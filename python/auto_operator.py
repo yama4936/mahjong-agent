@@ -50,7 +50,11 @@ def load_secret_environment(project: Path, env_file: str | None) -> dict[str, st
         return environment
     if not path.is_file():
         raise RuntimeError(f"secret env path is not a regular file: {path}")
-    if path.stat().st_mode & 0o077:
+    # Windows does not expose POSIX owner/group/other permission semantics.
+    # Its synthesized mode bits commonly look group/world-accessible even when
+    # the file is protected by an ACL, so this check would reject every normal
+    # .env.local file on Windows.
+    if sys.platform != "win32" and path.stat().st_mode & 0o077:
         raise RuntimeError(f"secret env file must not be group/world accessible: {path}")
     allowed = {"TYPESAFE_API_KEY", "JEV_MODEL"}
     for raw_line in path.read_text(encoding="utf-8").splitlines():

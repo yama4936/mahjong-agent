@@ -59,8 +59,17 @@ class AwayDialogDetectionTest(unittest.TestCase):
             path = Path(directory) / ".env.local"
             path.write_text("TYPESAFE_API_KEY=test-secret\n", encoding="utf-8")
             path.chmod(0o640)
-            with self.assertRaisesRegex(RuntimeError, "group/world"):
-                load_secret_environment(Path(directory), ".env.local")
+            with patch("auto_operator.sys.platform", "linux"):
+                with self.assertRaisesRegex(RuntimeError, "group/world"):
+                    load_secret_environment(Path(directory), ".env.local")
+
+    def test_env_loader_uses_acl_managed_secret_on_windows(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / ".env.local"
+            path.write_text("TYPESAFE_API_KEY=test-secret\n", encoding="utf-8")
+            with patch("auto_operator.sys.platform", "win32"):
+                environment = load_secret_environment(Path(directory), ".env.local")
+            self.assertEqual(environment["TYPESAFE_API_KEY"], "test-secret")
 
     def test_detects_dark_popup_with_gold_resume_button(self) -> None:
         viewport = {"width": 1920, "height": 1080}
@@ -96,9 +105,7 @@ class AwayDialogDetectionTest(unittest.TestCase):
         ])
 
     def test_saved_screens_are_classified_and_unknown_fails_closed(self) -> None:
-        artifacts = Path(__file__).resolve().parents[1] / "artifacts" / "live"
-        references = load_references(artifacts)
-        for expected, filename in {
+        expected_files = {
             "login": "result-step-1.png",
             "account_modal": "login-step-1.png",
             "lobby": "lobby-ready.png",
@@ -110,11 +117,17 @@ class AwayDialogDetectionTest(unittest.TestCase):
             "round_result": "round-result.png",
             "match_result": "match-result.png",
             "exit_confirm": "exit-dialog.png",
-        }.items():
-            self.assertEqual(classify_screen(artifacts / filename, references), (expected, 1))
-        blank = io.BytesIO()
-        Image.new("RGB", (1920, 1080), "white").save(blank, format="PNG")
-        self.assertEqual(classify_screen(blank.getvalue(), references), ("unknown", 0.0))
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            reference_dir = Path(directory)
+            for index, filename in enumerate(expected_files.values(), start=1):
+                Image.new("RGB", (64, 36), (index * 17 % 255, index * 31 % 255, index * 47 % 255)).save(reference_dir / filename)
+            references = load_references(reference_dir)
+            for expected, filename in expected_files.items():
+                self.assertEqual(classify_screen(reference_dir / filename, references), (expected, 1))
+            blank = io.BytesIO()
+            Image.new("RGB", (1920, 1080), "white").save(blank, format="PNG")
+            self.assertEqual(classify_screen(blank.getvalue(), references), ("unknown", 0.0))
 
 
 if __name__ == "__main__":
