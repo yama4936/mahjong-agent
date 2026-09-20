@@ -177,34 +177,60 @@ export async function guardedUiAction(
 }
 
 export async function showAdvisorOverlay(page: Page, decision: DecisionResult): Promise<void> {
+  const tileName = (tile: string) => {
+    const honors: Record<string, string> = { E: "東", S: "南", W: "西", N: "北", P: "白", F: "發", C: "中" };
+    if (honors[tile]) return honors[tile];
+    const match = tile.match(/^([0-9])([mps])$/);
+    if (!match) return tile;
+    const rank = match[1] === "0" ? "赤5" : match[1];
+    const suit: Record<string, string> = { m: "萬", p: "筒", s: "索" };
+    return `${rank}${suit[match[2]!]}`;
+  };
+  const actionNames: Record<string, string> = {
+    discard: "打牌", riichi: "リーチ", tsumo: "ツモ", ron: "ロン", kyuushu: "九種九牌",
+    chi: "チー", pon: "ポン", minkan: "明槓", ankan: "暗槓", pass: "見送り",
+  };
+  const reasonNames: Record<string, string> = {
+    recognition_confidence_below_threshold: "牌認識の信頼度が基準未満",
+    public_state_confidence_below_threshold: "局面認識の信頼度が基準未満",
+    jev_confidence_below_threshold: "Jev判断の信頼度が基準未満",
+    jev_required_for_auto_mode: "自動モードにはJevが必要",
+    no_legal_action: "合法な候補なし",
+    candidate_not_in_hand: "候補牌が手牌にない",
+    ambiguous_call_variant: "鳴き候補を特定できない",
+  };
   const ordered = [
     ...decision.candidates.filter((candidate) => candidate.actionId === decision.selectedActionId),
     ...decision.candidates.filter((candidate) => candidate.actionId !== decision.selectedActionId),
   ];
   const top = ordered.slice(0, 3).map((candidate) => ({
-    tile: candidate.tile,
+    tile: tileName(candidate.tile),
     shanten: candidate.shanten,
     ukeire: candidate.ukeire,
     ev: candidate.expectedRoundValue,
     danger: candidate.dealInProbability,
     selected: candidate.actionId === decision.selectedActionId,
   }));
-  await page.evaluate(({ decision, top }) => {
+  const safeText = decision.safety.allowed
+    ? "安全基準を通過"
+    : `停止: ${decision.safety.reasons.map((reason) => reasonNames[reason] ?? reason).join("、")}`;
+  const action = decision.selectedAction.action;
+  const actionText = `${actionNames[action] ?? action}${"tile" in decision.selectedAction ? ` ${tileName(decision.selectedAction.tile)}` : ""}`;
+  const modeName = decision.mode === "advisor" ? "助言モード" : decision.mode === "observer" ? "監視モード" : "自動モード";
+  await page.evaluate(({ decision, top, safeText, actionText, modeName }) => {
     const id = "jantama-auto-advisor";
     document.getElementById(id)?.remove();
     const root = document.createElement("aside");
     root.id = id;
-    root.setAttribute("aria-label", "Mahjong decision advisor");
+    root.setAttribute("aria-label", "麻雀打牌アドバイザー");
     root.style.cssText = [
       "position:fixed", "z-index:2147483647", "top:18px", "left:18px", "width:380px",
       "padding:16px", "border:1px solid rgba(232,190,90,.8)", "border-radius:12px",
       "background:rgba(10,14,20,.92)", "color:#f6f0dc", "font:14px/1.45 system-ui,sans-serif",
       "box-shadow:0 8px 30px rgba(0,0,0,.45)", "pointer-events:none",
     ].join(";");
-    const safeText = decision.safety.allowed ? "SAFETY OK" : `STOP: ${decision.safety.reasons.join(", ")}`;
-    const rows = top.map((item) => `<div style="display:grid;grid-template-columns:56px 1fr;gap:10px;opacity:${item.selected ? 1 : .72}"><span style="font-weight:${item.selected ? 750 : 500}">${item.selected ? "→ " : ""}${item.tile}</span><span style="text-align:right;white-space:nowrap">${item.shanten} shanten / ${item.ukeire} tiles / EV ${item.ev ?? "-"} / risk ${item.danger === undefined ? "-" : `${(item.danger * 100).toFixed(1)}%`}</span></div>`).join("");
-    const actionText = `${decision.selectedAction.action.toUpperCase()}${"tile" in decision.selectedAction ? ` ${decision.selectedAction.tile}` : ""}`;
-    root.innerHTML = `<div style="color:#d9b85f;font-size:12px">${decision.mode.toUpperCase()} · ${decision.source}</div><div style="font-size:28px;font-weight:750;margin:4px 0 8px">${actionText}</div><div style="margin-bottom:10px">confidence ${(decision.confidence * 100).toFixed(1)}% · ${safeText}</div>${rows ? `<div style="border-top:1px solid rgba(255,255,255,.18);padding-top:8px">${rows}</div>` : ""}`;
+    const rows = top.map((item) => `<div style="display:grid;grid-template-columns:56px 1fr;gap:10px;opacity:${item.selected ? 1 : .72}"><span style="font-weight:${item.selected ? 750 : 500}">${item.selected ? "→ " : ""}${item.tile}</span><span style="text-align:right;white-space:nowrap">${item.shanten}向聴 / 受入${item.ukeire}枚 / EV ${item.ev ?? "-"} / 放銃リスク ${item.danger === undefined ? "-" : `${(item.danger * 100).toFixed(1)}%`}</span></div>`).join("");
+    root.innerHTML = `<div style="color:#d9b85f;font-size:12px">${modeName} · ${decision.source}</div><div style="font-size:28px;font-weight:750;margin:4px 0 8px">${actionText}</div><div style="margin-bottom:10px">信頼度 ${(decision.confidence * 100).toFixed(1)}% · ${safeText}</div>${rows ? `<div style="border-top:1px solid rgba(255,255,255,.18);padding-top:8px">${rows}</div>` : ""}`;
     document.body.append(root);
-  }, { decision: { mode: decision.mode, source: decision.source, tile: decision.tile, confidence: decision.confidence, safety: decision.safety, selectedAction: decision.selectedAction }, top });
+  }, { decision: { source: decision.source, confidence: decision.confidence }, top, safeText, actionText, modeName });
 }

@@ -39,7 +39,9 @@ export class HybridTileRecognizer {
   private pending = new Map<number, { resolve: (value: WorkerPrediction[]) => void; reject: (error: Error) => void; timer: NodeJS.Timeout }>();
 
   constructor(
-    private readonly python = path.resolve(".runtime/vision-venv/bin/python"),
+    private readonly python = path.resolve(process.platform === "win32"
+      ? ".runtime/vision-venv/Scripts/python.exe"
+      : ".runtime/vision-venv/bin/python"),
     private readonly cvmajWeights = path.resolve(".runtime/hybrid-vision/cvmaj-pretrained.tar"),
     private readonly autoMajsoulWeights = path.resolve(".runtime/hybrid-vision/automajsoul-best-model.pt"),
     private readonly workerScript = path.resolve("scripts/hybrid_vision_worker.py"),

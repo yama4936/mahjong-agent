@@ -223,7 +223,7 @@ TYPESAFE_API_KEY=... npm run analyze:screenshot -- screenshot.png --state=state.
 npm run browser:start
 ```
 
-別のChrome実行ファイルや保存先を使う場合は`JANTAMA_CHROME_BIN`、`JANTAMA_BROWSER_PROFILE`、`JANTAMA_CDP_PORT`を指定します。OS依存ライブラリがユーザー領域にある環境では、起動前にその`LD_LIBRARY_PATH`も設定します。
+別のChrome実行ファイルや保存先を使う場合は`JANTAMA_CHROME_BIN`、`JANTAMA_BROWSER_PROFILE`、`JANTAMA_CDP_PORT`を指定します。既定ではログイン操作用にブラウザを表示し、非表示で動かす場合は`JANTAMA_HEADLESS=true`を指定します。OS依存ライブラリがユーザー領域にある環境では、起動前にその`LD_LIBRARY_PATH`も設定します。
 
 1局面を取得・判断するコマンド:
 

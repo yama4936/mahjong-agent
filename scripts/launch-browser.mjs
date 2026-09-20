@@ -5,11 +5,12 @@ import { chromium } from "playwright";
 
 const profile = path.resolve(process.env.JANTAMA_BROWSER_PROFILE ?? ".runtime/browser-profile");
 const port = Number(process.env.JANTAMA_CDP_PORT ?? 9222);
+const headless = /^(?:1|true|yes)$/i.test(process.env.JANTAMA_HEADLESS ?? "false");
 if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error("JANTAMA_CDP_PORT must be an integer from 1024 to 65535");
 await mkdir(profile, { recursive: true, mode: 0o700 });
 
 const context = await chromium.launchPersistentContext(profile, {
-  headless: true,
+  headless,
   viewport: { width: 1920, height: 1080 },
   ...(process.env.JANTAMA_CHROME_BIN ? { executablePath: process.env.JANTAMA_CHROME_BIN } : {}),
   args: [
