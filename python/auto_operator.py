@@ -497,6 +497,33 @@ class PythonAutoOperator:
             **receipt,
         }
 
+    def execute_reaction_pass(self, page: Page, evaluation: dict[str, Any]) -> dict[str, Any]:
+        """Dismiss any reaction prompt without guessing its discarded tile.
+
+        The Python path does not yet construct a trusted pendingDiscard, so it
+        must never choose among chi/pon/kan/ron candidates.  A certified pass
+        is valid for every such prompt and prevents the match from timing out.
+        """
+        if self.args.mode != "auto":
+            return {"clicked": False, "reason": "advisor_or_observer_reaction_prompt"}
+        recognition = evaluation.get("recognition", {})
+        if not recognition.get("safe") or len(recognition.get("tiles", [])) != 13:
+            raise RuntimeError("reaction prompt does not have a safe 13-tile concealed hand")
+        observed = self.validate_action_certificate("pass", evaluation)
+        region = self.layout["actionButtonRegions"]["pass"]
+        button_clip = {key: region[key] for key in ("x", "y", "width", "height")}
+        before = page.screenshot(clip=button_clip, animations="disabled")
+        page.wait_for_timeout(120)
+        if mean_pixel_delta(before, page.screenshot(clip=button_clip, animations="disabled")) > self.args.stability_pixel_delta:
+            raise RuntimeError("pass button changed during pre-click stability check")
+        point = observed["center"]
+        self.log("action_click_sent", action="pass", clickPoint=point,
+                 availableUiActions=evaluation.get("availableUiActions", []))
+        page.mouse.click(point["x"], point["y"])
+        receipt = self.confirm_action_button(page, "pass", before)
+        return {"clicked": True, "policy": "certified_auto", "action": "pass",
+                "clickPoint": point, **receipt}
+
     def run(self, page: Page) -> None:
         self.log("started", mode=self.args.mode, page=page.url)
         iterations = 0
@@ -550,6 +577,19 @@ class PythonAutoOperator:
                 screenshot_path = self.frames / f"{utc_stamp()}.png"
                 screenshot_path.write_bytes(page.screenshot(animations="disabled"))
                 evaluation = self.evaluate(screenshot_path)
+                if evaluation.get("status") == "reaction_prompt":
+                    try:
+                        receipt = self.execute_reaction_pass(page, evaluation)
+                    except Exception as error:
+                        self.last_processed_hand = hand_hash
+                        self.armed = False
+                        self.log("reaction_pass_failed", screenshot=str(screenshot_path), error=str(error))
+                        raise
+                    self.log("reaction_prompt", screenshot=str(screenshot_path), evaluation=evaluation, execution=receipt)
+                    self.last_processed_hand = hand_hash
+                    self.armed = False
+                    time.sleep(self.args.poll)
+                    continue
                 if evaluation.get("status") != "decision":
                     self.last_processed_hand = hand_hash
                     self.log("not_ready", screenshot=str(screenshot_path), evaluation=evaluation)

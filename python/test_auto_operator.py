@@ -139,6 +139,42 @@ class AwayDialogDetectionTest(unittest.TestCase):
             ("move", 960, 777.6),
         ])
 
+    def test_all_reaction_prompt_variants_use_the_certified_pass(self) -> None:
+        for offered in (["chi", "pass"], ["pon", "pass"], ["kan", "pass"],
+                        ["ron", "pass"], ["chi", "pon", "kan", "pass"]):
+            with self.subTest(offered=offered):
+                operator = PythonAutoOperator.__new__(PythonAutoOperator)
+                operator.args = argparse.Namespace(mode="auto", stability_pixel_delta=1.5)
+                operator.layout = {
+                    "actionButtonRegions": {"pass": {"x": 10, "y": 20, "width": 100, "height": 40}},
+                    "actionOperation": {"pass": {
+                        "enabled": True, "templateSetFingerprint": "buttons-v1",
+                    }},
+                }
+                operator.log = Mock()
+                operator.confirm_action_button = Mock(return_value={"confirmation": "action_button_region_changed"})
+                page = Mock()
+                page.screenshot.return_value = Image.new("RGB", (100, 40), "black")
+                buffer = io.BytesIO()
+                page.screenshot.return_value.save(buffer, format="PNG")
+                page.screenshot.return_value = buffer.getvalue()
+                evaluation = {
+                    "status": "reaction_prompt",
+                    "recognition": {"safe": True, "tiles": ["1m"] * 13},
+                    "availableUiActions": offered,
+                    "actionButton": {"action": "pass", "present": True, "confidence": 0.99,
+                                     "templateSetFingerprint": "buttons-v1", "center": {"x": 60, "y": 40}},
+                }
+                receipt = operator.execute_reaction_pass(page, evaluation)
+                self.assertEqual(receipt["action"], "pass")
+                page.mouse.click.assert_called_once_with(60, 40)
+
+    def test_reaction_prompt_never_clicks_without_auto_and_certificate(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(mode="advisor")
+        evaluation = {"recognition": {"safe": True, "tiles": ["1m"] * 13}}
+        self.assertFalse(operator.execute_reaction_pass(Mock(), evaluation)["clicked"])
+
     def test_saved_screens_are_classified_and_unknown_fails_closed(self) -> None:
         expected_files = {
             "login": "result-step-1.png",

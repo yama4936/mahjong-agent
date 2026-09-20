@@ -81,10 +81,41 @@ async function main(): Promise<void> {
     delete rawPublicState.recognitionConfidence;
     delete rawPublicState.recognition_confidence;
     const publicState = parsePublicGameState(rawPublicState);
-    const recognition = publicState.phase === "reaction"
+    const actionMatches = actionTemplatesArgument
+      ? await recognizeActionButtons(screenshot, layout, actionTemplatesArgument)
+      : [];
+    const detectedActions = availableUiActions(actionMatches);
+    let recognition = publicState.phase === "reaction"
       ? await recognizeTileSlots(screenshot, layout.handSlots, layout, templates)
       : await recognizeHand(screenshot, layout, templates);
+    const reactionPrompt = publicState.phase !== "reaction"
+      && detectedActions.includes("pass")
+      && detectedActions.some((action) => action === "chi" || action === "pon" || action === "kan" || action === "ron");
+    if (reactionPrompt && (!recognition.safe || recognition.tiles.length !== 14)) {
+      recognition = await recognizeTileSlots(screenshot, layout.handSlots, layout, templates);
+    }
     const expectedTiles = publicState.phase === "reaction" ? 13 : 14;
+    if (reactionPrompt && recognition.safe && recognition.tiles.length === 13) {
+      const passButton = actionMatches.find((match) => match.action === "pass" && match.present);
+      const actionTemplateSetFingerprint = passButton && actionTemplatesArgument
+        ? await fingerprintTemplateDirectory(actionTemplatesArgument)
+        : undefined;
+      console.log(JSON.stringify({
+        schemaVersion: 1,
+        status: "reaction_prompt",
+        recognition: {
+          backend: "template",
+          tiles: recognition.tiles,
+          confidence: recognition.confidence,
+          ambiguityMargin: recognition.ambiguityMargin,
+          safe: recognition.safe,
+          turnReady: true,
+        },
+        availableUiActions: detectedActions,
+        ...(passButton ? { actionButton: { ...passButton, templateSetFingerprint: actionTemplateSetFingerprint } } : {}),
+      }));
+      return;
+    }
     if (!recognition.safe || recognition.tiles.length !== expectedTiles) {
       console.log(JSON.stringify({
         schemaVersion: 1,
@@ -99,14 +130,11 @@ async function main(): Promise<void> {
       }));
       return;
     }
-    const actionMatches = actionTemplatesArgument
-      ? await recognizeActionButtons(screenshot, layout, actionTemplatesArgument)
-      : [];
     const state = parseGameState({
       ...publicState,
       hand: recognition.tiles.slice(0, 13),
       ...(publicState.phase === "self_turn" ? { draw: recognition.tiles[13] } : {}),
-      availableUiActions: actionMatches.length ? availableUiActions(actionMatches) : publicState.availableUiActions,
+      availableUiActions: actionMatches.length ? detectedActions : publicState.availableUiActions,
       recognitionConfidence: recognition.confidence,
     });
     const apiKey = process.env.TYPESAFE_API_KEY;
