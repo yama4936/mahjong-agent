@@ -279,13 +279,10 @@ npm run build
 認識や判断の曖昧さを無視して候補を常にクリックする必要がある場合は、明示的な`force-auto`モードを使用できます。このモードは牌認識confidence、曖昧度、Jev confidence、公開局面confidence、Auto証明書、アクション別証明書を操作許可に使いません。ただし、候補座標が存在しない場合、クリック直前に画面が変化した場合、クリック後の変化を確認できない場合は停止します。誤打牌・誤操作を起こし得るため、通常の`auto`とは分離されています。
 
 ```bash
-.runtime/python-auto-venv/bin/python python/auto_operator.py \
-  --layout config/layout.json \
-  --templates templates/live \
-  --action-templates templates/actions \
-  --state examples/public-unknown.json \
-  --mode force-auto
+npm run force:auto
 ```
+
+最新の`artifacts/live/*.layout.json`、`templates/bootstrap`、`examples/public-unknown.json`を自動選択します。`templates/actions`があればアクションボタンにも使用します。値を変える場合は、たとえば`npm run force:auto -- --layout path/to/layout.json --templates path/to/templates`のように末尾へ追加すると上書きできます。
 
 実画面テンプレートを収集中に、手牌14枚のconfidenceと曖昧度、合法手、前後フレーム確認だけで打牌する限定モードもあります。これはJev・河・点数・リーチを使わない牌効率専用であり、守備判断を行いません。明示的に指定した場合だけ有効です。実画面では、打牌後13枚が打牌前14枚から指定牌だけを除いた集合と一致するところまで確認済みです。
 

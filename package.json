@@ -34,6 +34,7 @@
     "vision:setup": "bash scripts/setup-vision.sh",
     "hybrid-vision:setup": "bash scripts/setup-hybrid-vision.sh",
     "browser:start": "node scripts/launch-browser.mjs",
+    "force:auto": "npm run build && node scripts/run-force-auto.mjs",
     "dashboard": ".runtime/python-auto-venv/bin/python python/dashboard.py",
     "turn": "tsx src/cli.ts turn",
     "watch": "tsx src/cli.ts watch",
