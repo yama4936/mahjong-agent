@@ -27,17 +27,30 @@ body{margin:0;padding:18px;display:grid;gap:14px}.bar{display:flex;gap:18px;alig
 .pill{padding:6px 10px;border:1px solid #665a38;border-radius:999px;background:#171b22}
 #screen{display:block;width:min(100%,1920px);height:auto;border:1px solid #5f5334;border-radius:10px;background:#101820}
 small{color:#aca692}.ok{color:#82d9a0}.stop{color:#ff9c91}
-.panel{padding:18px;background:#171d27;border:1px solid #424c5c;border-radius:10px}.metrics{display:flex;gap:24px;flex-wrap:wrap}.tiles{display:flex;gap:6px;flex-wrap:wrap;margin:14px 0}.tile{background:#eee9dd;color:#172132;padding:10px;border-radius:5px;font-weight:bold}.muted{color:#b7bbc4}pre{white-space:pre-wrap;overflow-wrap:anywhere}h2{font-size:18px;margin-top:0}#reason{color:#ffbc9b}
+.panel{padding:18px;background:#171d27;border:1px solid #424c5c;border-radius:10px}.metrics{display:flex;gap:24px;flex-wrap:wrap}.tiles{display:flex;gap:6px;flex-wrap:wrap;margin:14px 0}.tile{background:#eee9dd;color:#172132;padding:10px;border-radius:5px;font-weight:bold}.choices{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin:10px 0 14px}.choice{display:flex;justify-content:space-between;gap:10px;padding:9px 11px;border:1px solid #424c5c;border-radius:7px;background:#111720}.choice.selected{border-color:#d9b85f;background:#242216}.probability{font-variant-numeric:tabular-nums;color:#82d9a0}.muted{color:#b7bbc4}pre{white-space:pre-wrap;overflow-wrap:anywhere}h2{font-size:18px;margin-top:0}h3{font-size:15px;margin:14px 0 0}#reason{color:#ffbc9b}
 </style></head><body><div class="bar"><strong>Jantama Agent Monitor</strong>
 <span class="pill" id="state">state: …</span><span class="pill" id="confidence">confidence: …</span>
 <span class="pill" id="updated">updated: …</span><span class="pill stop">READ ONLY</span></div>
 <section class="panel" aria-label="判定情報"><h2>判定モニター <small>保存ログ・現在の画面とは別時点</small></h2>
 <p id="judgedAt" class="muted">判定待ち</p><div class="metrics"><span id="recommendation">推奨：未判定</span><span id="tileScore">認識スコア：—</span><span id="margin">候補差：—</span><span id="execution">クリック：—</span></div>
-<div id="tiles" class="tiles" aria-label="認識手牌"></div><p id="reason" role="status"></p><p id="operator" class="muted"></p>
+<div id="tiles" class="tiles" aria-label="認識手牌"></div><h3>選択肢 <small id="probabilityNote"></small></h3><div id="choices" class="choices" aria-label="選択肢と選択確率"></div><p id="reason" role="status"></p><p id="operator" class="muted"></p>
 <details><summary>判定データ</summary><pre id="judgmentJson"></pre></details></section>
 <strong>現在の画面（ライブ）</strong><img id="screen" alt="現在の雀魂画面"><small id="detail"></small><script>
 const el=id=>document.getElementById(id);
 const number=v=>typeof v==='number'?v.toFixed(3):'—';
+const percent=v=>typeof v==='number'?(v*100).toFixed(1)+'%':'—';
+function renderChoices(d){
+ const probabilities=d?.jev?.probabilities||{};
+ const candidates=(d?.candidates?.length?d.candidates:d?.legalActions)||[];
+ const selected=d?.selectedActionId;
+ el('probabilityNote').textContent=d?.jev?'（Jev選択確率）':'（Jev未使用のため確率なし）';
+ el('choices').replaceChildren(...candidates.map(c=>{
+  const id=c.actionId||c.id||'';const row=document.createElement('div');row.className='choice'+(id===selected?' selected':'');
+  const label=document.createElement('span');label.textContent=c.tile?`${c.action||'discard'} ${c.tile}`:(c.action||id);
+  const probability=document.createElement('span');probability.className='probability';probability.textContent=percent(probabilities[id]);probability.title='この選択肢が最善であるというJevの選択確率';
+  row.append(label,probability);return row;
+ }));
+}
 function renderJudgment(j){
  const e=j?.evaluation||{},r=e.recognition||{},d=e.decision||{},x=j?.execution||{};
  el('judgedAt').textContent=j?.timestamp?'判定時刻：'+new Date(j.timestamp).toLocaleString()+' ／ 保存ログ（ライブ判定ではありません）':'判定ログなし';
@@ -46,6 +59,7 @@ function renderJudgment(j){
  el('margin').textContent='候補差：'+number(r.ambiguityMargin);
  el('execution').textContent='クリック：'+(x.clicked===true?'送信済み'+(x.tileMultisetVerification?.verified?'・結果確認済み':''):x.clicked===false?'未実行':'実行記録なし');
  el('tiles').replaceChildren(...(r.tiles||[]).map((t,i)=>{const n=document.createElement('span');n.className='tile';n.textContent=t;n.title=(i===13?'ツモ牌':'手牌 '+(i+1));return n}));
+ renderChoices(d);
  const reasons=[];if(r.turnReady===false)reasons.push('手番・手牌枚数を確認できません');if(r.safe===false)reasons.push('認識基準未達：クリック対象に採用しません');if(x.reason)reasons.push(x.reason);if(d.reason)reasons.push(typeof d.reason==='string'?d.reason:JSON.stringify(d.reason));
  el('reason').textContent=reasons.join(' ／ ')||'停止理由の記録なし';
  el('judgmentJson').textContent=JSON.stringify(j||{},null,2);

@@ -2,10 +2,15 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from dashboard import read_operator_status
+from dashboard import HTML, read_operator_status
 
 
 class DashboardTest(unittest.TestCase):
+    def test_dashboard_renders_choice_probabilities(self):
+        self.assertIn('aria-label="選択肢と選択確率"', HTML)
+        self.assertIn("d?.jev?.probabilities", HTML)
+        self.assertIn("percent(probabilities[id])", HTML)
+
     def test_missing_log(self):
         self.assertIsNone(read_operator_status(None)["judgment"])
 
