@@ -110,4 +110,14 @@ test("reaction policy calls only when the call improves shanten", async () => {
     availableUiActions: ["chi", "pass"],
   });
   assert.equal((await decide(callable, { mode: "advisor" })).selectedAction.action, "chi");
+  const jev = { chooseReaction: async (_state: unknown, actions: any[]) => ({
+    actionId: actions.find((action) => action.action === "pass").id,
+    confidence: 0.88,
+    probabilities: Object.fromEntries(actions.map((action) => [action.id, action.action === "pass" ? 0.88 : 0.12])),
+    model: "fake", promptVersion: "mahjong-reaction-v1", latencyMs: 1,
+  }) } as any;
+  const judged = await decide(callable, { mode: "advisor", jev });
+  assert.equal(judged.selectedAction.action, "pass");
+  assert.equal(judged.source, "jev");
+  assert.equal(judged.jev?.promptVersion, "mahjong-reaction-v1");
 });

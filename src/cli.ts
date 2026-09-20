@@ -70,6 +70,8 @@ async function main(): Promise<void> {
     const stateArgument = process.argv.find((argument) => argument.startsWith("--state="))?.slice(8);
     const modeArgument = process.argv.find((argument) => argument.startsWith("--mode="))?.slice(7) ?? "advisor";
     const actionTemplatesArgument = process.argv.find((argument) => argument.startsWith("--action-templates="))?.slice(19);
+    const pendingDiscardArgument = process.argv.find((argument) => argument.startsWith("--pending-discard="))?.slice(18);
+    const publicObservationArgument = process.argv.find((argument) => argument.startsWith("--public-observation="))?.slice(21);
     if (!screenshot || !layoutPath || !templates || !stateArgument) {
       throw new Error("Usage: evaluate-frame <screenshot.png> <layout.json> <templates> --state=public-state.json [--mode=advisor|auto]");
     }
@@ -80,7 +82,22 @@ async function main(): Promise<void> {
     delete rawPublicState.draw;
     delete rawPublicState.recognitionConfidence;
     delete rawPublicState.recognition_confidence;
-    const publicState = parsePublicGameState(rawPublicState);
+    const observedBoard = publicObservationArgument ? JSON.parse(await readFile(publicObservationArgument, "utf8")) : undefined;
+    const observedPatch = observedBoard ? {
+      doraIndicators: observedBoard.doraIndicators,
+      ownDiscards: observedBoard.ownDiscards,
+      melds: observedBoard.ownMelds,
+      openMelds: observedBoard.ownMelds?.length ?? rawPublicState.openMelds,
+      opponents: observedBoard.opponentDiscards?.map((opponent: any) => ({
+        seat: opponent.seat, discards: opponent.discards, riichi: Boolean(opponent.riichiDeclared),
+        openMelds: opponent.melds?.length ?? 0,
+      })),
+    } : {};
+    const suppliedPublicState = parsePublicGameState({ ...rawPublicState, ...observedPatch });
+    const pendingParts = pendingDiscardArgument?.split(",");
+    const publicState = pendingParts?.length === 2
+      ? parsePublicGameState({ ...suppliedPublicState, phase: "reaction", pendingDiscard: { tile: pendingParts[0], fromSeat: pendingParts[1] } })
+      : suppliedPublicState;
     const actionMatches = actionTemplatesArgument
       ? await recognizeActionButtons(screenshot, layout, actionTemplatesArgument)
       : [];
@@ -88,14 +105,13 @@ async function main(): Promise<void> {
     let recognition = publicState.phase === "reaction"
       ? await recognizeTileSlots(screenshot, layout.handSlots, layout, templates)
       : await recognizeHand(screenshot, layout, templates);
-    const reactionPrompt = publicState.phase !== "reaction"
-      && detectedActions.includes("pass")
+    const reactionPrompt = detectedActions.includes("pass")
       && detectedActions.some((action) => action === "chi" || action === "pon" || action === "kan" || action === "ron");
     if (reactionPrompt && (!recognition.safe || recognition.tiles.length !== 14)) {
       recognition = await recognizeTileSlots(screenshot, layout.handSlots, layout, templates);
     }
     const expectedTiles = publicState.phase === "reaction" ? 13 : 14;
-    if (reactionPrompt && recognition.safe && recognition.tiles.length === 13) {
+    if (reactionPrompt && publicState.phase !== "reaction" && recognition.safe && recognition.tiles.length === 13) {
       const passButton = actionMatches.find((match) => match.action === "pass" && match.present);
       const actionTemplateSetFingerprint = passButton && actionTemplatesArgument
         ? await fingerprintTemplateDirectory(actionTemplatesArgument)
@@ -212,6 +228,18 @@ async function main(): Promise<void> {
     console.log(JSON.stringify(await recognizeConfiguredPublicTiles(screenshot, layout, templates), null, 2));
     return;
   }
+  if (command === "public-observation") {
+    const screenshot = path;
+    const layoutPath = process.argv[4];
+    const templates = process.argv[5];
+    const seat = process.argv.find((argument) => argument.startsWith("--seat="))?.slice(7) ?? "east";
+    if (!screenshot || !layoutPath || !templates) throw new Error("Usage: public-observation <screenshot.png> <layout.json> <templates> --seat=east|south|west|north");
+    if (!(["east", "south", "west", "north"] as const).includes(seat as any)) throw new Error("Invalid seat");
+    const layout = layoutSchema.parse(JSON.parse(await readFile(layoutPath, "utf8")));
+    const recognition = await recognizeConfiguredPublicTiles(screenshot, layout, templates);
+    console.log(JSON.stringify(toPublicTileObservation(recognition, seat as "east" | "south" | "west" | "north")));
+    return;
+  }
   if (command === "recognize-center") {
     const screenshot = path;
     const layoutPath = process.argv[4];
@@ -317,8 +345,8 @@ async function main(): Promise<void> {
   if (command === "watch-hand-layout") {
     const cdp = process.argv.find((arg) => arg.startsWith("--cdp="))?.slice(6) ?? "http://127.0.0.1:9222";
     const outputDirectory = process.argv.find((arg) => arg.startsWith("--output="))?.slice(9) ?? "artifacts/calibration";
-    const pollIntervalMs = Number(process.argv.find((arg) => arg.startsWith("--poll="))?.slice(7) ?? 1000);
-    if (!Number.isFinite(pollIntervalMs) || pollIntervalMs < 250) throw new Error("--poll must be at least 250ms");
+    const pollIntervalMs = Number(process.argv.find((arg) => arg.startsWith("--poll="))?.slice(7) ?? 100);
+    if (!Number.isFinite(pollIntervalMs) || pollIntervalMs < 100) throw new Error("--poll must be at least 100ms");
     const session = await connectJantama(cdp);
     let aborted = false;
     process.once("SIGINT", () => { aborted = true; });
@@ -354,9 +382,9 @@ async function main(): Promise<void> {
     const outputDirectory = process.argv.find((arg) => arg.startsWith("--output="))?.slice(9) ?? "artifacts/live";
     const templateDirectory = process.argv.find((arg) => arg.startsWith("--templates="))?.slice(12) ?? "templates/live-verified";
     const recognizerValue = process.argv.find((arg) => arg.startsWith("--recognizer="))?.slice(13) ?? "hybrid";
-    const pollIntervalMs = Number(process.argv.find((arg) => arg.startsWith("--poll="))?.slice(7) ?? 750);
+    const pollIntervalMs = Number(process.argv.find((arg) => arg.startsWith("--poll="))?.slice(7) ?? 100);
     const maxTurns = Number(process.argv.find((arg) => arg.startsWith("--max-turns="))?.slice(12) ?? 1);
-    if (!Number.isFinite(pollIntervalMs) || pollIntervalMs < 250) throw new Error("--poll must be at least 250ms");
+    if (!Number.isFinite(pollIntervalMs) || pollIntervalMs < 100) throw new Error("--poll must be at least 100ms");
     if (!Number.isInteger(maxTurns) || maxTurns < 1) throw new Error("--max-turns must be a positive integer");
 
     const rawPublicState = publicStatePath
@@ -568,7 +596,7 @@ async function main(): Promise<void> {
         ...(recognizer ? { tileRecognizer: recognizer } : {}),
       };
       if (command === "watch") {
-        const pollIntervalMs = Number(process.argv.find((arg) => arg.startsWith("--poll="))?.slice(7) ?? 750);
+        const pollIntervalMs = Number(process.argv.find((arg) => arg.startsWith("--poll="))?.slice(7) ?? 100);
         const maxTurnsArgument = process.argv.find((arg) => arg.startsWith("--max-turns="))?.slice(12);
         const abort = new AbortController();
         process.once("SIGINT", () => abort.abort());
@@ -589,7 +617,7 @@ async function main(): Promise<void> {
     }
     return;
   }
-  throw new Error("Commands: advise, jev-smoke, jev-tune, recognize, evaluate-frame, verify-discard-frame, detect-regions, recognize-regions, recognize-center, recognize-actions, propose-hand-layout, analyze-screenshot, watch-hand-layout, live-advisor, replay, attach-result, benchmark, policy-compare, collect-templates, validate-templates, certify-layout, turn, watch");
+  throw new Error("Commands: advise, jev-smoke, jev-tune, recognize, evaluate-frame, verify-discard-frame, detect-regions, recognize-regions, public-observation, recognize-center, recognize-actions, propose-hand-layout, analyze-screenshot, watch-hand-layout, live-advisor, replay, attach-result, benchmark, policy-compare, collect-templates, validate-templates, certify-layout, turn, watch");
 }
 
 main().catch((error) => {

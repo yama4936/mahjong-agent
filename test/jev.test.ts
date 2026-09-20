@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createServer } from "node:http";
 import { once } from "node:events";
-import { buildJevRequest, JevClient } from "../src/jev/client.js";
+import { buildJevReactionRequest, buildJevRequest, JevClient } from "../src/jev/client.js";
 import { deterministicAdvice } from "../src/evaluation/advisor.js";
 import { parseGameState } from "../src/game/state.js";
 
@@ -127,6 +127,23 @@ test("Jev adapter rejects probability keys that do not match legal actions", asy
   } finally {
     server.close();
   }
+});
+
+test("reaction request sends the hand, board, pending discard and only legal choices", () => {
+  const reaction = parseGameState({
+    hand: ["1m", "2m", "3m", "4m", "4m", "5m", "6m", "3p", "4p", "5p", "7s", "8s", "9s"],
+    phase: "reaction", seat: "south", pendingDiscard: { tile: "4m", fromSeat: "east" },
+    doraIndicators: ["3s"], ownDiscards: ["P"],
+    opponents: [{ seat: "east", discards: ["1p", "4m"], openMelds: 1 }],
+  });
+  const actions = [
+    { id: "pon_4m", action: "pon" as const, tile: "4m" as const, consumedTiles: ["4m", "4m"] as any },
+    { id: "pass" as const, action: "pass" as const },
+  ];
+  const request = buildJevReactionRequest(reaction, actions, "test-model") as any;
+  assert.deepEqual(request.state.pendingDiscard, { tile: "4m", fromSeat: "east" });
+  assert.deepEqual(request.state.doraIndicators, ["3s"]);
+  assert.deepEqual(Object.keys(request.questions.action.criteria), ["pon_4m", "pass"]);
 });
 
 test("Jev adapter normalizes display-rounded probabilities", async () => {

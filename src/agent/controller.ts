@@ -274,7 +274,7 @@ export async function processTurn(context: TurnContext) {
  * before it arms itself for the next decision.
  */
 export async function runAgentLoop(context: TurnContext, options: AgentLoopOptions = {}) {
-  const pollIntervalMs = options.pollIntervalMs ?? 750;
+  const pollIntervalMs = options.pollIntervalMs ?? 100;
   const maxTurns = options.maxTurns ?? Number.POSITIVE_INFINITY;
   const gate = new TurnRearmGate(options.rearmAfterUnsafeFrames ?? 3);
   let previousPublicObservation: ReturnType<typeof toPublicTileObservation> | undefined;

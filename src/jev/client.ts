@@ -1,5 +1,6 @@
 import type { GameState } from "../game/state.js";
 import type { DiscardEvaluation } from "../game/ukeire.js";
+import type { LegalAction } from "../game/actions.js";
 
 export interface JevDecision {
   actionId: string;
@@ -96,6 +97,68 @@ export class JevClient {
       signal?.removeEventListener("abort", abort);
     }
   }
+
+  async chooseReaction(state: GameState, actions: readonly LegalAction[], signal?: AbortSignal): Promise<JevDecision> {
+    if (!this.apiKey) throw new Error("TYPESAFE_API_KEY is required");
+    if (actions.length === 0) throw new Error("No reaction candidates");
+    if (actions.length === 1) return {
+      actionId: actions[0]!.id, confidence: 1, probabilities: { [actions[0]!.id]: 1 },
+      model: this.model, promptVersion: "mahjong-reaction-v1", latencyMs: 0,
+    };
+    const request = buildJevReactionRequest(state, actions, this.model);
+    return this.choose(request, "mahjong-reaction-v1", signal);
+  }
+
+  private async choose(request: JevRequest, version: string, signal?: AbortSignal): Promise<JevDecision> {
+    const ids = Object.keys(request.questions.action.criteria);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 20_000);
+    const abort = () => controller.abort();
+    signal?.addEventListener("abort", abort, { once: true });
+    const startedAt = performance.now();
+    try {
+      const response = await fetch(this.endpoint, {
+        method: "POST", headers: { Authorization: `Bearer ${this.apiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify(request), signal: controller.signal,
+      });
+      if (!response.ok) throw new Error(`Jev request failed with HTTP ${response.status}`);
+      const raw = await readBoundedJson(response);
+      const answer = raw?.answers?.action;
+      const probabilities = validateChoice(answer, ids);
+      if (typeof raw.model !== "string" || raw.model.length === 0 || raw.model.length > 200) throw new Error("Invalid Jev model identifier");
+      const usage = validateUsage(raw.usage);
+      return { actionId: answer.choice, confidence: answer.confidence, probabilities, model: raw.model,
+        promptVersion: version, latencyMs: Math.max(0, Math.round(performance.now() - startedAt)), ...(usage ? { usage } : {}) };
+    } finally {
+      clearTimeout(timeout);
+      signal?.removeEventListener("abort", abort);
+    }
+  }
+}
+
+export function buildJevReactionRequest(state: GameState, actions: readonly LegalAction[], model: string): JevRequest {
+  if (!state.pendingDiscard) throw new Error("Reaction request requires pendingDiscard");
+  const criteria = Object.fromEntries(actions.map((action) => [action.id, {
+    action: action.action,
+    ...(action.action === "chi" || action.action === "pon" || action.action === "minkan"
+      ? { calledTile: action.tile, consumedTiles: action.consumedTiles } : {}),
+  }]));
+  return {
+    model,
+    state: {
+      promptVersion: "mahjong-reaction-v1", task: "Choose whether to call in Japanese Mahjong",
+      round: state.round, honba: state.honba, riichiSticks: state.riichiSticks, seat: state.seat,
+      scores: state.scores, turn: state.turn, remainingTiles: state.remainingTiles,
+      hand: state.hand, doraIndicators: state.doraIndicators, ownDiscards: state.ownDiscards,
+      melds: state.melds, opponents: state.opponents, pendingDiscard: state.pendingDiscard,
+    },
+    questions: { action: { type: "choice", instructions: {
+      question: "Which legal reaction best maximizes expected match outcome?",
+      use_evidence: ["Use the complete supplied board state.", "Prefer passing when a call does not materially improve the hand.",
+        "Take ron immediately unless the supplied match context strongly justifies otherwise.", "Do not invent an unlisted action."],
+      output_constraint: "Select exactly one listed action id.",
+    }, criteria } },
+  };
 }
 
 export function buildJevRequest(

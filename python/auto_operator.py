@@ -141,9 +141,18 @@ class PythonAutoOperator:
         self.layout_path = Path(args.layout).resolve()
         self.templates = Path(args.templates).resolve()
         self.state_path = Path(args.state).resolve()
+        self.public_state = load_json(self.state_path)
         self.layout = load_json(self.layout_path)
         self.evaluator_env = load_secret_environment(self.root, args.env_file)
         self.hand_clip = clip_for_hand(self.layout)
+        action_regions = list(self.layout.get("actionButtonRegions", {}).values())
+        self.action_clip = None
+        if action_regions:
+            left = min(region["x"] for region in action_regions)
+            top = min(region["y"] for region in action_regions)
+            right = max(region["x"] + region["width"] for region in action_regions)
+            bottom = max(region["y"] + region["height"] for region in action_regions)
+            self.action_clip = {"x": left, "y": top, "width": right - left, "height": bottom - top}
         own_river = self.layout.get("publicTileRegions", {}).get("ownDiscards")
         if not own_river:
             raise RuntimeError("layout.publicTileRegions.ownDiscards is required")
@@ -158,6 +167,7 @@ class PythonAutoOperator:
         self.pending_match_replays: list[Path] = []
         self.screen_references = load_references(self.root / "artifacts" / "live")
         self.last_processed_hand: str | None = None
+        self.previous_public_observation: dict[str, Any] | None = None
         self.armed = True
 
     def resume_if_away(self, page: Page) -> bool:
@@ -278,7 +288,8 @@ class PythonAutoOperator:
         self.log("outcome_attached", kind=kind, replayCount=count, evidence=evidence)
         return count
 
-    def evaluate(self, screenshot: Path) -> dict[str, Any]:
+    def evaluate(self, screenshot: Path, pending_discard: dict[str, str] | None = None,
+                 public_observation: dict[str, Any] | None = None) -> dict[str, Any]:
         evaluator_mode = "advisor" if self.args.mode == "observer" else self.args.mode
         command = [
             "node", "dist/src/cli.js", "evaluate-frame", str(screenshot),
@@ -287,6 +298,12 @@ class PythonAutoOperator:
         ]
         if self.args.action_templates:
             command.append(f"--action-templates={Path(self.args.action_templates).resolve()}")
+        if pending_discard:
+            command.append(f"--pending-discard={pending_discard['tile']},{pending_discard['fromSeat']}")
+        if public_observation:
+            observation_path = self.frames / f"{utc_stamp()}.public-observation.json"
+            observation_path.write_text(json.dumps(public_observation, ensure_ascii=False), encoding="utf-8")
+            command.append(f"--public-observation={observation_path}")
         result = subprocess.run(
             command,
             cwd=self.root,
@@ -299,6 +316,32 @@ class PythonAutoOperator:
         if result.returncode != 0:
             raise RuntimeError((result.stderr or result.stdout or "frame evaluator failed").strip())
         return json.loads(result.stdout)
+
+    def observe_public_board(self, screenshot: Path) -> dict[str, Any] | None:
+        command = [
+            "node", "dist/src/cli.js", "public-observation", str(screenshot),
+            str(self.layout_path), str(self.templates), f"--seat={self.public_state.get('seat', 'east')}",
+        ]
+        result = subprocess.run(command, cwd=self.root, env=self.evaluator_env, text=True,
+                                capture_output=True, timeout=self.args.evaluation_timeout, check=False)
+        if result.returncode != 0:
+            self.log("public_observation_failed", error=(result.stderr or result.stdout).strip())
+            return None
+        return json.loads(result.stdout)
+
+    @staticmethod
+    def infer_pending_discard(previous: dict[str, Any] | None, current: dict[str, Any] | None) -> dict[str, str] | None:
+        if not previous or not current:
+            return None
+        additions = []
+        for opponent in current.get("opponentDiscards", []):
+            prior = next((item for item in previous.get("opponentDiscards", [])
+                          if item.get("seat") == opponent.get("seat")), None)
+            before = prior.get("discards", []) if prior else []
+            after = opponent.get("discards", [])
+            if len(after) == len(before) + 1 and after[:-1] == before:
+                additions.append({"tile": after[-1], "fromSeat": opponent["seat"]})
+        return additions[0] if len(additions) == 1 else None
 
     def verify_post_discard(self, screenshot: bytes, before: list[str], click_index: int) -> dict[str, Any]:
         screenshot_path = self.frames / f"{utc_stamp()}.post-discard.png"
@@ -564,7 +607,8 @@ class PythonAutoOperator:
                     self.armed = True
                     time.sleep(self.args.poll)
                     continue
-                hand_hash = perceptual_hash(hand)
+                action_image = page.screenshot(clip=self.action_clip, animations="disabled") if self.action_clip else b""
+                hand_hash = hashlib.sha256((perceptual_hash(hand) + (perceptual_hash(action_image) if action_image else "")).encode()).hexdigest()
                 if not self.armed:
                     if hand_hash == self.last_processed_hand:
                         time.sleep(self.args.poll)
@@ -576,7 +620,11 @@ class PythonAutoOperator:
                     continue
                 screenshot_path = self.frames / f"{utc_stamp()}.png"
                 screenshot_path.write_bytes(page.screenshot(animations="disabled"))
-                evaluation = self.evaluate(screenshot_path)
+                public_observation = self.observe_public_board(screenshot_path)
+                pending_discard = self.infer_pending_discard(self.previous_public_observation, public_observation)
+                if public_observation:
+                    self.previous_public_observation = public_observation
+                evaluation = self.evaluate(screenshot_path, pending_discard, public_observation)
                 if evaluation.get("status") == "reaction_prompt":
                     try:
                         receipt = self.execute_reaction_pass(page, evaluation)
@@ -642,7 +690,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--env-file", default=".env.local", help="private Jev environment file; use an empty value to disable")
     parser.add_argument("--artifacts", default="artifacts/python-auto")
     parser.add_argument("--mode", choices=("observer", "advisor", "auto"), default="advisor")
-    parser.add_argument("--poll", type=float, default=0.5)
+    parser.add_argument("--poll", type=float, default=0.1)
     parser.add_argument("--stability-ms", type=int, default=120)
     parser.add_argument("--stability-pixel-delta", type=float, default=1.5)
     parser.add_argument("--action-pixel-delta", type=float, default=3.0)

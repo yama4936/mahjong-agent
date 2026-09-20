@@ -238,7 +238,7 @@ npm run turn -- examples/state.json config/layout.json templates/bootstrap \
 
 ```bash
 npm run watch -- examples/state.json config/layout.json templates/bootstrap \
-  --cdp=http://127.0.0.1:9222 --mode=advisor --poll=750
+  --cdp=http://127.0.0.1:9222 --mode=advisor --poll=100
 ```
 
 検証時は`--max-turns=1`のように処理回数を制限できます。`Ctrl+C`で安全に監視を終了します。

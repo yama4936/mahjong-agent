@@ -184,6 +184,7 @@ async function decideReaction(state: GameState, legalActions: LegalAction[], opt
     ?? legalActions[0];
   if (!initialAction) throw new Error("No legal reaction action");
   let selectedAction: LegalAction = initialAction;
+  let jev: JevDecision | undefined;
 
   if (selectedAction.action !== "ron" && !state.opponents.some((opponent) => opponent.riichi)) {
     const currentShanten = calculateShanten(state.hand, state.openMelds).shanten;
@@ -196,11 +197,25 @@ async function decideReaction(state: GameState, legalActions: LegalAction[], opt
     if (improved[0]) selectedAction = improved[0].action;
   }
 
+  if (options.jev) {
+    try {
+      jev = await options.jev.chooseReaction(state, legalActions);
+      const choice = legalActions.find((action) => action.id === jev!.actionId);
+      if (!choice) throw new Error("Jev selected an unknown reaction");
+      selectedAction = choice;
+      if (jev.confidence < (options.minJevConfidence ?? 0.55)) safetyReasons.push("jev_confidence_below_threshold");
+    } catch (error) {
+      safetyReasons.push(`jev_error:${error instanceof Error ? error.message : String(error)}`);
+    }
+  } else if (options.mode === "auto") {
+    safetyReasons.push("jev_required_for_auto_mode");
+  }
+
   const sameButton = legalActions.filter((action) => action.action === selectedAction.action);
   if ((selectedAction.action === "chi" || selectedAction.action === "pon" || selectedAction.action === "minkan") && sameButton.length > 1) {
     safetyReasons.push("ambiguous_call_variant");
   }
-  const confidence = selectedAction.action === "ron" ? 1 : selectedAction.action === "pass" ? 0.9 : 0.75;
+  const confidence = jev?.confidence ?? (selectedAction.action === "ron" ? 1 : selectedAction.action === "pass" ? 0.9 : 0.75);
   const safety = { allowed: safetyReasons.length === 0, reasons: safetyReasons };
   return {
     ...base,
@@ -211,6 +226,7 @@ async function decideReaction(state: GameState, legalActions: LegalAction[], opt
     selectedActionId: selectedAction.id,
     selectedAction,
     legalActions,
+    ...(jev ? { jev, source: "jev" as const } : {}),
     executable: options.mode === "auto" && safety.allowed,
   };
 }

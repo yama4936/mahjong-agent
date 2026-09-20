@@ -63,7 +63,7 @@ Status values: `todo`, `doing`, `done`, `blocked`.
 - [x] `done` Add calibrated-ROI template recognition for riichi, chi, pon, kan, ron, tsumo, pass and kyuushu buttons.
 - [x] `done` Require a separate perfect holdout certificate and matching template fingerprint for every non-discard action; all such clicks are currently forbidden.
 - [x] `done` Wire certified riichi, chi, pon, kan, ron, tsumo, pass and kyuushu decisions through both controller implementations; verify riichi as declaration plus discard and calls by button, hand and own-meld changes.
-- [x] `done` Recognize every chi/pon/kan/ron reaction-prompt combination in the Python operator and execute a certified pass instead of repeatedly evaluating the prompt as an empty 14-tile hand until the game times out.
+- [x] `done` Recognize every chi/pon/kan/ron reaction-prompt combination in the Python operator, send the observed board and legal reactions to Jev, and fall back to a certified pass when the latest discard cannot be identified safely.
 - [ ] `blocked` Execute non-discard UI actions only after each action has at least 20 independent live holdouts, 100% accuracy and zero false positives.
 - [x] `done` Attach explicit verified/failed/not-attempted execution evidence to every new replay record; the Python operator now adds classified result-screen evidence and screenshots to every pending decision at round and match completion.
 - [x] `done` Add a shared replay-policy comparison runner with recorded/current-deterministic decisions, pairwise agreement, expert-label accuracy and per-policy error isolation; Jev can be enabled explicitly.

@@ -71,7 +71,7 @@ const image=document.querySelector('#screen'); async function refresh(){
  el('updated').textContent='画面更新: '+new Date(s.capturedAt).toLocaleTimeString();
  el('detail').textContent=s.pageUrl;renderJudgment(s.judgment);
  el('operator').textContent='操作者の最終記録：'+(s.lastEvent||'なし')+(s.lastEventAt?' ／ '+new Date(s.lastEventAt).toLocaleString():'')+(s.lastError?' ／ '+s.lastError:'');
- }catch(e){el('detail').textContent='更新失敗（表示内容は古い可能性があります）: '+e}finally{setTimeout(refresh,1000)} }
+ }catch(e){el('detail').textContent='更新失敗（表示内容は古い可能性があります）: '+e}finally{setTimeout(refresh,100)} }
 refresh();</script></body></html>"""
 
 
@@ -159,7 +159,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--cdp", default="http://127.0.0.1:9222")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8787)
-    parser.add_argument("--interval", type=float, default=0.5)
+    parser.add_argument("--interval", type=float, default=0.1)
     parser.add_argument("--operator-log")
     return parser.parse_args()
 
@@ -190,7 +190,7 @@ def main() -> int:
                         "pageUrl": page.url,
                         **read_operator_status(operator_log),
                     }
-                time.sleep(max(0.2, args.interval))
+                time.sleep(max(0.1, args.interval))
     except KeyboardInterrupt:
         return 0
     finally:

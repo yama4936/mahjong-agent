@@ -175,6 +175,23 @@ class AwayDialogDetectionTest(unittest.TestCase):
         evaluation = {"recognition": {"safe": True, "tiles": ["1m"] * 13}}
         self.assertFalse(operator.execute_reaction_pass(Mock(), evaluation)["clicked"])
 
+    def test_pending_discard_requires_one_exact_opponent_river_append(self) -> None:
+        previous = {"opponentDiscards": [
+            {"seat": "east", "discards": ["1m"]},
+            {"seat": "west", "discards": ["2p"]},
+        ]}
+        current = {"opponentDiscards": [
+            {"seat": "east", "discards": ["1m", "5s"]},
+            {"seat": "west", "discards": ["2p"]},
+        ]}
+        self.assertEqual(PythonAutoOperator.infer_pending_discard(previous, current),
+                         {"tile": "5s", "fromSeat": "east"})
+        current["opponentDiscards"][1]["discards"].append("3p")
+        self.assertIsNone(PythonAutoOperator.infer_pending_discard(previous, current))
+        current["opponentDiscards"][0]["discards"] = ["9m", "5s"]
+        current["opponentDiscards"][1]["discards"] = ["2p"]
+        self.assertIsNone(PythonAutoOperator.infer_pending_discard(previous, current))
+
     def test_saved_screens_are_classified_and_unknown_fails_closed(self) -> None:
         expected_files = {
             "login": "result-step-1.png",
