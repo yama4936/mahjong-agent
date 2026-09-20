@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import threading
 import time
@@ -158,6 +159,21 @@ def find_page(browser: Browser) -> Page:
     raise RuntimeError("No Mahjong Soul page found on the CDP browser")
 
 
+def capture_cdp_screenshot(session: Any) -> bytes:
+    """Capture without Playwright's page screenshot/viewport emulation.
+
+    The operator owns the game page's viewport.  A second Playwright client's
+    ``page.screenshot()`` can race that ownership and restore its inferred
+    viewport later, so the read-only dashboard uses the raw CDP command.
+    """
+    result = session.send("Page.captureScreenshot", {
+        "format": "png",
+        "fromSurface": True,
+        "captureBeyondViewport": False,
+    })
+    return base64.b64decode(result["data"], validate=True)
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Read-only Mahjong Soul browser monitor")
     parser.add_argument("--cdp", default="http://127.0.0.1:9222")
@@ -182,8 +198,9 @@ def main() -> int:
         with sync_playwright() as playwright:
             browser = playwright.chromium.connect_over_cdp(args.cdp)
             page = find_page(browser)
+            session = page.context.new_cdp_session(page)
             while True:
-                image = page.screenshot(animations="disabled")
+                image = capture_cdp_screenshot(session)
                 state, confidence = classify_screen(image, references)
                 with shared.lock:
                     shared.image = image

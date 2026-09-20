@@ -1,11 +1,27 @@
 import json
+import base64
 import tempfile
 import unittest
 from pathlib import Path
-from dashboard import HTML, read_operator_status
+from dashboard import HTML, capture_cdp_screenshot, read_operator_status
 
 
 class DashboardTest(unittest.TestCase):
+    def test_raw_cdp_capture_does_not_use_page_viewport_emulation(self):
+        class Session:
+            def __init__(self):
+                self.calls = []
+
+            def send(self, method, params):
+                self.calls.append((method, params))
+                return {"data": base64.b64encode(b"png").decode()}
+
+        session = Session()
+        self.assertEqual(capture_cdp_screenshot(session), b"png")
+        self.assertEqual(session.calls, [("Page.captureScreenshot", {
+            "format": "png", "fromSurface": True, "captureBeyondViewport": False,
+        })])
+
     def test_dashboard_renders_choice_probabilities(self):
         self.assertIn('aria-label="選択肢と選択確率"', HTML)
         self.assertIn("d?.jev?.probabilities", HTML)
