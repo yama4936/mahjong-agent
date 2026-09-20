@@ -43,27 +43,55 @@ export interface AgentLoopOptions {
 export class TurnRearmGate {
   private armed = true;
   private unsafeFrames = 0;
+  private processedSignature: string | undefined;
+  private changedSignature: string | undefined;
+  private changedSignatureFrames = 0;
 
   constructor(private readonly requiredUnsafeFrames = 3) {
     if (!Number.isInteger(requiredUnsafeFrames) || requiredUnsafeFrames < 1) throw new Error("requiredUnsafeFrames must be a positive integer");
   }
 
-  observe(safe: boolean): { shouldProcess: boolean; rearmed: boolean } {
+  observe(safe: boolean, signature?: string): { shouldProcess: boolean; rearmed: boolean } {
     if (!safe) {
       this.unsafeFrames += 1;
+      this.changedSignature = undefined;
+      this.changedSignatureFrames = 0;
       const rearmed = !this.armed && this.unsafeFrames >= this.requiredUnsafeFrames;
       if (rearmed) this.armed = true;
       return { shouldProcess: false, rearmed };
     }
     this.unsafeFrames = 0;
-    if (!this.armed) return { shouldProcess: false, rearmed: false };
+    if (!this.armed) {
+      if (signature === undefined || signature === this.processedSignature) {
+        this.changedSignature = undefined;
+        this.changedSignatureFrames = 0;
+        return { shouldProcess: false, rearmed: false };
+      }
+      if (signature !== this.changedSignature) {
+        this.changedSignature = signature;
+        this.changedSignatureFrames = 1;
+        return { shouldProcess: false, rearmed: false };
+      }
+      this.changedSignatureFrames += 1;
+      if (this.changedSignatureFrames < this.requiredUnsafeFrames) return { shouldProcess: false, rearmed: false };
+      this.armed = true;
+      this.changedSignature = undefined;
+      this.changedSignatureFrames = 0;
+      return { shouldProcess: false, rearmed: true };
+    }
     this.armed = false;
+    this.processedSignature = signature;
+    this.changedSignature = undefined;
+    this.changedSignatureFrames = 0;
     return { shouldProcess: true, rearmed: false };
   }
 
   retryCurrentFrame(): void {
     this.armed = true;
     this.unsafeFrames = 0;
+    this.processedSignature = undefined;
+    this.changedSignature = undefined;
+    this.changedSignatureFrames = 0;
   }
 }
 
@@ -342,7 +370,14 @@ export async function runAgentLoop(context: TurnContext, options: AgentLoopOptio
         }
       }
       if (!actionable && context.mode !== "observer") await hideAdvisorOverlay(context.page);
-      const gateResult = gate.observe(actionable);
+      // Advisor recognition can occasionally keep reporting a safe 14-tile row
+      // across the short transition after a discard.  In that mode, a stable
+      // changed hand is also evidence that the previous decision has ended.
+      // Auto mode retains the stricter unsafe-frame-only rearm rule.
+      const handSignature = context.mode === "advisor" && actionable
+        ? `${activeContext.publicState.phase}:${recognition.tiles.join(",")}`
+        : undefined;
+      const gateResult = gate.observe(actionable, handSignature);
       if (gateResult.rearmed) {
         if (context.mode !== "observer") await hideAdvisorOverlay(context.page);
         options.onStatus?.({ kind: "waiting", message: "Turn ended; armed for the next recognizable hand" });

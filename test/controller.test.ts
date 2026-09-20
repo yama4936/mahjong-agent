@@ -25,6 +25,24 @@ test("turn gate requires consecutive unsafe frames before rearming", () => {
   assert.equal(gate.observe(true).shouldProcess, true);
 });
 
+test("turn gate rearms after a changed safe hand remains stable", () => {
+  const gate = new TurnRearmGate(3);
+  assert.equal(gate.observe(true, "self_turn:1m,2m").shouldProcess, true);
+  assert.equal(gate.observe(true, "self_turn:1m,3m").rearmed, false);
+  assert.equal(gate.observe(true, "self_turn:1m,3m").rearmed, false);
+  assert.equal(gate.observe(true, "self_turn:1m,3m").rearmed, true);
+  assert.equal(gate.observe(true, "self_turn:1m,3m").shouldProcess, true);
+});
+
+test("turn gate does not rearm for unstable changed-hand recognition", () => {
+  const gate = new TurnRearmGate(3);
+  gate.observe(true, "self_turn:1m,2m");
+  assert.equal(gate.observe(true, "self_turn:1m,3m").rearmed, false);
+  assert.equal(gate.observe(true, "self_turn:1m,4m").rearmed, false);
+  assert.equal(gate.observe(true, "self_turn:1m,3m").rearmed, false);
+  assert.equal(gate.observe(true, "self_turn:1m,2m").rearmed, false);
+});
+
 test("auto calibration fingerprint rejects a changed template set", async () => {
   const directory = await mkdtemp(path.join(tmpdir(), "jantama-fingerprint-"));
   await writeFile(path.join(directory, "1m.png"), Buffer.from("first"));
