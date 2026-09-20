@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { createInterface } from "node:readline";
-import { decide } from "../agent/decision.js";
+import { decideForceAutoWithJevDeadline } from "../agent/decision.js";
+import { JevClient } from "../jev/client.js";
 import { parseGameState, parsePublicGameState } from "../game/state.js";
 import { parseGameTile } from "../game/tiles.js";
 import { proposeLiveHandLayout } from "./handLayoutProposal.js";
@@ -21,6 +22,11 @@ if (rawPublicState) {
   delete rawPublicState.recognition_confidence;
 }
 const publicState = rawPublicState ? parsePublicGameState(rawPublicState) : undefined;
+const forceAutoDeadlineMs = Number(process.env.JEV_FORCE_AUTO_DEADLINE_MS ?? 700);
+if (!Number.isFinite(forceAutoDeadlineMs) || forceAutoDeadlineMs <= 0) {
+  throw new Error(`Invalid force-auto Jev deadline: ${process.env.JEV_FORCE_AUTO_DEADLINE_MS}`);
+}
+const jev = process.env.TYPESAFE_API_KEY ? new JevClient(process.env.TYPESAFE_API_KEY) : undefined;
 const options: MatcherOptions = {
   normalizeFace: layout.tileMatcher !== "raw",
   allClasses: layout.tileMatcher === "face_all",
@@ -82,7 +88,10 @@ for await (const line of lines) {
         draw: recognition.tiles.at(-1),
         recognitionConfidence: recognition.confidence,
       });
-      const decision = await decide(state, { mode: "force-auto" });
+      const decision = await decideForceAutoWithJevDeadline(state, {
+        ...(jev ? { jev } : {}),
+        deadlineMs: forceAutoDeadlineMs,
+      });
       const clickIndex = decision.selectedAction.action === "discard" || decision.selectedAction.action === "riichi"
         ? [...state.hand, ...(state.draw ? [state.draw] : [])].map(String).lastIndexOf(decision.selectedAction.tile)
         : undefined;

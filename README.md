@@ -272,6 +272,12 @@ npm run operator:auto
 npm run force:auto
 ```
 
+`force-auto`はローカルの決定論判断を先に確保し、`.env.local`またはシェル環境に
+`TYPESAFE_API_KEY`がある場合だけJevを最大700ms待ちます。Jevが期限内に
+合法な判断を返せば採用し、期限超過・通信失敗・不正応答では即座にローカル判断へ
+戻ります。採用元、実測時間、フォールバック理由は判断JSONの`arbitration`へ記録します。
+期限を調整する場合は`JEV_FORCE_AUTO_DEADLINE_MS`をシェル環境へ設定してください。
+
 認識や判断の曖昧さを無視して候補を常にクリックする必要がある場合は、明示的な`force-auto`モードを使用できます。このモードは牌認識confidence、曖昧度、Jev confidence、公開局面confidence、Auto証明書、アクション別証明書を操作許可に使いません。ただし、候補座標が存在しない場合、クリック直前に画面が変化した場合、クリック後の変化を確認できない場合は停止します。誤打牌・誤操作を起こし得るため、通常の`auto`とは分離されています。
 
 各コマンドは最新の`artifacts/live/*.layout.json`、`templates/bootstrap`、`examples/public-unknown.json`を自動選択します。`templates/actions`があればアクションボタンにも使用します。値を変える場合は、たとえば`npm run force:auto -- --layout path/to/layout.json --templates path/to/templates`のように末尾へ追加すると上書きできます。

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { decide } from "../src/agent/decision.js";
+import { decide, decideForceAutoWithJevDeadline } from "../src/agent/decision.js";
 import { parseGameState } from "../src/game/state.js";
 
 const state = parseGameState({
@@ -96,6 +96,47 @@ test("force-auto gives Jev only non-worsening shanten choices when not under thr
   await decide(pairs, { mode: "force-auto", jev });
   assert.ok(offered.length > 0);
   assert.ok(offered.every((candidate) => candidate.shanten === Math.min(...offered.map((item) => item.shanten))));
+});
+
+test("force-auto adopts a valid Jev decision before its deadline", async () => {
+  const local = await decide(state, { mode: "force-auto" });
+  const jev = { chooseDiscard: async (_state: unknown, candidates: any[]) => {
+    const selected = candidates.find((candidate) => candidate.actionId !== local.selectedActionId) ?? candidates[0];
+    return {
+      actionId: selected.actionId,
+      confidence: 0.8,
+      probabilities: Object.fromEntries(candidates.map((candidate) => [candidate.actionId, candidate === selected ? 1 : 0])),
+      model: "fake", promptVersion: "test", latencyMs: 1,
+    };
+  } } as any;
+
+  const result = await decideForceAutoWithJevDeadline(state, { jev, deadlineMs: 100 });
+
+  assert.equal(result.source, "jev");
+  assert.equal(result.arbitration?.selectedSource, "jev");
+  assert.equal(result.arbitration?.deadlineMs, 100);
+});
+
+test("force-auto falls back locally when Jev exceeds its deadline", async () => {
+  const jev = { chooseDiscard: async (_state: unknown, _candidates: any[], signal: AbortSignal) => (
+    new Promise((_resolve, reject) => signal.addEventListener("abort", () => reject(new Error("aborted")), { once: true }))
+  ) } as any;
+
+  const result = await decideForceAutoWithJevDeadline(state, { jev, deadlineMs: 5 });
+
+  assert.equal(result.source, "deterministic");
+  assert.equal(result.arbitration?.selectedSource, "local");
+  assert.equal(result.arbitration?.fallbackReason, "deadline_exceeded");
+});
+
+test("force-auto falls back locally when Jev fails", async () => {
+  const jev = { chooseDiscard: async () => { throw new Error("offline"); } } as any;
+
+  const result = await decideForceAutoWithJevDeadline(state, { jev, deadlineMs: 100 });
+
+  assert.equal(result.source, "deterministic");
+  assert.equal(result.arbitration?.selectedSource, "local");
+  assert.equal(result.arbitration?.fallbackReason, "jev_error");
 });
 
 test("advisor recommends a non-worsening closed kan outside riichi", async () => {

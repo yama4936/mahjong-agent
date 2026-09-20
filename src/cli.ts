@@ -11,7 +11,7 @@ import { recognizeConfiguredPublicTiles, recognizeConfiguredPublicTilesWithVit, 
 import { layoutFromHandProposal, proposeHandLayout, proposeLiveHandLayout } from "./recognition/handLayoutProposal.js";
 import { VitTileRecognizer } from "./recognition/vitRecognizer.js";
 import { HybridTileRecognizer } from "./recognition/hybridTileRecognizer.js";
-import { decide } from "./agent/decision.js";
+import { decide, decideForceAutoWithJevDeadline } from "./agent/decision.js";
 import { appendDecisionLog, attachActualResult, readDecisionDataset, readDecisionLog } from "./logging/replay.js";
 import { summarizeBenchmark } from "./logging/benchmark.js";
 import { compareReplayPolicies, deterministicReplayPolicy, jevReplayPolicy } from "./logging/policyComparison.js";
@@ -163,13 +163,15 @@ async function main(): Promise<void> {
       if (!layout.autoOperation) throw new Error("Auto operation is not enabled by a passing template calibration");
       await assertTemplateSetMatchesCalibration(layout, templates);
     }
-    const decision = await decide(state, {
-      mode: modeArgument,
-      // Force-auto is the latency-focused fallback. Its deterministic
-      // candidate ordering already maximizes shanten/ukeire, while a remote
-      // Jev timeout can consume most of a short turn clock.
-      ...(apiKey && modeArgument !== "force-auto" ? { jev: new JevClient(apiKey) } : {}),
-    });
+    const decision = modeArgument === "force-auto"
+      ? await decideForceAutoWithJevDeadline(state, {
+          ...(apiKey ? { jev: new JevClient(apiKey) } : {}),
+          deadlineMs: Number(process.env.JEV_FORCE_AUTO_DEADLINE_MS ?? 700),
+        })
+      : await decide(state, {
+          mode: modeArgument,
+          ...(apiKey ? { jev: new JevClient(apiKey) } : {}),
+        });
     const clickIndex = decision.selectedAction.action === "discard" || decision.selectedAction.action === "riichi"
       ? [...state.hand, ...(state.draw ? [state.draw] : [])].map(String).lastIndexOf(decision.selectedAction.tile)
       : undefined;

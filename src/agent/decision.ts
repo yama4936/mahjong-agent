@@ -14,12 +14,22 @@ export interface DecisionResult extends AdvisorResult {
   executable: boolean;
   selectedAction: LegalAction;
   legalActions: LegalAction[];
+  arbitration?: ForceAutoArbitration;
 }
 
 export interface DecisionOptions {
   mode: AgentMode;
   jev?: JevClient;
   minJevConfidence?: number;
+  signal?: AbortSignal;
+}
+
+export interface ForceAutoArbitration {
+  strategy: "jev_deadline_with_local_fallback";
+  deadlineMs: number;
+  selectedSource: "jev" | "local";
+  elapsedMs: number;
+  fallbackReason?: "jev_unavailable" | "deadline_exceeded" | "jev_error" | "local_immediate_action";
 }
 
 function publicStateSafetyReasons(state: GameState): string[] {
@@ -65,7 +75,7 @@ export async function decide(state: GameState, options: DecisionOptions): Promis
       const jevCandidates = options.mode === "force-auto" && !underThreat && minimumShanten !== undefined
         ? base.candidates.filter((candidate) => candidate.shanten === minimumShanten)
         : base.candidates;
-      jev = await options.jev.chooseDiscard(state, jevCandidates);
+      jev = await options.jev.chooseDiscard(state, jevCandidates, options.signal);
       const candidate = base.candidates.find((item) => item.actionId === jev!.actionId);
       if (!candidate) throw new Error("Jev selected an unknown candidate");
       selected = candidate;
@@ -108,6 +118,60 @@ export async function decide(state: GameState, options: DecisionOptions): Promis
     ...(jev ? { jev } : {}),
     executable: options.mode === "force-auto" || (options.mode === "auto" && safety.allowed),
   };
+}
+
+/**
+ * Keep a complete deterministic force-auto decision ready while Jev gets a
+ * short opportunity to replace it. A slow or failed remote request must never
+ * consume the rest of a Mahjong Soul turn clock.
+ */
+export async function decideForceAutoWithJevDeadline(
+  state: GameState,
+  options: { jev?: JevClient; deadlineMs?: number },
+): Promise<DecisionResult> {
+  const deadlineMs = options.deadlineMs ?? 700;
+  if (!Number.isFinite(deadlineMs) || deadlineMs <= 0) throw new Error("Jev deadline must be positive");
+  const startedAt = performance.now();
+  const local = await decide(state, { mode: "force-auto" });
+  const withArbitration = (
+    decision: DecisionResult,
+    selectedSource: "jev" | "local",
+    fallbackReason?: ForceAutoArbitration["fallbackReason"],
+  ): DecisionResult => ({
+    ...decision,
+    arbitration: {
+      strategy: "jev_deadline_with_local_fallback",
+      deadlineMs,
+      selectedSource,
+      elapsedMs: Math.max(0, Math.round(performance.now() - startedAt)),
+      ...(fallbackReason ? { fallbackReason } : {}),
+    },
+  });
+
+  if (!options.jev) return withArbitration(local, "local", "jev_unavailable");
+  if (local.selectedAction.action === "tsumo" || local.selectedAction.action === "ron") {
+    return withArbitration(local, "local", "local_immediate_action");
+  }
+
+  const controller = new AbortController();
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<{ kind: "timeout" }>((resolve) => {
+    timeout = setTimeout(() => resolve({ kind: "timeout" }), deadlineMs);
+  });
+  const remote = decide(state, { mode: "force-auto", jev: options.jev, signal: controller.signal });
+  const outcome = await Promise.race([
+    remote.then((decision) => ({ kind: "decision" as const, decision })),
+    deadline,
+  ]);
+  if (timeout) clearTimeout(timeout);
+  if (outcome.kind === "timeout") {
+    controller.abort();
+    return withArbitration(local, "local", "deadline_exceeded");
+  }
+  if (outcome.decision.source !== "jev" || !outcome.decision.jev) {
+    return withArbitration(local, "local", "jev_error");
+  }
+  return withArbitration(outcome.decision, "jev");
 }
 
 function shouldRecommendKan(state: GameState, action: LegalAction & { action: "ankan" | "kakan"; consumedTiles: string[] }): boolean {
@@ -207,7 +271,7 @@ async function decideReaction(state: GameState, legalActions: LegalAction[], opt
 
   if (options.jev) {
     try {
-      jev = await options.jev.chooseReaction(state, legalActions);
+      jev = await options.jev.chooseReaction(state, legalActions, options.signal);
       const choice = legalActions.find((action) => action.id === jev!.actionId);
       if (!choice) throw new Error("Jev selected an unknown reaction");
       selectedAction = choice;
