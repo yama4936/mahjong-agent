@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { parseGameState, parsePublicGameState } from "./game/state.js";
+import { normalizeTile } from "./game/tiles.js";
 import { deterministicAdvice } from "./evaluation/advisor.js";
 import { JevClient, type JevPromptProfile } from "./jev/client.js";
 import { evaluateJevProfile } from "./jev/tuning.js";
@@ -196,6 +197,7 @@ async function main(): Promise<void> {
     const templates = process.argv[5];
     const beforeArgument = process.argv.find((argument) => argument.startsWith("--before="))?.slice(9);
     const clickIndex = Number(process.argv.find((argument) => argument.startsWith("--click-index="))?.slice(14));
+    const force = process.argv.includes("--force");
     if (!screenshot || !layoutPath || !templates || !beforeArgument || !Number.isInteger(clickIndex)) {
       throw new Error("Usage: verify-discard-frame <screenshot.png> <layout.json> <templates> --before=t1,...,t14 --click-index=N");
     }
@@ -205,10 +207,22 @@ async function main(): Promise<void> {
     const expected = before.filter((_, index) => index !== clickIndex).sort();
     const recognition = await recognizeTileSlots(screenshot, layout.handSlots, layout, templates);
     const actual = recognition.tiles.map(String).sort();
+    // The red-five gate can classify the same physical tile as either 0x or
+    // 5x on adjacent frames. That distinction matters to strategy, but it
+    // must not turn a successful discard into a false post-click failure.
+    const normalizedExpected = expected.map(normalizeTile).sort();
+    const normalizedActual = actual.map(normalizeTile).sort();
     const drawPresence = layout.drawSlot ? (await measureSlotPresence(screenshot, [layout.drawSlot]))[0]! : 0;
     const drawSlotEmpty = drawPresence < layout.minimumTilePresence;
-    const verified = recognition.safe && drawSlotEmpty && JSON.stringify(actual) === JSON.stringify(expected);
-    console.log(JSON.stringify({ schemaVersion: 1, verified, expected, actual, drawPresence, drawSlotEmpty, recognition }));
+    // force-auto deliberately ignores score calibration, but still requires
+    // the expected 13-tile multiset (apart from red-five classification) and
+    // an empty draw slot.
+    const verified = (force || recognition.safe) && drawSlotEmpty
+      && JSON.stringify(normalizedActual) === JSON.stringify(normalizedExpected);
+    console.log(JSON.stringify({
+      schemaVersion: 1, verified, force, expected, actual,
+      normalizedExpected, normalizedActual, drawPresence, drawSlotEmpty, recognition,
+    }));
     return;
   }
   if (command === "detect-regions") {

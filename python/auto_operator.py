@@ -26,6 +26,10 @@ from PIL import Image, ImageChops, ImageStat
 from screen_state import classify_screen, load_references
 
 
+class RetryableSafetyAbort(RuntimeError):
+    """A stale pre-click observation that is safe to reevaluate."""
+
+
 def utc_stamp() -> str:
     return datetime.now(timezone.utc).isoformat().replace(":", "-")
 
@@ -113,6 +117,25 @@ def is_away_resume_dialog(screenshot: bytes, viewport: dict[str, int]) -> bool:
         gold = fraction_matching(button_image, lambda red, green, blue: red > 180 and green > 110 and blue < 130)
         dark = fraction_matching(popup_image, lambda red, green, blue: red < 70 and green < 90 and blue < 120)
     return gold >= 0.65 and dark >= 0.75
+
+
+def is_force_auto_pass_prompt(screenshot: bytes, region: dict[str, float]) -> bool:
+    """Recognize the fixed Mahjong Soul skip button without a template set.
+
+    This fallback is restricted to force-auto and is combined with an
+    independently recognized 13-tile concealed hand before it can click.
+    """
+    with Image.open(io.BytesIO(screenshot)) as image:
+        button = image.convert("RGB").crop((
+            region["x"], region["y"],
+            region["x"] + region["width"], region["y"] + region["height"],
+        ))
+        dark = fraction_matching(button, lambda red, green, blue: red < 80 and green < 90 and blue < 100)
+        warm = fraction_matching(button, lambda red, green, blue: red > 120 and green > 95 and blue < 100)
+        neutral = fraction_matching(
+            button, lambda red, green, blue: abs(red - green) < 25 and red > 110 and blue < 120,
+        )
+    return dark >= 0.25 and warm >= 0.005 and neutral >= 0.02
 
 
 def local_discard_allowed(args: argparse.Namespace, evaluation: dict[str, Any]) -> bool:
@@ -333,6 +356,41 @@ class PythonAutoOperator:
             raise RuntimeError((result.stderr or result.stdout or "frame evaluator failed").strip())
         return json.loads(result.stdout)
 
+    def force_auto_reaction_fallback(self, screenshot: Path) -> dict[str, Any] | None:
+        """Build a pass-only reaction result when action templates are absent."""
+        if self.args.mode != "force-auto" or self.args.action_templates:
+            return None
+        region = self.layout.get("actionButtonRegions", {}).get("pass")
+        if not region or not is_force_auto_pass_prompt(screenshot.read_bytes(), region):
+            return None
+        command = [
+            "node", "dist/src/cli.js", "recognize", str(screenshot),
+            str(self.layout_path), str(self.templates), "--concealed-only",
+        ]
+        result = subprocess.run(
+            command, cwd=self.root, env=self.evaluator_env, text=True, capture_output=True,
+            timeout=self.args.evaluation_timeout, check=False,
+        )
+        if result.returncode != 0:
+            raise RuntimeError((result.stderr or result.stdout or "concealed hand recognizer failed").strip())
+        recognition = json.loads(result.stdout)
+        if len(recognition.get("tiles", [])) != 13:
+            return None
+        point = {
+            "x": region["x"] + region["width"] / 2,
+            "y": region["y"] + region["height"] / 2,
+        }
+        return {
+            "schemaVersion": 1,
+            "status": "reaction_prompt",
+            "recognition": recognition,
+            "availableUiActions": ["pass"],
+            "actionButton": {
+                "action": "pass", "present": True, "confidence": 1,
+                "center": point, "source": "force_auto_fixed_geometry",
+            },
+        }
+
     def observe_public_board(self, screenshot: Path) -> dict[str, Any] | None:
         command = [
             "node", "dist/src/cli.js", "public-observation", str(screenshot),
@@ -367,6 +425,8 @@ class PythonAutoOperator:
             str(self.layout_path), str(self.templates), f"--before={','.join(before)}",
             f"--click-index={click_index}",
         ]
+        if self.args.mode == "force-auto":
+            command.append("--force")
         result = subprocess.run(
             command,
             cwd=self.root,
@@ -391,10 +451,25 @@ class PythonAutoOperator:
         click_index: int,
     ) -> dict[str, Any]:
         started = time.monotonic()
+        deadline = started + self.args.confirmation_timeout
         maximum_hand_delta = 0.0
         maximum_river_delta = 0.0
-        while time.monotonic() - started < self.args.confirmation_timeout:
+        terminal_transition = False
+        while time.monotonic() < deadline:
             page.wait_for_timeout(100)
+            if terminal_transition:
+                full_screen = page.screenshot(animations="disabled")
+                screen_state, screen_confidence = classify_screen(full_screen, self.screen_references)
+                if screen_state in {"round_result", "match_result"}:
+                    return {
+                        "confirmation": "discard_followed_by_terminal_result",
+                        "confirmationLatencyMs": round((time.monotonic() - started) * 1000),
+                        "handPixelDelta": maximum_hand_delta,
+                        "riverPixelDelta": maximum_river_delta,
+                        "terminalScreenState": screen_state,
+                        "terminalScreenConfidence": screen_confidence,
+                    }
+                continue
             hand_after = page.screenshot(clip=self.hand_clip, animations="disabled")
             river_after = page.screenshot(clip=self.river_clip, animations="disabled")
             hand_delta = mean_pixel_delta(hand_before, hand_after)
@@ -407,6 +482,15 @@ class PythonAutoOperator:
                     page.screenshot(animations="disabled"), before_tiles, click_index,
                 )
                 if not verification.get("verified"):
+                    # An exhaustive draw or win immediately reveals and moves
+                    # every hand away from the configured concealed slots.
+                    # Wait for the independently detected result summary, but
+                    # keep every non-empty multiset mismatch fail-closed.
+                    if verification.get("actual") == []:
+                        terminal_transition = True
+                        deadline = max(deadline, time.monotonic() + self.args.terminal_transition_timeout)
+                        self.log("terminal_transition_wait", verification=verification)
+                        continue
                     raise RuntimeError(f"post-discard tile multiset verification failed: {verification}")
                 return {
                     "confirmation": "hand_and_own_river_changed",
@@ -490,7 +574,7 @@ class PythonAutoOperator:
                 raise RuntimeError("consensus recognition failed")
             fresh = json.loads(result.stdout)
             if (not force_auto and not fresh.get("safe")) or fresh.get("tiles") != recognition.get("tiles"):
-                raise RuntimeError("fresh frame recognition disagrees with the evaluated hand")
+                raise RetryableSafetyAbort("fresh frame recognition disagrees with the evaluated hand")
         if not force_auto and (not recognition.get("safe") or recognition.get("confidence", 0) < self.layout.get("minimumTileConfidence", 0.98)):
             raise RuntimeError("Python recognition safety gate rejected click")
         if certified_auto:
@@ -508,14 +592,14 @@ class PythonAutoOperator:
         # hand coordinate; resume only, then discard this stale decision.
         if is_away_resume_dialog(page.screenshot(animations="disabled"), self.layout["viewport"]):
             self.resume_if_away(page)
-            raise RuntimeError("decision canceled because away dialog appeared during evaluation")
+            raise RetryableSafetyAbort("decision canceled because away dialog appeared during evaluation")
 
         hand_before = page.screenshot(clip=self.hand_clip, animations="disabled")
         river_before = page.screenshot(clip=self.river_clip, animations="disabled")
         page.wait_for_timeout(120)
         stability_delta = mean_pixel_delta(hand_before, page.screenshot(clip=self.hand_clip, animations="disabled"))
         if stability_delta > self.args.stability_pixel_delta:
-            raise RuntimeError("hand changed during Python pre-click stability check")
+            raise RetryableSafetyAbort("hand changed during Python pre-click stability check")
         if selected_action != "discard":
             button_action = "kan" if selected_action in {"minkan", "ankan"} else selected_action
             observed = evaluation.get("actionButton") if force_auto else self.validate_action_certificate(button_action, evaluation)
@@ -648,6 +732,10 @@ class PythonAutoOperator:
                 if public_observation:
                     self.previous_public_observation = public_observation
                 evaluation = self.evaluate(screenshot_path, pending_discard, public_observation)
+                if evaluation.get("status") != "reaction_prompt":
+                    reaction_fallback = self.force_auto_reaction_fallback(screenshot_path)
+                    if reaction_fallback:
+                        evaluation = reaction_fallback
                 if evaluation.get("status") == "reaction_prompt":
                     try:
                         receipt = self.execute_reaction_pass(page, evaluation)
@@ -670,6 +758,13 @@ class PythonAutoOperator:
                     continue
                 try:
                     receipt = self.execute(page, evaluation)
+                except RetryableSafetyAbort as error:
+                    self.record_replay(evaluation, screenshot_path, execution_error=str(error))
+                    self.log("action_aborted", screenshot=str(screenshot_path), error=str(error), retryable=True)
+                    self.last_processed_hand = None
+                    self.armed = True
+                    time.sleep(self.args.poll)
+                    continue
                 except Exception as error:
                     # A click may already have reached the game even if visual
                     # confirmation failed. Disarm this exact hand so the loop
@@ -720,6 +815,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--action-pixel-delta", type=float, default=3.0)
     parser.add_argument("--river-pixel-delta", type=float, default=1.0)
     parser.add_argument("--confirmation-timeout", type=float, default=8.0)
+    parser.add_argument("--terminal-transition-timeout", type=float, default=20.0,
+                        help="extra time to confirm a result screen after a terminal discard reveal")
     parser.add_argument("--evaluation-timeout", type=float, default=30.0)
     parser.add_argument("--consensus-frames", type=int, choices=range(2, 6), default=3,
                         help="number of matching fresh hand observations required before clicking")

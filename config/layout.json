@@ -28,6 +28,9 @@
   "minimumTilePresence": 0.12,
   "minimumVitConfidence": 0.5,
   "minimumVitMargin": 0.05,
+  "actionButtonRegions": {
+    "pass": { "x": 1170, "y": 775, "width": 275, "height": 105 }
+  },
   "publicTileRegions": {
     "ownDiscards": { "x": 740, "y": 520, "width": 430, "height": 300, "rotationToUpright": 0, "detectionMode": "discard_grid" },
     "rightDiscards": { "x": 1125, "y": 333, "width": 280, "height": 220, "rotationToUpright": 90, "detectionMode": "discard_grid" },

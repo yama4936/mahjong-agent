@@ -9,7 +9,7 @@ import tempfile
 import json
 from unittest.mock import Mock, patch
 
-from auto_operator import PythonAutoOperator, away_resume_geometry, is_away_resume_dialog, load_json, load_secret_environment, local_discard_allowed, send_discard_click
+from auto_operator import PythonAutoOperator, away_resume_geometry, is_away_resume_dialog, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, send_discard_click
 from screen_state import classify_screen, load_references
 
 
@@ -25,6 +25,102 @@ class RecordingMouse:
 
 
 class AwayDialogDetectionTest(unittest.TestCase):
+    def test_force_auto_pass_prompt_requires_dark_button_and_warm_neutral_text(self) -> None:
+        region = {"x": 100, "y": 50, "width": 200, "height": 80}
+        image = Image.new("RGB", (400, 200), (25, 55, 85))
+        draw = ImageDraw.Draw(image)
+        draw.rectangle((100, 50, 300, 130), fill=(35, 40, 45))
+        draw.rectangle((140, 75, 170, 90), fill=(180, 150, 70))
+        draw.rectangle((190, 75, 250, 90), fill=(150, 145, 90))
+        output = io.BytesIO()
+        image.save(output, format="PNG")
+        self.assertTrue(is_force_auto_pass_prompt(output.getvalue(), region))
+
+        empty = io.BytesIO()
+        Image.new("RGB", (400, 200), (25, 55, 85)).save(empty, format="PNG")
+        self.assertFalse(is_force_auto_pass_prompt(empty.getvalue(), region))
+
+    def test_force_auto_reaction_fallback_requires_thirteen_concealed_tiles(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            operator = PythonAutoOperator.__new__(PythonAutoOperator)
+            operator.args = argparse.Namespace(mode="force-auto", action_templates="", evaluation_timeout=30)
+            operator.root = Path(directory)
+            operator.layout_path = Path(directory) / "layout.json"
+            operator.templates = Path(directory) / "templates"
+            operator.evaluator_env = {}
+            operator.layout = {"actionButtonRegions": {"pass": {"x": 100, "y": 50, "width": 200, "height": 80}}}
+            image = Image.new("RGB", (400, 200), (25, 55, 85))
+            draw = ImageDraw.Draw(image)
+            draw.rectangle((100, 50, 300, 130), fill=(35, 40, 45))
+            draw.rectangle((140, 75, 170, 90), fill=(180, 150, 70))
+            draw.rectangle((190, 75, 250, 90), fill=(150, 145, 90))
+            screenshot = Path(directory) / "reaction.png"
+            image.save(screenshot)
+            completed = argparse.Namespace(returncode=0, stdout=json.dumps({"tiles": ["1m"] * 13}), stderr="")
+
+            with patch("auto_operator.subprocess.run", return_value=completed):
+                result = operator.force_auto_reaction_fallback(screenshot)
+
+            self.assertEqual(result["status"], "reaction_prompt")
+            self.assertEqual(result["actionButton"]["center"], {"x": 200.0, "y": 90.0})
+
+    def test_force_auto_post_discard_verifier_keeps_exact_multiset_check(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            operator = PythonAutoOperator.__new__(PythonAutoOperator)
+            operator.frames = Path(directory)
+            operator.root = Path(directory)
+            operator.layout_path = Path(directory) / "layout.json"
+            operator.templates = Path(directory) / "templates"
+            operator.evaluator_env = {}
+            operator.args = argparse.Namespace(mode="force-auto", evaluation_timeout=30)
+            completed = argparse.Namespace(returncode=0, stdout=json.dumps({
+                "verified": True,
+                "force": True,
+                "expected": ["1m"] * 13,
+                "actual": ["1m"] * 13,
+            }), stderr="")
+
+            with patch("auto_operator.subprocess.run", return_value=completed) as run:
+                result = operator.verify_post_discard(b"png", ["1m"] * 14, 0)
+
+            self.assertTrue(result["verified"])
+            self.assertIn("--force", run.call_args.args[0])
+
+    def test_terminal_reveal_waits_for_result_instead_of_rejecting_empty_slots(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(
+            confirmation_timeout=0.1, terminal_transition_timeout=1,
+            action_pixel_delta=1, river_pixel_delta=1,
+        )
+        operator.hand_clip = {"x": 0, "y": 0, "width": 10, "height": 10}
+        operator.river_clip = {"x": 10, "y": 0, "width": 10, "height": 10}
+        operator.screen_references = {}
+        operator.verify_post_discard = Mock(return_value={"verified": False, "actual": []})
+        operator.log = Mock()
+        black = io.BytesIO()
+        Image.new("RGB", (10, 10), "black").save(black, format="PNG")
+        changed = io.BytesIO()
+        Image.new("RGB", (10, 10), "white").save(changed, format="PNG")
+        result_image = Image.new("RGB", (1920, 1080), (25, 55, 85))
+        draw = ImageDraw.Draw(result_image)
+        draw.rectangle((1650, 950, 1849, 1045), fill=(35, 40, 45))
+        draw.rectangle((1650, 950, 1749, 1045), fill=(55, 70, 115))
+        draw.rectangle((1680, 975, 1780, 1005), fill=(190, 165, 100))
+        terminal = io.BytesIO()
+        result_image.save(terminal, format="PNG")
+        page = Mock()
+        page.screenshot.side_effect = lambda **kwargs: (
+            changed.getvalue() if kwargs.get("clip") else terminal.getvalue()
+        )
+
+        receipt = operator.confirm_discard(
+            page, black.getvalue(), black.getvalue(), ["1m"] * 14, 0,
+        )
+
+        self.assertEqual(receipt["confirmation"], "discard_followed_by_terminal_result")
+        self.assertEqual(receipt["terminalScreenState"], "round_result")
+        operator.log.assert_called_once_with("terminal_transition_wait", verification={"verified": False, "actual": []})
+
     def test_operator_restores_and_verifies_cdp_viewport(self) -> None:
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
         operator.layout = {"viewport": {"width": 1920, "height": 1080}}
@@ -281,6 +377,17 @@ class AwayDialogDetectionTest(unittest.TestCase):
             blank = io.BytesIO()
             Image.new("RGB", (1920, 1080), "white").save(blank, format="PNG")
             self.assertEqual(classify_screen(blank.getvalue(), references), ("unknown", 0.0))
+
+    def test_round_result_uses_confirm_button_geometry_before_whole_frame_reference(self) -> None:
+        image = Image.new("RGB", (1920, 1080), (25, 55, 85))
+        draw = ImageDraw.Draw(image)
+        draw.rectangle((1650, 950, 1849, 1045), fill=(35, 40, 45))
+        draw.rectangle((1650, 950, 1749, 1045), fill=(55, 70, 115))
+        draw.rectangle((1680, 975, 1780, 1005), fill=(190, 165, 100))
+        output = io.BytesIO()
+        image.save(output, format="PNG")
+
+        self.assertEqual(classify_screen(output.getvalue(), {}), ("round_result", 1.0))
 
 
 if __name__ == "__main__":
