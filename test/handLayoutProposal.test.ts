@@ -35,6 +35,16 @@ async function syntheticHandWithConnectedOverlay(): Promise<Buffer> {
   }]).png().toBuffer();
 }
 
+async function syntheticPostCallHand(): Promise<Buffer> {
+  const hand = await syntheticHand(3, 11);
+  const melds = Array.from({ length: 3 }, (_, index) => ({
+    input: { create: { width: 30, height: 70, channels: 3 as const, background: "#f2eedb" } },
+    left: 600 + index * 33,
+    top: 350,
+  }));
+  return sharp(hand).composite(melds).png().toBuffer();
+}
+
 test("proposes thirteen hand slots plus a separated draw slot", async () => {
   const proposal = await proposeHandLayout(await syntheticHand(14));
   assert.equal(proposal.handSlots.length, 13);
@@ -52,6 +62,16 @@ test("proposes a compact hand plus draw slot after a kan", async () => {
   assert.equal(proposal.clickPoints.length, 11);
   assert.equal(proposal.evidence.detectedTiles, 11);
   assert.equal(proposal.evidence.drawGap, 14);
+});
+
+test("isolates an unseparated compact hand from a same-height exposed meld", async () => {
+  const proposal = await proposeHandLayout(await syntheticPostCallHand(), [11, 8, 5, 2]);
+  assert.equal(proposal.handSlots.length, 10);
+  assert.equal(proposal.clickPoints.length, 11);
+  assert.equal(proposal.evidence.detectedTiles, 11);
+  assert.equal(proposal.evidence.medianGap, 3);
+  assert.equal(proposal.evidence.drawGap, 3);
+  assert.equal(proposal.drawSlot.x, 430);
 });
 
 test("rejects a row whose draw tile cannot be distinguished", async () => {

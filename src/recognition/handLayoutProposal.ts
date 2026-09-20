@@ -85,6 +85,24 @@ function rowCandidates(candidates: RegionCandidate[]): RegionCandidate[][] {
   return rows;
 }
 
+function splitSeparatedGroups(row: RegionCandidate[]): RegionCandidate[][] {
+  if (row.length < 2) return [row];
+  const widths = row.map((tile) => tile.width);
+  const gaps = row.slice(1).map((tile, index) => tile.x - (row[index]!.x + row[index]!.width));
+  const nonNegativeGaps = gaps.filter((gap) => gap >= 0);
+  const ordinaryGap = nonNegativeGaps.length ? median(nonNegativeGaps) : 0;
+  const splitGap = Math.max(12, median(widths) * 0.75, ordinaryGap * 4);
+  const groups: RegionCandidate[][] = [];
+  let start = 0;
+  for (let index = 0; index < gaps.length; index += 1) {
+    if (gaps[index]! <= splitGap) continue;
+    groups.push(row.slice(start, index + 1));
+    start = index + 1;
+  }
+  groups.push(row.slice(start));
+  return groups.filter((group) => group.length >= 2);
+}
+
 function scoreRow(row: RegionCandidate[], viewportHeight: number, tileCounts: readonly number[]): number {
   if (!tileCounts.includes(row.length)) return Number.NEGATIVE_INFINITY;
   const heights = row.map((tile) => tile.height);
@@ -120,7 +138,8 @@ export async function proposeHandLayout(screenshot: string | Buffer, tileCounts:
   })));
   const attempts = detections.map(({ luminanceThreshold, detection }) => {
     const candidates = detection.candidates.filter(tileLike);
-    const row = rowCandidates(candidates).sort((a, b) => scoreRow(b, metadata.height!, tileCounts) - scoreRow(a, metadata.height!, tileCounts))[0];
+    const rows = rowCandidates(candidates).flatMap(splitSeparatedGroups);
+    const row = rows.sort((a, b) => scoreRow(b, metadata.height!, tileCounts) - scoreRow(a, metadata.height!, tileCounts))[0];
     return { luminanceThreshold, candidates, row, score: row ? scoreRow(row, metadata.height!, tileCounts) : Number.NEGATIVE_INFINITY };
   });
   const selected = attempts.sort((a, b) => b.score - a.score)[0]!;
@@ -132,16 +151,20 @@ export async function proposeHandLayout(screenshot: string | Buffer, tileCounts:
 
   const gaps = row.slice(1).map((tile, index) => tile.x - (row[index]!.x + row[index]!.width));
   const ordinaryGaps = gaps.slice(0, -1);
-  const medianGap = median(ordinaryGaps);
+  const medianGap = ordinaryGaps.length ? median(ordinaryGaps) : gaps[0]!;
   const drawGap = gaps.at(-1)!;
-  if (drawGap < Math.max(medianGap + 2, medianGap * 1.25)) {
+  const separatedDraw = drawGap >= Math.max(medianGap + 2, medianGap * 1.25);
+  const compactPostCall = row.length < 14 && !tileCounts.includes(14);
+  if (!separatedDraw && !compactPostCall) {
     throw new Error(`The 14th tile is not separated enough to identify the draw slot (gap ${drawGap}, baseline ${medianGap})`);
   }
   const bottoms = row.map((tile) => tile.y + tile.height);
   const rowBottomSpread = Math.max(...bottoms) - Math.min(...bottoms);
   const medianHeight = median(row.map((tile) => tile.height));
   const alignmentScore = Math.max(0, 1 - rowBottomSpread / Math.max(1, medianHeight * 0.2));
-  const gapScore = Math.min(1, Math.max(0, (drawGap - medianGap) / Math.max(4, median(row.map((tile) => tile.width)) * 0.25)));
+  const gapScore = separatedDraw
+    ? Math.min(1, Math.max(0, (drawGap - medianGap) / Math.max(4, median(row.map((tile) => tile.width)) * 0.25)))
+    : 0;
   const confidence = Math.min(0.99, 0.55 + alignmentScore * 0.25 + gapScore * 0.19);
   const rects = row.map(({ x, y, width, height }) => ({ x, y, width, height }));
   return {
