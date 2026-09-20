@@ -170,6 +170,22 @@ class PythonAutoOperator:
         self.previous_public_observation: dict[str, Any] | None = None
         self.armed = True
 
+    def ensure_viewport(self, page: Page, *, force: bool = False) -> None:
+        """Keep CDP clients from leaving the game canvas at a stale viewport."""
+        expected = self.layout["viewport"]
+        actual = page.evaluate("() => ({ width: window.innerWidth, height: window.innerHeight })")
+        if actual == expected and not force:
+            return
+        page.set_viewport_size({"width": expected["width"], "height": expected["height"]})
+        # CDP attachment can asynchronously apply its inferred viewport just
+        # after connect. Let that initialization settle before verification.
+        page.wait_for_timeout(250)
+        confirmed = page.evaluate("() => ({ width: window.innerWidth, height: window.innerHeight })")
+        if confirmed != expected:
+            raise RuntimeError(f"viewport restore failed: expected={expected}, actual={confirmed}")
+        if actual != confirmed:
+            self.log("viewport_restored", previous=actual, viewport=confirmed)
+
     def resume_if_away(self, page: Page) -> bool:
         if not self.args.resume_away:
             return False
@@ -573,6 +589,7 @@ class PythonAutoOperator:
                 "clickPoint": point, **receipt}
 
     def run(self, page: Page) -> None:
+        self.ensure_viewport(page, force=True)
         self.log("started", mode=self.args.mode, page=page.url)
         iterations = 0
         while True:
@@ -580,6 +597,7 @@ class PythonAutoOperator:
             if self.args.max_iterations and iterations > self.args.max_iterations:
                 return
             try:
+                self.ensure_viewport(page)
                 full_screen = page.screenshot(animations="disabled")
                 screen_state, screen_confidence = classify_screen(full_screen, self.screen_references)
                 if screen_state == "away":
@@ -727,8 +745,6 @@ def main() -> int:
             operator.run(find_mahjong_page(browser))
         except KeyboardInterrupt:
             operator.log("stopped", reason="keyboard_interrupt")
-        finally:
-            browser.close()
     return 0
 
 

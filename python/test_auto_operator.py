@@ -25,6 +25,51 @@ class RecordingMouse:
 
 
 class AwayDialogDetectionTest(unittest.TestCase):
+    def test_operator_restores_and_verifies_cdp_viewport(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.layout = {"viewport": {"width": 1920, "height": 1080}}
+        operator.log = Mock()
+        page = Mock()
+        page.evaluate.side_effect = [
+            {"width": 630, "height": 84},
+            {"width": 1920, "height": 1080},
+        ]
+
+        operator.ensure_viewport(page)
+
+        page.set_viewport_size.assert_called_once_with({"width": 1920, "height": 1080})
+        operator.log.assert_called_once_with(
+            "viewport_restored",
+            previous={"width": 630, "height": 84},
+            viewport={"width": 1920, "height": 1080},
+        )
+
+    def test_operator_leaves_matching_viewport_unchanged(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.layout = {"viewport": {"width": 1920, "height": 1080}}
+        page = Mock()
+        page.evaluate.return_value = {"width": 1920, "height": 1080}
+
+        operator.ensure_viewport(page)
+
+        page.set_viewport_size.assert_not_called()
+
+    def test_operator_force_sets_matching_viewport_after_cdp_attach(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.layout = {"viewport": {"width": 1920, "height": 1080}}
+        operator.log = Mock()
+        page = Mock()
+        page.evaluate.side_effect = [
+            {"width": 1920, "height": 1080},
+            {"width": 1920, "height": 1080},
+        ]
+
+        operator.ensure_viewport(page, force=True)
+
+        page.set_viewport_size.assert_called_once_with({"width": 1920, "height": 1080})
+        page.wait_for_timeout.assert_called_once_with(250)
+        operator.log.assert_not_called()
+
     def test_replay_records_execution_and_receives_round_and_match_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             operator = PythonAutoOperator.__new__(PythonAutoOperator)
