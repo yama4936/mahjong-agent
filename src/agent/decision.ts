@@ -5,7 +5,7 @@ import { generateLegalActions, type LegalAction } from "../game/actions.js";
 import { calculateShanten } from "../game/shanten.js";
 import { evaluateDiscards } from "../game/ukeire.js";
 
-export type AgentMode = "observer" | "advisor" | "auto";
+export type AgentMode = "observer" | "advisor" | "auto" | "force-auto";
 
 export interface DecisionResult extends AdvisorResult {
   mode: AgentMode;
@@ -101,7 +101,7 @@ export async function decide(state: GameState, options: DecisionOptions): Promis
     selectedAction,
     legalActions,
     ...(jev ? { jev } : {}),
-    executable: options.mode === "auto" && safety.allowed,
+    executable: options.mode === "force-auto" || (options.mode === "auto" && safety.allowed),
   };
 }
 
@@ -139,7 +139,7 @@ function decideImmediateSelfAction(
     selectedActionId: selectedAction.id,
     selectedAction,
     legalActions,
-    executable: options.mode === "auto" && safety.allowed,
+    executable: options.mode === "force-auto" || (options.mode === "auto" && safety.allowed),
   };
 }
 
@@ -227,6 +227,6 @@ async function decideReaction(state: GameState, legalActions: LegalAction[], opt
     selectedAction,
     legalActions,
     ...(jev ? { jev, source: "jev" as const } : {}),
-    executable: options.mode === "auto" && safety.allowed,
+    executable: options.mode === "force-auto" || (options.mode === "auto" && safety.allowed),
   };
 }

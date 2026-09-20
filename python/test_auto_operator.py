@@ -175,6 +175,26 @@ class AwayDialogDetectionTest(unittest.TestCase):
         evaluation = {"recognition": {"safe": True, "tiles": ["1m"] * 13}}
         self.assertFalse(operator.execute_reaction_pass(Mock(), evaluation)["clicked"])
 
+    def test_force_auto_reaction_ignores_confidence_and_certificate(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(mode="force-auto", stability_pixel_delta=1.5)
+        operator.layout = {"actionButtonRegions": {"pass": {"x": 10, "y": 20, "width": 100, "height": 40}}}
+        operator.log = Mock()
+        operator.confirm_action_button = Mock(return_value={"confirmation": "action_button_region_changed"})
+        page = Mock()
+        buffer = io.BytesIO()
+        Image.new("RGB", (100, 40), "black").save(buffer, format="PNG")
+        page.screenshot.return_value = buffer.getvalue()
+        evaluation = {
+            "recognition": {"safe": False, "tiles": ["1m"] * 13},
+            "availableUiActions": ["chi", "pass"],
+            "actionButton": {"action": "pass", "present": True, "confidence": 0.2,
+                             "center": {"x": 60, "y": 40}},
+        }
+        receipt = operator.execute_reaction_pass(page, evaluation)
+        self.assertEqual(receipt["policy"], "force_auto")
+        page.mouse.click.assert_called_once_with(60, 40)
+
     def test_pending_discard_requires_one_exact_opponent_river_append(self) -> None:
         previous = {"opponentDiscards": [
             {"seat": "east", "discards": ["1m"]},

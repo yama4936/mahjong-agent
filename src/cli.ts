@@ -73,9 +73,9 @@ async function main(): Promise<void> {
     const pendingDiscardArgument = process.argv.find((argument) => argument.startsWith("--pending-discard="))?.slice(18);
     const publicObservationArgument = process.argv.find((argument) => argument.startsWith("--public-observation="))?.slice(21);
     if (!screenshot || !layoutPath || !templates || !stateArgument) {
-      throw new Error("Usage: evaluate-frame <screenshot.png> <layout.json> <templates> --state=public-state.json [--mode=advisor|auto]");
+      throw new Error("Usage: evaluate-frame <screenshot.png> <layout.json> <templates> --state=public-state.json [--mode=advisor|auto|force-auto]");
     }
-    if (modeArgument !== "advisor" && modeArgument !== "auto") throw new Error("evaluate-frame mode must be advisor or auto");
+    if (modeArgument !== "advisor" && modeArgument !== "auto" && modeArgument !== "force-auto") throw new Error("evaluate-frame mode must be advisor, auto, or force-auto");
     const layout = layoutSchema.parse(JSON.parse(await readFile(layoutPath, "utf8")));
     const rawPublicState = JSON.parse(await readFile(stateArgument, "utf8"));
     delete rawPublicState.hand;
@@ -99,7 +99,7 @@ async function main(): Promise<void> {
       ? parsePublicGameState({ ...suppliedPublicState, phase: "reaction", pendingDiscard: { tile: pendingParts[0], fromSeat: pendingParts[1] } })
       : suppliedPublicState;
     const actionMatches = actionTemplatesArgument
-      ? await recognizeActionButtons(screenshot, layout, actionTemplatesArgument)
+      ? await recognizeActionButtons(screenshot, layout, actionTemplatesArgument, modeArgument === "force-auto" ? 0 : 0.98)
       : [];
     const detectedActions = availableUiActions(actionMatches);
     let recognition = publicState.phase === "reaction"
@@ -111,7 +111,7 @@ async function main(): Promise<void> {
       recognition = await recognizeTileSlots(screenshot, layout.handSlots, layout, templates);
     }
     const expectedTiles = publicState.phase === "reaction" ? 13 : 14;
-    if (reactionPrompt && publicState.phase !== "reaction" && recognition.safe && recognition.tiles.length === 13) {
+    if (reactionPrompt && publicState.phase !== "reaction" && (recognition.safe || modeArgument === "force-auto") && recognition.tiles.length === 13) {
       const passButton = actionMatches.find((match) => match.action === "pass" && match.present);
       const actionTemplateSetFingerprint = passButton && actionTemplatesArgument
         ? await fingerprintTemplateDirectory(actionTemplatesArgument)
@@ -132,7 +132,7 @@ async function main(): Promise<void> {
       }));
       return;
     }
-    if (!recognition.safe || recognition.tiles.length !== expectedTiles) {
+    if ((modeArgument !== "force-auto" && !recognition.safe) || recognition.tiles.length !== expectedTiles) {
       console.log(JSON.stringify({
         schemaVersion: 1,
         status: "not_ready",

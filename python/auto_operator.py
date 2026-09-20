@@ -451,9 +451,10 @@ class PythonAutoOperator:
         recognition = evaluation["recognition"]
         selected = decision.get("selectedAction", {"action": decision.get("recommendedAction", "discard")})
         selected_action = selected.get("action")
+        force_auto = self.args.mode == "force-auto"
         certified_auto = self.args.mode == "auto" and decision.get("executable") is True
         local_auto = local_discard_allowed(self.args, evaluation)
-        if not certified_auto and not local_auto:
+        if not force_auto and not certified_auto and not local_auto:
             return {"clicked": False, "reason": "advisor_or_safety_stop"}
         # Fresh captures must independently reproduce the evaluated ordered
         # hand. Pixel stability alone can leave a stale decision undetected.
@@ -472,9 +473,9 @@ class PythonAutoOperator:
             if result.returncode != 0:
                 raise RuntimeError("consensus recognition failed")
             fresh = json.loads(result.stdout)
-            if not fresh.get("safe") or fresh.get("tiles") != recognition.get("tiles"):
+            if (not force_auto and not fresh.get("safe")) or fresh.get("tiles") != recognition.get("tiles"):
                 raise RuntimeError("fresh frame recognition disagrees with the evaluated hand")
-        if not recognition.get("safe") or recognition.get("confidence", 0) < self.layout.get("minimumTileConfidence", 0.98):
+        if not force_auto and (not recognition.get("safe") or recognition.get("confidence", 0) < self.layout.get("minimumTileConfidence", 0.98)):
             raise RuntimeError("Python recognition safety gate rejected click")
         if certified_auto:
             auto_certificate = self.layout.get("autoOperation")
@@ -501,7 +502,9 @@ class PythonAutoOperator:
             raise RuntimeError("hand changed during Python pre-click stability check")
         if selected_action != "discard":
             button_action = "kan" if selected_action in {"minkan", "ankan"} else selected_action
-            observed = self.validate_action_certificate(button_action, evaluation)
+            observed = evaluation.get("actionButton") if force_auto else self.validate_action_certificate(button_action, evaluation)
+            if not observed or observed.get("action") != button_action:
+                raise RuntimeError(f"evaluated frame has no {button_action} button candidate")
             region = self.layout["actionButtonRegions"][button_action]
             button_clip = {key: region[key] for key in ("x", "y", "width", "height")}
             button_before = page.screenshot(clip=button_clip, animations="disabled")
@@ -523,7 +526,7 @@ class PythonAutoOperator:
         clicked_at = datetime.now(timezone.utc).isoformat()
         self.log(
             "click_sent",
-            policy="certified_auto" if certified_auto else "local_discard_only",
+            policy="force_auto" if force_auto else "certified_auto" if certified_auto else "local_discard_only",
             tile=selected.get("tile", decision.get("tile")),
             clickIndex=click_index,
             clickPoint=point,
@@ -532,7 +535,7 @@ class PythonAutoOperator:
         receipt = self.confirm_discard(page, hand_before, river_before, recognition["tiles"], click_index)
         return {
             "clicked": True,
-            "policy": "certified_auto" if certified_auto else "local_discard_only",
+            "policy": "force_auto" if force_auto else "certified_auto" if certified_auto else "local_discard_only",
             "clickIndex": click_index,
             "clickPoint": point,
             "clickedAt": clicked_at,
@@ -547,12 +550,14 @@ class PythonAutoOperator:
         must never choose among chi/pon/kan/ron candidates.  A certified pass
         is valid for every such prompt and prevents the match from timing out.
         """
-        if self.args.mode != "auto":
+        if self.args.mode not in {"auto", "force-auto"}:
             return {"clicked": False, "reason": "advisor_or_observer_reaction_prompt"}
         recognition = evaluation.get("recognition", {})
-        if not recognition.get("safe") or len(recognition.get("tiles", [])) != 13:
+        if self.args.mode != "force-auto" and (not recognition.get("safe") or len(recognition.get("tiles", [])) != 13):
             raise RuntimeError("reaction prompt does not have a safe 13-tile concealed hand")
-        observed = self.validate_action_certificate("pass", evaluation)
+        observed = evaluation.get("actionButton") if self.args.mode == "force-auto" else self.validate_action_certificate("pass", evaluation)
+        if not observed or observed.get("action") != "pass":
+            raise RuntimeError("evaluated frame has no pass button candidate")
         region = self.layout["actionButtonRegions"]["pass"]
         button_clip = {key: region[key] for key in ("x", "y", "width", "height")}
         before = page.screenshot(clip=button_clip, animations="disabled")
@@ -564,7 +569,7 @@ class PythonAutoOperator:
                  availableUiActions=evaluation.get("availableUiActions", []))
         page.mouse.click(point["x"], point["y"])
         receipt = self.confirm_action_button(page, "pass", before)
-        return {"clicked": True, "policy": "certified_auto", "action": "pass",
+        return {"clicked": True, "policy": "force_auto" if self.args.mode == "force-auto" else "certified_auto", "action": "pass",
                 "clickPoint": point, **receipt}
 
     def run(self, page: Page) -> None:
@@ -689,7 +694,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--state", required=True)
     parser.add_argument("--env-file", default=".env.local", help="private Jev environment file; use an empty value to disable")
     parser.add_argument("--artifacts", default="artifacts/python-auto")
-    parser.add_argument("--mode", choices=("observer", "advisor", "auto"), default="advisor")
+    parser.add_argument("--mode", choices=("observer", "advisor", "auto", "force-auto"), default="advisor",
+                        help="force-auto ignores confidence and calibration gates but keeps stability and post-click checks")
     parser.add_argument("--poll", type=float, default=0.1)
     parser.add_argument("--stability-ms", type=int, default=120)
     parser.add_argument("--stability-pixel-delta", type=float, default=1.5)

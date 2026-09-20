@@ -69,6 +69,13 @@ test("winning and riichi UI actions are selected ahead of a plain discard", asyn
   assert.equal(result.selectedActionId, "riichi_discard_E");
 });
 
+test("force-auto remains executable when normal safety checks are ambiguous", async () => {
+  const unsafe = parseGameState({ ...state, recognitionConfidence: 0.5 });
+  const result = await decide(unsafe, { mode: "force-auto" });
+  assert.equal(result.safety.allowed, false);
+  assert.equal(result.executable, true);
+});
+
 test("advisor recommends a non-worsening closed kan outside riichi", async () => {
   const closed = parseGameState({
     hand: ["1m", "2m", "3m", "1p", "2p", "3p", "1s", "2s", "3s", "E", "E", "E", "E"],
