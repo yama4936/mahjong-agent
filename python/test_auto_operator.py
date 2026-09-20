@@ -68,13 +68,12 @@ class AwayDialogDetectionTest(unittest.TestCase):
             draw.rectangle((190, 75, 250, 90), fill=(150, 145, 90))
             screenshot = Path(directory) / "reaction.png"
             image.save(screenshot)
-            completed = argparse.Namespace(returncode=0, stdout=json.dumps({"tiles": ["1m"] * 13}), stderr="")
-
-            with patch("auto_operator.subprocess.run", return_value=completed):
-                result = operator.force_auto_reaction_fallback(screenshot)
+            operator.recognize_resident = Mock(return_value={"tiles": ["1m"] * 13})
+            result = operator.force_auto_reaction_fallback(screenshot)
 
             self.assertEqual(result["status"], "reaction_prompt")
             self.assertEqual(result["actionButton"]["center"], {"x": 200.0, "y": 90.0})
+            operator.recognize_resident.assert_called_once_with(screenshot, concealed_only=True)
 
     def test_force_auto_post_discard_verifier_keeps_exact_multiset_check(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

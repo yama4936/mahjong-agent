@@ -192,6 +192,10 @@ async function loadRuntimeTemplates(directory: string, options: MatcherOptions =
   return pending;
 }
 
+export async function warmTemplateCache(directory: string, options: MatcherOptions = {}): Promise<void> {
+  await loadRuntimeTemplates(directory, options);
+}
+
 export async function matchTile(screenshot: string | Buffer, rect: Rect, templates: Map<GameTile, PreparedImage[]>, options: MatcherOptions = {}): Promise<TileMatch> {
   const sample = await prepare(screenshot, rect, options);
   return scorePrepared(sample, templates, options);

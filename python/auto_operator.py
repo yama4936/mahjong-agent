@@ -210,8 +210,26 @@ class PythonAutoOperator:
         self.pending_round_replays: list[Path] = []
         self.pending_match_replays: list[Path] = []
         self.screen_references = load_references(self.root / "artifacts" / "live")
+        self.recognition_request_id = 0
+        self.recognition_server = subprocess.Popen(
+            ["node", "dist/src/recognition/recognitionServer.js", str(self.layout_path), str(self.templates), str(self.state_path)],
+            cwd=self.root,
+            env=self.evaluator_env,
+            text=True,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            bufsize=1,
+        )
+        ready_line = self.recognition_server.stdout.readline() if self.recognition_server.stdout else ""
+        if not ready_line:
+            raise RuntimeError("resident recognition server stopped during startup")
+        ready = json.loads(ready_line)
+        if ready.get("ready") is not True:
+            raise RuntimeError(f"resident recognition server failed to initialize: {ready}")
         self.last_processed_hand: str | None = None
         self.previous_public_observation: dict[str, Any] | None = None
+        self.cached_concealed_tiles: list[str] | None = None
         self.last_shanten: int | None = None
         if self.log_path.exists():
             for line in reversed(self.log_path.read_text(encoding="utf-8").splitlines()):
@@ -228,6 +246,43 @@ class PythonAutoOperator:
                     self.last_shanten = candidate.get("shanten")
                 break
         self.armed = True
+
+    def close(self) -> None:
+        if self.recognition_server.poll() is None:
+            self.recognition_server.terminate()
+            try:
+                self.recognition_server.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                self.recognition_server.kill()
+
+    def recognize_resident(
+        self, screenshot: Path, *, concealed_only: bool = False, draw_only: bool = False,
+        concealed_tiles: list[str] | None = None, evaluate_force_auto: bool = False,
+    ) -> dict[str, Any]:
+        if self.recognition_server.poll() is not None:
+            raise RuntimeError("resident recognition server is not running")
+        if not self.recognition_server.stdin or not self.recognition_server.stdout:
+            raise RuntimeError("resident recognition server pipes are unavailable")
+        self.recognition_request_id += 1
+        request_id = self.recognition_request_id
+        self.recognition_server.stdin.write(json.dumps({
+            "id": request_id,
+            "screenshot": str(screenshot),
+            "concealedOnly": concealed_only,
+            "drawOnly": draw_only,
+            "concealedTiles": concealed_tiles,
+            "evaluateForceAuto": evaluate_force_auto,
+        }) + "\n")
+        self.recognition_server.stdin.flush()
+        response_line = self.recognition_server.stdout.readline()
+        if not response_line:
+            raise RuntimeError("resident recognition server closed its output")
+        response = json.loads(response_line)
+        if response.get("id") != request_id:
+            raise RuntimeError(f"resident recognition response id mismatch: {response}")
+        if response.get("error"):
+            raise RuntimeError(f"resident recognition failed: {response['error']}")
+        return response["result"]
 
     def ensure_viewport(self, page: Page, *, force: bool = False) -> None:
         """Keep CDP clients from leaving the game canvas at a stale viewport."""
@@ -364,7 +419,8 @@ class PythonAutoOperator:
         return count
 
     def evaluate(self, screenshot: Path, pending_discard: dict[str, str] | None = None,
-                 public_observation: dict[str, Any] | None = None) -> dict[str, Any]:
+                 public_observation: dict[str, Any] | None = None,
+                 recognition: dict[str, Any] | None = None) -> dict[str, Any]:
         evaluator_mode = "advisor" if self.args.mode == "observer" else self.args.mode
         command = [
             "node", "dist/src/cli.js", "evaluate-frame", str(screenshot),
@@ -379,6 +435,10 @@ class PythonAutoOperator:
             observation_path = self.frames / f"{utc_stamp()}.public-observation.json"
             observation_path.write_text(json.dumps(public_observation, ensure_ascii=False), encoding="utf-8")
             command.append(f"--public-observation={observation_path}")
+        if recognition is not None:
+            recognition_path = self.frames / f"{utc_stamp()}.recognition.json"
+            recognition_path.write_text(json.dumps(recognition, ensure_ascii=False), encoding="utf-8")
+            command.append(f"--recognition-file={recognition_path}")
         result = subprocess.run(
             command,
             cwd=self.root,
@@ -399,17 +459,7 @@ class PythonAutoOperator:
         region = self.layout.get("actionButtonRegions", {}).get("pass")
         if not region or not is_force_auto_pass_prompt(screenshot.read_bytes(), region):
             return None
-        command = [
-            "node", "dist/src/cli.js", "recognize", str(screenshot),
-            str(self.layout_path), str(self.templates), "--concealed-only",
-        ]
-        result = subprocess.run(
-            command, cwd=self.root, env=self.evaluator_env, text=True, capture_output=True,
-            timeout=self.args.evaluation_timeout, check=False,
-        )
-        if result.returncode != 0:
-            raise RuntimeError((result.stderr or result.stdout or "concealed hand recognizer failed").strip())
-        recognition = json.loads(result.stdout)
+        recognition = self.recognize_resident(screenshot, concealed_only=True)
         if len(recognition.get("tiles", [])) != 13:
             return None
         point = {
@@ -497,6 +547,7 @@ class PythonAutoOperator:
                 full_screen = page.screenshot(animations="disabled")
                 screen_state, screen_confidence = classify_screen(full_screen, self.screen_references)
                 if screen_state in {"round_result", "match_result"}:
+                    self.cached_concealed_tiles = None
                     return {
                         "confirmation": "discard_followed_by_terminal_result",
                         "confirmationLatencyMs": round((time.monotonic() - started) * 1000),
@@ -815,7 +866,38 @@ class PythonAutoOperator:
                 pending_discard = self.infer_pending_discard(self.previous_public_observation, public_observation)
                 if public_observation:
                     self.previous_public_observation = public_observation
-                evaluation = self.evaluate(screenshot_path, pending_discard, public_observation)
+                if self.args.mode == "force-auto" and not pending_discard:
+                    try:
+                        evaluation = self.recognize_resident(
+                            screenshot_path,
+                            draw_only=self.cached_concealed_tiles is not None,
+                            concealed_tiles=self.cached_concealed_tiles,
+                            evaluate_force_auto=True,
+                        )
+                    except RuntimeError:
+                        if self.cached_concealed_tiles is None:
+                            raise
+                        self.cached_concealed_tiles = None
+                        evaluation = self.recognize_resident(
+                            screenshot_path, evaluate_force_auto=True,
+                        )
+                elif self.cached_concealed_tiles is not None and not pending_discard:
+                    draw_recognition = self.recognize_resident(screenshot_path, draw_only=True)
+                    if len(draw_recognition.get("tiles", [])) == 1:
+                        recognition = {
+                            **draw_recognition,
+                            "tiles": [*self.cached_concealed_tiles, draw_recognition["tiles"][0]],
+                            "turnReady": True,
+                        }
+                    else:
+                        self.cached_concealed_tiles = None
+                        recognition = self.recognize_resident(screenshot_path)
+                    evaluation = self.evaluate(screenshot_path, pending_discard, public_observation, recognition)
+                else:
+                    recognition = self.recognize_resident(
+                        screenshot_path, concealed_only=bool(pending_discard),
+                    )
+                    evaluation = self.evaluate(screenshot_path, pending_discard, public_observation, recognition)
                 if evaluation.get("status") != "reaction_prompt":
                     reaction_fallback = self.force_auto_reaction_fallback(screenshot_path)
                     if reaction_fallback:
@@ -864,6 +946,13 @@ class PythonAutoOperator:
                 selected_candidate = next((item for item in evaluation.get("decision", {}).get("candidates", [])
                                            if item.get("actionId") == selected_id), None)
                 self.last_shanten = selected_candidate.get("shanten") if selected_candidate else None
+                if receipt.get("clicked") and receipt.get("confirmation") == "hand_and_own_river_changed":
+                    recognized_tiles = evaluation.get("recognition", {}).get("tiles", [])
+                    click_index = evaluation.get("clickIndex")
+                    if isinstance(click_index, int) and len(recognized_tiles) == 14:
+                        self.cached_concealed_tiles = [
+                            tile for index, tile in enumerate(recognized_tiles) if index != click_index
+                        ]
                 self.last_processed_hand = hand_hash
                 self.armed = False
             except KeyboardInterrupt:
@@ -930,6 +1019,8 @@ def main() -> int:
             operator.run(find_mahjong_page(browser))
         except KeyboardInterrupt:
             operator.log("stopped", reason="keyboard_interrupt")
+        finally:
+            operator.close()
     return 0
 
 

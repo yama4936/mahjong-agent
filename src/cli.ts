@@ -73,6 +73,7 @@ async function main(): Promise<void> {
     const actionTemplatesArgument = process.argv.find((argument) => argument.startsWith("--action-templates="))?.slice(19);
     const pendingDiscardArgument = process.argv.find((argument) => argument.startsWith("--pending-discard="))?.slice(18);
     const publicObservationArgument = process.argv.find((argument) => argument.startsWith("--public-observation="))?.slice(21);
+    const recognitionArgument = process.argv.find((argument) => argument.startsWith("--recognition-file="))?.slice(19);
     if (!screenshot || !layoutPath || !templates || !stateArgument) {
       throw new Error("Usage: evaluate-frame <screenshot.png> <layout.json> <templates> --state=public-state.json [--mode=advisor|auto|force-auto]");
     }
@@ -103,9 +104,11 @@ async function main(): Promise<void> {
       ? await recognizeActionButtons(screenshot, layout, actionTemplatesArgument, modeArgument === "force-auto" ? 0 : 0.98)
       : [];
     const detectedActions = availableUiActions(actionMatches);
-    let recognition = publicState.phase === "reaction"
-      ? await recognizeTileSlots(screenshot, layout.handSlots, layout, templates)
-      : await recognizeHand(screenshot, layout, templates);
+    let recognition = recognitionArgument
+      ? JSON.parse(await readFile(recognitionArgument, "utf8"))
+      : publicState.phase === "reaction"
+        ? await recognizeTileSlots(screenshot, layout.handSlots, layout, templates)
+        : await recognizeHand(screenshot, layout, templates);
     const reactionPrompt = detectedActions.includes("pass")
       && detectedActions.some((action) => action === "chi" || action === "pon" || action === "kan" || action === "ron");
     if (reactionPrompt && (!recognition.safe || recognition.tiles.length !== 14)) {
@@ -162,7 +165,10 @@ async function main(): Promise<void> {
     }
     const decision = await decide(state, {
       mode: modeArgument,
-      ...(apiKey ? { jev: new JevClient(apiKey) } : {}),
+      // Force-auto is the latency-focused fallback. Its deterministic
+      // candidate ordering already maximizes shanten/ukeire, while a remote
+      // Jev timeout can consume most of a short turn clock.
+      ...(apiKey && modeArgument !== "force-auto" ? { jev: new JevClient(apiKey) } : {}),
     });
     const clickIndex = decision.selectedAction.action === "discard" || decision.selectedAction.action === "riichi"
       ? [...state.hand, ...(state.draw ? [state.draw] : [])].map(String).lastIndexOf(decision.selectedAction.tile)
