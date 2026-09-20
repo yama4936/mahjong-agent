@@ -204,11 +204,8 @@ export async function showAdvisorOverlay(page: Page, decision: DecisionResult): 
     ...decision.candidates.filter((candidate) => candidate.actionId !== decision.selectedActionId),
   ];
   const top = ordered.slice(0, 3).map((candidate) => ({
-    tile: tileName(candidate.tile),
-    shanten: candidate.shanten,
-    ukeire: candidate.ukeire,
-    ev: candidate.expectedRoundValue,
-    danger: candidate.dealInProbability,
+    label: tileName(candidate.tile),
+    detail: `${candidate.shanten}向聴 / 受入${candidate.ukeire}枚 / EV ${candidate.expectedRoundValue ?? "-"} / 放銃リスク ${candidate.dealInProbability === undefined ? "-" : `${(candidate.dealInProbability * 100).toFixed(1)}%`}`,
     selected: candidate.actionId === decision.selectedActionId,
   }));
   const localizeReason = (reason: string) => reason.startsWith("jev_error:")
@@ -219,8 +216,21 @@ export async function showAdvisorOverlay(page: Page, decision: DecisionResult): 
     : `停止: ${decision.safety.reasons.map(localizeReason).join("、")}`;
   const action = decision.selectedAction.action;
   const actionText = `${actionNames[action] ?? action}${"tile" in decision.selectedAction ? ` ${tileName(decision.selectedAction.tile)}` : ""}`;
+  const reactionActions = new Set(["ron", "chi", "pon", "minkan", "pass"]);
+  const reactionRows = reactionActions.has(action)
+    ? [
+        ...decision.legalActions.filter((candidate) => candidate.id === decision.selectedActionId),
+        ...decision.legalActions.filter((candidate) => candidate.id !== decision.selectedActionId),
+      ].map((candidate) => ({
+        label: `${actionNames[candidate.action] ?? candidate.action}${"tile" in candidate ? ` ${tileName(candidate.tile)}` : ""}`,
+        detail: decision.jev?.probabilities[candidate.id] === undefined
+          ? "選択確率 —"
+          : `選択確率 ${(decision.jev.probabilities[candidate.id]! * 100).toFixed(1)}%`,
+        selected: candidate.id === decision.selectedActionId,
+      }))
+    : top;
   const modeName = decision.mode === "advisor" ? "助言モード" : decision.mode === "observer" ? "監視モード" : "自動モード";
-  await page.evaluate(({ decision, top, safeText, actionText, modeName }) => {
+  await page.evaluate(({ decision, rows, safeText, actionText, modeName }) => {
     const id = "jantama-auto-advisor";
     document.getElementById(id)?.remove();
     const root = document.createElement("aside");
@@ -232,10 +242,10 @@ export async function showAdvisorOverlay(page: Page, decision: DecisionResult): 
       "background:rgba(10,14,20,.92)", "color:#f6f0dc", "font:14px/1.45 system-ui,sans-serif",
       "box-shadow:0 8px 30px rgba(0,0,0,.45)", "pointer-events:none",
     ].join(";");
-    const rows = top.map((item) => `<div style="display:grid;grid-template-columns:56px 1fr;gap:10px;opacity:${item.selected ? 1 : .72}"><span style="font-weight:${item.selected ? 750 : 500}">${item.selected ? "→ " : ""}${item.tile}</span><span style="text-align:right;white-space:nowrap">${item.shanten}向聴 / 受入${item.ukeire}枚 / EV ${item.ev ?? "-"} / 放銃リスク ${item.danger === undefined ? "-" : `${(item.danger * 100).toFixed(1)}%`}</span></div>`).join("");
-    root.innerHTML = `<div style="color:#d9b85f;font-size:12px">${modeName} · ${decision.source}</div><div style="font-size:28px;font-weight:750;margin:4px 0 8px">${actionText}</div><div style="margin-bottom:10px">信頼度 ${(decision.confidence * 100).toFixed(1)}% · ${safeText}</div>${rows ? `<div style="border-top:1px solid rgba(255,255,255,.18);padding-top:8px">${rows}</div>` : ""}`;
+    const rowHtml = rows.map((item) => `<div style="display:grid;grid-template-columns:110px 1fr;gap:10px;opacity:${item.selected ? 1 : .72}"><span style="font-weight:${item.selected ? 750 : 500}">${item.selected ? "→ " : ""}${item.label}</span><span style="text-align:right;white-space:nowrap">${item.detail}</span></div>`).join("");
+    root.innerHTML = `<div style="color:#d9b85f;font-size:12px">${modeName} · ${decision.source}</div><div style="font-size:28px;font-weight:750;margin:4px 0 8px">${actionText}</div><div style="margin-bottom:10px">信頼度 ${(decision.confidence * 100).toFixed(1)}% · ${safeText}</div>${rowHtml ? `<div style="border-top:1px solid rgba(255,255,255,.18);padding-top:8px">${rowHtml}</div>` : ""}`;
     document.body.append(root);
-  }, { decision: { source: decision.source, confidence: decision.confidence }, top, safeText, actionText, modeName });
+  }, { decision: { source: decision.source, confidence: decision.confidence }, rows: reactionRows, safeText, actionText, modeName });
 }
 
 export async function hideAdvisorOverlay(page: Page): Promise<void> {

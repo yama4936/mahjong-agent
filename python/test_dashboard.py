@@ -11,6 +11,12 @@ class DashboardTest(unittest.TestCase):
         self.assertIn("d?.jev?.probabilities", HTML)
         self.assertIn("percent(probabilities[id])", HTML)
 
+    def test_dashboard_renders_reaction_actions_without_a_discard_tile(self):
+        self.assertIn("selected.action||d.recommendedAction", HTML)
+        self.assertIn("pon:'ポン'", HTML)
+        self.assertIn("pass:'見送り'", HTML)
+        self.assertIn("e.status==='reaction_prompt'", HTML)
+
     def test_missing_log(self):
         self.assertIsNone(read_operator_status(None)["judgment"])
 

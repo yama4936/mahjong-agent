@@ -39,6 +39,7 @@ small{color:#aca692}.ok{color:#82d9a0}.stop{color:#ff9c91}
 const el=id=>document.getElementById(id);
 const number=v=>typeof v==='number'?v.toFixed(3):'—';
 const percent=v=>typeof v==='number'?(v*100).toFixed(1)+'%':'—';
+const actionName=a=>({discard:'打牌',riichi:'リーチ',tsumo:'ツモ',ron:'ロン',chi:'チー',pon:'ポン',minkan:'明槓',ankan:'暗槓',kakan:'加槓',pass:'見送り'}[a]||a||'未判定');
 function renderChoices(d){
  const probabilities=d?.jev?.probabilities||{};
  const candidates=(d?.candidates?.length?d.candidates:d?.legalActions)||[];
@@ -53,8 +54,11 @@ function renderChoices(d){
 }
 function renderJudgment(j){
  const e=j?.evaluation||{},r=e.recognition||{},d=e.decision||{},x=j?.execution||{};
+ const selected=d.selectedAction||{};
+ const action=selected.action||d.recommendedAction||(e.status==='reaction_prompt'?'pass':undefined);
+ const tile=selected.tile||d.tile;
  el('judgedAt').textContent=j?.timestamp?'判定時刻：'+new Date(j.timestamp).toLocaleString()+' ／ 保存ログ（ライブ判定ではありません）':'判定ログなし';
- el('recommendation').textContent='推奨：'+(d.tile?(d.recommendedAction||'discard')+' '+d.tile:'未判定');
+ el('recommendation').textContent='推奨：'+actionName(action)+(tile?' '+tile:'')+(e.status==='reaction_prompt'?'（盤面を特定できないため安全側）':'');
  el('tileScore').textContent='認識スコア：'+number(r.confidence)+'（正解確率ではありません）';
  el('margin').textContent='候補差：'+number(r.ambiguityMargin);
  el('execution').textContent='クリック：'+(x.clicked===true?'送信済み'+(x.tileMultisetVerification?.verified?'・結果確認済み':''):x.clicked===false?'未実行':'実行記録なし');
