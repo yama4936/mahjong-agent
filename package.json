@@ -19,6 +19,7 @@
     "evaluate:frame": "tsx src/cli.ts evaluate-frame",
     "regions:detect": "tsx src/cli.ts detect-regions",
     "regions:recognize": "tsx src/cli.ts recognize-regions",
+    "center:recognize": "tsx src/cli.ts recognize-center",
     "actions:recognize": "tsx src/cli.ts recognize-actions",
     "layout:propose-hand": "tsx src/cli.ts propose-hand-layout",
     "analyze:screenshot": "tsx src/cli.ts analyze-screenshot",
@@ -37,7 +38,8 @@
     "turn": "tsx src/cli.ts turn",
     "watch": "tsx src/cli.ts watch",
     "result:attach": "tsx src/cli.ts attach-result",
-    "benchmark": "tsx src/cli.ts benchmark"
+    "benchmark": "tsx src/cli.ts benchmark",
+    "policy:compare": "tsx src/cli.ts policy-compare"
   },
   "dependencies": {
     "playwright": "^1.55.0",

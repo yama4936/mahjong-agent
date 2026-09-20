@@ -35,9 +35,12 @@ Status values: `todo`, `doing`, `done`, `blocked`.
 - [x] `done` Detect and classify calibrated river/meld tile candidates without automatically trusting them.
 - [x] `done` Map the three detected river regions to absolute opponent seats and reject non-prefix temporal changes.
 - [x] `done` Infer sideways-riichi evidence and complete exposed chi/pon/minkan groups, including table-orientation normalization and regression checks.
-- [ ] `todo` Recognize round, honba, riichi sticks, remaining tiles, seat and four scores from the center board.
+- [x] `done` Recognize calibrated dora-indicator regions separately from rivers/melds and feed them into explicitly enabled untrusted Advisor observations.
+- [x] `done` Add fail-closed recognition for round, honba, riichi sticks, remaining tiles, seat and four scores from calibrated center-board regions; require score/pool consistency and multi-frame agreement. It reads both saved East-1/East-2 reference states but remains untrusted.
+- [ ] `todo` Collect independent center-board references covering unseen values and animations, then validate and certify the recognizer before feeding its output to Auto.
 - [ ] `blocked` Validate riichi/meld inference on independent live screenshots and add ankan/kakan evidence. This needs the template replacement plus labeled live holdouts; inferred evidence remains untrusted until then.
-- [ ] `todo` Produce `publicStateConfidence >= 0.98` only when all required evidence is complete.
+- [x] `done` Reject any supplied `publicStateConfidence >= 0.98` unless round, dora, remaining tiles, four scores and three unique opponents are complete.
+- [ ] `todo` Produce `publicStateConfidence >= 0.98` from independently calibrated center-board, dora, river and meld evidence; current recognizers deliberately never self-promote to trusted.
 
 ## D. Decision and Jev
 
@@ -58,7 +61,8 @@ Status values: `todo`, `doing`, `done`, `blocked`.
 - [x] `done` Wire certified riichi, chi, pon, kan, ron, tsumo, pass and kyuushu decisions through both controller implementations; verify riichi as declaration plus discard and calls by button, hand and own-meld changes.
 - [ ] `blocked` Execute non-discard UI actions only after each action has at least 20 independent live holdouts, 100% accuracy and zero false positives.
 - [ ] `todo` Attach verified execution evidence and eventual round/match outcomes to every replay record.
-- [ ] `todo` Run the same replay corpus through deterministic, Jev and future search policies for comparison.
+- [x] `done` Add a shared replay-policy comparison runner with recorded/current-deterministic decisions, pairwise agreement, expert-label accuracy and per-policy error isolation; Jev can be enabled explicitly.
+- [ ] `todo` Expand the replay corpus, run current Jev on it, and add a search policy before making policy-quality claims.
 
 ## Completion definition
 

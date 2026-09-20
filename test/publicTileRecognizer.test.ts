@@ -80,6 +80,7 @@ test("batch-classifies configured public candidates with ViT", async () => {
   assert.equal(result.ownDiscards?.classificationSafe, true);
   const observation = toPublicTileObservation(result);
   assert.deepEqual(observation.ownDiscards, ["3p"]);
+  assert.deepEqual(observation.doraIndicators, []);
   assert.deepEqual(observation.opponentDiscards.map((opponent) => opponent.seat), ["south", "west", "north"]);
   assert.deepEqual(observation.otherVisibleTiles, []);
   assert.equal(observation.complete, false);
@@ -87,6 +88,7 @@ test("batch-classifies configured public candidates with ViT", async () => {
 
 test("public river observations preserve seat assignment and temporal prefixes", () => {
   const base: PublicTileObservation = {
+    doraIndicators: [],
     ownDiscards: ["1m"],
     opponentDiscards: [
       { seat: "south" as const, discards: ["2m" as const] },
@@ -106,6 +108,16 @@ test("does not promote individually confident tiles from an invalid river grid",
   const observation = toPublicTileObservation({ ownDiscards: invalid });
   assert.deepEqual(observation.ownDiscards, []);
   assert.equal(observation.acceptedTiles, 0);
+});
+
+test("keeps calibrated dora indicators separate from other visible tiles", () => {
+  const observation = toPublicTileObservation({
+    doraIndicators: publicRegion([{ tile: "4s", x: 0 }]),
+    ownDiscards: publicRegion([{ tile: "1m", x: 0 }]),
+  });
+  assert.deepEqual(observation.doraIndicators, ["4s"]);
+  assert.deepEqual(observation.ownDiscards, ["1m"]);
+  assert.deepEqual(observation.otherVisibleTiles, []);
 });
 
 test("detects sideways riichi evidence after table-orientation normalization", () => {

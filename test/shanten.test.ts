@@ -78,6 +78,14 @@ test("public state parser does not invent concealed tiles", () => {
   assert.equal(state.publicStateConfidence, 0.5);
 });
 
+test("high public confidence cannot be supplied with incomplete evidence", () => {
+  assert.throws(() => parseGameState({
+    hand: ["1m", "2m", "3m", "4m", "5m", "6m", "3p", "4p", "5p", "7s", "8s", "9s", "E"],
+    draw: "6p",
+    publicStateConfidence: 0.98,
+  }), /requires complete evidence/);
+});
+
 test("public state parser enforces visible four-copy consistency", () => {
   assert.throws(() => parsePublicGameState({
     ownDiscards: ["5m", "5m", "5m", "5m"],

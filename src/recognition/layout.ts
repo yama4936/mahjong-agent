@@ -13,6 +13,7 @@ const publicTileRegionSchema = rectSchema.extend({
 });
 
 const publicTileRegionsSchema = z.object({
+  doraIndicators: publicTileRegionSchema.optional(),
   ownDiscards: publicTileRegionSchema.optional(),
   rightDiscards: publicTileRegionSchema.optional(),
   oppositeDiscards: publicTileRegionSchema.optional(),
@@ -32,6 +33,18 @@ const actionButtonRegionsSchema = z.object({
   kan: rectSchema.optional(),
   kyuushu: rectSchema.optional(),
   pass: rectSchema.optional(),
+});
+
+const centerBoardRegionsSchema = z.object({
+  round: publicTileRegionSchema,
+  honba: publicTileRegionSchema,
+  riichiSticks: publicTileRegionSchema,
+  remainingTiles: publicTileRegionSchema,
+  ownSeat: publicTileRegionSchema,
+  ownScore: publicTileRegionSchema,
+  rightScore: publicTileRegionSchema,
+  oppositeScore: publicTileRegionSchema,
+  leftScore: publicTileRegionSchema,
 });
 
 const actionCertificateSchema = z.object({
@@ -54,6 +67,7 @@ export const layoutSchema = z.object({
   minimumVitConfidence: z.number().min(0).max(1).default(0.5),
   minimumVitMargin: z.number().min(0).max(1).default(0.05),
   publicTileRegions: publicTileRegionsSchema.optional(),
+  centerBoardRegions: centerBoardRegionsSchema.optional(),
   actionButtonRegions: actionButtonRegionsSchema.optional(),
   actionOperation: z.object({
     riichi: actionCertificateSchema.optional(),

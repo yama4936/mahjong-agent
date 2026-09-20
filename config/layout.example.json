@@ -29,10 +29,22 @@
   "minimumVitConfidence": 0.5,
   "minimumVitMargin": 0.05,
   "publicTileRegions": {
+    "doraIndicators": { "x": 18, "y": 32, "width": 292, "height": 82, "rotationToUpright": 0 },
     "ownDiscards": { "x": 770, "y": 535, "width": 390, "height": 225, "rotationToUpright": 0, "detectionMode": "discard_grid" },
     "rightDiscards": { "x": 1115, "y": 285, "width": 305, "height": 250, "rotationToUpright": 90, "detectionMode": "discard_grid" },
     "oppositeDiscards": { "x": 770, "y": 150, "width": 390, "height": 190, "rotationToUpright": 180, "detectionMode": "discard_grid" },
     "leftDiscards": { "x": 500, "y": 285, "width": 305, "height": 250, "rotationToUpright": 270, "detectionMode": "discard_grid" },
     "ownMelds": { "x": 732, "y": 759, "width": 200, "height": 84, "rotationToUpright": 0 }
+  },
+  "centerBoardRegions": {
+    "round": { "x": 910, "y": 377, "width": 100, "height": 39, "rotationToUpright": 0 },
+    "honba": { "x": 218, "y": 136, "width": 75, "height": 42, "rotationToUpright": 0 },
+    "riichiSticks": { "x": 82, "y": 136, "width": 75, "height": 42, "rotationToUpright": 0 },
+    "remainingTiles": { "x": 910, "y": 416, "width": 100, "height": 41, "rotationToUpright": 0 },
+    "ownSeat": { "x": 784, "y": 487, "width": 75, "height": 56, "rotationToUpright": 0 },
+    "ownScore": { "x": 908, "y": 456, "width": 105, "height": 48, "rotationToUpright": 0 },
+    "rightScore": { "x": 1016, "y": 367, "width": 55, "height": 110, "rotationToUpright": 90 },
+    "oppositeScore": { "x": 908, "y": 333, "width": 105, "height": 48, "rotationToUpright": 180 },
+    "leftScore": { "x": 842, "y": 367, "width": 55, "height": 110, "rotationToUpright": 270 }
   }
 }

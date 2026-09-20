@@ -123,6 +123,7 @@ async function completeTurn(context: TurnContext, image: Buffer, recognition: Ha
   assertPublicObservationAllowed(context.mode, Boolean(context.useUntrustedPublicObservation));
   const hasSuppliedOpponentDiscards = context.publicState.opponents.some((opponent) => opponent.discards.length > 0);
   const observedPatch = observation && context.useUntrustedPublicObservation ? {
+    ...(context.publicState.doraIndicators.length === 0 ? { doraIndicators: observation.doraIndicators } : {}),
     ...(context.publicState.ownDiscards.length === 0 ? { ownDiscards: observation.ownDiscards } : {}),
     ...(!hasSuppliedOpponentDiscards
       ? {

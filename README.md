@@ -54,6 +54,13 @@ npm run jev:tune:local -- artifacts/replays \
   --model=jev-1.13.0
 ```
 
+保存時の判断と現在の決定論方策を同じリプレイで比較するには次を使います。方策間一致率、専門家ラベル精度、方策ごとの失敗数を出力します。`--jev`を付ける場合だけJev APIを呼び出します。
+
+```bash
+npm run policy:compare -- artifacts/replays
+node --env-file=.env.local --import tsx src/cli.ts policy-compare artifacts/replays --jev
+```
+
 局結果だけでは個々の打牌の正解ラベルにならないため、`won`や`pointsDelta`を`expertActionId`の代用にはしません。ラベルがないデータセットでは調整コマンドは停止します。現在の`confidence`閾値`0.55`は未校正の暫定値であり、十分な独立ラベルが集まるまでは引き下げません。
 
 ## 画面認識
@@ -154,7 +161,15 @@ npm run regions:recognize -- screenshot.png config/layout.json templates/live
 npm run actions:recognize -- screenshot.png config/layout.json templates/actions
 ```
 
-`regions:recognize`は各家の`rotationToUpright`を適用してから分類します。横向き牌をリーチ証拠として抽出し、完全かつ曖昧でない3～4枚組だけをチー・ポン・明槓へ構造化します。空領域や低信頼候補は安全扱いにしません。また、候補分類だけでは河全体を取りこぼしていないことを証明できないため、この結果だけで`publicStateConfidence`を上げることはありません。
+中央盤面は`centerBoardRegions`で局、本場、供託、残り牌、自風、4方向の点数ROIを設定し、正解値を付けた参照フレームとの一致で読み取れます。参照にない値、候補差が小さい値、点数が100点単位でない状態、または4人の点数と供託の合計が100000点にならない状態は不完全として停止します。
+
+```bash
+npm run center:recognize -- screenshot.png config/layout.json center-reference-manifest.json
+```
+
+参照マニフェストは`schemaVersion`、`viewport`と、`screenshot`、`round`、`honba`、`riichiSticks`、`remainingTiles`、`ownSeat`、東南西北の`scores`を持つ`samples`配列で構成します。同一対局の保存画像2状態では全項目を再認識できましたが、これは学習元への再照合であり独立精度ではありません。そのため出力は常に`trusted: false`で、Autoの`publicStateConfidence`を上げません。3フレーム一致ゲートも実装済みです。
+
+`regions:recognize`はドラ表示と各家の公開領域を分類し、各家には`rotationToUpright`を適用します。ドラ表示は河・副露の既知牌と重複させず、明示的に有効化したAdvisor観測へ渡します。横向き牌をリーチ証拠として抽出し、完全かつ曖昧でない3～4枚組だけをチー・ポン・明槓へ構造化します。空領域や低信頼候補は安全扱いにしません。また、候補分類だけでは河全体を取りこぼしていないことを証明できないため、この結果だけで`publicStateConfidence`を上げることはありません。
 
 `publicTileRegions`の初期値は1920px幅の公開実測実装と一致する値ですが、クライアント版・ウィンドウ比率ごとに実画面で再校正してください。
 

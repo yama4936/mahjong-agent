@@ -13,11 +13,13 @@ import { HybridTileRecognizer } from "./recognition/hybridTileRecognizer.js";
 import { decide } from "./agent/decision.js";
 import { appendDecisionLog, attachActualResult, readDecisionDataset, readDecisionLog } from "./logging/replay.js";
 import { summarizeBenchmark } from "./logging/benchmark.js";
+import { compareReplayPolicies, deterministicReplayPolicy, jevReplayPolicy } from "./logging/policyComparison.js";
 import { collectHandTemplates } from "./recognition/templateCollector.js";
 import { AUTO_MINIMUM_HOLDOUTS, fingerprintTemplateDirectory, validateTemplateDirectory } from "./recognition/templateValidator.js";
 import { connectJantama } from "./jantama/browser.js";
 import { assertTemplateSetMatchesCalibration, processTurn, runAgentLoop } from "./agent/controller.js";
 import { availableUiActions, recognizeActionButtons } from "./recognition/actionButtonRecognizer.js";
+import { recognizeCenterBoard } from "./recognition/centerBoardRecognizer.js";
 
 type ModelRecognizer = VitTileRecognizer | HybridTileRecognizer;
 
@@ -182,6 +184,15 @@ async function main(): Promise<void> {
     console.log(JSON.stringify(await recognizeConfiguredPublicTiles(screenshot, layout, templates), null, 2));
     return;
   }
+  if (command === "recognize-center") {
+    const screenshot = path;
+    const layoutPath = process.argv[4];
+    const manifest = process.argv[5];
+    if (!screenshot || !layoutPath || !manifest) throw new Error("Usage: recognize-center <screenshot.png> <layout.json> <reference-manifest.json>");
+    const layout = layoutSchema.parse(JSON.parse(await readFile(layoutPath, "utf8")));
+    console.log(JSON.stringify(await recognizeCenterBoard(screenshot, layout, manifest), null, 2));
+    return;
+  }
   if (command === "recognize-actions") {
     const screenshot = path;
     const layoutPath = process.argv[4];
@@ -227,6 +238,7 @@ async function main(): Promise<void> {
       try {
         state = parseGameState({
           ...publicState,
+          ...(usePublicObservation && publicState.doraIndicators.length === 0 ? { doraIndicators: publicObservation.doraIndicators } : {}),
           ...(usePublicObservation && publicState.ownDiscards.length === 0 ? { ownDiscards: publicObservation.ownDiscards } : {}),
           ...(usePublicObservation && publicState.visibleTiles.length === 0 && !publicState.opponents.some((opponent) => opponent.discards.length > 0)
             ? { visibleTiles: publicObservation.otherVisibleTiles }
@@ -403,6 +415,18 @@ async function main(): Promise<void> {
     console.log(JSON.stringify(summarizeBenchmark(records), null, 2));
     return;
   }
+  if (command === "policy-compare") {
+    if (!path) throw new Error("Usage: policy-compare <replay-directory|decisions.jsonl|decision.json> [--jev]");
+    const records = await readDecisionDataset(path);
+    const policies = [deterministicReplayPolicy()];
+    if (process.argv.includes("--jev")) {
+      const apiKey = process.env.TYPESAFE_API_KEY ?? "";
+      if (!apiKey) throw new Error("TYPESAFE_API_KEY is required with --jev");
+      policies.push(jevReplayPolicy(new JevClient(apiKey)));
+    }
+    console.log(JSON.stringify(await compareReplayPolicies(records, policies), null, 2));
+    return;
+  }
   if (command === "jev-tune") {
     if (!path) throw new Error("Usage: jev-tune <replay-directory|decisions.jsonl|decision.json> [--profiles=legacy-v1,balanced-v2] [--model=jev-1.13.0]");
     const apiKey = process.env.TYPESAFE_API_KEY ?? "";
@@ -537,7 +561,7 @@ async function main(): Promise<void> {
     }
     return;
   }
-  throw new Error("Commands: advise, jev-smoke, jev-tune, recognize, evaluate-frame, verify-discard-frame, detect-regions, recognize-regions, recognize-actions, propose-hand-layout, analyze-screenshot, watch-hand-layout, live-advisor, replay, attach-result, benchmark, collect-templates, validate-templates, certify-layout, turn, watch");
+  throw new Error("Commands: advise, jev-smoke, jev-tune, recognize, evaluate-frame, verify-discard-frame, detect-regions, recognize-regions, recognize-center, recognize-actions, propose-hand-layout, analyze-screenshot, watch-hand-layout, live-advisor, replay, attach-result, benchmark, policy-compare, collect-templates, validate-templates, certify-layout, turn, watch");
 }
 
 main().catch((error) => {

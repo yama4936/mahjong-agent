@@ -27,6 +27,7 @@ export interface PublicTileRecognitionOptions extends RegionDetectionOptions {
 }
 
 export interface PublicTileObservation {
+  doraIndicators: GameTile[];
   ownDiscards: GameTile[];
   ownRiichiDeclared?: boolean;
   ownMelds?: RecognizedMeld[];
@@ -134,6 +135,7 @@ export function toPublicTileObservation(
     return region.recognized.filter((tile) => tile.safe).map((tile) => tile.tile);
   };
   const ownDiscards = safeTiles("ownDiscards");
+  const doraIndicators = safeTiles("doraIndicators");
   const seats = ["east", "south", "west", "north"] as const;
   const ownIndex = seats.indexOf(ownSeat);
   const opponentDiscards = [
@@ -146,6 +148,7 @@ export function toPublicTileObservation(
   const opponentMeldTiles = opponentDiscards.flatMap((opponent) => opponent.melds.flatMap((meld) => meld.tiles));
   const otherVisibleTiles = [...opponentDiscards.flatMap((opponent) => opponent.discards), ...ownMeldTiles, ...opponentMeldTiles];
   return {
+    doraIndicators,
     ownDiscards,
     ownRiichiDeclared: hasSidewaysRiichiTile(recognition.ownDiscards),
     ownMelds,
@@ -168,6 +171,7 @@ export function assertTemporalPublicObservation(
   previous: PublicTileObservation,
   current: PublicTileObservation,
 ): void {
+  if (!hasPrefix(current.doraIndicators, previous.doraIndicators)) throw new Error("Dora indicators regressed or reordered");
   if (!hasPrefix(current.ownDiscards, previous.ownDiscards)) throw new Error("Own river regressed or reordered");
   for (const prior of previous.opponentDiscards) {
     const next = current.opponentDiscards.find((opponent) => opponent.seat === prior.seat);
