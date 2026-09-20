@@ -1,0 +1,18 @@
+{
+  "round": "unknown",
+  "honba": 0,
+  "riichiSticks": 0,
+  "seat": "east",
+  "scores": {},
+  "doraIndicators": [],
+  "ownDiscards": [],
+  "melds": [],
+  "visibleTiles": [],
+  "openMelds": 0,
+  "turn": 0,
+  "phase": "self_turn",
+  "publicStateConfidence": 0,
+  "riichiDeclared": false,
+  "availableUiActions": [],
+  "opponents": []
+}

@@ -1,0 +1,55 @@
+{
+  "name": "jantama-auto",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "node --import tsx --test test/**/*.test.ts",
+    "test:python": ".runtime/python-auto-venv/bin/python -m unittest discover -s python -p 'test_*.py'",
+    "recognition:benchmark": "tsx scripts/benchmark-recognition.ts",
+    "recognition:benchmark-live": "tsx scripts/benchmark-live-recognition.ts",
+    "recognition:train-cnn": ".runtime/vision-venv/bin/python scripts/train-local-tiles.py",
+    "recognition:statistics": "tsx scripts/recognition-statistics.ts",
+    "advisor": "tsx src/cli.ts advise",
+    "jev:smoke": "tsx src/cli.ts jev-smoke",
+    "jev:smoke:local": "node --env-file=.env.local --import tsx src/cli.ts jev-smoke",
+    "jev:tune:local": "node --env-file=.env.local --import tsx src/cli.ts jev-tune",
+    "recognize": "tsx src/cli.ts recognize",
+    "evaluate:frame": "tsx src/cli.ts evaluate-frame",
+    "regions:detect": "tsx src/cli.ts detect-regions",
+    "regions:recognize": "tsx src/cli.ts recognize-regions",
+    "actions:recognize": "tsx src/cli.ts recognize-actions",
+    "layout:propose-hand": "tsx src/cli.ts propose-hand-layout",
+    "analyze:screenshot": "tsx src/cli.ts analyze-screenshot",
+    "layout:watch-hand": "tsx src/cli.ts watch-hand-layout",
+    "templates:collect": "tsx src/cli.ts collect-templates",
+    "templates:import-row": "tsx scripts/import-labeled-row.ts",
+    "templates:seed-manifest": "node scripts/seed-bootstrap-manifest.mjs",
+    "live:advisor": "tsx src/cli.ts live-advisor",
+    "templates:validate": "tsx src/cli.ts validate-templates",
+    "layout:certify": "tsx src/cli.ts certify-layout",
+    "templates:fetch": "node scripts/fetch-bootstrap-templates.mjs",
+    "vision:setup": "bash scripts/setup-vision.sh",
+    "hybrid-vision:setup": "bash scripts/setup-hybrid-vision.sh",
+    "browser:start": "node scripts/launch-browser.mjs",
+    "dashboard": ".runtime/python-auto-venv/bin/python python/dashboard.py",
+    "turn": "tsx src/cli.ts turn",
+    "watch": "tsx src/cli.ts watch",
+    "result:attach": "tsx src/cli.ts attach-result",
+    "benchmark": "tsx src/cli.ts benchmark"
+  },
+  "dependencies": {
+    "playwright": "^1.55.0",
+    "sharp": "^0.35.4",
+    "zod": "^4.1.5"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

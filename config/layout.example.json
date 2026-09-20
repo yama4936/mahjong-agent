@@ -1,0 +1,38 @@
+{
+  "viewport": { "width": 1920, "height": 1080 },
+  "handSlots": [
+    { "x": 105, "y": 759, "width": 45, "height": 84 },
+    { "x": 150, "y": 759, "width": 45, "height": 84 },
+    { "x": 195, "y": 759, "width": 45, "height": 84 },
+    { "x": 240, "y": 759, "width": 45, "height": 84 },
+    { "x": 285, "y": 759, "width": 45, "height": 84 },
+    { "x": 330, "y": 759, "width": 45, "height": 84 },
+    { "x": 375, "y": 759, "width": 45, "height": 84 },
+    { "x": 420, "y": 759, "width": 45, "height": 84 },
+    { "x": 465, "y": 759, "width": 45, "height": 84 },
+    { "x": 510, "y": 759, "width": 45, "height": 84 },
+    { "x": 555, "y": 759, "width": 45, "height": 84 },
+    { "x": 600, "y": 759, "width": 45, "height": 84 },
+    { "x": 645, "y": 759, "width": 45, "height": 84 }
+  ],
+  "drawSlot": { "x": 690, "y": 759, "width": 45, "height": 84 },
+  "clickPoints": [
+    { "x": 127.5, "y": 801 }, { "x": 172.5, "y": 801 }, { "x": 217.5, "y": 801 },
+    { "x": 262.5, "y": 801 }, { "x": 307.5, "y": 801 }, { "x": 352.5, "y": 801 },
+    { "x": 397.5, "y": 801 }, { "x": 442.5, "y": 801 }, { "x": 487.5, "y": 801 },
+    { "x": 532.5, "y": 801 }, { "x": 577.5, "y": 801 }, { "x": 622.5, "y": 801 },
+    { "x": 667.5, "y": 801 }, { "x": 712.5, "y": 801 }
+  ],
+  "minimumTileConfidence": 0.98,
+  "tileMatcher": "face",
+  "minimumTilePresence": 0.12,
+  "minimumVitConfidence": 0.5,
+  "minimumVitMargin": 0.05,
+  "publicTileRegions": {
+    "ownDiscards": { "x": 770, "y": 535, "width": 390, "height": 225, "rotationToUpright": 0, "detectionMode": "discard_grid" },
+    "rightDiscards": { "x": 1115, "y": 285, "width": 305, "height": 250, "rotationToUpright": 90, "detectionMode": "discard_grid" },
+    "oppositeDiscards": { "x": 770, "y": 150, "width": 390, "height": 190, "rotationToUpright": 180, "detectionMode": "discard_grid" },
+    "leftDiscards": { "x": 500, "y": 285, "width": 305, "height": 250, "rotationToUpright": 270, "detectionMode": "discard_grid" },
+    "ownMelds": { "x": 732, "y": 759, "width": 200, "height": 84, "rotationToUpright": 0 }
+  }
+}

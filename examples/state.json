@@ -1,0 +1,11 @@
+{
+  "round": "east_1",
+  "honba": 0,
+  "riichiSticks": 0,
+  "seat": "south",
+  "scores": { "east": 25000, "south": 25000, "west": 25000, "north": 25000 },
+  "hand": ["1m", "2m", "3m", "4m", "5m", "6m", "3p", "4p", "5p", "7s", "8s", "9s", "E"],
+  "draw": "6p",
+  "doraIndicators": ["4s"],
+  "recognitionConfidence": 1.0
+}
