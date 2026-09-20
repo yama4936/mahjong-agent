@@ -3,17 +3,18 @@ import test from "node:test";
 import sharp from "sharp";
 import { layoutFromHandProposal, proposeHandLayout } from "../src/recognition/handLayoutProposal.js";
 
-async function syntheticHand(drawGap: number): Promise<Buffer> {
+async function syntheticHand(drawGap: number, tileCount = 14): Promise<Buffer> {
   const width = 800;
   const height = 450;
   const tileWidth = 30;
   const tileHeight = 70;
   const ordinaryGap = 3;
   const left = 100;
-  const composites = Array.from({ length: 14 }, (_, index) => {
-    const x = index < 13
+  const handCount = tileCount - 1;
+  const composites = Array.from({ length: tileCount }, (_, index) => {
+    const x = index < handCount
       ? left + index * (tileWidth + ordinaryGap)
-      : left + 13 * tileWidth + 12 * ordinaryGap + drawGap;
+      : left + handCount * tileWidth + (handCount - 1) * ordinaryGap + drawGap;
     return {
       input: { create: { width: tileWidth, height: tileHeight, channels: 3 as const, background: "#f2eedb" } },
       left: x,
@@ -43,6 +44,14 @@ test("proposes thirteen hand slots plus a separated draw slot", async () => {
   assert.equal(proposal.evidence.drawGap, 14);
   assert.equal(proposal.requiresHoldoutValidation, true);
   assert.ok(proposal.confidence > 0.8);
+});
+
+test("proposes a compact hand plus draw slot after a kan", async () => {
+  const proposal = await proposeHandLayout(await syntheticHand(14, 11), [11, 8, 5, 2]);
+  assert.equal(proposal.handSlots.length, 10);
+  assert.equal(proposal.clickPoints.length, 11);
+  assert.equal(proposal.evidence.detectedTiles, 11);
+  assert.equal(proposal.evidence.drawGap, 14);
 });
 
 test("rejects a row whose draw tile cannot be distinguished", async () => {

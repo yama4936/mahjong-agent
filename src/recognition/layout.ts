@@ -58,9 +58,9 @@ const actionCertificateSchema = z.object({
 
 export const layoutSchema = z.object({
   viewport: z.object({ width: z.number().int().positive(), height: z.number().int().positive() }),
-  handSlots: z.array(rectSchema).min(13).max(14),
+  handSlots: z.array(rectSchema).min(1).max(14),
   drawSlot: rectSchema.optional(),
-  clickPoints: z.array(z.object({ x: z.number(), y: z.number() })).min(13).max(14),
+  clickPoints: z.array(z.object({ x: z.number(), y: z.number() })).min(1).max(14),
   minimumTileConfidence: z.number().min(0).max(1).default(0.98),
   minimumTilePresence: z.number().min(0).max(1).default(0.12),
   tileMatcher: z.enum(["raw", "face", "face_all"]).default("raw"),

@@ -16,6 +16,7 @@ import type { PublicTileRegionName } from "../recognition/layout.js";
 import { availableUiActions, recognizeActionButtons, type ActionButtonMatch } from "../recognition/actionButtonRecognizer.js";
 import { generateLegalActions } from "../game/actions.js";
 import type { GameTile } from "../game/tiles.js";
+import { layoutFromHandProposal, proposeHandLayout } from "../recognition/handLayoutProposal.js";
 
 export interface TurnContext {
   page: Page;
@@ -109,6 +110,14 @@ async function captureRecognition(context: TurnContext): Promise<{ image: Buffer
       : await recognizeTileSlots(image, context.layout.handSlots, reactionLayout, context.templateDirectory);
     if (reactionRecognition.safe) recognition = reactionRecognition;
   }
+  if (!recognition.safe && modelRecognizer) {
+    try {
+      const proposal = await proposeHandLayout(image, [11, 8, 5, 2]);
+      const compactLayout = layoutFromHandProposal(proposal, context.layout);
+      const compactRecognition = await modelRecognizer.recognizeHand(image, compactLayout);
+      if (compactRecognition.safe) recognition = compactRecognition;
+    } catch {}
+  }
   const actionMatches = context.actionTemplateDirectory
     ? await recognizeActionButtons(image, context.layout, context.actionTemplateDirectory)
     : [];
@@ -151,13 +160,14 @@ async function completeTurn(context: TurnContext, image: Buffer, recognition: Ha
     ...(context.publicState.visibleTiles.length === 0 ? { visibleTiles: observation.allMeldTiles ?? observation.ownMeldTiles } : {}),
   } : {};
   let state;
+  const concealedCount = 14 - context.publicState.openMelds * 3;
   try {
     state = parseGameState({
       ...context.publicState,
       ...observedPatch,
       ...(context.publicState.phase === "reaction"
         ? { hand: recognition.tiles.slice(0, 13), draw: undefined }
-        : { hand: recognition.tiles.slice(0, 13), draw: recognition.tiles[13] }),
+        : { hand: recognition.tiles.slice(0, concealedCount - 1), draw: recognition.tiles[concealedCount - 1] }),
       availableUiActions: actionMatches.length ? availableUiActions(actionMatches) : context.publicState.availableUiActions,
       recognitionConfidence: recognition.confidence,
     });
@@ -169,7 +179,7 @@ async function completeTurn(context: TurnContext, image: Buffer, recognition: Ha
       ...context.publicState,
       ...(context.publicState.phase === "reaction"
         ? { hand: recognition.tiles.slice(0, 13), draw: undefined }
-        : { hand: recognition.tiles.slice(0, 13), draw: recognition.tiles[13] }),
+        : { hand: recognition.tiles.slice(0, concealedCount - 1), draw: recognition.tiles[concealedCount - 1] }),
       availableUiActions: actionMatches.length ? availableUiActions(actionMatches) : context.publicState.availableUiActions,
       recognitionConfidence: recognition.confidence,
     });
@@ -249,7 +259,13 @@ async function completeTurn(context: TurnContext, image: Buffer, recognition: Ha
 
 export async function processTurn(context: TurnContext) {
   const { image, recognition, publicRecognition, actionMatches } = await captureRecognition(context);
-  return completeTurn(context, image, recognition, publicRecognition, actionMatches);
+  const inferredOpenMelds = [14, 11, 8, 5, 2].includes(recognition.tiles.length)
+    ? (14 - recognition.tiles.length) / 3
+    : context.publicState.openMelds;
+  const activeContext = inferredOpenMelds === context.publicState.openMelds
+    ? context
+    : { ...context, publicState: { ...context.publicState, openMelds: inferredOpenMelds } };
+  return completeTurn(activeContext, image, recognition, publicRecognition, actionMatches);
 }
 
 /**
@@ -291,12 +307,16 @@ export async function runAgentLoop(context: TurnContext, options: AgentLoopOptio
       if (recognition.safe && recognition.tiles.length === 14) pendingReaction = undefined;
 
       let activeContext = context;
-      let actionable = recognition.safe && recognition.tiles.length === 14;
+      const inferredOpenMelds = [14, 11, 8, 5, 2].includes(recognition.tiles.length)
+        ? (14 - recognition.tiles.length) / 3
+        : context.publicState.openMelds;
+      let actionable = recognition.safe && [14, 11, 8, 5, 2].includes(recognition.tiles.length);
       if (actionable) {
         activeContext = {
           ...context,
           publicState: {
             ...context.publicState,
+            openMelds: inferredOpenMelds,
             availableUiActions: [...new Set([...context.publicState.availableUiActions, "kan" as const])],
           },
         };

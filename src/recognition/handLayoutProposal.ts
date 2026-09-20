@@ -85,8 +85,8 @@ function rowCandidates(candidates: RegionCandidate[]): RegionCandidate[][] {
   return rows;
 }
 
-function scoreRow(row: RegionCandidate[], viewportHeight: number): number {
-  if (row.length !== 14) return Number.NEGATIVE_INFINITY;
+function scoreRow(row: RegionCandidate[], viewportHeight: number, tileCounts: readonly number[]): number {
+  if (!tileCounts.includes(row.length)) return Number.NEGATIVE_INFINITY;
   const heights = row.map((tile) => tile.height);
   const widths = row.map((tile) => tile.width);
   const heightVariation = (Math.max(...heights) - Math.min(...heights)) / median(heights);
@@ -96,7 +96,8 @@ function scoreRow(row: RegionCandidate[], viewportHeight: number): number {
 }
 
 /** Proposes a 13+draw hand layout from a screenshot; it never certifies Auto. */
-export async function proposeHandLayout(screenshot: string | Buffer): Promise<HandLayoutProposal> {
+export async function proposeHandLayout(screenshot: string | Buffer, tileCounts: readonly number[] = [14]): Promise<HandLayoutProposal> {
+  if (tileCounts.some((count) => !Number.isInteger(count) || count < 2 || count > 14)) throw new Error("tileCounts must contain integers from 2 through 14");
   const metadata = await sharp(screenshot).metadata();
   if (!metadata.width || !metadata.height) throw new Error("Screenshot dimensions are unavailable");
   const lowerY = Math.floor(metadata.height * 0.52);
@@ -119,20 +120,20 @@ export async function proposeHandLayout(screenshot: string | Buffer): Promise<Ha
   })));
   const attempts = detections.map(({ luminanceThreshold, detection }) => {
     const candidates = detection.candidates.filter(tileLike);
-    const row = rowCandidates(candidates).sort((a, b) => scoreRow(b, metadata.height!) - scoreRow(a, metadata.height!))[0];
-    return { luminanceThreshold, candidates, row, score: row ? scoreRow(row, metadata.height!) : Number.NEGATIVE_INFINITY };
+    const row = rowCandidates(candidates).sort((a, b) => scoreRow(b, metadata.height!, tileCounts) - scoreRow(a, metadata.height!, tileCounts))[0];
+    return { luminanceThreshold, candidates, row, score: row ? scoreRow(row, metadata.height!, tileCounts) : Number.NEGATIVE_INFINITY };
   });
   const selected = attempts.sort((a, b) => b.score - a.score)[0]!;
   const row = selected.row;
-  if (!row || row.length !== 14) {
+  if (!row || !tileCounts.includes(row.length)) {
     const counts = attempts.map((attempt) => `${attempt.luminanceThreshold}:${attempt.candidates.length}`).join(", ");
-    throw new Error(`Could not isolate a 14-tile hand row (tile-like components by threshold: ${counts})`);
+    throw new Error(`Could not isolate a ${tileCounts.join("/")}-tile hand row (tile-like components by threshold: ${counts})`);
   }
 
   const gaps = row.slice(1).map((tile, index) => tile.x - (row[index]!.x + row[index]!.width));
-  const ordinaryGaps = gaps.slice(0, 12);
+  const ordinaryGaps = gaps.slice(0, -1);
   const medianGap = median(ordinaryGaps);
-  const drawGap = gaps[12]!;
+  const drawGap = gaps.at(-1)!;
   if (drawGap < Math.max(medianGap + 2, medianGap * 1.25)) {
     throw new Error(`The 14th tile is not separated enough to identify the draw slot (gap ${drawGap}, baseline ${medianGap})`);
   }
@@ -145,8 +146,8 @@ export async function proposeHandLayout(screenshot: string | Buffer): Promise<Ha
   const rects = row.map(({ x, y, width, height }) => ({ x, y, width, height }));
   return {
     viewport: { width: metadata.width, height: metadata.height },
-    handSlots: rects.slice(0, 13),
-    drawSlot: rects[13]!,
+    handSlots: rects.slice(0, -1),
+    drawSlot: rects.at(-1)!,
     clickPoints: rects.map((rect) => ({ x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 })),
     evidence: {
       detectedTiles: row.length,
