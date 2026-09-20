@@ -69,6 +69,17 @@ test("winning and riichi UI actions are selected ahead of a plain discard", asyn
   assert.equal(result.selectedActionId, "riichi_discard_E");
 });
 
+test("advisor recommends a non-worsening closed kan outside riichi", async () => {
+  const closed = parseGameState({
+    hand: ["1m", "2m", "3m", "1p", "2p", "3p", "1s", "2s", "3s", "E", "E", "E", "E"],
+    draw: "5m",
+    availableUiActions: ["kan"],
+  });
+  assert.equal((await decide(closed, { mode: "advisor" })).selectedAction.action, "ankan");
+  const riichi = parseGameState({ ...closed, riichiDeclared: true });
+  assert.notEqual((await decide(riichi, { mode: "advisor" })).selectedAction.action, "ankan");
+});
+
 test("reaction policy wins immediately and folds calls against riichi", async () => {
   const ron = parseGameState({
     phase: "reaction",

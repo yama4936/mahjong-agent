@@ -43,6 +43,9 @@ export async function decide(state: GameState, options: DecisionOptions): Promis
   const base = deterministicAdvice(state);
   const immediateWin = legalActions.find((action) => action.action === "tsumo");
   if (immediateWin) return decideImmediateSelfAction(state, base, legalActions, immediateWin, options);
+  const kan = legalActions.find((action): action is LegalAction & { action: "ankan" | "kakan"; consumedTiles: string[] } =>
+    action.action === "ankan" || action.action === "kakan");
+  if (kan && shouldRecommendKan(state, kan)) return decideImmediateSelfAction(state, base, legalActions, kan, options);
   const minJevConfidence = options.minJevConfidence ?? 0.55;
   let selected = base.candidates[0]!;
   let confidence = base.confidence;
@@ -100,6 +103,19 @@ export async function decide(state: GameState, options: DecisionOptions): Promis
     ...(jev ? { jev } : {}),
     executable: options.mode === "auto" && safety.allowed,
   };
+}
+
+function shouldRecommendKan(state: GameState, action: LegalAction & { action: "ankan" | "kakan"; consumedTiles: string[] }): boolean {
+  if (state.riichiDeclared) return false;
+  const concealed = [...state.hand, ...(state.draw ? [state.draw] : [])];
+  for (const tile of action.consumedTiles) {
+    const index = concealed.findIndex((candidate) => candidate === tile || (candidate[1] === tile[1] && (candidate[0] === "0" ? "5" : candidate[0]) === (tile[0] === "0" ? "5" : tile[0])));
+    if (index < 0) return false;
+    concealed.splice(index, 1);
+  }
+  const before = calculateShanten([...state.hand, ...(state.draw ? [state.draw] : [])], state.openMelds).shanten;
+  const after = calculateShanten(concealed, state.openMelds + (action.action === "ankan" ? 1 : 0)).shanten;
+  return after <= before;
 }
 
 function decideImmediateSelfAction(

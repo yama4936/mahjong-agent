@@ -43,6 +43,24 @@ test("pon and open kan require two and three matching concealed tiles", () => {
   assert.ok(actions.some((action) => action.action === "minkan"));
 });
 
+test("closed and added kan are generated on a self turn", () => {
+  const closed = parseGameState({
+    hand: ["1m", "2m", "3m", "1p", "2p", "3p", "1s", "2s", "3s", "E", "E", "E", "E"],
+    draw: "5m",
+    availableUiActions: ["kan"],
+  });
+  assert.ok(generateSelfTurnActions(closed).some((action) => action.action === "ankan" && action.tile === "E"));
+
+  const added = parseGameState({
+    hand: ["1m", "2m", "3m", "1p", "2p", "3p", "1s", "2s", "3s", "E"],
+    draw: "5m",
+    melds: [{ type: "pon", tiles: ["E", "E", "E"] }],
+    openMelds: 1,
+    availableUiActions: ["kan"],
+  });
+  assert.ok(generateSelfTurnActions(added).some((action) => action.action === "kakan" && action.tile === "E"));
+});
+
 test("nine terminals abort is UI-gated and structurally checked", () => {
   const state = parseGameState({
     turn: 0,

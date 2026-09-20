@@ -11,7 +11,7 @@ export type LegalAction =
   | { id: "kyuushu"; action: "kyuushu" }
   | { id: string; action: "chi"; tile: Tile; consumedTiles: Tile[] }
   | { id: string; action: "pon"; tile: Tile; consumedTiles: Tile[] }
-  | { id: string; action: "minkan" | "ankan"; tile: Tile; consumedTiles: Tile[] }
+  | { id: string; action: "minkan" | "ankan" | "kakan"; tile: Tile; consumedTiles: Tile[] }
   | { id: "pass"; action: "pass" };
 
 export function generateSelfTurnActions(state: GameState): LegalAction[] {
@@ -38,6 +38,11 @@ export function generateSelfTurnActions(state: GameState): LegalAction[] {
         const tile = tileFromIndex(index);
         actions.push({ id: `ankan_${tile}`, action: "ankan", tile, consumedTiles: [tile, tile, tile, tile] });
       }
+    }
+    for (const meld of state.melds.filter((candidate) => candidate.type === "pon")) {
+      const tile = normalizeTile(meld.tiles[0]!);
+      const concealed = hand.find((candidate) => normalizeTile(candidate) === tile);
+      if (concealed) actions.push({ id: `kakan_${tile}`, action: "kakan", tile, consumedTiles: [tile] });
     }
   }
   if (ui.has("pass")) actions.push({ id: "pass", action: "pass" });

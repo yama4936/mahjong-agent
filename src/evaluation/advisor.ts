@@ -4,7 +4,7 @@ import { evaluateTileDanger } from "./defense.js";
 import { evaluateRoundValue } from "./value.js";
 
 export interface AdvisorResult {
-  recommendedAction: "discard" | "riichi" | "tsumo" | "ron" | "chi" | "pon" | "minkan" | "ankan" | "kyuushu" | "pass";
+  recommendedAction: "discard" | "riichi" | "tsumo" | "ron" | "chi" | "pon" | "minkan" | "ankan" | "kakan" | "kyuushu" | "pass";
   tile: string;
   confidence: number;
   source: "deterministic" | "jev";

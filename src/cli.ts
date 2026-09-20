@@ -122,7 +122,7 @@ async function main(): Promise<void> {
     const clickIndex = decision.selectedAction.action === "discard" || decision.selectedAction.action === "riichi"
       ? [...state.hand, ...(state.draw ? [state.draw] : [])].map(String).lastIndexOf(decision.selectedAction.tile)
       : undefined;
-    const actionButtonName = decision.selectedAction.action === "minkan" || decision.selectedAction.action === "ankan"
+    const actionButtonName = decision.selectedAction.action === "minkan" || decision.selectedAction.action === "ankan" || decision.selectedAction.action === "kakan"
       ? "kan"
       : decision.selectedAction.action;
     const actionButton = actionMatches.find((match) => match.action === actionButtonName && match.present);

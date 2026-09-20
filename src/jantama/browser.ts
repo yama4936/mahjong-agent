@@ -188,7 +188,7 @@ export async function showAdvisorOverlay(page: Page, decision: DecisionResult): 
   };
   const actionNames: Record<string, string> = {
     discard: "打牌", riichi: "リーチ", tsumo: "ツモ", ron: "ロン", kyuushu: "九種九牌",
-    chi: "チー", pon: "ポン", minkan: "明槓", ankan: "暗槓", pass: "見送り",
+    chi: "チー", pon: "ポン", minkan: "明槓", ankan: "暗槓", kakan: "加槓", pass: "見送り",
   };
   const reasonNames: Record<string, string> = {
     recognition_confidence_below_threshold: "牌認識の信頼度が基準未満",

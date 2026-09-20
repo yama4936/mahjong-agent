@@ -192,7 +192,7 @@ async function completeTurn(context: TurnContext, image: Buffer, recognition: Ha
           decisionConfidence: decision.confidence,
         });
       } else {
-        const button = selected.action === "minkan" || selected.action === "ankan" ? "kan" : selected.action;
+        const button = selected.action === "minkan" || selected.action === "ankan" || selected.action === "kakan" ? "kan" : selected.action;
         if (!context.actionTemplateDirectory) throw new Error("Action template directory is required for non-discard execution");
         const match = actionMatches.find((candidate) => candidate.action === button && candidate.present);
         if (!match) throw new Error(`Selected ${button} button is not present in the evaluated frame`);
@@ -292,6 +292,15 @@ export async function runAgentLoop(context: TurnContext, options: AgentLoopOptio
 
       let activeContext = context;
       let actionable = recognition.safe && recognition.tiles.length === 14;
+      if (actionable) {
+        activeContext = {
+          ...context,
+          publicState: {
+            ...context.publicState,
+            availableUiActions: [...new Set([...context.publicState.availableUiActions, "kan" as const])],
+          },
+        };
+      }
       if (recognition.safe && recognition.tiles.length === 13 && pendingReaction) {
         const reactionState = {
           ...context.publicState,
