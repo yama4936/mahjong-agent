@@ -137,7 +137,7 @@ export class VitTileRecognizer {
     }));
     const confidence = Math.min(...matches.map((match) => match.confidence));
     const ambiguityMargin = Math.min(...matches.map((match) => match.confidence - match.runnerUpConfidence));
-    const turnReady = matches.length === 14;
+    const turnReady = matches.length === slots.length;
     return {
       backend: "vit" as const,
       tiles: matches.map((match) => match.tile),

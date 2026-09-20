@@ -147,7 +147,7 @@ export class HybridTileRecognizer {
     }));
     const confidence = Math.min(...matches.map((match) => match.confidence));
     const ambiguityMargin = Math.min(...matches.map((match) => match.confidence - match.runnerUpConfidence));
-    const turnReady = matches.length === 14;
+    const turnReady = matches.length === slots.length;
     return {
       backend: "hybrid" as const,
       tiles: matches.map((match) => match.tile),

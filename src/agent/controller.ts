@@ -14,6 +14,8 @@ import { HybridTileRecognizer } from "../recognition/hybridTileRecognizer.js";
 import { recognizeConfiguredPublicTilesWithVit, toPublicTileObservation, type PublicTileRecognitionRegion } from "../recognition/publicTileRecognizer.js";
 import type { PublicTileRegionName } from "../recognition/layout.js";
 import { availableUiActions, recognizeActionButtons, type ActionButtonMatch } from "../recognition/actionButtonRecognizer.js";
+import { generateLegalActions } from "../game/actions.js";
+import type { GameTile } from "../game/tiles.js";
 
 export interface TurnContext {
   page: Page;
@@ -95,11 +97,18 @@ type PublicRecognition = Partial<Record<PublicTileRegionName, PublicTileRecognit
 async function captureRecognition(context: TurnContext): Promise<{ image: Buffer; recognition: HandRecognition; publicRecognition?: PublicRecognition; actionMatches: ActionButtonMatch[] }> {
   const image = await captureViewport(context.page, context.layout);
   const modelRecognizer = context.tileRecognizer ?? context.vitRecognizer;
-  const recognition = modelRecognizer
+  let recognition = modelRecognizer
     ? await modelRecognizer.recognizeHand(image, context.layout)
     : context.publicState.phase === "reaction"
       ? await recognizeTileSlots(image, context.layout.handSlots, context.layout, context.templateDirectory)
       : await recognizeHand(image, context.layout, context.templateDirectory);
+  if (!recognition.safe && context.layout.drawSlot) {
+    const reactionLayout = { ...context.layout, drawSlot: undefined };
+    const reactionRecognition = modelRecognizer
+      ? await modelRecognizer.recognizeHand(image, reactionLayout)
+      : await recognizeTileSlots(image, context.layout.handSlots, reactionLayout, context.templateDirectory);
+    if (reactionRecognition.safe) recognition = reactionRecognition;
+  }
   const actionMatches = context.actionTemplateDirectory
     ? await recognizeActionButtons(image, context.layout, context.actionTemplateDirectory)
     : [];
@@ -252,6 +261,9 @@ export async function runAgentLoop(context: TurnContext, options: AgentLoopOptio
   const pollIntervalMs = options.pollIntervalMs ?? 750;
   const maxTurns = options.maxTurns ?? Number.POSITIVE_INFINITY;
   const gate = new TurnRearmGate(options.rearmAfterUnsafeFrames ?? 3);
+  let previousPublicObservation: ReturnType<typeof toPublicTileObservation> | undefined;
+  let pendingReaction: { tile: GameTile; fromSeat: "east" | "south" | "west" | "north" } | undefined;
+  let pendingReactionExpiresAt = 0;
   if (!Number.isFinite(pollIntervalMs) || pollIntervalMs < 100) throw new Error("pollIntervalMs must be at least 100");
   if (!(maxTurns === Number.POSITIVE_INFINITY || (Number.isInteger(maxTurns) && maxTurns > 0))) throw new Error("maxTurns must be a positive integer");
 
@@ -259,13 +271,54 @@ export async function runAgentLoop(context: TurnContext, options: AgentLoopOptio
   while (!options.signal?.aborted && turns < maxTurns) {
     try {
       const { image, recognition, publicRecognition, actionMatches } = await captureRecognition(context);
-      if (!recognition.safe && context.mode !== "observer") await hideAdvisorOverlay(context.page);
-      const gateResult = gate.observe(recognition.safe);
+      const publicObservation = publicRecognition
+        ? toPublicTileObservation(publicRecognition, context.publicState.seat)
+        : undefined;
+      if (previousPublicObservation && publicObservation) {
+        const additions = publicObservation.opponentDiscards.flatMap((opponent) => {
+          const previous = previousPublicObservation!.opponentDiscards.find((item) => item.seat === opponent.seat);
+          if (!previous || opponent.discards.length !== previous.discards.length + 1) return [];
+          if (!previous.discards.every((tile, index) => opponent.discards[index] === tile)) return [];
+          return [{ tile: opponent.discards.at(-1)!, fromSeat: opponent.seat }];
+        });
+        if (additions.length === 1) {
+          pendingReaction = additions[0];
+          pendingReactionExpiresAt = Date.now() + 5_000;
+        }
+      }
+      if (publicObservation) previousPublicObservation = publicObservation;
+      if (pendingReaction && Date.now() > pendingReactionExpiresAt) pendingReaction = undefined;
+      if (recognition.safe && recognition.tiles.length === 14) pendingReaction = undefined;
+
+      let activeContext = context;
+      let actionable = recognition.safe && recognition.tiles.length === 14;
+      if (recognition.safe && recognition.tiles.length === 13 && pendingReaction) {
+        const reactionState = {
+          ...context.publicState,
+          phase: "reaction" as const,
+          pendingDiscard: pendingReaction,
+          availableUiActions: ["ron", "pon", "kan", "chi", "pass"] as PublicGameState["availableUiActions"],
+        };
+        try {
+          const preview = parseGameState({
+            ...reactionState,
+            hand: recognition.tiles,
+            draw: undefined,
+            recognitionConfidence: recognition.confidence,
+          });
+          actionable = generateLegalActions(preview).some((action) => action.action !== "pass");
+          if (actionable) activeContext = { ...context, publicState: reactionState };
+        } catch {
+          actionable = false;
+        }
+      }
+      if (!actionable && context.mode !== "observer") await hideAdvisorOverlay(context.page);
+      const gateResult = gate.observe(actionable);
       if (gateResult.rearmed) {
         if (context.mode !== "observer") await hideAdvisorOverlay(context.page);
         options.onStatus?.({ kind: "waiting", message: "Turn ended; armed for the next recognizable hand" });
       } else if (gateResult.shouldProcess) {
-        const result = await completeTurn(context, image, recognition, publicRecognition, actionMatches);
+        const result = await completeTurn(activeContext, image, recognition, publicRecognition, actionMatches);
         turns += 1;
         options.onStatus?.({ kind: "turn", message: `Processed turn ${turns}: ${result.decision.selectedAction.action}${result.decision.tile ? ` ${result.decision.tile}` : ""}` });
       }
