@@ -47,8 +47,12 @@ export class TurnRearmGate {
   private changedSignature: string | undefined;
   private changedSignatureFrames = 0;
 
-  constructor(private readonly requiredUnsafeFrames = 3) {
+  constructor(
+    private readonly requiredUnsafeFrames = 3,
+    private readonly requiredChangedSignatureFrames = requiredUnsafeFrames,
+  ) {
     if (!Number.isInteger(requiredUnsafeFrames) || requiredUnsafeFrames < 1) throw new Error("requiredUnsafeFrames must be a positive integer");
+    if (!Number.isInteger(requiredChangedSignatureFrames) || requiredChangedSignatureFrames < 1) throw new Error("requiredChangedSignatureFrames must be a positive integer");
   }
 
   observe(safe: boolean, signature?: string): { shouldProcess: boolean; rearmed: boolean } {
@@ -73,11 +77,11 @@ export class TurnRearmGate {
         return { shouldProcess: false, rearmed: false };
       }
       this.changedSignatureFrames += 1;
-      if (this.changedSignatureFrames < this.requiredUnsafeFrames) return { shouldProcess: false, rearmed: false };
-      this.armed = true;
+      if (this.changedSignatureFrames < this.requiredChangedSignatureFrames) return { shouldProcess: false, rearmed: false };
+      this.processedSignature = signature;
       this.changedSignature = undefined;
       this.changedSignatureFrames = 0;
-      return { shouldProcess: false, rearmed: true };
+      return { shouldProcess: true, rearmed: false };
     }
     this.armed = false;
     this.processedSignature = signature;
@@ -311,7 +315,8 @@ export async function processTurn(context: TurnContext) {
 export async function runAgentLoop(context: TurnContext, options: AgentLoopOptions = {}) {
   const pollIntervalMs = options.pollIntervalMs ?? 100;
   const maxTurns = options.maxTurns ?? Number.POSITIVE_INFINITY;
-  const gate = new TurnRearmGate(options.rearmAfterUnsafeFrames ?? 3);
+  const unsafeFramesToRearm = options.rearmAfterUnsafeFrames ?? (context.mode === "advisor" ? 1 : 3);
+  const gate = new TurnRearmGate(unsafeFramesToRearm, context.mode === "advisor" ? 2 : unsafeFramesToRearm);
   let previousPublicObservation: ReturnType<typeof toPublicTileObservation> | undefined;
   let pendingReaction: { tile: GameTile; fromSeat: "east" | "south" | "west" | "north" } | undefined;
   let pendingReactionExpiresAt = 0;

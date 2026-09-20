@@ -30,8 +30,20 @@ test("turn gate rearms after a changed safe hand remains stable", () => {
   assert.equal(gate.observe(true, "self_turn:1m,2m").shouldProcess, true);
   assert.equal(gate.observe(true, "self_turn:1m,3m").rearmed, false);
   assert.equal(gate.observe(true, "self_turn:1m,3m").rearmed, false);
-  assert.equal(gate.observe(true, "self_turn:1m,3m").rearmed, true);
   assert.equal(gate.observe(true, "self_turn:1m,3m").shouldProcess, true);
+  assert.equal(gate.observe(true, "self_turn:1m,3m").shouldProcess, false);
+});
+
+test("advisor turn gate rearms on one unsafe frame or two stable changed-hand frames", () => {
+  const unsafeGate = new TurnRearmGate(1, 2);
+  unsafeGate.observe(true, "self_turn:1m,2m");
+  assert.equal(unsafeGate.observe(false).rearmed, true);
+  assert.equal(unsafeGate.observe(true, "self_turn:1m,3m").shouldProcess, true);
+
+  const changedGate = new TurnRearmGate(1, 2);
+  changedGate.observe(true, "self_turn:1m,2m");
+  assert.equal(changedGate.observe(true, "self_turn:1m,3m").shouldProcess, false);
+  assert.equal(changedGate.observe(true, "self_turn:1m,3m").shouldProcess, true);
 });
 
 test("turn gate does not rearm for unstable changed-hand recognition", () => {
