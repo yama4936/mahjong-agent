@@ -259,6 +259,7 @@ export async function runAgentLoop(context: TurnContext, options: AgentLoopOptio
   while (!options.signal?.aborted && turns < maxTurns) {
     try {
       const { image, recognition, publicRecognition, actionMatches } = await captureRecognition(context);
+      if (!recognition.safe && context.mode !== "observer") await hideAdvisorOverlay(context.page);
       const gateResult = gate.observe(recognition.safe);
       if (gateResult.rearmed) {
         if (context.mode !== "observer") await hideAdvisorOverlay(context.page);
