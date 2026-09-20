@@ -424,6 +424,24 @@ class AwayDialogDetectionTest(unittest.TestCase):
         current["opponentDiscards"][1]["discards"] = ["2p"]
         self.assertIsNone(PythonAutoOperator.infer_pending_discard(previous, current))
 
+    def test_ranked_loop_click_points_cover_bronze_east_navigation_only(self) -> None:
+        viewport = {"width": 1920, "height": 1080}
+        self.assertEqual(PythonAutoOperator.ranked_loop_click_point("lobby", viewport),
+                         {"x": 1390.08, "y": 324.0})
+        self.assertEqual(PythonAutoOperator.ranked_loop_click_point("ranked_menu", viewport),
+                         {"x": 1390.08, "y": 410.4})
+        self.assertEqual(PythonAutoOperator.ranked_loop_click_point("ranked_room", viewport),
+                         {"x": 1390.08, "y": 405.0})
+        self.assertIsNone(PythonAutoOperator.ranked_loop_click_point("matchmaking", viewport))
+        self.assertIsNone(PythonAutoOperator.ranked_loop_click_point("match", viewport))
+
+    def test_compact_hand_requires_a_previously_observed_call(self) -> None:
+        self.assertTrue(PythonAutoOperator.compact_hand_is_proven(0, False))
+        self.assertTrue(PythonAutoOperator.compact_hand_is_proven(1, True))
+        self.assertTrue(PythonAutoOperator.compact_hand_is_proven(4, True))
+        self.assertFalse(PythonAutoOperator.compact_hand_is_proven(1, False))
+        self.assertFalse(PythonAutoOperator.compact_hand_is_proven(3, False))
+
     def test_saved_screens_are_classified_and_unknown_fails_closed(self) -> None:
         expected_files = {
             "login": "result-step-1.png",

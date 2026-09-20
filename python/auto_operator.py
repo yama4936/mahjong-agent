@@ -270,6 +270,8 @@ class PythonAutoOperator:
         self.screencast_sequence = 0
         self.screencast_draw_occupied: bool | None = None
         self.screencast_draw_generation = 0
+        self.last_ranked_loop_state: str | None = None
+        self.last_ranked_loop_click_at = 0.0
         if self.log_path.exists():
             for line in reversed(self.log_path.read_text(encoding="utf-8").splitlines()):
                 try:
@@ -405,6 +407,39 @@ class PythonAutoOperator:
         with self.log_path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n")
         print(json.dumps(record, ensure_ascii=False), flush=True)
+
+    @staticmethod
+    def ranked_loop_click_point(state: str, viewport: dict[str, int]) -> dict[str, float] | None:
+        """Return the fixed navigation target for a Bronze Room East loop."""
+        ratios = {
+            "lobby": (0.724, 0.300),       # ranked match
+            "ranked_menu": (0.724, 0.380), # Bronze Room
+            "ranked_room": (0.724, 0.375), # four-player East
+        }
+        ratio = ratios.get(state)
+        if ratio is None:
+            return None
+        return {"x": viewport["width"] * ratio[0], "y": viewport["height"] * ratio[1]}
+
+    @staticmethod
+    def compact_hand_is_proven(open_melds: int, dynamic_layout_was_required: bool) -> bool:
+        return open_melds == 0 or dynamic_layout_was_required
+
+    def advance_ranked_loop(self, page: Page, state: str, confidence: float) -> bool:
+        """Enter or re-enter Bronze Room four-player East after every match."""
+        if not self.args.ranked_loop or confidence < 0.25:
+            return False
+        point = self.ranked_loop_click_point(state, self.layout["viewport"])
+        if point is None:
+            return False
+        now = time.monotonic()
+        if state == self.last_ranked_loop_state and now - self.last_ranked_loop_click_at < 1.5:
+            return True
+        page.mouse.click(point["x"], point["y"])
+        self.last_ranked_loop_state = state
+        self.last_ranked_loop_click_at = now
+        self.log("ranked_loop_advanced", state=state, confidence=confidence, clickPoint=point)
+        return True
 
     def record_replay(
         self,
@@ -949,6 +984,14 @@ class PythonAutoOperator:
                     # The stricter popup/button geometry remains authoritative.
                     screen_state = "match"
                 if screen_state in {"round_result", "match_result"}:
+                    # A new hand (or a new match) must never inherit tiles or
+                    # reaction state from the hand whose result is displayed.
+                    self.cached_concealed_tiles = None
+                    self.cached_open_melds = 0
+                    self.dynamic_layout_required = False
+                    self.last_shanten = None
+                    self.last_processed_hand = None
+                    self.armed = True
                     self.attach_outcome("match" if screen_state == "match_result" else "round", full_screen, screen_confidence)
                     if self.args.advance_screens:
                         y_ratio = 0.92 if screen_state == "match_result" else 0.935
@@ -957,6 +1000,9 @@ class PythonAutoOperator:
                         self.log("screen_advanced", state=screen_state, clickPoint=point)
                         time.sleep(self.args.poll)
                         continue
+                if self.advance_ranked_loop(page, screen_state, screen_confidence):
+                    page.wait_for_timeout(max(100, round(self.args.poll * 1000)))
+                    continue
                 if screen_state != "match" and self.args.mode != "force-auto":
                     self.log("screen_state", state=screen_state, confidence=screen_confidence)
                     time.sleep(self.args.poll)
@@ -1073,6 +1119,7 @@ class PythonAutoOperator:
                 if public_observation:
                     self.previous_public_observation = public_observation
                 if self.args.mode == "force-auto" and not pending_discard:
+                    dynamic_layout_was_required = self.dynamic_layout_required
                     try:
                         evaluation = self.recognize_resident(
                             screenshot_path,
@@ -1082,13 +1129,46 @@ class PythonAutoOperator:
                             dynamic_layout=self.dynamic_layout_required,
                             open_melds=self.cached_open_melds if self.cached_concealed_tiles is not None else None,
                         )
-                    except RuntimeError:
+                    except RuntimeError as initial_error:
                         self.cached_concealed_tiles = None
                         self.cached_open_melds = 0
-                        self.dynamic_layout_required = True
-                        evaluation = self.recognize_resident(
-                            screenshot_path, evaluate_force_auto=True, dynamic_layout=True,
+                        try:
+                            evaluation = self.recognize_resident(
+                                screenshot_path, evaluate_force_auto=True, dynamic_layout=True,
+                            )
+                        except RuntimeError as retry_error:
+                            # Deal animations can briefly place 15-20 bright
+                            # tile-like components across the hand row. This is
+                            # not an operator fault and becomes valid on a later
+                            # streamed frame, so keep the click gate armed and
+                            # retry instead of terminating the whole session.
+                            self.last_processed_hand = None
+                            self.armed = True
+                            self.log(
+                                "recognition_retry", screenshot=str(screenshot_path),
+                                error=str(retry_error), initialError=str(initial_error),
+                            )
+                            page.wait_for_timeout(max(20, round(self.args.poll * 1000)))
+                            continue
+                    if evaluation.get("status") == "decision" and not self.compact_hand_is_proven(
+                        evaluation.get("openMelds", 0), dynamic_layout_was_required,
+                    ):
+                        # During the opening deal, a temporary 11/8/5/2-tile
+                        # row can look exactly like a compact post-call hand.
+                        # A compact layout is valid only after this operator
+                        # has already observed/executed a call in the round.
+                        self.cached_concealed_tiles = None
+                        self.cached_open_melds = 0
+                        self.dynamic_layout_required = False
+                        self.last_processed_hand = None
+                        self.armed = True
+                        self.log(
+                            "recognition_retry", screenshot=str(screenshot_path),
+                            error="compact hand appeared before any observed call",
+                            inferredOpenMelds=evaluation.get("openMelds"),
                         )
+                        page.wait_for_timeout(max(20, round(self.args.poll * 1000)))
+                        continue
                 elif self.cached_concealed_tiles is not None and not pending_discard:
                     draw_recognition = self.recognize_resident(screenshot_path, draw_only=True)
                     if len(draw_recognition.get("tiles", [])) == 1:
@@ -1225,6 +1305,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--stop-on-error", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--resume-away", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument("--advance-screens", action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument(
+        "--ranked-loop", action=argparse.BooleanOptionalAction, default=False,
+        help="continuously enter Bronze Room four-player East from lobby/result screens",
+    )
     parser.add_argument(
         "--allow-local-discard",
         action=argparse.BooleanOptionalAction,
