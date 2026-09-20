@@ -60,7 +60,12 @@ export async function decide(state: GameState, options: DecisionOptions): Promis
 
   if (options.jev) {
     try {
-      jev = await options.jev.chooseDiscard(state, base.candidates);
+      const underThreat = state.opponents.some((opponent) => opponent.riichi || opponent.openMelds >= 2);
+      const minimumShanten = base.candidates[0]?.shanten;
+      const jevCandidates = options.mode === "force-auto" && !underThreat && minimumShanten !== undefined
+        ? base.candidates.filter((candidate) => candidate.shanten === minimumShanten)
+        : base.candidates;
+      jev = await options.jev.chooseDiscard(state, jevCandidates);
       const candidate = base.candidates.find((item) => item.actionId === jev!.actionId);
       if (!candidate) throw new Error("Jev selected an unknown candidate");
       selected = candidate;
@@ -183,10 +188,13 @@ async function decideReaction(state: GameState, legalActions: LegalAction[], opt
     ?? legalActions.find((action) => action.action === "pass")
     ?? legalActions[0];
   if (!initialAction) throw new Error("No legal reaction action");
+  if (initialAction.action === "ron") {
+    return decideImmediateSelfAction(state, base, legalActions, initialAction, options);
+  }
   let selectedAction: LegalAction = initialAction;
   let jev: JevDecision | undefined;
 
-  if (selectedAction.action !== "ron" && !state.opponents.some((opponent) => opponent.riichi)) {
+  if (!state.opponents.some((opponent) => opponent.riichi)) {
     const currentShanten = calculateShanten(state.hand, state.openMelds).shanten;
     const calls = legalActions.filter((action): action is CallAction =>
       action.action === "chi" || action.action === "pon" || action.action === "minkan");

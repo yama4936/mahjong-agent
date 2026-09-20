@@ -9,7 +9,7 @@ import tempfile
 import json
 from unittest.mock import Mock, patch
 
-from auto_operator import PythonAutoOperator, away_resume_geometry, is_away_resume_dialog, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, send_discard_click
+from auto_operator import PythonAutoOperator, away_resume_geometry, is_away_resume_dialog, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, send_discard_click
 from screen_state import classify_screen, load_references
 
 
@@ -25,6 +25,18 @@ class RecordingMouse:
 
 
 class AwayDialogDetectionTest(unittest.TestCase):
+    def test_draw_slot_presence_distinguishes_own_and_opponent_turns(self) -> None:
+        region = {"x": 100, "y": 50, "width": 100, "height": 100}
+        own_turn = io.BytesIO()
+        image = Image.new("RGB", (300, 200), (25, 55, 85))
+        ImageDraw.Draw(image).rectangle((100, 50, 200, 150), fill=(230, 225, 210))
+        image.save(own_turn, format="PNG")
+        self.assertTrue(is_draw_slot_occupied(own_turn.getvalue(), region))
+
+        opponent_turn = io.BytesIO()
+        Image.new("RGB", (300, 200), (25, 55, 85)).save(opponent_turn, format="PNG")
+        self.assertFalse(is_draw_slot_occupied(opponent_turn.getvalue(), region))
+
     def test_force_auto_pass_prompt_requires_dark_button_and_warm_neutral_text(self) -> None:
         region = {"x": 100, "y": 50, "width": 200, "height": 80}
         image = Image.new("RGB", (400, 200), (25, 55, 85))
@@ -85,6 +97,34 @@ class AwayDialogDetectionTest(unittest.TestCase):
 
             self.assertTrue(result["verified"])
             self.assertIn("--force", run.call_args.args[0])
+
+    def test_force_auto_confirmation_uses_visual_change_without_repeating_recognition(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            operator = PythonAutoOperator.__new__(PythonAutoOperator)
+            operator.args = argparse.Namespace(
+                mode="force-auto", confirmation_timeout=1,
+                action_pixel_delta=1, river_pixel_delta=1,
+            )
+            operator.frames = Path(directory)
+            operator.hand_clip = {"x": 0, "y": 0, "width": 10, "height": 10}
+            operator.river_clip = {"x": 10, "y": 0, "width": 10, "height": 10}
+            operator.verify_post_discard = Mock(side_effect=AssertionError("must not re-recognize"))
+            black = io.BytesIO()
+            Image.new("RGB", (10, 10), "black").save(black, format="PNG")
+            white = io.BytesIO()
+            Image.new("RGB", (10, 10), "white").save(white, format="PNG")
+            full = io.BytesIO()
+            Image.new("RGB", (20, 10), "navy").save(full, format="PNG")
+            page = Mock()
+            page.screenshot.side_effect = lambda **kwargs: white.getvalue() if kwargs.get("clip") else full.getvalue()
+
+            receipt = operator.confirm_discard(
+                page, black.getvalue(), black.getvalue(), ["1m"] * 14, 0,
+            )
+
+            self.assertEqual(receipt["confirmation"], "hand_and_own_river_changed")
+            self.assertTrue(Path(receipt["screenshot"]).exists())
+            operator.verify_post_discard.assert_not_called()
 
     def test_terminal_reveal_waits_for_result_instead_of_rejecting_empty_slots(self) -> None:
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
@@ -219,6 +259,38 @@ class AwayDialogDetectionTest(unittest.TestCase):
                     with self.assertRaisesRegex(RuntimeError, "disagrees"):
                         operator.execute(page, evaluation)
                 page.mouse.click.assert_not_called()
+
+    def test_force_auto_rejects_a_hand_that_changed_since_evaluation_without_rerecognition(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(
+            mode="force-auto", allow_local_discard=False, consensus_frames=3,
+            stability_ms=10, stability_pixel_delta=1.5, evaluation_timeout=30,
+        )
+        operator.hand_clip = {"x": 0, "y": 0, "width": 10, "height": 10}
+        operator.layout = {
+            "clickPoints": [{"x": 5, "y": 5}] * 14,
+            "viewport": {"width": 1920, "height": 1080},
+        }
+        black = io.BytesIO()
+        white = io.BytesIO()
+        full = io.BytesIO()
+        Image.new("RGB", (10, 10), "black").save(black, format="PNG")
+        Image.new("RGB", (10, 10), "white").save(white, format="PNG")
+        Image.new("RGB", (1920, 1080), "black").save(full, format="PNG")
+        page = Mock()
+        page.screenshot.side_effect = lambda **kwargs: white.getvalue() if kwargs.get("clip") else full.getvalue()
+        evaluation = {
+            "decision": {"executable": True, "selectedAction": {"action": "discard", "tile": "1m"}},
+            "recognition": {"tiles": ["1m"] * 14, "safe": False},
+            "clickIndex": 0,
+        }
+
+        with patch("auto_operator.subprocess.run") as run:
+            with self.assertRaisesRegex(RuntimeError, "changed since evaluation"):
+                operator.execute(page, evaluation, evaluated_hand=black.getvalue())
+
+        run.assert_not_called()
+        page.mouse.click.assert_not_called()
 
     def test_private_env_loader_passes_only_jev_settings(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -76,6 +76,28 @@ test("force-auto remains executable when normal safety checks are ambiguous", as
   assert.equal(result.executable, true);
 });
 
+test("force-auto gives Jev only non-worsening shanten choices when not under threat", async () => {
+  const pairs = parseGameState({
+    hand: ["1m", "1m", "2m", "2m", "3p", "3p", "4p", "4p", "5s", "5s", "E", "E", "P"],
+    draw: "F",
+    recognitionConfidence: 0.5,
+  });
+  let offered: any[] = [];
+  const jev = { chooseDiscard: async (_state: unknown, candidates: any[]) => {
+    offered = candidates;
+    return {
+      actionId: candidates[0].actionId,
+      confidence: 1,
+      probabilities: Object.fromEntries(candidates.map((candidate: any, index: number) => [candidate.actionId, index ? 0 : 1])),
+      model: "fake", promptVersion: "test", latencyMs: 1,
+    };
+  } } as any;
+
+  await decide(pairs, { mode: "force-auto", jev });
+  assert.ok(offered.length > 0);
+  assert.ok(offered.every((candidate) => candidate.shanten === Math.min(...offered.map((item) => item.shanten))));
+});
+
 test("advisor recommends a non-worsening closed kan outside riichi", async () => {
   const closed = parseGameState({
     hand: ["1m", "2m", "3m", "1p", "2p", "3p", "1s", "2s", "3s", "E", "E", "E", "E"],
@@ -96,6 +118,8 @@ test("reaction policy wins immediately and folds calls against riichi", async ()
     availableUiActions: ["ron", "pon", "pass"],
   });
   assert.equal((await decide(ron, { mode: "advisor" })).selectedAction.action, "ron");
+  const passJev = { chooseReaction: async () => { throw new Error("Jev must not run for ron"); } } as any;
+  assert.equal((await decide(ron, { mode: "force-auto", jev: passJev })).selectedAction.action, "ron");
 
   const threatened = parseGameState({
     phase: "reaction",

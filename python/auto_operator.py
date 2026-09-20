@@ -138,6 +138,21 @@ def is_force_auto_pass_prompt(screenshot: bytes, region: dict[str, float]) -> bo
     return dark >= 0.25 and warm >= 0.005 and neutral >= 0.02
 
 
+def is_draw_slot_occupied(screenshot: bytes, region: dict[str, float]) -> bool:
+    """Cheaply distinguish our 14-tile turn from an opponent's turn.
+
+    The calibrated draw slot is blue felt while empty and mostly ivory when a
+    tile is present.  This guard runs before the expensive tile recognizer.
+    """
+    with Image.open(io.BytesIO(screenshot)) as image:
+        slot = image.convert("RGB").crop((
+            region["x"], region["y"],
+            region["x"] + region["width"], region["y"] + region["height"],
+        ))
+        light = fraction_matching(slot, lambda red, green, blue: red > 145 and green > 145 and blue > 135)
+    return light >= 0.20
+
+
 def local_discard_allowed(args: argparse.Namespace, evaluation: dict[str, Any]) -> bool:
     decision = evaluation.get("decision", {})
     return bool(
@@ -166,6 +181,12 @@ class PythonAutoOperator:
         self.state_path = Path(args.state).resolve()
         self.public_state = load_json(self.state_path)
         self.layout = load_json(self.layout_path)
+        # Live calibration files focus on tiles and may omit static action
+        # buttons. Reuse those fixed screen-space regions from the base layout.
+        base_layout_path = self.root / "config" / "layout.json"
+        if not self.layout.get("actionButtonRegions") and base_layout_path.exists():
+            base_layout = load_json(base_layout_path)
+            self.layout["actionButtonRegions"] = base_layout.get("actionButtonRegions", {})
         self.evaluator_env = load_secret_environment(self.root, args.env_file)
         self.hand_clip = clip_for_hand(self.layout)
         action_regions = list(self.layout.get("actionButtonRegions", {}).values())
@@ -191,6 +212,21 @@ class PythonAutoOperator:
         self.screen_references = load_references(self.root / "artifacts" / "live")
         self.last_processed_hand: str | None = None
         self.previous_public_observation: dict[str, Any] | None = None
+        self.last_shanten: int | None = None
+        if self.log_path.exists():
+            for line in reversed(self.log_path.read_text(encoding="utf-8").splitlines()):
+                try:
+                    previous = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if previous.get("event") != "decision":
+                    continue
+                decision = previous.get("evaluation", {}).get("decision", {})
+                selected_id = decision.get("selectedActionId")
+                candidate = next((item for item in decision.get("candidates", []) if item.get("actionId") == selected_id), None)
+                if candidate is not None:
+                    self.last_shanten = candidate.get("shanten")
+                break
         self.armed = True
 
     def ensure_viewport(self, page: Page, *, force: bool = False) -> None:
@@ -478,6 +514,16 @@ class PythonAutoOperator:
             maximum_river_delta = max(maximum_river_delta, river_delta)
             if hand_delta >= self.args.action_pixel_delta and river_delta >= self.args.river_pixel_delta:
                 page.wait_for_timeout(200)
+                if getattr(self.args, "mode", None) == "force-auto":
+                    screenshot_path = self.frames / f"{utc_stamp()}.post-discard.png"
+                    screenshot_path.write_bytes(page.screenshot(animations="disabled"))
+                    return {
+                        "confirmation": "hand_and_own_river_changed",
+                        "confirmationLatencyMs": round((time.monotonic() - started) * 1000),
+                        "handPixelDelta": hand_delta,
+                        "riverPixelDelta": river_delta,
+                        "screenshot": str(screenshot_path),
+                    }
                 verification = self.verify_post_discard(
                     page.screenshot(animations="disabled"), before_tiles, click_index,
                 )
@@ -546,7 +592,7 @@ class PythonAutoOperator:
             raise RuntimeError(f"{action} template set does not match its calibration certificate")
         return observed
 
-    def execute(self, page: Page, evaluation: dict[str, Any]) -> dict[str, Any]:
+    def execute(self, page: Page, evaluation: dict[str, Any], evaluated_hand: bytes | None = None) -> dict[str, Any]:
         decision = evaluation["decision"]
         recognition = evaluation["recognition"]
         selected = decision.get("selectedAction", {"action": decision.get("recommendedAction", "discard")})
@@ -556,25 +602,29 @@ class PythonAutoOperator:
         local_auto = local_discard_allowed(self.args, evaluation)
         if not force_auto and not certified_auto and not local_auto:
             return {"clicked": False, "reason": "advisor_or_safety_stop"}
-        # Fresh captures must independently reproduce the evaluated ordered
-        # hand. Pixel stability alone can leave a stale decision undetected.
-        for _ in range(self.args.consensus_frames - 1):
-            page.wait_for_timeout(self.args.stability_ms)
-            frame_path = self.frames / f"{utc_stamp()}.consensus.png"
-            frame_path.write_bytes(page.screenshot(animations="disabled"))
-            recognize_command = ["node", "dist/src/cli.js", "recognize", str(frame_path), str(self.layout_path), str(self.templates)]
-            if evaluation.get("state", {}).get("phase") == "reaction":
-                recognize_command.append("--concealed-only")
-            result = subprocess.run(
-                recognize_command,
-                cwd=self.root, env=self.evaluator_env, text=True, capture_output=True,
-                timeout=self.args.evaluation_timeout, check=False,
-            )
-            if result.returncode != 0:
-                raise RuntimeError("consensus recognition failed")
-            fresh = json.loads(result.stdout)
-            if (not force_auto and not fresh.get("safe")) or fresh.get("tiles") != recognition.get("tiles"):
-                raise RetryableSafetyAbort("fresh frame recognition disagrees with the evaluated hand")
+        # Certified Auto independently re-recognizes consensus frames.  In
+        # force-auto, compare the current hand pixels with the stable hand
+        # that produced the decision instead.  Re-running the template
+        # recognizer twice costs roughly 35 seconds and can exhaust a 300s
+        # clock, while this equality gate still rejects every stale decision.
+        if not force_auto:
+            for _ in range(self.args.consensus_frames - 1):
+                page.wait_for_timeout(self.args.stability_ms)
+                frame_path = self.frames / f"{utc_stamp()}.consensus.png"
+                frame_path.write_bytes(page.screenshot(animations="disabled"))
+                recognize_command = ["node", "dist/src/cli.js", "recognize", str(frame_path), str(self.layout_path), str(self.templates)]
+                if evaluation.get("state", {}).get("phase") == "reaction":
+                    recognize_command.append("--concealed-only")
+                result = subprocess.run(
+                    recognize_command,
+                    cwd=self.root, env=self.evaluator_env, text=True, capture_output=True,
+                    timeout=self.args.evaluation_timeout, check=False,
+                )
+                if result.returncode != 0:
+                    raise RuntimeError("consensus recognition failed")
+                fresh = json.loads(result.stdout)
+                if not fresh.get("safe") or fresh.get("tiles") != recognition.get("tiles"):
+                    raise RetryableSafetyAbort("fresh frame recognition disagrees with the evaluated hand")
         if not force_auto and (not recognition.get("safe") or recognition.get("confidence", 0) < self.layout.get("minimumTileConfidence", 0.98)):
             raise RuntimeError("Python recognition safety gate rejected click")
         if certified_auto:
@@ -595,6 +645,14 @@ class PythonAutoOperator:
             raise RetryableSafetyAbort("decision canceled because away dialog appeared during evaluation")
 
         hand_before = page.screenshot(clip=self.hand_clip, animations="disabled")
+        if force_auto:
+            if evaluated_hand is None:
+                raise RuntimeError("force-auto requires the stable evaluated hand image")
+            evaluated_delta = mean_pixel_delta(evaluated_hand, hand_before)
+            if evaluated_delta > self.args.stability_pixel_delta:
+                raise RetryableSafetyAbort(
+                    f"hand changed since evaluation (pixel delta={evaluated_delta:.3f})"
+                )
         river_before = page.screenshot(clip=self.river_clip, animations="disabled")
         page.wait_for_timeout(120)
         stability_delta = mean_pixel_delta(hand_before, page.screenshot(clip=self.hand_clip, animations="disabled"))
@@ -707,6 +765,29 @@ class PythonAutoOperator:
                 if self.resume_if_away(page):
                     time.sleep(self.args.poll)
                     continue
+                if self.args.mode == "force-auto":
+                    pass_region = self.layout.get("actionButtonRegions", {}).get("pass")
+                    if pass_region and is_force_auto_pass_prompt(full_screen, pass_region):
+                        screenshot_path = self.frames / f"{utc_stamp()}.png"
+                        screenshot_path.write_bytes(full_screen)
+                        if self.last_shanten == 0:
+                            self.log("tenpai_reaction_guard", screenshot=str(screenshot_path),
+                                     reason="reaction may contain ron; refusing blind pass")
+                            time.sleep(max(self.args.poll, 1))
+                            continue
+                        reaction = self.force_auto_reaction_fallback(screenshot_path)
+                        if reaction:
+                            receipt = self.execute_reaction_pass(page, reaction)
+                            self.log("reaction_prompt", screenshot=str(screenshot_path), evaluation=reaction, execution=receipt)
+                            self.last_processed_hand = None
+                            self.armed = True
+                            time.sleep(self.args.poll)
+                            continue
+                    draw_slot = self.layout.get("drawSlot")
+                    if draw_slot and not is_draw_slot_occupied(full_screen, draw_slot):
+                        self.armed = True
+                        time.sleep(self.args.poll)
+                        continue
                 hand = page.screenshot(clip=self.hand_clip, animations="disabled")
                 page.wait_for_timeout(self.args.stability_ms)
                 hand_second = page.screenshot(clip=self.hand_clip, animations="disabled")
@@ -727,7 +808,10 @@ class PythonAutoOperator:
                     continue
                 screenshot_path = self.frames / f"{utc_stamp()}.png"
                 screenshot_path.write_bytes(page.screenshot(animations="disabled"))
-                public_observation = self.observe_public_board(screenshot_path)
+                # force-auto does not trust or require public-board
+                # confidence. Avoid its expensive recognition pass so a
+                # 300-second match clock remains usable.
+                public_observation = None if self.args.mode == "force-auto" else self.observe_public_board(screenshot_path)
                 pending_discard = self.infer_pending_discard(self.previous_public_observation, public_observation)
                 if public_observation:
                     self.previous_public_observation = public_observation
@@ -757,7 +841,7 @@ class PythonAutoOperator:
                     time.sleep(self.args.poll)
                     continue
                 try:
-                    receipt = self.execute(page, evaluation)
+                    receipt = self.execute(page, evaluation, evaluated_hand=hand)
                 except RetryableSafetyAbort as error:
                     self.record_replay(evaluation, screenshot_path, execution_error=str(error))
                     self.log("action_aborted", screenshot=str(screenshot_path), error=str(error), retryable=True)
@@ -776,6 +860,10 @@ class PythonAutoOperator:
                 replay_path = self.record_replay(evaluation, screenshot_path, execution=receipt)
                 self.log("decision", screenshot=str(screenshot_path), evaluation=evaluation, execution=receipt)
                 self.log("replay_saved", replay=str(replay_path))
+                selected_id = evaluation.get("decision", {}).get("selectedActionId")
+                selected_candidate = next((item for item in evaluation.get("decision", {}).get("candidates", [])
+                                           if item.get("actionId") == selected_id), None)
+                self.last_shanten = selected_candidate.get("shanten") if selected_candidate else None
                 self.last_processed_hand = hand_hash
                 self.armed = False
             except KeyboardInterrupt:
