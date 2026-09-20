@@ -9,6 +9,7 @@ touching the page.
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import io
 import json
@@ -21,7 +22,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from playwright.sync_api import Browser, Page, sync_playwright
+from playwright.sync_api import Browser, CDPSession, Page, sync_playwright
 from PIL import Image, ImageChops, ImageStat
 from screen_state import classify_screen, load_references
 
@@ -264,6 +265,11 @@ class PythonAutoOperator:
         self.cached_open_melds = 0
         self.dynamic_layout_required = False
         self.last_shanten: int | None = None
+        self.screencast_session: CDPSession | None = None
+        self.latest_screencast_frame: bytes | None = None
+        self.screencast_sequence = 0
+        self.screencast_draw_occupied: bool | None = None
+        self.screencast_draw_generation = 0
         if self.log_path.exists():
             for line in reversed(self.log_path.read_text(encoding="utf-8").splitlines()):
                 try:
@@ -281,12 +287,49 @@ class PythonAutoOperator:
         self.armed = True
 
     def close(self) -> None:
+        if self.screencast_session is not None:
+            try:
+                self.screencast_session.send("Page.stopScreencast")
+                self.screencast_session.detach()
+            except Exception:
+                pass
+            self.screencast_session = None
         if self.recognition_server.poll() is None:
             self.recognition_server.terminate()
             try:
                 self.recognition_server.wait(timeout=3)
             except subprocess.TimeoutExpired:
                 self.recognition_server.kill()
+
+    def start_screencast_gate(self, page: Page) -> None:
+        """Stream low-latency frames for the turn gate without CDP screenshots."""
+        if self.args.mode != "force-auto" or self.screencast_session is not None:
+            return
+        session = page.context.new_cdp_session(page)
+
+        def receive_frame(event: dict[str, Any]) -> None:
+            try:
+                frame = base64.b64decode(event["data"])
+                self.latest_screencast_frame = frame
+                self.screencast_sequence += 1
+                draw_slot = self.layout.get("drawSlot")
+                if draw_slot:
+                    occupied = is_draw_slot_clip_occupied(crop_screenshot(frame, draw_slot))
+                    if occupied and self.screencast_draw_occupied is not True:
+                        self.screencast_draw_generation += 1
+                    self.screencast_draw_occupied = occupied
+            finally:
+                session.send("Page.screencastFrameAck", {"sessionId": event["sessionId"]})
+
+        session.on("Page.screencastFrame", receive_frame)
+        session.send("Page.startScreencast", {
+            "format": "jpeg",
+            "quality": 55,
+            "maxWidth": self.layout["viewport"]["width"],
+            "maxHeight": self.layout["viewport"]["height"],
+            "everyNthFrame": 1,
+        })
+        self.screencast_session = session
 
     def recognize_resident(
         self, screenshot: Path, *, concealed_only: bool = False, draw_only: bool = False,
@@ -336,10 +379,10 @@ class PythonAutoOperator:
         if actual != confirmed:
             self.log("viewport_restored", previous=actual, viewport=confirmed)
 
-    def resume_if_away(self, page: Page) -> bool:
+    def resume_if_away(self, page: Page, screenshot: bytes | None = None) -> bool:
         if not self.args.resume_away:
             return False
-        screenshot = page.screenshot(animations="disabled")
+        screenshot = screenshot or page.screenshot(animations="disabled")
         viewport = self.layout["viewport"]
         if not is_away_resume_dialog(screenshot, viewport):
             return False
@@ -688,7 +731,10 @@ class PythonAutoOperator:
             raise RuntimeError(f"{action} template set does not match its calibration certificate")
         return observed
 
-    def execute(self, page: Page, evaluation: dict[str, Any], evaluated_hand: bytes | None = None) -> dict[str, Any]:
+    def execute(
+        self, page: Page, evaluation: dict[str, Any], evaluated_hand: bytes | None = None,
+        evaluated_full: bytes | None = None, evaluated_draw_generation: int | None = None,
+    ) -> dict[str, Any]:
         decision = evaluation["decision"]
         recognition = evaluation["recognition"]
         selected = decision.get("selectedAction", {"action": decision.get("recommendedAction", "discard")})
@@ -744,25 +790,39 @@ class PythonAutoOperator:
         # Evaluation can take long enough for Mahjong Soul to show its away
         # dialog. Re-check the full viewport immediately before touching a
         # hand coordinate; resume only, then discard this stale decision.
-        pre_click_full = page.screenshot(animations="disabled")
+        screencast_session = getattr(self, "screencast_session", None)
+        if force_auto and screencast_session is not None:
+            # Dispatch frames queued while the resident recognizer was busy.
+            page.wait_for_timeout(1)
+        streamed_turn_is_current = bool(
+            force_auto
+            and screencast_session is not None
+            and evaluated_full is not None
+            and evaluated_draw_generation is not None
+            and getattr(self, "screencast_draw_occupied", None) is True
+            and getattr(self, "screencast_draw_generation", None) == evaluated_draw_generation
+        )
+        pre_click_full = evaluated_full if streamed_turn_is_current else page.screenshot(animations="disabled")
         if is_away_resume_dialog(pre_click_full, self.layout["viewport"]):
-            self.resume_if_away(page)
+            self.resume_if_away(page, pre_click_full)
             raise RetryableSafetyAbort("decision canceled because away dialog appeared during evaluation")
 
-        hand_before = crop_screenshot(pre_click_full, self.hand_clip)
+        hand_before = evaluated_hand if streamed_turn_is_current and evaluated_hand is not None else crop_screenshot(pre_click_full, self.hand_clip)
         if force_auto:
             if evaluated_hand is None:
                 raise RuntimeError("force-auto requires the stable evaluated hand image")
-            evaluated_delta = mean_pixel_delta(evaluated_hand, hand_before)
-            if evaluated_delta > self.args.stability_pixel_delta:
-                raise RetryableSafetyAbort(
-                    f"hand changed since evaluation (pixel delta={evaluated_delta:.3f})"
-                )
+            if not streamed_turn_is_current:
+                evaluated_delta = mean_pixel_delta(evaluated_hand, hand_before)
+                if evaluated_delta > self.args.stability_pixel_delta:
+                    raise RetryableSafetyAbort(
+                        f"hand changed since evaluation (pixel delta={evaluated_delta:.3f})"
+                    )
         river_before = crop_screenshot(pre_click_full, self.river_clip)
-        page.wait_for_timeout(120)
-        stability_delta = mean_pixel_delta(hand_before, page.screenshot(clip=self.hand_clip, animations="disabled"))
-        if stability_delta > self.args.stability_pixel_delta:
-            raise RetryableSafetyAbort("hand changed during Python pre-click stability check")
+        if not (force_auto and screencast_session is not None):
+            page.wait_for_timeout(120)
+            stability_delta = mean_pixel_delta(hand_before, page.screenshot(clip=self.hand_clip, animations="disabled"))
+            if stability_delta > self.args.stability_pixel_delta:
+                raise RetryableSafetyAbort("hand changed during Python pre-click stability check")
         if selected_action != "discard":
             button_action = "kan" if selected_action in {"minkan", "ankan"} else selected_action
             observed = evaluation.get("actionButton") if force_auto else self.validate_action_certificate(button_action, evaluation)
@@ -837,37 +897,52 @@ class PythonAutoOperator:
 
     def run(self, page: Page) -> None:
         self.ensure_viewport(page, force=True)
-        self.log("started", mode=self.args.mode, page=page.url)
+        self.start_screencast_gate(page)
+        if self.args.mode == "force-auto":
+            deadline = time.monotonic() + 2
+            while self.latest_screencast_frame is None and time.monotonic() < deadline:
+                page.wait_for_timeout(25)
+        self.log("started", mode=self.args.mode, page=page.url,
+                 turnGate="cdp_screencast" if self.screencast_session else "screenshot")
         iterations = 0
+        last_gate_sequence = -1
+        draw_gate_streak = 0
+        pass_gate_streak = 0
         while True:
             iterations += 1
             if self.args.max_iterations and iterations > self.args.max_iterations:
                 return
             try:
                 self.ensure_viewport(page)
+                gate_frame = None
+                quick_draw = False
+                quick_pass = False
                 if self.args.mode == "force-auto" and self.layout.get("drawSlot"):
-                    draw_region = self.layout["drawSlot"]
-                    draw_clip = {key: draw_region[key] for key in ("x", "y", "width", "height")}
-                    quick_draw = is_draw_slot_clip_occupied(
-                        page.screenshot(clip=draw_clip, animations="disabled")
-                    )
+                    if self.screencast_sequence == last_gate_sequence:
+                        page.wait_for_timeout(max(20, min(100, round(self.args.poll * 1000))))
+                    gate_frame = self.latest_screencast_frame
+                    last_gate_sequence = self.screencast_sequence
+                    quick_draw = self.screencast_draw_occupied is True
                     pass_region = self.layout.get("actionButtonRegions", {}).get("pass")
-                    quick_pass = False
-                    if not quick_draw and pass_region:
-                        pass_clip = {key: pass_region[key] for key in ("x", "y", "width", "height")}
+                    if not quick_draw and pass_region and gate_frame:
                         quick_pass = is_force_auto_pass_clip(
-                            page.screenshot(clip=pass_clip, animations="disabled")
+                            crop_screenshot(gate_frame, pass_region)
                         )
+                    draw_gate_streak = draw_gate_streak + 1 if quick_draw else 0
+                    pass_gate_streak = pass_gate_streak + 1 if quick_pass else 0
+                    if (quick_draw and draw_gate_streak < 2) or (quick_pass and pass_gate_streak < 2):
+                        page.wait_for_timeout(20)
+                        continue
                     # The small regions are the latency-critical turn gate.
                     # Keep a periodic full frame for away/result handling.
                     if not quick_draw and not quick_pass and iterations % 10:
-                        time.sleep(self.args.poll)
+                        page.wait_for_timeout(max(20, round(self.args.poll * 1000)))
                         continue
-                full_screen = page.screenshot(animations="disabled")
+                full_screen = gate_frame or page.screenshot(animations="disabled")
                 draw_slot_heuristic_occupied = False
                 screen_state, screen_confidence = classify_screen(full_screen, self.screen_references)
                 if screen_state == "away":
-                    if self.resume_if_away(page):
+                    if self.resume_if_away(page, full_screen):
                         time.sleep(self.args.poll)
                         continue
                     # Match and away references share almost the entire table.
@@ -894,7 +969,7 @@ class PythonAutoOperator:
                     # a recognized draw tile and a complete legal hand before
                     # any click is possible.
                     self.log("screen_state_bypassed", state=screen_state, confidence=screen_confidence)
-                if self.resume_if_away(page):
+                if self.resume_if_away(page, full_screen):
                     time.sleep(self.args.poll)
                     continue
                 if self.args.mode == "force-auto":
@@ -918,14 +993,30 @@ class PythonAutoOperator:
                     draw_slot = self.layout.get("drawSlot")
                     if draw_slot:
                         draw_slot_heuristic_occupied = is_draw_slot_occupied(full_screen, draw_slot)
-                hand = page.screenshot(clip=self.hand_clip, animations="disabled")
-                page.wait_for_timeout(self.args.stability_ms)
-                hand_second = page.screenshot(clip=self.hand_clip, animations="disabled")
-                if mean_pixel_delta(hand, hand_second) > self.args.stability_pixel_delta:
-                    self.armed = True
-                    time.sleep(self.args.poll)
-                    continue
-                action_image = page.screenshot(clip=self.action_clip, animations="disabled") if self.action_clip else b""
+                    if not quick_draw and not quick_pass:
+                        # Periodic streamed frames above are sufficient for
+                        # away/result handling. Do not enter lossless capture
+                        # or tile recognition while waiting on opponents.
+                        page.wait_for_timeout(max(20, round(self.args.poll * 1000)))
+                        continue
+                if self.args.mode == "force-auto" and self.screencast_session is not None:
+                    # Two consecutive streamed gate frames already established
+                    # stability. Take one lossless frame for recognition and
+                    # derive every hash region from it locally.
+                    evaluation_frame = page.screenshot(animations="disabled")
+                    hand = crop_screenshot(evaluation_frame, self.hand_clip)
+                    action_image = crop_screenshot(evaluation_frame, self.action_clip) if self.action_clip else b""
+                else:
+                    hand = page.screenshot(clip=self.hand_clip, animations="disabled")
+                    page.wait_for_timeout(self.args.stability_ms)
+                    hand_second = page.screenshot(clip=self.hand_clip, animations="disabled")
+                    if mean_pixel_delta(hand, hand_second) > self.args.stability_pixel_delta:
+                        self.armed = True
+                        time.sleep(self.args.poll)
+                        continue
+                    action_image = page.screenshot(clip=self.action_clip, animations="disabled") if self.action_clip else b""
+                    evaluation_frame = page.screenshot(animations="disabled")
+                evaluation_draw_generation = self.screencast_draw_generation if self.screencast_session else None
                 hand_hash = hashlib.sha256((perceptual_hash(hand) + (perceptual_hash(action_image) if action_image else "")).encode()).hexdigest()
                 if not self.armed:
                     if hand_hash == self.last_processed_hand:
@@ -937,16 +1028,17 @@ class PythonAutoOperator:
                     time.sleep(self.args.poll)
                     continue
                 screenshot_path = self.frames / f"{utc_stamp()}.png"
-                screenshot_path.write_bytes(page.screenshot(animations="disabled"))
+                screenshot_path.write_bytes(evaluation_frame)
                 if self.args.mode == "force-auto" and self.layout.get("drawSlot"):
                     # Re-check the exact frame that will be evaluated.  On a
                     # short clock the turn can expire between the earlier
                     # full-screen gate and this stable screenshot, leaving a
-                    # stale "occupied" result for a now 13-tile hand.  The
-                    # resident draw-slot probe is inexpensive and prevents
-                    # that race as well as covering the heuristic's misses.
-                    draw_probe = self.recognize_resident(screenshot_path, draw_only=True)
-                    if len(draw_probe.get("tiles", [])) != 1:
+                    # stale "occupied" result for a now 13-tile hand. Inspect
+                    # the lossless evaluation frame directly; template
+                    # classification belongs only to frames that still have
+                    # an occupied draw slot.
+                    exact_draw_occupied = is_draw_slot_occupied(evaluation_frame, self.layout["drawSlot"])
+                    if not exact_draw_occupied:
                         if self.cached_concealed_tiles is None:
                             concealed = self.recognize_resident(screenshot_path, concealed_only=True)
                             concealed_tiles = concealed.get("tiles", [])
@@ -959,13 +1051,13 @@ class PythonAutoOperator:
                         self.last_processed_hand = hand_hash
                         self.armed = False
                         self.log("opponent_turn_confirmed", screenshot=str(screenshot_path),
-                                 source="evaluated_frame_draw_slot_probe",
+                                 source="evaluated_frame_draw_slot_pixels",
                                  priorHeuristicOccupied=draw_slot_heuristic_occupied)
                         time.sleep(self.args.poll)
                         continue
                     if not draw_slot_heuristic_occupied:
                         self.log("self_turn_detected", screenshot=str(screenshot_path),
-                                 source="evaluated_frame_draw_slot_probe")
+                                 source="evaluated_frame_draw_slot_pixels")
                 # force-auto does not trust or require public-board
                 # confidence. Avoid its expensive recognition pass so a
                 # 300-second match clock remains usable.
@@ -1032,7 +1124,10 @@ class PythonAutoOperator:
                     time.sleep(self.args.poll)
                     continue
                 try:
-                    receipt = self.execute(page, evaluation, evaluated_hand=hand)
+                    receipt = self.execute(
+                        page, evaluation, evaluated_hand=hand, evaluated_full=evaluation_frame,
+                        evaluated_draw_generation=evaluation_draw_generation,
+                    )
                 except RetryableSafetyAbort as error:
                     self.record_replay(evaluation, screenshot_path, execution_error=str(error))
                     self.log("action_aborted", screenshot=str(screenshot_path), error=str(error), retryable=True)
