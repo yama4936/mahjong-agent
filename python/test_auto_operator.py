@@ -9,7 +9,7 @@ import tempfile
 import json
 from unittest.mock import Mock, patch
 
-from auto_operator import PythonAutoOperator, away_resume_geometry, is_away_resume_dialog, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, send_discard_click
+from auto_operator import PythonAutoOperator, away_resume_geometry, force_auto_call_buttons, is_away_resume_dialog, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, send_discard_click
 from screen_state import classify_screen, load_references
 
 
@@ -51,6 +51,68 @@ class AwayDialogDetectionTest(unittest.TestCase):
         empty = io.BytesIO()
         Image.new("RGB", (400, 200), (25, 55, 85)).save(empty, format="PNG")
         self.assertFalse(is_force_auto_pass_prompt(empty.getvalue(), region))
+
+    def test_force_auto_call_buttons_only_find_green_action_buttons(self) -> None:
+        viewport = {"width": 1600, "height": 900}
+        image = Image.new("RGB", (1600, 900), (25, 55, 85))
+        draw = ImageDraw.Draw(image)
+        draw.rectangle((893, 779, 1131, 872), fill=(45, 130, 70))
+        output = io.BytesIO()
+        image.save(output, format="PNG")
+        buttons = force_auto_call_buttons(output.getvalue(), viewport)
+        self.assertEqual(len(buttons), 1)
+        self.assertEqual(buttons[0]["center"], {"x": 1012.0, "y": 825.5})
+
+        orange = Image.new("RGB", (1600, 900), (25, 55, 85))
+        ImageDraw.Draw(orange).rectangle((893, 779, 1131, 872), fill=(190, 110, 35))
+        output = io.BytesIO()
+        orange.save(output, format="PNG")
+        self.assertEqual(force_auto_call_buttons(output.getvalue(), viewport), [])
+
+    def test_force_auto_call_buttons_keep_multiple_choices_ambiguous(self) -> None:
+        viewport = {"width": 1600, "height": 900}
+        image = Image.new("RGB", (1600, 900), (25, 55, 85))
+        draw = ImageDraw.Draw(image)
+        draw.rectangle((650, 779, 790, 872), fill=(45, 130, 70))
+        draw.rectangle((850, 779, 990, 872), fill=(45, 130, 70))
+        output = io.BytesIO()
+        image.save(output, format="PNG")
+        self.assertEqual(len(force_auto_call_buttons(output.getvalue(), viewport)), 2)
+
+    def test_single_call_arms_compact_hand_discard_after_button_disappears(self) -> None:
+        viewport = {"width": 1600, "height": 900}
+        prompt = Image.new("RGB", (1600, 900), (25, 55, 85))
+        ImageDraw.Draw(prompt).rectangle((893, 779, 1131, 872), fill=(45, 130, 70))
+        prompt_bytes = io.BytesIO()
+        prompt.save(prompt_bytes, format="PNG")
+        table_bytes = io.BytesIO()
+        Image.new("RGB", (1600, 900), (25, 55, 85)).save(table_bytes, format="PNG")
+        button = force_auto_call_buttons(prompt_bytes.getvalue(), viewport)[0]
+
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(
+            mode="force-auto", accept_single_call=True, confirmation_timeout=1,
+        )
+        operator.layout = {"viewport": viewport}
+        operator.screencast_sequence = 0
+        operator.latest_screencast_frame = None
+        operator.cached_concealed_tiles = ["1m"] * 13
+        operator.cached_open_melds = 0
+        operator.dynamic_layout_required = False
+        operator.pending_post_call_discard = False
+        operator.last_processed_hand = "old"
+        operator.armed = False
+        operator.log = Mock()
+        page = Mock()
+        page.screenshot.return_value = table_bytes.getvalue()
+
+        receipt = operator.execute_force_auto_call(page, prompt_bytes.getvalue(), button)
+
+        self.assertEqual(receipt["confirmation"], "call_button_disappeared")
+        self.assertTrue(operator.pending_post_call_discard)
+        self.assertTrue(operator.dynamic_layout_required)
+        self.assertTrue(operator.armed)
+        page.mouse.click.assert_called_once_with(1012.0, 825.5)
 
     def test_force_auto_reaction_fallback_requires_thirteen_concealed_tiles(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

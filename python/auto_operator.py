@@ -162,6 +162,45 @@ def is_force_auto_pass_clip(screenshot: bytes) -> bool:
     return dark >= 0.25 and warm >= 0.005 and neutral >= 0.02
 
 
+def force_auto_call_buttons(screenshot: bytes, viewport: dict[str, int]) -> list[dict[str, Any]]:
+    """Locate green chi/pon/kan buttons without confusing orange self-turn actions."""
+    left = round(viewport["width"] * 0.35)
+    top = round(viewport["height"] * 0.68)
+    right = round(viewport["width"] * 0.75)
+    bottom = round(viewport["height"] * 0.99)
+    with Image.open(io.BytesIO(screenshot)) as image:
+        pixels = image.convert("RGB")
+        active_columns: list[tuple[int, int, int]] = []
+        for x in range(left, right):
+            matching_y = []
+            for y in range(top, bottom):
+                red, green, blue = pixels.getpixel((x, y))
+                if green > 80 and green - red > 15 and green - blue > 10:
+                    matching_y.append(y)
+            if len(matching_y) >= 5:
+                active_columns.append((x, min(matching_y), max(matching_y)))
+
+    groups: list[list[tuple[int, int, int]]] = []
+    for column in active_columns:
+        if not groups or column[0] - groups[-1][-1][0] > 10:
+            groups.append([column])
+        else:
+            groups[-1].append(column)
+
+    buttons = []
+    for group in groups:
+        x1, x2 = group[0][0], group[-1][0]
+        y1 = min(column[1] for column in group)
+        y2 = max(column[2] for column in group)
+        if x2 - x1 < viewport["width"] * 0.07 or y2 - y1 < viewport["height"] * 0.04:
+            continue
+        buttons.append({
+            "x": x1, "y": y1, "width": x2 - x1, "height": y2 - y1,
+            "center": {"x": (x1 + x2) / 2, "y": (y1 + y2) / 2},
+        })
+    return buttons
+
+
 def is_draw_slot_occupied(screenshot: bytes, region: dict[str, float]) -> bool:
     """Cheaply distinguish our 14-tile turn from an opponent's turn.
 
@@ -270,6 +309,7 @@ class PythonAutoOperator:
         self.screencast_sequence = 0
         self.screencast_draw_occupied: bool | None = None
         self.screencast_draw_generation = 0
+        self.pending_post_call_discard = False
         self.last_ranked_loop_state: str | None = None
         self.last_ranked_loop_click_at = 0.0
         if self.log_path.exists():
@@ -930,6 +970,43 @@ class PythonAutoOperator:
         return {"clicked": True, "policy": "force_auto" if self.args.mode == "force-auto" else "certified_auto", "action": "pass",
                 "clickPoint": point, **receipt}
 
+    def execute_force_auto_call(
+        self, page: Page, screenshot: bytes, button: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Accept one unambiguous green call and arm the compact-hand discard."""
+        if self.args.mode != "force-auto" or not getattr(self.args, "accept_single_call", False):
+            return {"clicked": False, "reason": "single_call_not_enabled"}
+        buttons = force_auto_call_buttons(screenshot, self.layout["viewport"])
+        if len(buttons) != 1:
+            raise RetryableSafetyAbort(f"expected one stable call button, found {len(buttons)}")
+        if abs(buttons[0]["center"]["x"] - button["center"]["x"]) > 12:
+            raise RetryableSafetyAbort("call button moved before click")
+        point = buttons[0]["center"]
+        self.log("action_click_sent", action="call", clickPoint=point, source="single_green_button")
+        sequence_before = self.screencast_sequence
+        page.mouse.click(point["x"], point["y"])
+        deadline = time.monotonic() + min(3.0, self.args.confirmation_timeout)
+        current = screenshot
+        while time.monotonic() < deadline:
+            page.wait_for_timeout(50)
+            if self.screencast_sequence != sequence_before and self.latest_screencast_frame is not None:
+                current = self.latest_screencast_frame
+                sequence_before = self.screencast_sequence
+            else:
+                current = page.screenshot(animations="disabled")
+            if not force_auto_call_buttons(current, self.layout["viewport"]):
+                self.cached_concealed_tiles = None
+                self.cached_open_melds = 0
+                self.dynamic_layout_required = True
+                self.pending_post_call_discard = True
+                self.last_processed_hand = None
+                self.armed = True
+                return {
+                    "clicked": True, "policy": "force_auto", "action": "call",
+                    "clickPoint": point, "confirmation": "call_button_disappeared",
+                }
+        raise RuntimeError("call button did not disappear after click")
+
     def run(self, page: Page) -> None:
         self.ensure_viewport(page, force=True)
         self.start_screencast_gate(page)
@@ -957,7 +1034,7 @@ class PythonAutoOperator:
                         page.wait_for_timeout(max(20, min(100, round(self.args.poll * 1000))))
                     gate_frame = self.latest_screencast_frame
                     last_gate_sequence = self.screencast_sequence
-                    quick_draw = self.screencast_draw_occupied is True
+                    quick_draw = self.screencast_draw_occupied is True or self.pending_post_call_discard
                     pass_region = self.layout.get("actionButtonRegions", {}).get("pass")
                     if not quick_draw and pass_region and gate_frame:
                         quick_pass = is_force_auto_pass_clip(
@@ -989,6 +1066,7 @@ class PythonAutoOperator:
                     self.cached_concealed_tiles = None
                     self.cached_open_melds = 0
                     self.dynamic_layout_required = False
+                    self.pending_post_call_discard = False
                     self.last_shanten = None
                     self.last_processed_hand = None
                     self.armed = True
@@ -1023,6 +1101,15 @@ class PythonAutoOperator:
                     if pass_region and is_force_auto_pass_prompt(full_screen, pass_region):
                         screenshot_path = self.frames / f"{utc_stamp()}.png"
                         screenshot_path.write_bytes(full_screen)
+                        call_buttons = force_auto_call_buttons(full_screen, self.layout["viewport"])
+                        if getattr(self.args, "accept_single_call", False) and len(call_buttons) == 1:
+                            receipt = self.execute_force_auto_call(page, full_screen, call_buttons[0])
+                            self.log("reaction_call", screenshot=str(screenshot_path), execution=receipt)
+                            time.sleep(self.args.poll)
+                            continue
+                        if len(call_buttons) > 1:
+                            self.log("reaction_call_ambiguous", screenshot=str(screenshot_path),
+                                     buttonCount=len(call_buttons))
                         if self.last_shanten == 0:
                             self.log("tenpai_reaction_guard", screenshot=str(screenshot_path),
                                      reason="reaction may contain ron; refusing blind pass")
@@ -1091,7 +1178,7 @@ class PythonAutoOperator:
                     # classification belongs only to frames that still have
                     # an occupied draw slot.
                     exact_draw_occupied = is_draw_slot_occupied(evaluation_frame, self.layout["drawSlot"])
-                    if not exact_draw_occupied:
+                    if not exact_draw_occupied and not self.pending_post_call_discard:
                         if self.cached_concealed_tiles is None:
                             concealed = self.recognize_resident(screenshot_path, concealed_only=True)
                             concealed_tiles = concealed.get("tiles", [])
@@ -1239,6 +1326,7 @@ class PythonAutoOperator:
                                            if item.get("actionId") == selected_id), None)
                 self.last_shanten = selected_candidate.get("shanten") if selected_candidate else None
                 if receipt.get("clicked") and receipt.get("confirmation") == "hand_and_own_river_changed":
+                    self.pending_post_call_discard = False
                     recognized_tiles = evaluation.get("recognition", {}).get("tiles", [])
                     click_index = evaluation.get("clickIndex")
                     if isinstance(click_index, int) and len(recognized_tiles) == 14:
@@ -1308,6 +1396,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--ranked-loop", action=argparse.BooleanOptionalAction, default=False,
         help="continuously enter Bronze Room four-player East from lobby/result screens",
+    )
+    parser.add_argument(
+        "--accept-single-call", action=argparse.BooleanOptionalAction, default=False,
+        help="in force-auto, accept one unambiguous green chi/pon/kan button and then discard",
     )
     parser.add_argument(
         "--allow-local-discard",
