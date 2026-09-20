@@ -13,6 +13,9 @@ Status values: `todo`, `doing`, `done`, `blocked`.
 - [x] `done` Obtain one live discard with `tileMultisetVerification.verified=true`.
 - [x] `done` Recognize login, account, lobby, ranked menu/room, matchmaking, match, away, round result, match result and exit-confirm screens; safely advance through one ranked East match and return to the lobby.
 - [x] `done` Serve a read-only live browser dashboard with the current Mahjong Soul frame and classified screen state at localhost:8787.
+- [ ] `todo` Package or explicitly configure the screen-state reference set and fail at startup with a clear diagnostic when it is empty; the current operator otherwise classifies every screen as `unknown` forever.
+- [ ] `todo` Validate the live CDP viewport before every clipped capture and recover or stop cleanly when docked DevTools or window resizing changes the calibrated 1920×1080 geometry.
+- [ ] `todo` Add a Windows-native Python operator setup command and npm script; the documented venv paths and setup script currently assume POSIX `bin/python` and Bash.
 
 ## B. Tile recognition calibration
 
@@ -26,6 +29,7 @@ Status values: `todo`, `doing`, `done`, `blocked`.
 - [x] `done` Test pretrained ViT agreement and a 37-output local CNN. Agreement accepts zero; CNN 28/28 on two held frames but lacks red-man/red-pin training and remains experimental.
 - [x] `done` Reject blank images, exclude holdout templates at runtime, detect exact train/test duplication, and bind certificates to matcher version/strategy.
 - [x] `done` Add three-frame recognition agreement to Python pre-click checks and report score-bin accuracy, coverage and sample-size uncertainty.
+- [ ] `todo` Wire the configured hybrid/ViT recognizer through Python `evaluate-frame`, consensus recognition and post-discard verification; the live advisor recognizes the hand while the Python operator's template-only path returns `tiles: []`.
 - [ ] `todo` Collect genuinely separate-match labeled validation data across all 37 tile classes, screen scales, animations, rivers, melds and riichi indicators; calibrate probability on separate calibration data before testing on a locked test set.
 - [ ] `blocked` Reach the strengthened Auto certificate requirement: 37 classes × at least 5 independent upright holdouts (185 total), 100% label and safety-gate accuracy. Latest rerun: 44/78 correct, 2/78 automation-safe, 31 holdout classes (34 template classes), no cross-label collisions. The claimed replacement is not present in this workspace; live red-five holdouts and a stronger recognizer are still required.
 
@@ -59,6 +63,7 @@ Status values: `todo`, `doing`, `done`, `blocked`.
 - [x] `done` Add calibrated-ROI template recognition for riichi, chi, pon, kan, ron, tsumo, pass and kyuushu buttons.
 - [x] `done` Require a separate perfect holdout certificate and matching template fingerprint for every non-discard action; all such clicks are currently forbidden.
 - [x] `done` Wire certified riichi, chi, pon, kan, ron, tsumo, pass and kyuushu decisions through both controller implementations; verify riichi as declaration plus discard and calls by button, hand and own-meld changes.
+- [ ] `todo` Recognize reaction prompts in the Python operator and execute a certified pass instead of repeatedly evaluating the prompt as an empty 14-tile hand until the game times out.
 - [ ] `blocked` Execute non-discard UI actions only after each action has at least 20 independent live holdouts, 100% accuracy and zero false positives.
 - [ ] `todo` Attach verified execution evidence and eventual round/match outcomes to every replay record.
 - [x] `done` Add a shared replay-policy comparison runner with recorded/current-deterministic decisions, pairwise agreement, expert-label accuracy and per-policy error isolation; Jev can be enabled explicitly.
