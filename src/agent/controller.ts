@@ -298,13 +298,11 @@ async function completeTurn(context: TurnContext, image: Buffer, recognition: Ha
 
 export async function processTurn(context: TurnContext) {
   const { image, recognition, publicRecognition, actionMatches } = await captureRecognition(context);
-  const inferredOpenMelds = [14, 11, 8, 5, 2].includes(recognition.tiles.length)
-    ? (14 - recognition.tiles.length) / 3
-    : context.publicState.openMelds;
-  const activeContext = inferredOpenMelds === context.publicState.openMelds
-    ? context
-    : { ...context, publicState: { ...context.publicState, openMelds: inferredOpenMelds } };
-  return completeTurn(activeContext, image, recognition, publicRecognition, actionMatches);
+  return completeTurn(context, image, recognition, publicRecognition, actionMatches);
+}
+
+export function expectedSelfTurnTileCount(openMelds: number): number {
+  return 14 - openMelds * 3;
 }
 
 /**
@@ -347,16 +345,13 @@ export async function runAgentLoop(context: TurnContext, options: AgentLoopOptio
       if (recognition.safe && recognition.tiles.length === 14) pendingReaction = undefined;
 
       let activeContext = context;
-      const inferredOpenMelds = [14, 11, 8, 5, 2].includes(recognition.tiles.length)
-        ? (14 - recognition.tiles.length) / 3
-        : context.publicState.openMelds;
-      let actionable = recognition.safe && [14, 11, 8, 5, 2].includes(recognition.tiles.length);
+      const expectedTileCount = expectedSelfTurnTileCount(context.publicState.openMelds);
+      let actionable = recognition.safe && recognition.tiles.length === expectedTileCount;
       if (actionable) {
         activeContext = {
           ...context,
           publicState: {
             ...context.publicState,
-            openMelds: inferredOpenMelds,
             availableUiActions: [...new Set([...context.publicState.availableUiActions, "kan" as const])],
           },
         };

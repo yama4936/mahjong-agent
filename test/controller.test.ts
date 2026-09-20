@@ -3,7 +3,7 @@ import test from "node:test";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { assertPublicObservationAllowed, assertRecognizerAllowedForAuto, assertTemplateSetMatchesCalibration, TurnRearmGate } from "../src/agent/controller.js";
+import { assertPublicObservationAllowed, assertRecognizerAllowedForAuto, assertTemplateSetMatchesCalibration, expectedSelfTurnTileCount, TurnRearmGate } from "../src/agent/controller.js";
 import { layoutSchema } from "../src/recognition/layout.js";
 import { fingerprintTemplateDirectory } from "../src/recognition/templateValidator.js";
 
@@ -23,6 +23,13 @@ test("turn gate requires consecutive unsafe frames before rearming", () => {
   assert.equal(gate.observe(false).rearmed, false);
   assert.equal(gate.observe(false).rearmed, true);
   assert.equal(gate.observe(true).shouldProcess, true);
+});
+
+test("expected turn tile count comes only from known open melds", () => {
+  assert.equal(expectedSelfTurnTileCount(0), 14);
+  assert.equal(expectedSelfTurnTileCount(1), 11);
+  assert.equal(expectedSelfTurnTileCount(4), 2);
+  assert.notEqual(expectedSelfTurnTileCount(0), 2);
 });
 
 test("turn gate rearms after a changed safe hand remains stable", () => {
