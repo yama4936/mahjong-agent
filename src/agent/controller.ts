@@ -16,7 +16,7 @@ import type { PublicTileRegionName } from "../recognition/layout.js";
 import { availableUiActions, recognizeActionButtons, type ActionButtonMatch } from "../recognition/actionButtonRecognizer.js";
 import { generateLegalActions } from "../game/actions.js";
 import type { GameTile } from "../game/tiles.js";
-import { layoutFromHandProposal, proposeHandLayout } from "../recognition/handLayoutProposal.js";
+import { layoutFromHandProposal, proposeHandLayout, proposeLiveHandLayout } from "../recognition/handLayoutProposal.js";
 
 export interface TurnContext {
   page: Page;
@@ -126,16 +126,23 @@ type PublicRecognition = Partial<Record<PublicTileRegionName, PublicTileRecognit
 async function captureRecognition(context: TurnContext): Promise<{ image: Buffer; recognition: HandRecognition; publicRecognition?: PublicRecognition; actionMatches: ActionButtonMatch[] }> {
   const image = await captureViewport(context.page, context.layout);
   const modelRecognizer = context.tileRecognizer ?? context.vitRecognizer;
+  let recognitionLayout = context.layout;
+  if (modelRecognizer && context.mode === "advisor") {
+    try {
+      const proposal = await proposeLiveHandLayout(image);
+      recognitionLayout = layoutFromHandProposal(proposal, context.layout);
+    } catch {}
+  }
   let recognition = modelRecognizer
-    ? await modelRecognizer.recognizeHand(image, context.layout)
+    ? await modelRecognizer.recognizeHand(image, recognitionLayout)
     : context.publicState.phase === "reaction"
       ? await recognizeTileSlots(image, context.layout.handSlots, context.layout, context.templateDirectory)
       : await recognizeHand(image, context.layout, context.templateDirectory);
-  if (!recognition.safe && context.layout.drawSlot) {
-    const reactionLayout = { ...context.layout, drawSlot: undefined };
+  if (!recognition.safe && recognitionLayout.drawSlot) {
+    const reactionLayout = { ...recognitionLayout, drawSlot: undefined };
     const reactionRecognition = modelRecognizer
       ? await modelRecognizer.recognizeHand(image, reactionLayout)
-      : await recognizeTileSlots(image, context.layout.handSlots, reactionLayout, context.templateDirectory);
+      : await recognizeTileSlots(image, recognitionLayout.handSlots, reactionLayout, context.templateDirectory);
     if (reactionRecognition.safe) recognition = reactionRecognition;
   }
   if (!recognition.safe && modelRecognizer) {
