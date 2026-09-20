@@ -7,7 +7,6 @@ import argparse
 import base64
 import json
 import threading
-import time
 from datetime import datetime, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -84,6 +83,7 @@ class SharedFrame:
     def __init__(self) -> None:
         self.lock = threading.Lock()
         self.image = b""
+        self.image_content_type = "image/png"
         self.status: dict[str, Any] = {
             "screenState": "unknown", "screenConfidence": 0, "capturedAt": None,
             "pageUrl": "", "lastEvent": None,
@@ -129,7 +129,7 @@ def handler_for(shared: SharedFrame) -> type[BaseHTTPRequestHandler]:
                 return
             with shared.lock:
                 if route == "/screen.png" and shared.image:
-                    self.send_payload(shared.image, "image/png")
+                    self.send_payload(shared.image, shared.image_content_type)
                     return
                 if route == "/api/status":
                     self.send_payload(json.dumps(shared.status).encode(), "application/json")
@@ -199,11 +199,36 @@ def main() -> int:
             browser = playwright.chromium.connect_over_cdp(args.cdp)
             page = find_page(browser)
             session = page.context.new_cdp_session(page)
+            latest: dict[str, Any] = {"image": None, "sequence": 0}
+
+            def receive_frame(event: dict[str, Any]) -> None:
+                try:
+                    latest["image"] = base64.b64decode(event["data"], validate=True)
+                    latest["sequence"] += 1
+                finally:
+                    session.send("Page.screencastFrameAck", {"sessionId": event["sessionId"]})
+
+            session.on("Page.screencastFrame", receive_frame)
+            session.send("Page.startScreencast", {
+                "format": "jpeg",
+                "quality": 55,
+                "maxWidth": 1920,
+                "maxHeight": 1080,
+                "everyNthFrame": 1,
+            })
+            last_sequence = -1
             while True:
-                image = capture_cdp_screenshot(session)
+                # Pump CDP events without competing with the operator for a
+                # blocking Page.captureScreenshot request.
+                page.wait_for_timeout(max(20, round(args.interval * 1000)))
+                if latest["image"] is None or latest["sequence"] == last_sequence:
+                    continue
+                image = latest["image"]
+                last_sequence = latest["sequence"]
                 state, confidence = classify_screen(image, references)
                 with shared.lock:
                     shared.image = image
+                    shared.image_content_type = "image/jpeg"
                     shared.status = {
                         "screenState": state,
                         "screenConfidence": confidence,
@@ -211,7 +236,6 @@ def main() -> int:
                         "pageUrl": page.url,
                         **read_operator_status(operator_log),
                     }
-                time.sleep(max(0.1, args.interval))
     except KeyboardInterrupt:
         return 0
     finally:

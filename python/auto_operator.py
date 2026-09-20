@@ -1001,9 +1001,15 @@ class PythonAutoOperator:
                         continue
                 if self.args.mode == "force-auto" and self.screencast_session is not None:
                     # Two consecutive streamed gate frames already established
-                    # stability. Take one lossless frame for recognition and
-                    # derive every hash region from it locally.
-                    evaluation_frame = page.screenshot(animations="disabled")
+                    # stability. Reuse that exact frame for recognition instead
+                    # of issuing a blocking PNG capture on the three-second
+                    # clock. The calibrated matcher tolerates the screencast's
+                    # JPEG encoding, while the generation check in execute()
+                    # still rejects a frame after the turn has rolled over.
+                    if gate_frame is None:
+                        page.wait_for_timeout(20)
+                        continue
+                    evaluation_frame = gate_frame
                     hand = crop_screenshot(evaluation_frame, self.hand_clip)
                     action_image = crop_screenshot(evaluation_frame, self.action_clip) if self.action_clip else b""
                 else:
@@ -1027,7 +1033,8 @@ class PythonAutoOperator:
                 if hand_hash == self.last_processed_hand:
                     time.sleep(self.args.poll)
                     continue
-                screenshot_path = self.frames / f"{utc_stamp()}.png"
+                frame_suffix = ".jpg" if evaluation_frame.startswith(b"\xff\xd8\xff") else ".png"
+                screenshot_path = self.frames / f"{utc_stamp()}{frame_suffix}"
                 screenshot_path.write_bytes(evaluation_frame)
                 if self.args.mode == "force-auto" and self.layout.get("drawSlot"):
                     # Re-check the exact frame that will be evaluated.  On a
