@@ -79,13 +79,13 @@ export class JevClient {
       if (!response.ok) throw new Error(`Jev request failed with HTTP ${response.status}`);
       const raw = await readBoundedJson(response);
       const answer = raw?.answers?.action;
-      validateChoice(answer, ids);
+      const probabilities = validateChoice(answer, ids);
       if (typeof raw.model !== "string" || raw.model.length === 0 || raw.model.length > 200) throw new Error("Invalid Jev model identifier");
       const usage = validateUsage(raw.usage);
       return {
         actionId: answer.choice,
         confidence: answer.confidence,
-        probabilities: answer.probabilities,
+        probabilities,
         model: raw.model,
         promptVersion: promptVersion(this.profile),
         latencyMs: Math.max(0, Math.round(performance.now() - startedAt)),
@@ -213,7 +213,7 @@ function validateUsage(raw: any): JevDecision["usage"] | undefined {
   return { input_tokens: raw.input_tokens, output_tokens: raw.output_tokens };
 }
 
-function validateChoice(answer: any, ids: readonly string[]): void {
+function validateChoice(answer: any, ids: readonly string[]): Record<string, number> {
   if (!answer || answer.type !== "choice" || !ids.includes(answer.choice)) throw new Error("Invalid Jev choice");
   if (!Number.isFinite(answer.confidence) || answer.confidence < 0 || answer.confidence > 1) throw new Error("Invalid Jev confidence");
   const keys = Object.keys(answer.probabilities ?? {}).sort();
@@ -221,7 +221,10 @@ function validateChoice(answer: any, ids: readonly string[]): void {
   const values = Object.values(answer.probabilities) as number[];
   if (values.some((value) => !Number.isFinite(value) || value < 0 || value > 1)) throw new Error("Invalid Jev probabilities");
   const sum = values.reduce((a, b) => a + b, 0);
-  if (Math.abs(sum - 1) > 1e-3) throw new Error("Jev probabilities do not sum to one");
+  // Jev can return display-rounded probabilities (for example 0.99 or 1.01
+  // in total). Accept a small rounding envelope and normalize before use.
+  if (sum <= 0 || Math.abs(sum - 1) > 0.02) throw new Error("Jev probabilities do not sum to one");
   const maximum = Math.max(...values);
   if (Math.abs(answer.probabilities[answer.choice] - maximum) > 1e-9) throw new Error("Jev choice is not maximum probability");
+  return Object.fromEntries(ids.map((id) => [id, answer.probabilities[id] / sum]));
 }

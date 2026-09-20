@@ -211,9 +211,12 @@ export async function showAdvisorOverlay(page: Page, decision: DecisionResult): 
     danger: candidate.dealInProbability,
     selected: candidate.actionId === decision.selectedActionId,
   }));
+  const localizeReason = (reason: string) => reason.startsWith("jev_error:")
+    ? `Jevエラー: ${reason.slice("jev_error:".length)}`
+    : reasonNames[reason] ?? reason;
   const safeText = decision.safety.allowed
     ? "安全基準を通過"
-    : `停止: ${decision.safety.reasons.map((reason) => reasonNames[reason] ?? reason).join("、")}`;
+    : `停止: ${decision.safety.reasons.map(localizeReason).join("、")}`;
   const action = decision.selectedAction.action;
   const actionText = `${actionNames[action] ?? action}${"tile" in decision.selectedAction ? ` ${tileName(decision.selectedAction.tile)}` : ""}`;
   const modeName = decision.mode === "advisor" ? "助言モード" : decision.mode === "observer" ? "監視モード" : "自動モード";
@@ -233,4 +236,8 @@ export async function showAdvisorOverlay(page: Page, decision: DecisionResult): 
     root.innerHTML = `<div style="color:#d9b85f;font-size:12px">${modeName} · ${decision.source}</div><div style="font-size:28px;font-weight:750;margin:4px 0 8px">${actionText}</div><div style="margin-bottom:10px">信頼度 ${(decision.confidence * 100).toFixed(1)}% · ${safeText}</div>${rows ? `<div style="border-top:1px solid rgba(255,255,255,.18);padding-top:8px">${rows}</div>` : ""}`;
     document.body.append(root);
   }, { decision: { source: decision.source, confidence: decision.confidence }, top, safeText, actionText, modeName });
+}
+
+export async function hideAdvisorOverlay(page: Page): Promise<void> {
+  await page.evaluate(() => document.getElementById("jantama-auto-advisor")?.remove());
 }

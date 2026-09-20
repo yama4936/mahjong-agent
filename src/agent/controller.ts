@@ -5,7 +5,7 @@ import { decide, type AgentMode } from "./decision.js";
 import { parseGameState, type PublicGameState } from "../game/state.js";
 import { JevClient } from "../jev/client.js";
 import { appendDecisionLog } from "../logging/replay.js";
-import { captureViewport, guardedDiscard, guardedUiAction, showAdvisorOverlay, type ActionExecutionReceipt, type UiActionExecutionReceipt } from "../jantama/browser.js";
+import { captureViewport, guardedDiscard, guardedUiAction, hideAdvisorOverlay, showAdvisorOverlay, type ActionExecutionReceipt, type UiActionExecutionReceipt } from "../jantama/browser.js";
 import type { ScreenLayout } from "../recognition/layout.js";
 import { recognizeHand, recognizeTileSlots } from "../recognition/templateMatcher.js";
 import { fingerprintTemplateDirectory } from "../recognition/templateValidator.js";
@@ -261,6 +261,7 @@ export async function runAgentLoop(context: TurnContext, options: AgentLoopOptio
       const { image, recognition, publicRecognition, actionMatches } = await captureRecognition(context);
       const gateResult = gate.observe(recognition.safe);
       if (gateResult.rearmed) {
+        if (context.mode !== "observer") await hideAdvisorOverlay(context.page);
         options.onStatus?.({ kind: "waiting", message: "Turn ended; armed for the next recognizable hand" });
       } else if (gateResult.shouldProcess) {
         const result = await completeTurn(context, image, recognition, publicRecognition, actionMatches);

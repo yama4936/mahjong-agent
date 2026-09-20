@@ -128,3 +128,32 @@ test("Jev adapter rejects probability keys that do not match legal actions", asy
     server.close();
   }
 });
+
+test("Jev adapter normalizes display-rounded probabilities", async () => {
+  const candidates = deterministicAdvice(state).candidates;
+  const server = createServer((request, response) => {
+    let body = "";
+    request.on("data", (chunk) => { body += chunk; });
+    request.on("end", () => {
+      const ids = Object.keys(JSON.parse(body).questions.action.criteria);
+      const probabilities = Object.fromEntries(ids.map((id: string, index: number) => [id, index === 0 ? 0.98 : index === 1 ? 0.01 : 0]));
+      response.setHeader("Content-Type", "application/json");
+      response.end(JSON.stringify({
+        model: "jev-test",
+        answers: { action: { type: "choice", choice: ids[0], confidence: 0.8, probabilities } },
+      }));
+    });
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  try {
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("Test server failed");
+    const result = await new JevClient("test-key", `http://127.0.0.1:${address.port}`, "jev-test").chooseDiscard(state, candidates);
+    const total = Object.values(result.probabilities).reduce((sum, value) => sum + value, 0);
+    assert.ok(Math.abs(total - 1) < 1e-12);
+    assert.equal(result.actionId, candidates[0]!.actionId);
+  } finally {
+    server.close();
+  }
+});
