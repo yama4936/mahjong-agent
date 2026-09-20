@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { createInterface } from "node:readline";
 import { decideForceAutoWithJevDeadline } from "../agent/decision.js";
+import { cachedPublicStatePatch, type CachedPublicObservation } from "../agent/publicCache.js";
 import { JevClient } from "../jev/client.js";
 import { parseGameState, parsePublicGameState } from "../game/state.js";
 import { parseGameTile } from "../game/tiles.js";
@@ -26,6 +27,10 @@ const forceAutoDeadlineMs = Number(process.env.JEV_FORCE_AUTO_DEADLINE_MS ?? 700
 if (!Number.isFinite(forceAutoDeadlineMs) || forceAutoDeadlineMs <= 0) {
   throw new Error(`Invalid force-auto Jev deadline: ${process.env.JEV_FORCE_AUTO_DEADLINE_MS}`);
 }
+const maximumPublicCacheAgeMs = Number(process.env.FORCE_AUTO_PUBLIC_CACHE_MAX_AGE_MS ?? 15_000);
+if (!Number.isFinite(maximumPublicCacheAgeMs) || maximumPublicCacheAgeMs <= 0) {
+  throw new Error(`Invalid force-auto public cache age: ${process.env.FORCE_AUTO_PUBLIC_CACHE_MAX_AGE_MS}`);
+}
 const jev = process.env.TYPESAFE_API_KEY ? new JevClient(process.env.TYPESAFE_API_KEY) : undefined;
 const options: MatcherOptions = {
   normalizeFace: layout.tileMatcher !== "raw",
@@ -49,6 +54,7 @@ for await (const line of lines) {
       evaluateForceAuto?: boolean;
       dynamicLayout?: boolean;
       openMelds?: number;
+      publicObservation?: CachedPublicObservation;
     };
     id = request.id;
     const activeLayout = request.dynamicLayout
@@ -80,14 +86,42 @@ for await (const line of lines) {
       if (!Number.isInteger(inferredOpenMelds) || inferredOpenMelds < 0 || inferredOpenMelds > 4) {
         throw new Error(`force-auto evaluation requires 14/11/8/5/2 concealed tiles; got ${recognition.tiles.length}`);
       }
-      const state = parseGameState({
-        ...publicState,
-        openMelds: inferredOpenMelds,
-        melds: [],
-        hand: recognition.tiles.slice(0, -1),
-        draw: recognition.tiles.at(-1),
-        recognitionConfidence: recognition.confidence,
-      });
+      const concealed = recognition.tiles;
+      const capturedAtMs = request.publicObservation ? Date.parse(request.publicObservation.capturedAt) : undefined;
+      const cacheAgeMs = capturedAtMs !== undefined && Number.isFinite(capturedAtMs)
+        ? Math.max(0, Date.now() - capturedAtMs)
+        : undefined;
+      const cachedPatch = request.publicObservation && cacheAgeMs !== undefined && cacheAgeMs <= maximumPublicCacheAgeMs
+        ? cachedPublicStatePatch(request.publicObservation, concealed)
+        : undefined;
+      const cacheFreshnessIgnoredReason = request.publicObservation
+        ? cacheAgeMs === undefined
+          ? "invalid_capture_time"
+          : cacheAgeMs > maximumPublicCacheAgeMs ? "stale" : undefined
+        : undefined;
+      let publicCacheIgnoredReason: string | undefined;
+      let state;
+      try {
+        state = parseGameState({
+          ...publicState,
+          ...(cachedPatch?.patch ?? {}),
+          openMelds: inferredOpenMelds,
+          melds: [],
+          hand: recognition.tiles.slice(0, -1),
+          draw: recognition.tiles.at(-1),
+          recognitionConfidence: recognition.confidence,
+        });
+      } catch (error) {
+        publicCacheIgnoredReason = error instanceof Error ? error.message : String(error);
+        state = parseGameState({
+          ...publicState,
+          openMelds: inferredOpenMelds,
+          melds: [],
+          hand: recognition.tiles.slice(0, -1),
+          draw: recognition.tiles.at(-1),
+          recognitionConfidence: recognition.confidence,
+        });
+      }
       const decision = await decideForceAutoWithJevDeadline(state, {
         ...(jev ? { jev } : {}),
         deadlineMs: forceAutoDeadlineMs,
@@ -113,6 +147,21 @@ for await (const line of lines) {
           : {}),
         concealedCount: recognition.tiles.length,
         openMelds: inferredOpenMelds,
+        publicCache: {
+          applied: Boolean(cachedPatch && !publicCacheIgnoredReason),
+          ...(request.publicObservation ? {
+            capturedAt: request.publicObservation.capturedAt,
+            recognitionLatencyMs: request.publicObservation.recognitionLatencyMs,
+            acceptedTiles: request.publicObservation.acceptedTiles,
+            detectedCandidates: request.publicObservation.detectedCandidates,
+            configuredRegions: request.publicObservation.configuredRegions,
+          } : {}),
+          ...(cacheAgeMs !== undefined ? { ageMs: cacheAgeMs } : {}),
+          ...(cachedPatch ? { rejectedTiles: cachedPatch.rejectedTiles } : {}),
+          ...(cacheFreshnessIgnoredReason
+            ? { ignoredReason: cacheFreshnessIgnoredReason }
+            : publicCacheIgnoredReason ? { ignoredReason: publicCacheIgnoredReason } : {}),
+        },
       };
     }
     process.stdout.write(`${JSON.stringify({ id, result })}\n`);

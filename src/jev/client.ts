@@ -179,6 +179,7 @@ export function buildJevRequest(
     turn: state.turn,
     remainingTiles: state.remainingTiles,
     phase: state.phase,
+    openMelds: state.openMelds,
     riichiDeclared: state.riichiDeclared,
     hand: state.draw ? [...state.hand, state.draw] : state.hand,
     doraIndicators: state.doraIndicators,

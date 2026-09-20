@@ -9,7 +9,7 @@ import tempfile
 import json
 from unittest.mock import Mock, patch
 
-from auto_operator import PythonAutoOperator, away_resume_geometry, force_auto_call_buttons, is_away_resume_dialog, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, send_discard_click
+from auto_operator import PythonAutoOperator, away_resume_geometry, force_auto_call_buttons, is_away_resume_dialog, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, merge_public_observations, send_discard_click
 from screen_state import classify_screen, load_references
 
 
@@ -25,6 +25,31 @@ class RecordingMouse:
 
 
 class AwayDialogDetectionTest(unittest.TestCase):
+    def test_public_cache_only_grows_rivers_and_preserves_riichi(self) -> None:
+        previous = {
+            "doraIndicators": ["4m"], "ownDiscards": ["1p"], "ownRiichiDeclared": True,
+            "ownMeldTiles": [], "ownMelds": [],
+            "opponentDiscards": [
+                {"seat": "south", "discards": ["E"], "riichiDeclared": True, "melds": []},
+            ],
+        }
+        current = {
+            "doraIndicators": [], "ownDiscards": ["1p", "2p"], "ownRiichiDeclared": False,
+            "ownMeldTiles": [], "ownMelds": [],
+            "opponentDiscards": [
+                {"seat": "south", "discards": [], "riichiDeclared": False, "melds": []},
+            ],
+            "capturedAt": "now", "recognitionLatencyMs": 350,
+        }
+
+        merged = merge_public_observations(previous, current)
+
+        self.assertEqual(merged["doraIndicators"], ["4m"])
+        self.assertEqual(merged["ownDiscards"], ["1p", "2p"])
+        self.assertEqual(merged["opponentDiscards"][0]["discards"], ["E"])
+        self.assertTrue(merged["opponentDiscards"][0]["riichiDeclared"])
+        self.assertTrue(merged["ownRiichiDeclared"])
+
     def test_draw_slot_presence_distinguishes_own_and_opponent_turns(self) -> None:
         region = {"x": 100, "y": 50, "width": 100, "height": 100}
         own_turn = io.BytesIO()

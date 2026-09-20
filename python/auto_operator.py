@@ -16,6 +16,7 @@ import json
 import os
 import subprocess
 import sys
+import threading
 import time
 import uuid
 from datetime import datetime, timezone
@@ -243,6 +244,53 @@ def send_discard_click(mouse: Any, point: dict[str, float], viewport: dict[str, 
     mouse.move(viewport["width"] / 2, viewport["height"] * 0.72)
 
 
+def merge_public_observations(
+    previous: dict[str, Any] | None, current: dict[str, Any],
+) -> dict[str, Any]:
+    """Keep only monotonic river/dora growth across asynchronous snapshots."""
+    if previous is None:
+        return current
+
+    def growing(prior: list[Any], latest: list[Any]) -> list[Any]:
+        return latest if len(latest) >= len(prior) and latest[:len(prior)] == prior else prior
+
+    own_discards = growing(previous.get("ownDiscards", []), current.get("ownDiscards", []))
+    dora = growing(previous.get("doraIndicators", []), current.get("doraIndicators", []))
+    opponents = []
+    for latest in current.get("opponentDiscards", []):
+        prior = next((item for item in previous.get("opponentDiscards", [])
+                      if item.get("seat") == latest.get("seat")), {})
+        opponents.append({
+            **latest,
+            "discards": growing(prior.get("discards", []), latest.get("discards", [])),
+            "riichiDeclared": bool(prior.get("riichiDeclared") or latest.get("riichiDeclared")),
+            "melds": latest.get("melds", []) if len(latest.get("melds", [])) >= len(prior.get("melds", []))
+            else prior.get("melds", []),
+        })
+    own_meld_tiles = growing(previous.get("ownMeldTiles", []), current.get("ownMeldTiles", []))
+    own_melds = current.get("ownMelds", []) if len(current.get("ownMelds", [])) >= len(previous.get("ownMelds", [])) \
+        else previous.get("ownMelds", [])
+    all_meld_tiles = [*own_meld_tiles, *[
+        tile for opponent in opponents for meld in opponent.get("melds", []) for tile in meld.get("tiles", [])
+    ]]
+    other_visible = [
+        *[tile for opponent in opponents for tile in opponent.get("discards", [])],
+        *all_meld_tiles,
+    ]
+    return {
+        **current,
+        "doraIndicators": dora,
+        "ownDiscards": own_discards,
+        "ownRiichiDeclared": bool(previous.get("ownRiichiDeclared") or current.get("ownRiichiDeclared")),
+        "ownMelds": own_melds,
+        "opponentDiscards": opponents,
+        "ownMeldTiles": own_meld_tiles,
+        "allMeldTiles": all_meld_tiles,
+        "otherVisibleTiles": other_visible,
+        "acceptedTiles": len(dora) + len(own_discards) + len(other_visible),
+    }
+
+
 class PythonAutoOperator:
     def __init__(self, args: argparse.Namespace) -> None:
         self.args = args
@@ -298,6 +346,39 @@ class PythonAutoOperator:
         ready = json.loads(ready_line)
         if ready.get("ready") is not True:
             raise RuntimeError(f"resident recognition server failed to initialize: {ready}")
+        self.public_recognition_server: subprocess.Popen[str] | None = None
+        self.public_recognition_thread: threading.Thread | None = None
+        self.public_recognition_result: dict[str, Any] | None = None
+        self.public_recognition_lock = threading.Lock()
+        self.public_recognition_request_id = 0
+        self.public_cache_generation = 0
+        self.public_cache_last_frame_hash: str | None = None
+        self.cached_public_observation: dict[str, Any] | None = None
+        if args.mode == "force-auto" and args.public_cache:
+            try:
+                self.public_recognition_server = subprocess.Popen(
+                    [
+                        "node", "dist/src/recognition/publicRecognitionServer.js",
+                        str(self.layout_path), self.public_state.get("seat", "east"),
+                    ],
+                    cwd=self.root,
+                    env=self.evaluator_env,
+                    text=True,
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    bufsize=1,
+                )
+                public_ready_line = self.public_recognition_server.stdout.readline() \
+                    if self.public_recognition_server.stdout else ""
+                public_ready = json.loads(public_ready_line) if public_ready_line else {}
+                if public_ready.get("ready") is not True:
+                    raise RuntimeError(f"public recognition server failed to initialize: {public_ready}")
+            except Exception as error:
+                if self.public_recognition_server and self.public_recognition_server.poll() is None:
+                    self.public_recognition_server.terminate()
+                self.public_recognition_server = None
+                self.log("public_cache_disabled", error=str(error))
         self.last_processed_hand: str | None = None
         self.previous_public_observation: dict[str, Any] | None = None
         self.cached_concealed_tiles: list[str] | None = None
@@ -342,6 +423,82 @@ class PythonAutoOperator:
                 self.recognition_server.wait(timeout=3)
             except subprocess.TimeoutExpired:
                 self.recognition_server.kill()
+        if self.public_recognition_server and self.public_recognition_server.poll() is None:
+            if self.public_recognition_server.stdin:
+                self.public_recognition_server.stdin.close()
+            try:
+                self.public_recognition_server.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                self.public_recognition_server.terminate()
+                try:
+                    self.public_recognition_server.wait(timeout=1)
+                except subprocess.TimeoutExpired:
+                    self.public_recognition_server.kill()
+
+    def schedule_public_recognition(self, screenshot: bytes) -> None:
+        server = self.public_recognition_server
+        if not server or server.poll() is not None:
+            return
+        if self.public_recognition_thread and self.public_recognition_thread.is_alive():
+            return
+        frame_hash = perceptual_hash(screenshot)
+        if frame_hash == self.public_cache_last_frame_hash:
+            return
+        self.public_cache_last_frame_hash = frame_hash
+        captured_at = datetime.now(timezone.utc).isoformat()
+        frame_path = self.frames / f"{utc_stamp()}.public-cache.jpg"
+        frame_path.write_bytes(screenshot)
+        self.public_recognition_request_id += 1
+        request_id = self.public_recognition_request_id
+        generation = self.public_cache_generation
+
+        def recognize() -> None:
+            envelope: dict[str, Any]
+            try:
+                if not server.stdin or not server.stdout:
+                    raise RuntimeError("public recognition server pipes are unavailable")
+                server.stdin.write(json.dumps({
+                    "id": request_id, "screenshot": str(frame_path), "capturedAt": captured_at,
+                }) + "\n")
+                server.stdin.flush()
+                line = server.stdout.readline()
+                if not line:
+                    raise RuntimeError("public recognition server closed its output")
+                response = json.loads(line)
+                if response.get("id") != request_id:
+                    raise RuntimeError(f"public recognition response id mismatch: {response}")
+                if response.get("error"):
+                    raise RuntimeError(response["error"])
+                envelope = {"generation": generation, "result": response["result"]}
+            except Exception as error:
+                envelope = {"generation": generation, "error": str(error)}
+            with self.public_recognition_lock:
+                self.public_recognition_result = envelope
+
+        self.public_recognition_thread = threading.Thread(target=recognize, daemon=True)
+        self.public_recognition_thread.start()
+
+    def poll_public_recognition(self) -> None:
+        with self.public_recognition_lock:
+            envelope = self.public_recognition_result
+            self.public_recognition_result = None
+        if not envelope:
+            return
+        if envelope.get("generation") != self.public_cache_generation:
+            return
+        if envelope.get("error"):
+            self.log("public_cache_failed", error=envelope["error"])
+            return
+        current = envelope["result"]
+        self.cached_public_observation = merge_public_observations(self.cached_public_observation, current)
+        self.log(
+            "public_cache_updated",
+            capturedAt=self.cached_public_observation.get("capturedAt"),
+            recognitionLatencyMs=self.cached_public_observation.get("recognitionLatencyMs"),
+            acceptedTiles=self.cached_public_observation.get("acceptedTiles"),
+            detectedCandidates=self.cached_public_observation.get("detectedCandidates"),
+            configuredRegions=self.cached_public_observation.get("configuredRegions"),
+        )
 
     def start_screencast_gate(self, page: Page) -> None:
         """Stream low-latency frames for the turn gate without CDP screenshots."""
@@ -377,6 +534,7 @@ class PythonAutoOperator:
         self, screenshot: Path, *, concealed_only: bool = False, draw_only: bool = False,
         concealed_tiles: list[str] | None = None, evaluate_force_auto: bool = False,
         dynamic_layout: bool = False, open_melds: int | None = None,
+        public_observation: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         if self.recognition_server.poll() is not None:
             raise RuntimeError("resident recognition server is not running")
@@ -393,6 +551,7 @@ class PythonAutoOperator:
             "evaluateForceAuto": evaluate_force_auto,
             "dynamicLayout": dynamic_layout,
             "openMelds": open_melds,
+            "publicObservation": public_observation,
         }) + "\n")
         self.recognition_server.stdin.flush()
         response_line = self.recognition_server.stdout.readline()
@@ -1025,6 +1184,7 @@ class PythonAutoOperator:
             if self.args.max_iterations and iterations > self.args.max_iterations:
                 return
             try:
+                self.poll_public_recognition()
                 self.ensure_viewport(page)
                 gate_frame = None
                 quick_draw = False
@@ -1067,6 +1227,9 @@ class PythonAutoOperator:
                     self.cached_open_melds = 0
                     self.dynamic_layout_required = False
                     self.pending_post_call_discard = False
+                    self.public_cache_generation += 1
+                    self.public_cache_last_frame_hash = None
+                    self.cached_public_observation = None
                     self.last_shanten = None
                     self.last_processed_hand = None
                     self.armed = True
@@ -1128,8 +1291,10 @@ class PythonAutoOperator:
                         draw_slot_heuristic_occupied = is_draw_slot_occupied(full_screen, draw_slot)
                     if not quick_draw and not quick_pass:
                         # Periodic streamed frames above are sufficient for
-                        # away/result handling. Do not enter lossless capture
-                        # or tile recognition while waiting on opponents.
+                        # away/result handling. Public tiles are classified by
+                        # a separate resident worker so this turn gate remains
+                        # responsive while opponents are acting.
+                        self.schedule_public_recognition(full_screen)
                         page.wait_for_timeout(max(20, round(self.args.poll * 1000)))
                         continue
                 if self.args.mode == "force-auto" and self.screencast_session is not None:
@@ -1198,12 +1363,14 @@ class PythonAutoOperator:
                     if not draw_slot_heuristic_occupied:
                         self.log("self_turn_detected", screenshot=str(screenshot_path),
                                  source="evaluated_frame_draw_slot_pixels")
-                # force-auto does not trust or require public-board
-                # confidence. Avoid its expensive recognition pass so a
-                # 300-second match clock remains usable.
-                public_observation = None if self.args.mode == "force-auto" else self.observe_public_board(screenshot_path)
-                pending_discard = self.infer_pending_discard(self.previous_public_observation, public_observation)
-                if public_observation:
+                self.poll_public_recognition()
+                # Force-auto never waits for public recognition on our turn;
+                # it consumes the newest completed opponent-turn snapshot.
+                public_observation = self.cached_public_observation \
+                    if self.args.mode == "force-auto" else self.observe_public_board(screenshot_path)
+                pending_discard = None if self.args.mode == "force-auto" \
+                    else self.infer_pending_discard(self.previous_public_observation, public_observation)
+                if public_observation and self.args.mode != "force-auto":
                     self.previous_public_observation = public_observation
                 if self.args.mode == "force-auto" and not pending_discard:
                     dynamic_layout_was_required = self.dynamic_layout_required
@@ -1215,6 +1382,7 @@ class PythonAutoOperator:
                             evaluate_force_auto=True,
                             dynamic_layout=self.dynamic_layout_required,
                             open_melds=self.cached_open_melds if self.cached_concealed_tiles is not None else None,
+                            public_observation=public_observation,
                         )
                     except RuntimeError as initial_error:
                         self.cached_concealed_tiles = None
@@ -1222,6 +1390,7 @@ class PythonAutoOperator:
                         try:
                             evaluation = self.recognize_resident(
                                 screenshot_path, evaluate_force_auto=True, dynamic_layout=True,
+                                public_observation=public_observation,
                             )
                         except RuntimeError as retry_error:
                             # Deal animations can briefly place 15-20 bright
@@ -1393,6 +1562,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--stop-on-error", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--resume-away", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument("--advance-screens", action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument(
+        "--public-cache", action=argparse.BooleanOptionalAction, default=True,
+        help="recognize dora/rivers/melds asynchronously during opponent turns",
+    )
     parser.add_argument(
         "--ranked-loop", action=argparse.BooleanOptionalAction, default=False,
         help="continuously enter Bronze Room four-player East from lobby/result screens",

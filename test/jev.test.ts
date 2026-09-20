@@ -46,6 +46,7 @@ test("Jev adapter sends bounded choices and validates a response", async () => {
     assert.equal(observedState.honba, 0);
     assert.deepEqual(observedState.ownDiscards, []);
     assert.deepEqual(observedState.opponents, []);
+    assert.equal(observedState.openMelds, 0);
     assert.equal(observedState.promptVersion, "mahjong-discard-v2");
     assert.equal(observedState.candidates, undefined);
   } finally {

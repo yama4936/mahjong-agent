@@ -116,6 +116,7 @@ test("keeps calibrated dora indicators separate from other visible tiles", () =>
     ownDiscards: publicRegion([{ tile: "1m", x: 0 }]),
   });
   assert.deepEqual(observation.doraIndicators, ["4s"]);
+  assert.equal(observation.acceptedTiles, 2);
   assert.deepEqual(observation.ownDiscards, ["1m"]);
   assert.deepEqual(observation.otherVisibleTiles, []);
 });

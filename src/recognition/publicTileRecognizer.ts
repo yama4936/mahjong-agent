@@ -156,7 +156,7 @@ export function toPublicTileObservation(
     ownMeldTiles,
     allMeldTiles: [...ownMeldTiles, ...opponentMeldTiles],
     otherVisibleTiles,
-    acceptedTiles: ownDiscards.length + otherVisibleTiles.length,
+    acceptedTiles: doraIndicators.length + ownDiscards.length + otherVisibleTiles.length,
     detectedCandidates: Object.values(recognition).reduce((sum, region) => sum + (region?.candidateCount ?? 0), 0),
     complete: false,
   };
