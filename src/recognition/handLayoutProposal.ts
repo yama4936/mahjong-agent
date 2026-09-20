@@ -185,3 +185,18 @@ export async function proposeHandLayout(screenshot: string | Buffer, tileCounts:
     requiresHoldoutValidation: true,
   };
 }
+
+/** Detects either a closed 14-tile turn or a compact post-call turn. */
+export async function proposeLiveHandLayout(screenshot: string | Buffer): Promise<HandLayoutProposal> {
+  try {
+    return await proposeHandLayout(screenshot);
+  } catch (closedHandError) {
+    try {
+      return await proposeHandLayout(screenshot, [11, 8, 5, 2]);
+    } catch (compactHandError) {
+      const closedMessage = closedHandError instanceof Error ? closedHandError.message : String(closedHandError);
+      const compactMessage = compactHandError instanceof Error ? compactHandError.message : String(compactHandError);
+      throw new Error(`Could not isolate a live hand row (closed: ${closedMessage}; compact: ${compactMessage})`);
+    }
+  }
+}

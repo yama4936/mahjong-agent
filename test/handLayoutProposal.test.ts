@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import sharp from "sharp";
-import { layoutFromHandProposal, proposeHandLayout } from "../src/recognition/handLayoutProposal.js";
+import { layoutFromHandProposal, proposeHandLayout, proposeLiveHandLayout } from "../src/recognition/handLayoutProposal.js";
 
 async function syntheticHand(drawGap: number, tileCount = 14): Promise<Buffer> {
   const width = 800;
@@ -72,6 +72,13 @@ test("isolates an unseparated compact hand from a same-height exposed meld", asy
   assert.equal(proposal.evidence.medianGap, 3);
   assert.equal(proposal.evidence.drawGap, 3);
   assert.equal(proposal.drawSlot.x, 430);
+});
+
+test("live calibration falls back from a closed hand to a compact post-call hand", async () => {
+  const proposal = await proposeLiveHandLayout(await syntheticPostCallHand());
+  assert.equal(proposal.evidence.detectedTiles, 11);
+  assert.equal(proposal.handSlots.length, 10);
+  assert.equal(proposal.evidence.drawGap, 3);
 });
 
 test("rejects a row whose draw tile cannot be distinguished", async () => {

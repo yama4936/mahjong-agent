@@ -7,7 +7,7 @@ import { layoutSchema } from "./recognition/layout.js";
 import { measureSlotPresence, recognizeHand, recognizeTileSlots } from "./recognition/templateMatcher.js";
 import { detectConfiguredPublicRegions } from "./recognition/regionDetector.js";
 import { recognizeConfiguredPublicTiles, recognizeConfiguredPublicTilesWithVit, toPublicTileObservation } from "./recognition/publicTileRecognizer.js";
-import { layoutFromHandProposal, proposeHandLayout } from "./recognition/handLayoutProposal.js";
+import { layoutFromHandProposal, proposeHandLayout, proposeLiveHandLayout } from "./recognition/handLayoutProposal.js";
 import { VitTileRecognizer } from "./recognition/vitRecognizer.js";
 import { HybridTileRecognizer } from "./recognition/hybridTileRecognizer.js";
 import { decide } from "./agent/decision.js";
@@ -401,7 +401,7 @@ async function main(): Promise<void> {
         frames += 1;
         calibrationImage = await session.page.screenshot({ animations: "disabled" });
         try {
-          proposal = await proposeHandLayout(calibrationImage);
+          proposal = await proposeLiveHandLayout(calibrationImage);
         } catch (error) {
           if (frames === 1 || frames % 30 === 0) {
             console.error(`[calibrating] frame ${frames}: ${error instanceof Error ? error.message : String(error)}`);
