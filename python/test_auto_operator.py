@@ -275,7 +275,7 @@ class AwayDialogDetectionTest(unittest.TestCase):
         full = io.BytesIO()
         Image.new("RGB", (10, 10), "black").save(black, format="PNG")
         Image.new("RGB", (10, 10), "white").save(white, format="PNG")
-        Image.new("RGB", (1920, 1080), "black").save(full, format="PNG")
+        Image.new("RGB", (1920, 1080), "white").save(full, format="PNG")
         page = Mock()
         page.screenshot.side_effect = lambda **kwargs: white.getvalue() if kwargs.get("clip") else full.getvalue()
         evaluation = {

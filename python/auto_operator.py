@@ -90,6 +90,18 @@ def mean_pixel_delta(first: bytes, second: bytes) -> float:
         return sum(ImageStat.Stat(difference).mean) / 3
 
 
+def crop_screenshot(screenshot: bytes, clip: dict[str, float]) -> bytes:
+    """Crop a PNG in memory so one CDP capture can serve several checks."""
+    with Image.open(io.BytesIO(screenshot)) as image:
+        cropped = image.crop((
+            int(clip["x"]), int(clip["y"]),
+            int(clip["x"] + clip["width"]), int(clip["y"] + clip["height"]),
+        ))
+        output = io.BytesIO()
+        cropped.save(output, format="PNG")
+        return output.getvalue()
+
+
 def perceptual_hash(data: bytes) -> str:
     with Image.open(io.BytesIO(data)) as image:
         pixels = image.convert("L").resize((32, 8)).getdata()
@@ -138,6 +150,17 @@ def is_force_auto_pass_prompt(screenshot: bytes, region: dict[str, float]) -> bo
     return dark >= 0.25 and warm >= 0.005 and neutral >= 0.02
 
 
+def is_force_auto_pass_clip(screenshot: bytes) -> bool:
+    with Image.open(io.BytesIO(screenshot)) as image:
+        button = image.convert("RGB")
+        dark = fraction_matching(button, lambda red, green, blue: red < 80 and green < 90 and blue < 100)
+        warm = fraction_matching(button, lambda red, green, blue: red > 120 and green > 95 and blue < 100)
+        neutral = fraction_matching(
+            button, lambda red, green, blue: abs(red - green) < 25 and red > 110 and blue < 120,
+        )
+    return dark >= 0.25 and warm >= 0.005 and neutral >= 0.02
+
+
 def is_draw_slot_occupied(screenshot: bytes, region: dict[str, float]) -> bool:
     """Cheaply distinguish our 14-tile turn from an opponent's turn.
 
@@ -150,6 +173,14 @@ def is_draw_slot_occupied(screenshot: bytes, region: dict[str, float]) -> bool:
             region["x"] + region["width"], region["y"] + region["height"],
         ))
         light = fraction_matching(slot, lambda red, green, blue: red > 145 and green > 145 and blue > 135)
+    return light >= 0.20
+
+
+def is_draw_slot_clip_occupied(screenshot: bytes) -> bool:
+    with Image.open(io.BytesIO(screenshot)) as image:
+        light = fraction_matching(
+            image.convert("RGB"), lambda red, green, blue: red > 145 and green > 145 and blue > 135,
+        )
     return light >= 0.20
 
 
@@ -562,8 +593,17 @@ class PythonAutoOperator:
                         "terminalScreenConfidence": screen_confidence,
                     }
                 continue
-            hand_after = page.screenshot(clip=self.hand_clip, animations="disabled")
-            river_after = page.screenshot(clip=self.river_clip, animations="disabled")
+            if getattr(self.args, "mode", None) == "force-auto":
+                # CDP captures serialize behind Mahjong Soul's WebGL renderer.
+                # Capture once and derive both evidence regions locally so the
+                # confirmation loop cannot consume the next short-clock turn.
+                full_after = page.screenshot(animations="disabled")
+                hand_after = crop_screenshot(full_after, self.hand_clip)
+                river_after = crop_screenshot(full_after, self.river_clip)
+            else:
+                full_after = None
+                hand_after = page.screenshot(clip=self.hand_clip, animations="disabled")
+                river_after = page.screenshot(clip=self.river_clip, animations="disabled")
             hand_delta = mean_pixel_delta(hand_before, hand_after)
             river_delta = mean_pixel_delta(river_before, river_after)
             maximum_hand_delta = max(maximum_hand_delta, hand_delta)
@@ -572,7 +612,7 @@ class PythonAutoOperator:
                 page.wait_for_timeout(200)
                 if getattr(self.args, "mode", None) == "force-auto":
                     screenshot_path = self.frames / f"{utc_stamp()}.post-discard.png"
-                    screenshot_path.write_bytes(page.screenshot(animations="disabled"))
+                    screenshot_path.write_bytes(full_after or page.screenshot(animations="disabled"))
                     return {
                         "confirmation": "hand_and_own_river_changed",
                         "confirmationLatencyMs": round((time.monotonic() - started) * 1000),
@@ -704,11 +744,12 @@ class PythonAutoOperator:
         # Evaluation can take long enough for Mahjong Soul to show its away
         # dialog. Re-check the full viewport immediately before touching a
         # hand coordinate; resume only, then discard this stale decision.
-        if is_away_resume_dialog(page.screenshot(animations="disabled"), self.layout["viewport"]):
+        pre_click_full = page.screenshot(animations="disabled")
+        if is_away_resume_dialog(pre_click_full, self.layout["viewport"]):
             self.resume_if_away(page)
             raise RetryableSafetyAbort("decision canceled because away dialog appeared during evaluation")
 
-        hand_before = page.screenshot(clip=self.hand_clip, animations="disabled")
+        hand_before = crop_screenshot(pre_click_full, self.hand_clip)
         if force_auto:
             if evaluated_hand is None:
                 raise RuntimeError("force-auto requires the stable evaluated hand image")
@@ -717,7 +758,7 @@ class PythonAutoOperator:
                 raise RetryableSafetyAbort(
                     f"hand changed since evaluation (pixel delta={evaluated_delta:.3f})"
                 )
-        river_before = page.screenshot(clip=self.river_clip, animations="disabled")
+        river_before = crop_screenshot(pre_click_full, self.river_clip)
         page.wait_for_timeout(120)
         stability_delta = mean_pixel_delta(hand_before, page.screenshot(clip=self.hand_clip, animations="disabled"))
         if stability_delta > self.args.stability_pixel_delta:
@@ -804,6 +845,24 @@ class PythonAutoOperator:
                 return
             try:
                 self.ensure_viewport(page)
+                if self.args.mode == "force-auto" and self.layout.get("drawSlot"):
+                    draw_region = self.layout["drawSlot"]
+                    draw_clip = {key: draw_region[key] for key in ("x", "y", "width", "height")}
+                    quick_draw = is_draw_slot_clip_occupied(
+                        page.screenshot(clip=draw_clip, animations="disabled")
+                    )
+                    pass_region = self.layout.get("actionButtonRegions", {}).get("pass")
+                    quick_pass = False
+                    if not quick_draw and pass_region:
+                        pass_clip = {key: pass_region[key] for key in ("x", "y", "width", "height")}
+                        quick_pass = is_force_auto_pass_clip(
+                            page.screenshot(clip=pass_clip, animations="disabled")
+                        )
+                    # The small regions are the latency-critical turn gate.
+                    # Keep a periodic full frame for away/result handling.
+                    if not quick_draw and not quick_pass and iterations % 10:
+                        time.sleep(self.args.poll)
+                        continue
                 full_screen = page.screenshot(animations="disabled")
                 draw_slot_heuristic_occupied = False
                 screen_state, screen_confidence = classify_screen(full_screen, self.screen_references)
@@ -823,10 +882,18 @@ class PythonAutoOperator:
                         self.log("screen_advanced", state=screen_state, clickPoint=point)
                         time.sleep(self.args.poll)
                         continue
-                if screen_state != "match":
+                if screen_state != "match" and self.args.mode != "force-auto":
                     self.log("screen_state", state=screen_state, confidence=screen_confidence)
                     time.sleep(self.args.poll)
                     continue
+                if screen_state != "match":
+                    # Loading animation frames are frequently closest to the
+                    # login/account references for several seconds after the
+                    # table is already interactive.  Force-auto remains safe
+                    # here because the exact evaluated frame must still have
+                    # a recognized draw tile and a complete legal hand before
+                    # any click is possible.
+                    self.log("screen_state_bypassed", state=screen_state, confidence=screen_confidence)
                 if self.resume_if_away(page):
                     time.sleep(self.args.poll)
                     continue
@@ -871,22 +938,34 @@ class PythonAutoOperator:
                     continue
                 screenshot_path = self.frames / f"{utc_stamp()}.png"
                 screenshot_path.write_bytes(page.screenshot(animations="disabled"))
-                if self.args.mode == "force-auto" and self.layout.get("drawSlot") and not draw_slot_heuristic_occupied:
-                    # The cheap ivory-pixel gate can miss a very short draw
-                    # animation or a tile whose face is partly covered.  A
-                    # cached-template probe is still inexpensive and is the
-                    # authoritative fallback.  Disarm the unchanged 13-tile
-                    # frame so the probe runs again only after the hand moves.
+                if self.args.mode == "force-auto" and self.layout.get("drawSlot"):
+                    # Re-check the exact frame that will be evaluated.  On a
+                    # short clock the turn can expire between the earlier
+                    # full-screen gate and this stable screenshot, leaving a
+                    # stale "occupied" result for a now 13-tile hand.  The
+                    # resident draw-slot probe is inexpensive and prevents
+                    # that race as well as covering the heuristic's misses.
                     draw_probe = self.recognize_resident(screenshot_path, draw_only=True)
                     if len(draw_probe.get("tiles", [])) != 1:
+                        if self.cached_concealed_tiles is None:
+                            concealed = self.recognize_resident(screenshot_path, concealed_only=True)
+                            concealed_tiles = concealed.get("tiles", [])
+                            if len(concealed_tiles) == 13:
+                                self.cached_concealed_tiles = concealed_tiles
+                                self.cached_open_melds = 0
+                                self.dynamic_layout_required = False
+                                self.log("concealed_hand_cached", screenshot=str(screenshot_path),
+                                         tileCount=len(concealed_tiles))
                         self.last_processed_hand = hand_hash
                         self.armed = False
                         self.log("opponent_turn_confirmed", screenshot=str(screenshot_path),
-                                 source="draw_slot_template_probe")
+                                 source="evaluated_frame_draw_slot_probe",
+                                 priorHeuristicOccupied=draw_slot_heuristic_occupied)
                         time.sleep(self.args.poll)
                         continue
-                    self.log("self_turn_detected", screenshot=str(screenshot_path),
-                             source="draw_slot_template_probe")
+                    if not draw_slot_heuristic_occupied:
+                        self.log("self_turn_detected", screenshot=str(screenshot_path),
+                                 source="evaluated_frame_draw_slot_probe")
                 # force-auto does not trust or require public-board
                 # confidence. Avoid its expensive recognition pass so a
                 # 300-second match clock remains usable.
