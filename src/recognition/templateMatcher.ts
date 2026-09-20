@@ -210,11 +210,21 @@ function scorePrepared(sample: PreparedImage, templates: Map<GameTile, PreparedI
     if (options.rejectBlank !== false) return { tile: "P", confidence: 0, runnerUpConfidence: 0 };
     return { tile: "P", confidence: 1, runnerUpConfidence: 0.5 };
   }
-  const shortlist = [...templates.entries()].map(([tile, variants]) => ({
-    tile,
-    variants,
-    coarse: Math.max(...variants.map((variant) => similarityAtOffset(sample, variant, 0, 0))),
-  })).sort((a, b) => b.coarse - a.coarse).slice(0, options.allClasses ? templates.size : 4);
+  const shortlist = [...templates.entries()].map(([tile, variants]) => {
+    const rankedVariants = variants.map((variant) => ({
+      variant,
+      coarse: similarityAtOffset(sample, variant, 0, 0),
+    })).sort((a, b) => b.coarse - a.coarse);
+    return {
+      tile,
+      // A class can contain dozens of near-identical captures. The coarse
+      // pass already ranks every one, so only refine its closest examples.
+      // This keeps live draw recognition below the turn-time budget without
+      // changing the set of tile classes considered.
+      variants: rankedVariants.slice(0, 3).map(({ variant }) => variant),
+      coarse: rankedVariants[0]!.coarse,
+    };
+  }).sort((a, b) => b.coarse - a.coarse).slice(0, options.allClasses ? templates.size : 4);
   const scores = shortlist.map(({ tile, variants }) => ({
     tile,
     discriminativeScore: Math.max(...variants.map((variant) => similarity(sample, variant))),

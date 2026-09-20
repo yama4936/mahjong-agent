@@ -3,6 +3,7 @@ import { createInterface } from "node:readline";
 import { decide } from "../agent/decision.js";
 import { parseGameState, parsePublicGameState } from "../game/state.js";
 import { parseGameTile } from "../game/tiles.js";
+import { proposeLiveHandLayout } from "./handLayoutProposal.js";
 import { layoutSchema } from "./layout.js";
 import { recognizeHand, recognizeTileSlots, warmTemplateCache, type MatcherOptions } from "./templateMatcher.js";
 
@@ -40,15 +41,26 @@ for await (const line of lines) {
       drawOnly?: boolean;
       concealedTiles?: string[];
       evaluateForceAuto?: boolean;
+      dynamicLayout?: boolean;
+      openMelds?: number;
     };
     id = request.id;
+    const activeLayout = request.dynamicLayout
+      ? {
+          ...layout,
+          ...(await proposeLiveHandLayout(request.screenshot)),
+          tileMatcher: layout.tileMatcher,
+          minimumTileConfidence: layout.minimumTileConfidence,
+          minimumTilePresence: layout.minimumTilePresence,
+        }
+      : layout;
     let recognition = request.drawOnly
-      ? layout.drawSlot
-        ? await recognizeTileSlots(request.screenshot, [layout.drawSlot], layout, templateDirectory)
+      ? activeLayout.drawSlot
+        ? await recognizeTileSlots(request.screenshot, [activeLayout.drawSlot], activeLayout, templateDirectory)
         : (() => { throw new Error("layout has no draw slot"); })()
       : request.concealedOnly
-        ? await recognizeTileSlots(request.screenshot, layout.handSlots, layout, templateDirectory)
-        : await recognizeHand(request.screenshot, layout, templateDirectory);
+        ? await recognizeTileSlots(request.screenshot, activeLayout.handSlots, activeLayout, templateDirectory)
+        : await recognizeHand(request.screenshot, activeLayout, templateDirectory);
     if (request.concealedTiles && recognition.tiles.length === 1) {
       recognition = {
         ...recognition,
@@ -58,11 +70,16 @@ for await (const line of lines) {
     let result: unknown = recognition;
     if (request.evaluateForceAuto) {
       if (!publicState) throw new Error("force-auto evaluation requires a state file");
-      if (recognition.tiles.length !== 14) throw new Error(`force-auto evaluation requires 14 tiles; got ${recognition.tiles.length}`);
+      const inferredOpenMelds = request.openMelds ?? (14 - recognition.tiles.length) / 3;
+      if (!Number.isInteger(inferredOpenMelds) || inferredOpenMelds < 0 || inferredOpenMelds > 4) {
+        throw new Error(`force-auto evaluation requires 14/11/8/5/2 concealed tiles; got ${recognition.tiles.length}`);
+      }
       const state = parseGameState({
         ...publicState,
-        hand: recognition.tiles.slice(0, 13),
-        draw: recognition.tiles[13],
+        openMelds: inferredOpenMelds,
+        melds: [],
+        hand: recognition.tiles.slice(0, -1),
+        draw: recognition.tiles.at(-1),
         recognitionConfidence: recognition.confidence,
       });
       const decision = await decide(state, { mode: "force-auto" });
@@ -82,6 +99,11 @@ for await (const line of lines) {
         },
         decision,
         ...(clickIndex !== undefined ? { clickIndex } : {}),
+        ...(clickIndex !== undefined && activeLayout.clickPoints[clickIndex]
+          ? { clickPoint: activeLayout.clickPoints[clickIndex] }
+          : {}),
+        concealedCount: recognition.tiles.length,
+        openMelds: inferredOpenMelds,
       };
     }
     process.stdout.write(`${JSON.stringify({ id, result })}\n`);

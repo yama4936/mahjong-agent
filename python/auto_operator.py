@@ -230,6 +230,8 @@ class PythonAutoOperator:
         self.last_processed_hand: str | None = None
         self.previous_public_observation: dict[str, Any] | None = None
         self.cached_concealed_tiles: list[str] | None = None
+        self.cached_open_melds = 0
+        self.dynamic_layout_required = False
         self.last_shanten: int | None = None
         if self.log_path.exists():
             for line in reversed(self.log_path.read_text(encoding="utf-8").splitlines()):
@@ -258,6 +260,7 @@ class PythonAutoOperator:
     def recognize_resident(
         self, screenshot: Path, *, concealed_only: bool = False, draw_only: bool = False,
         concealed_tiles: list[str] | None = None, evaluate_force_auto: bool = False,
+        dynamic_layout: bool = False, open_melds: int | None = None,
     ) -> dict[str, Any]:
         if self.recognition_server.poll() is not None:
             raise RuntimeError("resident recognition server is not running")
@@ -272,6 +275,8 @@ class PythonAutoOperator:
             "drawOnly": draw_only,
             "concealedTiles": concealed_tiles,
             "evaluateForceAuto": evaluate_force_auto,
+            "dynamicLayout": dynamic_layout,
+            "openMelds": open_melds,
         }) + "\n")
         self.recognition_server.stdin.flush()
         response_line = self.recognition_server.stdout.readline()
@@ -683,9 +688,17 @@ class PythonAutoOperator:
             if not auto_certificate or auto_certificate.get("enabled") is not True:
                 raise RuntimeError("layout has no passing Auto certificate")
         click_index = evaluation.get("clickIndex")
+        dynamic_click_point = evaluation.get("clickPoint")
         points = self.layout["clickPoints"]
         needs_tile_click = selected_action in {"discard", "riichi"}
-        if needs_tile_click and (not isinstance(click_index, int) or click_index < 0 or click_index >= len(points)):
+        has_dynamic_click_point = (
+            isinstance(dynamic_click_point, dict)
+            and isinstance(dynamic_click_point.get("x"), (int, float))
+            and isinstance(dynamic_click_point.get("y"), (int, float))
+        )
+        if needs_tile_click and not has_dynamic_click_point and (
+            not isinstance(click_index, int) or click_index < 0 or click_index >= len(points)
+        ):
             raise RuntimeError("evaluator returned an invalid click index")
 
         # Evaluation can take long enough for Mahjong Soul to show its away
@@ -731,7 +744,7 @@ class PythonAutoOperator:
                 return {"clicked": True, "policy": "certified_auto", "action": selected_action,
                         "clickPoint": point, **action_receipt}
 
-        point = points[click_index]
+        point = dynamic_click_point if has_dynamic_click_point else points[click_index]
         clicked_at = datetime.now(timezone.utc).isoformat()
         self.log(
             "click_sent",
@@ -792,6 +805,7 @@ class PythonAutoOperator:
             try:
                 self.ensure_viewport(page)
                 full_screen = page.screenshot(animations="disabled")
+                draw_slot_heuristic_occupied = False
                 screen_state, screen_confidence = classify_screen(full_screen, self.screen_references)
                 if screen_state == "away":
                     if self.resume_if_away(page):
@@ -835,10 +849,8 @@ class PythonAutoOperator:
                             time.sleep(self.args.poll)
                             continue
                     draw_slot = self.layout.get("drawSlot")
-                    if draw_slot and not is_draw_slot_occupied(full_screen, draw_slot):
-                        self.armed = True
-                        time.sleep(self.args.poll)
-                        continue
+                    if draw_slot:
+                        draw_slot_heuristic_occupied = is_draw_slot_occupied(full_screen, draw_slot)
                 hand = page.screenshot(clip=self.hand_clip, animations="disabled")
                 page.wait_for_timeout(self.args.stability_ms)
                 hand_second = page.screenshot(clip=self.hand_clip, animations="disabled")
@@ -859,6 +871,22 @@ class PythonAutoOperator:
                     continue
                 screenshot_path = self.frames / f"{utc_stamp()}.png"
                 screenshot_path.write_bytes(page.screenshot(animations="disabled"))
+                if self.args.mode == "force-auto" and self.layout.get("drawSlot") and not draw_slot_heuristic_occupied:
+                    # The cheap ivory-pixel gate can miss a very short draw
+                    # animation or a tile whose face is partly covered.  A
+                    # cached-template probe is still inexpensive and is the
+                    # authoritative fallback.  Disarm the unchanged 13-tile
+                    # frame so the probe runs again only after the hand moves.
+                    draw_probe = self.recognize_resident(screenshot_path, draw_only=True)
+                    if len(draw_probe.get("tiles", [])) != 1:
+                        self.last_processed_hand = hand_hash
+                        self.armed = False
+                        self.log("opponent_turn_confirmed", screenshot=str(screenshot_path),
+                                 source="draw_slot_template_probe")
+                        time.sleep(self.args.poll)
+                        continue
+                    self.log("self_turn_detected", screenshot=str(screenshot_path),
+                             source="draw_slot_template_probe")
                 # force-auto does not trust or require public-board
                 # confidence. Avoid its expensive recognition pass so a
                 # 300-second match clock remains usable.
@@ -873,13 +901,15 @@ class PythonAutoOperator:
                             draw_only=self.cached_concealed_tiles is not None,
                             concealed_tiles=self.cached_concealed_tiles,
                             evaluate_force_auto=True,
+                            dynamic_layout=self.dynamic_layout_required,
+                            open_melds=self.cached_open_melds if self.cached_concealed_tiles is not None else None,
                         )
                     except RuntimeError:
-                        if self.cached_concealed_tiles is None:
-                            raise
                         self.cached_concealed_tiles = None
+                        self.cached_open_melds = 0
+                        self.dynamic_layout_required = True
                         evaluation = self.recognize_resident(
-                            screenshot_path, evaluate_force_auto=True,
+                            screenshot_path, evaluate_force_auto=True, dynamic_layout=True,
                         )
                 elif self.cached_concealed_tiles is not None and not pending_discard:
                     draw_recognition = self.recognize_resident(screenshot_path, draw_only=True)
@@ -943,6 +973,7 @@ class PythonAutoOperator:
                 self.log("decision", screenshot=str(screenshot_path), evaluation=evaluation, execution=receipt)
                 self.log("replay_saved", replay=str(replay_path))
                 selected_id = evaluation.get("decision", {}).get("selectedActionId")
+                selected_action = evaluation.get("decision", {}).get("selectedAction", {}).get("action")
                 selected_candidate = next((item for item in evaluation.get("decision", {}).get("candidates", [])
                                            if item.get("actionId") == selected_id), None)
                 self.last_shanten = selected_candidate.get("shanten") if selected_candidate else None
@@ -953,6 +984,18 @@ class PythonAutoOperator:
                         self.cached_concealed_tiles = [
                             tile for index, tile in enumerate(recognized_tiles) if index != click_index
                         ]
+                        self.cached_open_melds = evaluation.get("openMelds", 0)
+                        self.dynamic_layout_required = self.cached_open_melds > 0
+                    elif isinstance(click_index, int) and len(recognized_tiles) in {11, 8, 5, 2}:
+                        self.cached_concealed_tiles = [
+                            tile for index, tile in enumerate(recognized_tiles) if index != click_index
+                        ]
+                        self.cached_open_melds = evaluation.get("openMelds", (14 - len(recognized_tiles)) // 3)
+                        self.dynamic_layout_required = True
+                elif receipt.get("clicked") and selected_action in {"chi", "pon", "minkan", "ankan", "kakan"}:
+                    self.cached_concealed_tiles = None
+                    self.cached_open_melds = 0
+                    self.dynamic_layout_required = True
                 self.last_processed_hand = hand_hash
                 self.armed = False
             except KeyboardInterrupt:
