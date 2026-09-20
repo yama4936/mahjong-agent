@@ -61,6 +61,8 @@ npm run policy:compare -- artifacts/replays
 node --env-file=.env.local --import tsx src/cli.ts policy-compare artifacts/replays --jev
 ```
 
+新しく保存する各リプレイには、操作の状態を`executionEvidence.status`（`verified` / `failed` / `not_attempted`）として必ず記録します。Python操作者は局結果・対局結果画面を検出すると、その画面の保存先、検出時刻、分類confidenceを、該当する全リプレイの`actualResult.round` / `actualResult.match`へ追記します。結果の追記は`--advance-screens`の有無に依存しません。数値の点差・最終順位など、画面分類だけでは確定できない値は推測せず、従来どおり`npm run result:attach -- <decision.json> <actual-result.json>`で明示的に追加します。
+
 局結果だけでは個々の打牌の正解ラベルにならないため、`won`や`pointsDelta`を`expertActionId`の代用にはしません。ラベルがないデータセットでは調整コマンドは停止します。現在の`confidence`閾値`0.55`は未校正の暫定値であり、十分な独立ラベルが集まるまでは引き下げません。
 
 ## 画面認識

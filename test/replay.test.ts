@@ -20,6 +20,11 @@ test("decision logs round-trip through JSONL", async () => {
   assert.equal(records.length, 1);
   assert.equal(records[0]!.id, written.id);
   assert.equal(records[0]!.decision.tile, "E");
+  assert.deepEqual(records[0]!.executionEvidence, {
+    status: "not_attempted",
+    actionId: written.decision.selectedActionId,
+    reason: "decision_not_executable",
+  });
   assert.match(await readFile(path.join(directory, `${written.id}.json`), "utf8"), /frame\.png/);
 });
 
@@ -38,4 +43,36 @@ test("actual outcomes can be attached and benchmarked", async () => {
   assert.equal(summary.overall.dealInRate, 0);
   assert.equal(summary.overall.averagePointsDelta, 5200);
   assert.equal(summary.overall.averageFinalRank, 1);
+});
+
+test("round and match evidence are merged without discarding outcome labels", async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), "jantama-result-evidence-"));
+  const state = parseGameState({
+    hand: ["1m", "2m", "3m", "4m", "5m", "6m", "3p", "4p", "5p", "7s", "8s", "9s", "E"],
+    draw: "6p",
+  });
+  const decision = await decide(state, { mode: "advisor" });
+  const record = await appendDecisionLog(directory, state, decision);
+  const replay = path.join(directory, `${record.id}.json`);
+  await attachActualResult(replay, {
+    won: true,
+    round: {
+      observedAt: "2026-09-20T00:00:00.000Z",
+      screenshot: "round.png",
+      screenState: "round_result",
+      screenConfidence: 0.99,
+    },
+  });
+  await attachActualResult(replay, {
+    match: {
+      observedAt: "2026-09-20T00:01:00.000Z",
+      screenshot: "match.png",
+      screenState: "match_result",
+      screenConfidence: 0.98,
+    },
+  });
+  const [updated] = await readDecisionLog(replay);
+  assert.equal(updated!.actualResult?.won, true);
+  assert.equal(updated!.actualResult?.round?.screenState, "round_result");
+  assert.equal(updated!.actualResult?.match?.screenState, "match_result");
 });

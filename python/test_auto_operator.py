@@ -9,7 +9,7 @@ import tempfile
 import json
 from unittest.mock import Mock, patch
 
-from auto_operator import PythonAutoOperator, away_resume_geometry, is_away_resume_dialog, load_secret_environment, local_discard_allowed, send_discard_click
+from auto_operator import PythonAutoOperator, away_resume_geometry, is_away_resume_dialog, load_json, load_secret_environment, local_discard_allowed, send_discard_click
 from screen_state import classify_screen, load_references
 
 
@@ -25,6 +25,41 @@ class RecordingMouse:
 
 
 class AwayDialogDetectionTest(unittest.TestCase):
+    def test_replay_records_execution_and_receives_round_and_match_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            operator = PythonAutoOperator.__new__(PythonAutoOperator)
+            operator.replays = Path(directory) / "replays"
+            operator.replays.mkdir()
+            operator.frames = Path(directory) / "frames"
+            operator.frames.mkdir()
+            operator.log_path = Path(directory) / "operator.jsonl"
+            operator.pending_round_replays = []
+            operator.pending_match_replays = []
+            screenshot = operator.frames / "decision.png"
+            screenshot.write_bytes(b"decision")
+            evaluation = {
+                "state": {"round": "east_1"},
+                "recognition": {"backend": "template", "tiles": ["1m"], "confidence": 1,
+                                "ambiguityMargin": 1, "safe": True},
+                "decision": {"selectedActionId": "discard_1m", "recommendedAction": "discard"},
+            }
+            replay = operator.record_replay(evaluation, screenshot, execution={
+                "clicked": True,
+                "confirmation": "hand_and_own_river_changed",
+                "tileMultisetVerification": {"verified": True},
+            })
+            self.assertEqual(load_json(replay)["executionEvidence"]["status"], "verified")
+
+            self.assertEqual(operator.attach_outcome("round", b"round", 0.99), 1)
+            self.assertEqual(operator.attach_outcome("match", b"match", 0.98), 1)
+            result = load_json(replay)["actualResult"]
+            self.assertEqual(result["round"]["screenState"], "round_result")
+            self.assertEqual(result["match"]["screenState"], "match_result")
+            jsonl_record = json.loads((operator.replays / "decisions.jsonl").read_text(encoding="utf-8"))
+            self.assertEqual(jsonl_record["actualResult"]["round"]["screenState"], "round_result")
+            self.assertEqual(jsonl_record["actualResult"]["match"]["screenState"], "match_result")
+            self.assertEqual(operator.attach_outcome("round", b"duplicate", 1), 0)
+
     def test_fresh_recognition_disagreement_prevents_click(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             operator = PythonAutoOperator.__new__(PythonAutoOperator)

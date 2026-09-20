@@ -16,6 +16,7 @@ import os
 import subprocess
 import sys
 import time
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -151,6 +152,10 @@ class PythonAutoOperator:
         self.frames = self.artifacts / "frames"
         self.frames.mkdir(parents=True, exist_ok=True)
         self.log_path = self.artifacts / "python-operator.jsonl"
+        self.replays = self.artifacts / "replays"
+        self.replays.mkdir(parents=True, exist_ok=True)
+        self.pending_round_replays: list[Path] = []
+        self.pending_match_replays: list[Path] = []
         self.screen_references = load_references(self.root / "artifacts" / "live")
         self.last_processed_hand: str | None = None
         self.armed = True
@@ -181,6 +186,97 @@ class PythonAutoOperator:
         with self.log_path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n")
         print(json.dumps(record, ensure_ascii=False), flush=True)
+
+    def record_replay(
+        self,
+        evaluation: dict[str, Any],
+        screenshot: Path,
+        execution: dict[str, Any] | None = None,
+        execution_error: str | None = None,
+    ) -> Path:
+        """Persist one decision with an explicit, auditable execution state."""
+        replay_id = str(uuid.uuid4())
+        decision = evaluation["decision"]
+        action_id = decision.get("selectedActionId", decision.get("recommendedAction", "unknown"))
+        if execution_error:
+            execution_evidence = {"status": "failed", "actionId": action_id, "reason": execution_error}
+        elif execution and execution.get("clicked") is True:
+            execution_evidence = {"status": "verified", "actionId": action_id, "receipt": execution}
+        else:
+            execution_evidence = {
+                "status": "not_attempted",
+                "actionId": action_id,
+                "reason": (execution or {}).get("reason", "advisor_or_safety_stop"),
+            }
+        record = {
+            "schemaVersion": 1,
+            "id": replay_id,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "screenshot": str(screenshot),
+            "state": evaluation["state"],
+            "decision": decision,
+            "executionEvidence": execution_evidence,
+            "evidence": {
+                "recognition": evaluation["recognition"],
+                **({"execution": execution} if execution else {}),
+                **({"executionError": execution_error} if execution_error else {}),
+            },
+        }
+        path = self.replays / f"{replay_id}.json"
+        path.write_text(json.dumps(record, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        path.chmod(0o600)
+        with (self.replays / "decisions.jsonl").open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n")
+        (self.replays / "decisions.jsonl").chmod(0o600)
+        self.pending_round_replays.append(path)
+        self.pending_match_replays.append(path)
+        return path
+
+    def attach_outcome(self, kind: str, screenshot: bytes, confidence: float) -> int:
+        """Attach one observed result screen to all decisions in its scope."""
+        if kind not in {"round", "match"}:
+            raise ValueError(f"unsupported outcome kind: {kind}")
+        pending = self.pending_round_replays if kind == "round" else self.pending_match_replays
+        if not pending:
+            return 0
+        screen_state = f"{kind}_result"
+        screenshot_path = self.frames / f"{utc_stamp()}.{screen_state}.png"
+        screenshot_path.write_bytes(screenshot)
+        evidence = {
+            "observedAt": datetime.now(timezone.utc).isoformat(),
+            "screenshot": str(screenshot_path),
+            "screenState": screen_state,
+            "screenConfidence": confidence,
+        }
+        for replay_path in pending:
+            record = load_json(replay_path)
+            record.setdefault("actualResult", {})[kind] = evidence
+            replacement = replay_path.with_suffix(".json.tmp")
+            replacement.write_text(json.dumps(record, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            replacement.chmod(0o600)
+            replacement.replace(replay_path)
+        jsonl_path = self.replays / "decisions.jsonl"
+        pending_ids = {replay_path.stem for replay_path in pending}
+        if jsonl_path.exists():
+            records = [json.loads(line) for line in jsonl_path.read_text(encoding="utf-8").splitlines() if line]
+            for record in records:
+                if record.get("id") in pending_ids:
+                    record.setdefault("actualResult", {})[kind] = evidence
+            replacement = jsonl_path.with_suffix(".jsonl.tmp")
+            replacement.write_text(
+                "".join(json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n" for record in records),
+                encoding="utf-8",
+            )
+            replacement.chmod(0o600)
+            replacement.replace(jsonl_path)
+        count = len(pending)
+        if kind == "round":
+            self.pending_round_replays = []
+        else:
+            self.pending_match_replays = []
+            self.pending_round_replays = []
+        self.log("outcome_attached", kind=kind, replayCount=count, evidence=evidence)
+        return count
 
     def evaluate(self, screenshot: Path) -> dict[str, Any]:
         evaluator_mode = "advisor" if self.args.mode == "observer" else self.args.mode
@@ -418,13 +514,15 @@ class PythonAutoOperator:
                     # Match and away references share almost the entire table.
                     # The stricter popup/button geometry remains authoritative.
                     screen_state = "match"
-                if screen_state in {"round_result", "match_result"} and self.args.advance_screens:
-                    y_ratio = 0.92 if screen_state == "match_result" else 0.935
-                    point = {"x": self.layout["viewport"]["width"] * 0.91, "y": self.layout["viewport"]["height"] * y_ratio}
-                    page.mouse.click(point["x"], point["y"])
-                    self.log("screen_advanced", state=screen_state, clickPoint=point)
-                    time.sleep(self.args.poll)
-                    continue
+                if screen_state in {"round_result", "match_result"}:
+                    self.attach_outcome("match" if screen_state == "match_result" else "round", full_screen, screen_confidence)
+                    if self.args.advance_screens:
+                        y_ratio = 0.92 if screen_state == "match_result" else 0.935
+                        point = {"x": self.layout["viewport"]["width"] * 0.91, "y": self.layout["viewport"]["height"] * y_ratio}
+                        page.mouse.click(point["x"], point["y"])
+                        self.log("screen_advanced", state=screen_state, clickPoint=point)
+                        time.sleep(self.args.poll)
+                        continue
                 if screen_state != "match":
                     self.log("screen_state", state=screen_state, confidence=screen_confidence)
                     time.sleep(self.args.poll)
@@ -461,14 +559,17 @@ class PythonAutoOperator:
                     continue
                 try:
                     receipt = self.execute(page, evaluation)
-                except Exception:
+                except Exception as error:
                     # A click may already have reached the game even if visual
                     # confirmation failed. Disarm this exact hand so the loop
                     # can never retry the action.
                     self.last_processed_hand = hand_hash
                     self.armed = False
+                    self.record_replay(evaluation, screenshot_path, execution_error=str(error))
                     raise
+                replay_path = self.record_replay(evaluation, screenshot_path, execution=receipt)
                 self.log("decision", screenshot=str(screenshot_path), evaluation=evaluation, execution=receipt)
+                self.log("replay_saved", replay=str(replay_path))
                 self.last_processed_hand = hand_hash
                 self.armed = False
             except KeyboardInterrupt:

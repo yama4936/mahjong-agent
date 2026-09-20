@@ -65,7 +65,7 @@ Status values: `todo`, `doing`, `done`, `blocked`.
 - [x] `done` Wire certified riichi, chi, pon, kan, ron, tsumo, pass and kyuushu decisions through both controller implementations; verify riichi as declaration plus discard and calls by button, hand and own-meld changes.
 - [ ] `todo` Recognize reaction prompts in the Python operator and execute a certified pass instead of repeatedly evaluating the prompt as an empty 14-tile hand until the game times out.
 - [ ] `blocked` Execute non-discard UI actions only after each action has at least 20 independent live holdouts, 100% accuracy and zero false positives.
-- [ ] `todo` Attach verified execution evidence and eventual round/match outcomes to every replay record.
+- [x] `done` Attach explicit verified/failed/not-attempted execution evidence to every new replay record; the Python operator now adds classified result-screen evidence and screenshots to every pending decision at round and match completion.
 - [x] `done` Add a shared replay-policy comparison runner with recorded/current-deterministic decisions, pairwise agreement, expert-label accuracy and per-policy error isolation; Jev can be enabled explicitly.
 - [ ] `todo` Expand the replay corpus, run current Jev on it, and add a search policy before making policy-quality claims.
 
