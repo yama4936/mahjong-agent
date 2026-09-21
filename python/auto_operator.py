@@ -177,7 +177,7 @@ def force_auto_call_buttons(screenshot: bytes, viewport: dict[str, int]) -> list
     bottom = round(viewport["height"] * 0.85)
     with Image.open(io.BytesIO(screenshot)) as image:
         pixels = image.convert("RGB")
-        groups: list[list[tuple[int, int, int]]] = []
+        groups: list[tuple[str, list[tuple[int, int, int]]]] = []
         # Scan the two button palettes separately. Their glow regions can
         # touch, so a combined color mask would fuse adjacent chi and pon
         # buttons into one apparently unambiguous component.
@@ -200,16 +200,17 @@ def force_auto_call_buttons(screenshot: bytes, viewport: dict[str, int]) -> list
                     palette_groups.append([column])
                 else:
                     palette_groups[-1].append(column)
-            groups.extend(palette_groups)
+            groups.extend((palette, group) for group in palette_groups)
 
     buttons = []
-    for group in groups:
+    for palette, group in groups:
         x1, x2 = group[0][0], group[-1][0]
         y1 = min(column[1] for column in group)
         y2 = max(column[2] for column in group)
         if x2 - x1 < viewport["width"] * 0.07 or y2 - y1 < viewport["height"] * 0.04:
             continue
         buttons.append({
+            "action": "chi" if palette == "green" else "pon",
             "x": x1, "y": y1, "width": x2 - x1, "height": y2 - y1,
             "center": {"x": (x1 + x2) / 2, "y": (y1 + y2) / 2},
         })
@@ -225,6 +226,19 @@ def force_auto_call_buttons(screenshot: bytes, viewport: dict[str, int]) -> list
             current["width"] = max(0, current_right - current["x"])
             current["center"]["x"] = current["x"] + current["width"] / 2
     return [button for button in buttons if button["width"] >= viewport["width"] * 0.07]
+
+
+def post_call_transition(call_action: str, prior_open_melds: int) -> dict[str, Any]:
+    """Describe the state expected after a verified open call."""
+    if call_action not in {"chi", "pon", "minkan"}:
+        raise ValueError(f"unsupported open call: {call_action}")
+    return {
+        "openMelds": min(4, prior_open_melds + 1),
+        "dynamicLayoutRequired": True,
+        # Chi/pon immediately require a discard. Minkan first produces a
+        # replacement draw, which the normal draw-slot gate must observe.
+        "pendingPostCallDiscard": call_action in {"chi", "pon"},
+    }
 
 
 def should_guard_tenpai_reaction(last_shanten: int | None, call_buttons: list[dict[str, Any]]) -> bool:
@@ -1256,8 +1270,14 @@ class PythonAutoOperator:
             raise RetryableSafetyAbort(f"expected one stable call button, found {len(buttons)}")
         if abs(buttons[0]["center"]["x"] - button["center"]["x"]) > 12:
             raise RetryableSafetyAbort("call button moved before click")
+        call_action = buttons[0].get("action")
+        if call_action not in {"chi", "pon", "minkan"}:
+            raise RetryableSafetyAbort(f"unclassified call button: {call_action}")
         point = buttons[0]["center"]
-        self.log("action_click_sent", action="call", clickPoint=point, source="single_green_button")
+        hand_before = crop_screenshot(screenshot, self.hand_clip)
+        meld_region = self.layout.get("publicTileRegions", {}).get("ownMelds")
+        meld_before = crop_screenshot(screenshot, meld_region) if meld_region else None
+        self.log("action_click_sent", action=call_action, clickPoint=point, source="single_call_button")
         sequence_before = self.screencast_sequence
         page.mouse.click(point["x"], point["y"])
         deadline = time.monotonic() + min(3.0, self.args.confirmation_timeout)
@@ -1270,15 +1290,25 @@ class PythonAutoOperator:
             else:
                 current = page.screenshot(animations="disabled")
             if not force_auto_call_buttons(current, self.layout["viewport"]):
+                hand_delta = mean_pixel_delta(hand_before, crop_screenshot(current, self.hand_clip))
+                meld_delta = mean_pixel_delta(meld_before, crop_screenshot(current, meld_region)) \
+                    if meld_before is not None and meld_region else 0
+                if hand_delta < self.args.action_pixel_delta \
+                        or (meld_region and meld_delta < self.args.action_pixel_delta):
+                    continue
+                transition = post_call_transition(call_action, self.cached_open_melds)
                 self.cached_concealed_tiles = None
-                self.cached_open_melds = 0
-                self.dynamic_layout_required = True
-                self.pending_post_call_discard = True
+                self.cached_open_melds = transition["openMelds"]
+                self.dynamic_layout_required = transition["dynamicLayoutRequired"]
+                self.pending_post_call_discard = transition["pendingPostCallDiscard"]
                 self.last_processed_hand = None
                 self.armed = True
                 return {
-                    "clicked": True, "policy": "force_auto", "action": "call",
-                    "clickPoint": point, "confirmation": "call_button_disappeared",
+                    "clicked": True, "policy": "force_auto", "action": call_action,
+                    "clickPoint": point, "confirmation": "hand_and_own_meld_changed",
+                    "handPixelDelta": hand_delta, "meldPixelDelta": meld_delta,
+                    "openMelds": self.cached_open_melds,
+                    "pendingPostCallDiscard": self.pending_post_call_discard,
                 }
         raise RetryableSafetyAbort("call button did not disappear after click")
 

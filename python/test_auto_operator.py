@@ -9,7 +9,7 @@ import tempfile
 import json
 from unittest.mock import Mock, patch
 
-from auto_operator import PythonAutoOperator, away_resume_geometry, force_auto_call_buttons, force_auto_reaction_win_button, force_auto_self_action_buttons, is_away_resume_dialog, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, merge_public_observations, send_discard_click, should_guard_tenpai_reaction
+from auto_operator import PythonAutoOperator, away_resume_geometry, force_auto_call_buttons, force_auto_reaction_win_button, force_auto_self_action_buttons, is_away_resume_dialog, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, merge_public_observations, post_call_transition, send_discard_click, should_guard_tenpai_reaction
 from screen_state import classify_screen, load_references
 
 
@@ -102,6 +102,7 @@ class AwayDialogDetectionTest(unittest.TestCase):
         image.save(output, format="PNG")
         buttons = force_auto_call_buttons(output.getvalue(), viewport)
         self.assertEqual(len(buttons), 1)
+        self.assertEqual(buttons[0]["action"], "chi")
         self.assertEqual(buttons[0]["center"], {"x": 1012.0, "y": 696.5})
 
         orange = Image.new("RGB", (1600, 900), (25, 55, 85))
@@ -123,6 +124,7 @@ class AwayDialogDetectionTest(unittest.TestCase):
         image.save(output, format="PNG")
         buttons = force_auto_call_buttons(output.getvalue(), viewport)
         self.assertEqual(len(buttons), 2)
+        self.assertEqual([button["action"] for button in buttons], ["chi", "pon"])
         self.assertLess(max(button["height"] for button in buttons), 100)
 
     def test_tenpai_guard_allows_pass_when_a_green_call_is_visible(self) -> None:
@@ -159,21 +161,29 @@ class AwayDialogDetectionTest(unittest.TestCase):
         viewport = {"width": 1600, "height": 900}
         prompt = Image.new("RGB", (1600, 900), (25, 55, 85))
         ImageDraw.Draw(prompt).rectangle((893, 650, 1131, 743), fill=(45, 130, 70))
+        ImageDraw.Draw(prompt).rectangle((100, 780, 700, 899), fill=(230, 225, 210))
+        ImageDraw.Draw(prompt).rectangle((20, 700, 180, 770), fill=(25, 55, 85))
         prompt_bytes = io.BytesIO()
         prompt.save(prompt_bytes, format="PNG")
         table_bytes = io.BytesIO()
-        Image.new("RGB", (1600, 900), (25, 55, 85)).save(table_bytes, format="PNG")
+        table = Image.new("RGB", (1600, 900), (25, 55, 85))
+        ImageDraw.Draw(table).rectangle((100, 780, 500, 899), fill=(230, 225, 210))
+        ImageDraw.Draw(table).rectangle((20, 700, 180, 770), fill=(230, 225, 210))
+        table.save(table_bytes, format="PNG")
         button = force_auto_call_buttons(prompt_bytes.getvalue(), viewport)[0]
 
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
         operator.args = argparse.Namespace(
-            mode="force-auto", accept_single_call=True, confirmation_timeout=1,
+            mode="force-auto", accept_single_call=True, confirmation_timeout=1, action_pixel_delta=3,
         )
-        operator.layout = {"viewport": viewport}
+        operator.layout = {"viewport": viewport, "publicTileRegions": {
+            "ownMelds": {"x": 20, "y": 700, "width": 160, "height": 70},
+        }}
+        operator.hand_clip = {"x": 100, "y": 780, "width": 600, "height": 120}
         operator.screencast_sequence = 0
         operator.latest_screencast_frame = None
         operator.cached_concealed_tiles = ["1m"] * 13
-        operator.cached_open_melds = 0
+        operator.cached_open_melds = 1
         operator.dynamic_layout_required = False
         operator.pending_post_call_discard = False
         operator.last_processed_hand = "old"
@@ -184,11 +194,21 @@ class AwayDialogDetectionTest(unittest.TestCase):
 
         receipt = operator.execute_force_auto_call(page, prompt_bytes.getvalue(), button)
 
-        self.assertEqual(receipt["confirmation"], "call_button_disappeared")
+        self.assertEqual(receipt["confirmation"], "hand_and_own_meld_changed")
+        self.assertEqual(receipt["action"], "chi")
+        self.assertEqual(operator.cached_open_melds, 2)
         self.assertTrue(operator.pending_post_call_discard)
         self.assertTrue(operator.dynamic_layout_required)
         self.assertTrue(operator.armed)
         page.mouse.click.assert_called_once_with(1012.0, 696.5)
+
+    def test_post_call_transition_distinguishes_discard_and_rinshan_draw(self) -> None:
+        self.assertEqual(post_call_transition("pon", 1), {
+            "openMelds": 2, "dynamicLayoutRequired": True, "pendingPostCallDiscard": True,
+        })
+        self.assertEqual(post_call_transition("minkan", 2), {
+            "openMelds": 3, "dynamicLayoutRequired": True, "pendingPostCallDiscard": False,
+        })
 
     def test_force_auto_reaction_fallback_requires_thirteen_concealed_tiles(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
