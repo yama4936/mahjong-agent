@@ -1686,10 +1686,18 @@ class PythonAutoOperator:
                     )
                     geometric_open_melds = geometric_open_meld_count(gate_frame, self.layout) \
                         if gate_frame else None
-                    candidate_open_melds = restart_open_melds or geometric_open_melds
-                    if restart_open_melds is not None and geometric_open_melds is not None \
-                            and restart_open_melds != geometric_open_melds:
-                        candidate_open_melds = None
+                    if self.cached_open_melds > 0:
+                        # A call executed and confirmed by this process is
+                        # stronger than asynchronously promoted public melds.
+                        # Require current hand geometry to agree with it and
+                        # ignore stale/over-promoted public counts.
+                        candidate_open_melds = geometric_open_melds \
+                            if geometric_open_melds == self.cached_open_melds else None
+                    else:
+                        candidate_open_melds = restart_open_melds or geometric_open_melds
+                        if restart_open_melds is not None and geometric_open_melds is not None \
+                                and restart_open_melds != geometric_open_melds:
+                            candidate_open_melds = None
                     gate_open_melds = self.stable_open_meld_count(
                         candidate_open_melds, gate_frame,
                     ) if gate_frame else None
@@ -1921,10 +1929,14 @@ class PythonAutoOperator:
                     # an occupied draw slot.
                     verified_open_melds = self.verified_visible_open_melds(public_observation)
                     geometric_open_melds = geometric_open_meld_count(evaluation_frame, self.layout)
-                    exact_open_melds = verified_open_melds or geometric_open_melds
-                    if verified_open_melds is not None and geometric_open_melds is not None \
-                            and verified_open_melds != geometric_open_melds:
-                        exact_open_melds = None
+                    if self.cached_open_melds > 0:
+                        exact_open_melds = geometric_open_melds \
+                            if geometric_open_melds == self.cached_open_melds else None
+                    else:
+                        exact_open_melds = verified_open_melds or geometric_open_melds
+                        if verified_open_melds is not None and geometric_open_melds is not None \
+                                and verified_open_melds != geometric_open_melds:
+                            exact_open_melds = None
                     if gate_open_melds is not None and exact_open_melds != gate_open_melds:
                         exact_open_melds = None
                     exact_draw_slot = open_hand_draw_slot(self.layout, exact_open_melds or 0) \

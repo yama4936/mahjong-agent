@@ -300,10 +300,10 @@ class AwayDialogDetectionTest(unittest.TestCase):
 
         self.assertEqual(geometric_open_meld_count(frame, layout), 1)
 
-    def test_run_loop_initializes_public_observation_before_geometry_exact_gate(self) -> None:
+    def test_run_loop_reaches_post_pon_next_draw_with_trusted_open_meld_count(self) -> None:
         project = Path(__file__).resolve().parents[1]
         layout = load_json(project / "config" / "layout.json")
-        frame = (project / "artifacts" / "debug-300-live-now2.png").read_bytes()
+        frame = (project / "artifacts" / "debug-300-current5.png").read_bytes()
         with tempfile.TemporaryDirectory() as directory:
             operator = PythonAutoOperator.__new__(PythonAutoOperator)
             operator.args = argparse.Namespace(mode="force-auto", max_iterations=2, poll=0.001)
@@ -321,7 +321,7 @@ class AwayDialogDetectionTest(unittest.TestCase):
             operator.screencast_draw_generation = 0
             operator.cached_public_observation = None
             operator.cached_concealed_tiles = None
-            operator.cached_open_melds = 0
+            operator.cached_open_melds = 1
             operator.dynamic_layout_required = False
             operator.pending_post_call_discard = False
             operator.pending_post_call_started_at = None
@@ -338,7 +338,6 @@ class AwayDialogDetectionTest(unittest.TestCase):
             operator.advance_ranked_loop = Mock(return_value=False)
             operator.recognize_resident = Mock(return_value={"status": "not_ready"})
             operator.force_auto_reaction_fallback = Mock(return_value=None)
-            operator.stable_open_meld_count = Mock(return_value=1)
             operator.log = Mock()
             page = Mock()
             page.url = "https://mahjongsoul.game.yo-star.com/"
