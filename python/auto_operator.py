@@ -349,6 +349,12 @@ def is_draw_slot_clip_occupied(screenshot: bytes) -> bool:
     return light >= 0.20
 
 
+def closed_concealed_row_visible(screenshot: bytes, layout: dict[str, Any]) -> bool:
+    """Require the complete calibrated 13-tile row before leaving a win latch."""
+    slots = layout.get("handSlots", [])
+    return len(slots) == 13 and all(is_draw_slot_occupied(screenshot, slot) for slot in slots)
+
+
 def open_hand_draw_slot(layout: dict[str, Any], open_melds: int) -> dict[str, float] | None:
     """Shift the calibrated closed-hand draw slot by three tiles per open meld."""
     draw_slot = layout.get("drawSlot")
@@ -599,6 +605,8 @@ class PythonAutoOperator:
         self.restart_open_hand_probe_hash: str | None = None
         self.open_meld_candidate: int | None = None
         self.open_meld_candidate_frames: set[str] = set()
+        self.round_terminal_latched = False
+        self.round_terminal_result_observed = False
         self.last_ranked_loop_state: str | None = None
         self.last_ranked_loop_click_at = 0.0
         if self.log_path.exists():
@@ -1473,6 +1481,9 @@ class PythonAutoOperator:
                 region_override=region if force_auto else None,
             )
             if selected_action != "riichi":
+                if button_action == "tsumo":
+                    self.round_terminal_latched = True
+                    self.round_terminal_result_observed = False
                 return {"clicked": True, "policy": "certified_auto", "action": selected_action,
                         "clickPoint": point, **action_receipt}
 
@@ -1631,6 +1642,8 @@ class PythonAutoOperator:
             if not force_auto_reaction_win_button(after, self.layout["viewport"], pass_region):
                 self.last_processed_hand = None
                 self.armed = True
+                self.round_terminal_latched = True
+                self.round_terminal_result_observed = False
                 return {
                     "clicked": True, "policy": "force_auto", "action": "ron",
                     "clickPoint": point, "confirmation": "reaction_win_button_disappeared",
@@ -1787,6 +1800,8 @@ class PythonAutoOperator:
                     # The stricter popup/button geometry remains authoritative.
                     screen_state = "match"
                 if screen_state in {"round_result", "match_result"}:
+                    if getattr(self, "round_terminal_latched", False):
+                        self.round_terminal_result_observed = True
                     # A new hand (or a new match) must never inherit tiles or
                     # reaction state from the hand whose result is displayed.
                     self.cached_concealed_tiles = None
@@ -1810,6 +1825,20 @@ class PythonAutoOperator:
                         page.mouse.click(point["x"], point["y"])
                         self.log("screen_advanced", state=screen_state, clickPoint=point)
                         time.sleep(self.args.poll)
+                        continue
+                if getattr(self, "round_terminal_latched", False):
+                    if getattr(self, "round_terminal_result_observed", False) and screen_state == "match" \
+                            and closed_concealed_row_visible(full_screen, self.layout):
+                        self.round_terminal_latched = False
+                        self.round_terminal_result_observed = False
+                        self.log("round_terminal_latch_cleared", source="verified_new_round_closed_row")
+                    else:
+                        self.log(
+                            "round_terminal_wait",
+                            screenState=screen_state,
+                            resultObserved=getattr(self, "round_terminal_result_observed", False),
+                        )
+                        page.wait_for_timeout(max(20, round(self.args.poll * 1000)))
                         continue
                 if self.advance_ranked_loop(page, screen_state, screen_confidence):
                     page.wait_for_timeout(max(100, round(self.args.poll * 1000)))

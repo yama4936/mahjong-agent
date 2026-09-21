@@ -9,7 +9,7 @@ import tempfile
 import json
 from unittest.mock import Mock, patch
 
-from auto_operator import PythonAutoOperator, RetryableSafetyAbort, away_resume_geometry, crop_screenshot, discard_point_in_hand_geometry, force_auto_call_buttons, force_auto_reaction_win_button, force_auto_self_action_buttons, geometric_open_meld_count, is_away_resume_dialog, is_contextual_reaction_pass, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, merge_public_observations, open_hand_draw_slot, post_call_transition, send_discard_click, should_guard_tenpai_reaction, should_process_reaction_prompt
+from auto_operator import PythonAutoOperator, RetryableSafetyAbort, away_resume_geometry, closed_concealed_row_visible, crop_screenshot, discard_point_in_hand_geometry, force_auto_call_buttons, force_auto_reaction_win_button, force_auto_self_action_buttons, geometric_open_meld_count, is_away_resume_dialog, is_contextual_reaction_pass, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, merge_public_observations, open_hand_draw_slot, post_call_transition, send_discard_click, should_guard_tenpai_reaction, should_process_reaction_prompt
 from screen_state import classify_screen, load_references
 
 
@@ -280,6 +280,22 @@ class AwayDialogDetectionTest(unittest.TestCase):
             "x": 916.0, "y": 926.0, "width": 92.0, "height": 146.0,
         })
         self.assertIsNone(open_hand_draw_slot(layout, 0))
+
+    def test_winning_animation_does_not_look_like_verified_new_round(self) -> None:
+        project = Path(__file__).resolve().parents[1]
+        layout = load_json(project / "config" / "layout.json")
+        frames = project / "artifacts" / "friend-5-20" / "frames"
+        for name in (
+            "2026-09-21T05-41-02.311448+00-00.jpg",
+            "2026-09-21T05-41-03.461291+00-00.jpg",
+            "2026-09-21T05-41-04.636486+00-00.jpg",
+            "2026-09-21T05-41-06.397759+00-00.jpg",
+            "2026-09-21T05-41-07.758711+00-00.jpg",
+        ):
+            self.assertFalse(closed_concealed_row_visible((frames / name).read_bytes(), layout), name)
+        self.assertTrue(closed_concealed_row_visible(
+            (frames / "2026-09-21T05-41-16.298972+00-00.jpg").read_bytes(), layout,
+        ))
 
     def test_shifted_open_hand_draw_slot_does_not_match_empty_opponent_turn(self) -> None:
         region = {"x": 1201, "y": 926, "width": 92, "height": 146}
@@ -1173,6 +1189,48 @@ class AwayDialogDetectionTest(unittest.TestCase):
         receipt = operator.execute_reaction_pass(page, evaluation)
         self.assertEqual(receipt["policy"], "force_auto")
         page.mouse.click.assert_called_once_with(60, 40)
+
+    def test_successful_tsumo_arms_round_terminal_latch(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(mode="force-auto", allow_local_discard=False,
+                                           stability_pixel_delta=1.5)
+        operator.layout = {
+            "viewport": {"width": 1920, "height": 1080},
+            "clickPoints": [],
+            "publicTileRegions": {},
+        }
+        operator.hand_clip = {"x": 0, "y": 0, "width": 10, "height": 10}
+        operator.river_clip = {"x": 10, "y": 0, "width": 10, "height": 10}
+        operator.screencast_session = Mock()
+        frame_buffer = io.BytesIO()
+        Image.new("RGB", (1920, 1080), "navy").save(frame_buffer, format="JPEG")
+        frame = frame_buffer.getvalue()
+        operator.latest_screencast_frame = frame
+        operator.screencast_draw_generation = 4
+        operator.log = Mock()
+        operator.confirm_action_button = Mock(return_value={"confirmation": "action_button_region_changed"})
+        button_buffer = io.BytesIO()
+        Image.new("RGB", (100, 40), "orange").save(button_buffer, format="PNG")
+        page = Mock()
+        page.screenshot.return_value = button_buffer.getvalue()
+        evaluation = {
+            "decision": {"selectedAction": {"action": "tsumo"}},
+            "recognition": {"tiles": ["2p", "2p"], "safe": False},
+            "actionButton": {
+                "action": "tsumo", "x": 1087, "y": 788, "width": 352, "height": 57,
+                "center": {"x": 1263, "y": 816.5},
+            },
+        }
+
+        receipt = operator.execute(
+            page, evaluation,
+            evaluated_hand=crop_screenshot(frame, operator.hand_clip),
+            evaluated_draw_generation=4,
+        )
+
+        self.assertTrue(receipt["clicked"])
+        self.assertTrue(operator.round_terminal_latched)
+        self.assertFalse(operator.round_terminal_result_observed)
 
     def test_pending_discard_requires_one_exact_opponent_river_append(self) -> None:
         previous = {"opponentDiscards": [
