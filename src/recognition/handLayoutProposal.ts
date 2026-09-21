@@ -85,6 +85,27 @@ function rowCandidates(candidates: RegionCandidate[]): RegionCandidate[][] {
   return rows;
 }
 
+/** Reject exposed melds or board tiles masquerading as a known compact hand. */
+export function knownOpenHandProposalFitsCalibratedRow(
+  proposal: Pick<HandLayoutProposal, "clickPoints">,
+  layout: { handSlots: Rect[]; drawSlot?: Pick<Rect, "x" | "width"> | undefined },
+  openMelds: number,
+): boolean {
+  if (!layout.drawSlot || layout.handSlots.length < 2 || openMelds < 1) return false;
+  const pitches = layout.handSlots.slice(1)
+    .map((slot, index) => slot.x - layout.handSlots[index]!.x)
+    .sort((a, b) => a - b);
+  const pitch = pitches[Math.floor(pitches.length / 2)]!;
+  const right = layout.drawSlot.x + layout.drawSlot.width - openMelds * 3 * pitch;
+  const left = layout.handSlots[0]!.x;
+  const top = Math.min(...layout.handSlots.map((slot) => slot.y));
+  const bottom = Math.max(...layout.handSlots.map((slot) => slot.y + slot.height));
+  const expected = 14 - openMelds * 3;
+  return proposal.clickPoints.length === expected && proposal.clickPoints.every(
+    (point) => point.x >= left && point.x <= right && point.y >= top && point.y <= bottom,
+  );
+}
+
 function splitSeparatedGroups(row: RegionCandidate[]): RegionCandidate[][] {
   if (row.length < 2) return [row];
   const widths = row.map((tile) => tile.width);

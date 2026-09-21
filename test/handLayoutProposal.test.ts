@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFile } from "node:fs/promises";
 import sharp from "sharp";
-import { layoutFromHandProposal, proposeHandLayout, proposeLiveHandLayout } from "../src/recognition/handLayoutProposal.js";
+import { knownOpenHandProposalFitsCalibratedRow, layoutFromHandProposal, proposeHandLayout, proposeLiveHandLayout } from "../src/recognition/handLayoutProposal.js";
+import { layoutSchema } from "../src/recognition/layout.js";
+
+async function calibratedLayout() {
+  return layoutSchema.parse(JSON.parse(await readFile("config/layout.json", "utf8")));
+}
 
 async function syntheticHand(drawGap: number, tileCount = 14): Promise<Buffer> {
   const width = 800;
@@ -90,6 +96,29 @@ test("uses a stricter threshold when an annotation overlay connects the hand", a
   assert.equal(proposal.handSlots.length, 13);
   assert.equal(proposal.drawSlot.x, 540);
   assert.ok(proposal.evidence.luminanceThreshold >= 190);
+});
+
+test("rejects the exposed-meld row selected from the live 5+20 opponent turn", async () => {
+  const layout = await calibratedLayout();
+  const frame = "artifacts/friend-5-20/frames/2026-09-21T05-14-56.898415+00-00.jpg";
+  const falseTwoTileHand = await proposeHandLayout(frame, [2]);
+  assert.equal(falseTwoTileHand.clickPoints.at(-1)?.x, 1446.5);
+  assert.equal(knownOpenHandProposalFitsCalibratedRow(falseTwoTileHand, layout, 4), false);
+});
+
+test("accepts only a complete compact row inside the shifted draw boundary", async () => {
+  const layout = await calibratedLayout();
+  const proposal = await proposeHandLayout(await syntheticHand(14, 8), [8]);
+  // Translate the synthetic row into the calibrated lower-left hand region.
+  const translated = {
+    ...proposal,
+    clickPoints: proposal.clickPoints.map((_, index) => ({ x: 269 + index * 95, y: 999 })),
+  };
+  assert.equal(knownOpenHandProposalFitsCalibratedRow(translated, layout, 2), true);
+  assert.equal(knownOpenHandProposalFitsCalibratedRow({
+    ...translated,
+    clickPoints: translated.clickPoints.map((point, index) => index === 7 ? { ...point, x: 1446.5 } : point),
+  }, layout, 2), false);
 });
 
 test("converts a proposal to an Advisor-only layout", () => {

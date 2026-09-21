@@ -2178,7 +2178,18 @@ class PythonAutoOperator:
                         self.cached_concealed_tiles = [
                             tile for index, tile in enumerate(recognized_tiles) if index != click_index
                         ]
-                        self.cached_open_melds = evaluation.get("openMelds", (14 - len(recognized_tiles)) // 3)
+                        recognized_open_melds = (14 - len(recognized_tiles)) // 3
+                        # Never let a dynamic proposal overwrite the count
+                        # established by confirmed call receipts.  That was
+                        # how an opponent-turn exposed meld row became the
+                        # next two-tile "hand" after a valid two-meld discard.
+                        if self.cached_open_melds <= 0:
+                            self.cached_open_melds = recognized_open_melds
+                        elif recognized_open_melds != self.cached_open_melds:
+                            raise RuntimeError(
+                                "post-discard recognition changed confirmed open meld count "
+                                f"from {self.cached_open_melds} to {recognized_open_melds}"
+                            )
                         self.dynamic_layout_required = True
                 elif receipt.get("clicked") and selected_action in {"chi", "pon", "minkan", "ankan", "kakan"}:
                     self.cached_concealed_tiles = None
