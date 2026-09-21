@@ -101,6 +101,7 @@ Status values: `todo`, `doing`, `done`, `blocked`.
 ## Completion definition
 
 - [x] `done` Recognize the current cherry-blossom lobby/menu safely for `--ranked-loop` and never run reaction actions outside a verified match. At 19:43+09 the WQHD lobby showed 段位戦/大会戦/友人戦 but was classified `unknown`; after manually opening 段位戦, the operator misclassified a menu element as Ron and logged/clicked `action_click_sent action=ron` at 19:43:58 (`artifacts/ranked-infinite/python-operator.jsonl`, screenshots `artifacts/ranked-transition-2.png` and `artifacts/ranked-menu-current.png`). Add both current skins to fail-closed classification, hard-gate reaction detection on verified in-match evidence, and add live-frame regressions proving ranked-loop navigation with zero gameplay clicks on lobby/menu screens.
+- [x] `done` Recognize the live Bronze Room reservation screen and stop ranked navigation click spam. After successfully reserving 銅の間・四人東, the operator continued classifying the reservation screen as `ranked_menu` and clicked `(1390.08,410.4)` every ~1.6 seconds from 19:48:37 onward (`artifacts/ranked-infinite/python-operator.jsonl`, screenshot `artifacts/ranked-loop-live.png`). Classify this frame as `matchmaking` (or verified reserved state), perform zero navigation/gameplay clicks while reserved, and add a real-frame regression proving the loop waits safely for match start.
 
 All tasks above are `done`; full Auto remains fail-closed whenever any recognition,
 state, legal-action, Jev, click-target or post-action verification gate is uncertain.

@@ -1695,6 +1695,23 @@ class AwayDialogDetectionTest(unittest.TestCase):
         # detector is consulted on this classified frame.
         page.mouse.click.assert_called_once_with(1390.08, 410.4)
 
+    def test_current_ranked_reservation_is_matchmaking_and_clicks_nothing(self) -> None:
+        project = Path(__file__).resolve().parents[1]
+        frame = project / "artifacts" / "ranked-loop-live.png"
+        state, confidence = classify_screen(frame, {})
+        self.assertEqual((state, confidence), ("matchmaking", 1.0))
+
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(ranked_loop=True)
+        operator.layout = {"viewport": {"width": 1920, "height": 1080}}
+        operator.last_ranked_loop_state = None
+        operator.last_ranked_loop_click_at = 0.0
+        operator.log = Mock()
+        page = Mock()
+        self.assertFalse(operator.advance_ranked_loop(page, state, confidence))
+        page.mouse.click.assert_not_called()
+        operator.log.assert_not_called()
+
     def test_compact_hand_requires_a_previously_observed_call(self) -> None:
         self.assertTrue(PythonAutoOperator.compact_hand_is_proven(0, False))
         self.assertTrue(PythonAutoOperator.compact_hand_is_proven(1, True))

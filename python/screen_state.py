@@ -93,6 +93,17 @@ def _is_cherry_blossom_ranked_menu(image: Image.Image) -> bool:
     return all(fraction >= 0.45 for fraction in dark_fractions)
 
 
+def _is_cherry_blossom_matchmaking(image: Image.Image) -> bool:
+    """Detect the bottom-left reservation card before generic ranked menu."""
+    if not _is_cherry_blossom_ranked_menu(image):
+        return False
+    width, height = image.size
+    region = image.crop((width * 0.01, height * 0.82, width * 0.29, height * 0.99)).convert("RGB")
+    pixels = list(region.getdata())
+    dark = sum(1 for pixel in pixels if max(pixel) < 100) / max(1, len(pixels))
+    return dark >= 0.65
+
+
 def load_references(directory: Path) -> dict[str, tuple[ScreenState, Image.Image]]:
     return {
         f"{state}:{index}": (state, _open(directory / filename))
@@ -109,6 +120,8 @@ def classify_screen(
     image = _open(screenshot)
     if _is_round_result_summary(image):
         return "round_result", 1.0
+    if _is_cherry_blossom_matchmaking(image):
+        return "matchmaking", 1.0
     if _is_cherry_blossom_ranked_menu(image):
         return "ranked_menu", 1.0
     if _is_cherry_blossom_lobby(image):
