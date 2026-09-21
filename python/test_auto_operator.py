@@ -1740,6 +1740,33 @@ class AwayDialogDetectionTest(unittest.TestCase):
         self.assertFalse(operator.advance_ranked_loop(page, "matchmaking", 1.0))
         self.assertEqual(page.mouse.click.call_count, 3)
 
+    def test_early_main_loop_result_branch_confirms_once_before_quick_gate(self) -> None:
+        project = Path(__file__).resolve().parents[1]
+        state, confidence = classify_screen(project / "artifacts" / "ranked-current-check.png", {})
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(ranked_loop=True, advance_screens=True)
+        operator.layout = {"viewport": {"width": 1920, "height": 1080}}
+        operator.result_screen_advanced = False
+        operator.last_ranked_loop_state = None
+        operator.last_ranked_loop_click_at = 0.0
+        operator.pending_post_call_discard = True
+        operator.pending_post_call_started_at = time.monotonic()
+        operator.round_terminal_latched = False
+        operator.round_terminal_result_observed = False
+        operator.log = Mock()
+        page = Mock()
+
+        self.assertTrue(operator.handle_early_non_gameplay_screen(page, state, confidence))
+        self.assertTrue(operator.handle_early_non_gameplay_screen(page, state, confidence))
+        page.mouse.click.assert_called_once_with(1747.2, 993.6)
+        self.assertFalse(operator.pending_post_call_discard)
+        self.assertTrue(operator.round_terminal_result_observed)
+        # Once the resulting lobby is visible, the result latch clears and
+        # ranked navigation resumes rather than issuing a gameplay action.
+        self.assertTrue(operator.handle_early_non_gameplay_screen(page, "lobby", 1.0))
+        self.assertFalse(operator.result_screen_advanced)
+        self.assertEqual(page.mouse.click.call_count, 2)
+
     def test_compact_hand_requires_a_previously_observed_call(self) -> None:
         self.assertTrue(PythonAutoOperator.compact_hand_is_proven(0, False))
         self.assertTrue(PythonAutoOperator.compact_hand_is_proven(1, True))

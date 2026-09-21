@@ -1208,6 +1208,24 @@ class PythonAutoOperator:
         self.log("screen_advanced", state=state, confidence=confidence, clickPoint=point)
         return True
 
+    def handle_early_non_gameplay_screen(self, page: Page, state: str, confidence: float) -> bool:
+        """Handle verified non-gameplay screens before latency quick gates."""
+        if state in {"round_result", "match_result"}:
+            self.pending_post_call_discard = False
+            self.pending_post_call_started_at = None
+            self.round_terminal_latched = True
+            self.round_terminal_result_observed = True
+            if self.args.advance_screens:
+                self.advance_result_screen_once(page, state, confidence)
+            return True
+        if state in {"lobby", "ranked_menu", "ranked_room", "matchmaking"}:
+            self.result_screen_advanced = False
+            if not self.advance_ranked_loop(page, state, confidence):
+                self.log("screen_state_bypassed", state=state,
+                         confidence=confidence, gameplayClicks=0)
+            return True
+        return False
+
     def record_replay(
         self,
         evaluation: dict[str, Any],
@@ -1944,11 +1962,9 @@ class PythonAutoOperator:
                     # reaction/draw gate and never run gameplay clicks there.
                     early_state, early_confidence = classify_screen(gate_frame, self.screen_references) \
                         if gate_frame else ("unknown", 0.0)
-                    if early_state in {"lobby", "ranked_menu", "ranked_room", "matchmaking"}:
-                        self.result_screen_advanced = False
-                        if not self.advance_ranked_loop(page, early_state, early_confidence):
-                            self.log("screen_state_bypassed", state=early_state,
-                                     confidence=early_confidence, gameplayClicks=0)
+                    if self.handle_early_non_gameplay_screen(
+                        page, early_state, early_confidence,
+                    ):
                         page.wait_for_timeout(max(20, round(self.args.poll * 1000)))
                         continue
                     gameplay_reactions_allowed = early_state == "match"
