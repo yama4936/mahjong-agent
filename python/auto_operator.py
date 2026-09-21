@@ -1481,8 +1481,25 @@ class PythonAutoOperator:
             trusted_open_melds = getattr(self, "cached_open_melds", 0)
             evaluated_open_melds = evaluation.get("openMelds", 0)
             if trusted_open_melds > 0 and evaluated_open_melds != trusted_open_melds:
-                raise RetryableSafetyAbort(
-                    f"evaluated open meld count changed from {trusted_open_melds} to {evaluated_open_melds}"
+                # The generic live-layout proposal can collapse the compact
+                # concealed row to two tiles and consequently infer four open
+                # melds.  A call observed by this operator is stronger
+                # evidence, but only anchor to it when recognition still
+                # explains the *complete* compact self-turn row.  Thus a real
+                # geometry/count change remains fail-closed.
+                expected_concealed = 14 - trusted_open_melds * 3
+                recognized_concealed = len(recognition.get("tiles", []))
+                if recognized_concealed != expected_concealed:
+                    raise RetryableSafetyAbort(
+                        "evaluated hand geometry does not match confirmed open meld count "
+                        f"{trusted_open_melds}: expected {expected_concealed} concealed tiles, "
+                        f"recognized {recognized_concealed}"
+                    )
+                self.log(
+                    "open_meld_revalidation_anchored",
+                    confirmedOpenMelds=trusted_open_melds,
+                    rejectedInferredOpenMelds=evaluated_open_melds,
+                    recognizedConcealedTiles=recognized_concealed,
                 )
             if not discard_point_in_hand_geometry(point, self.layout, trusted_open_melds):
                 raise RetryableSafetyAbort(
@@ -2016,7 +2033,7 @@ class PythonAutoOperator:
                             concealed_tiles=self.cached_concealed_tiles,
                             evaluate_force_auto=True,
                             dynamic_layout=self.dynamic_layout_required,
-                            open_melds=self.cached_open_melds if self.cached_concealed_tiles is not None else None,
+                            open_melds=self.cached_open_melds if self.cached_open_melds > 0 else None,
                             public_observation=public_observation,
                             force_auto_action_buttons=self_action_buttons,
                         )
@@ -2026,6 +2043,7 @@ class PythonAutoOperator:
                         try:
                             evaluation = self.recognize_resident(
                                 screenshot_path, evaluate_force_auto=True, dynamic_layout=True,
+                                open_melds=self.cached_open_melds if self.cached_open_melds > 0 else None,
                                 public_observation=public_observation,
                                 force_auto_action_buttons=self_action_buttons,
                             )

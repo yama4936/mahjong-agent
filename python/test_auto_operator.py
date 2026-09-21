@@ -346,6 +346,7 @@ class AwayDialogDetectionTest(unittest.TestCase):
                 operator.run(page)
 
             operator.recognize_resident.assert_called_once()
+            self.assertEqual(operator.recognize_resident.call_args.kwargs["open_melds"], 1)
             self.assertTrue(operator.dynamic_layout_required)
             self.assertEqual(operator.cached_open_melds, 1)
             self.assertTrue(any(
@@ -954,12 +955,89 @@ class AwayDialogDetectionTest(unittest.TestCase):
             "openMelds": 4,
         }
 
-        with self.assertRaisesRegex(RetryableSafetyAbort, "open meld count changed"):
+        with self.assertRaisesRegex(RetryableSafetyAbort, "does not match confirmed open meld count"):
             operator.execute(
                 page, evaluation,
                 evaluated_hand=crop_screenshot(frame, operator.hand_clip),
                 evaluated_full=frame,
                 evaluated_draw_generation=2,
+            )
+        page.mouse.click.assert_not_called()
+
+    def test_live_frame_anchors_pre_click_meld_count_to_confirmed_call(self) -> None:
+        project = Path(__file__).resolve().parents[1]
+        frame = (project / "artifacts" / "debug-300" / "frames" /
+                 "2026-09-21T05-03-29.704020+00-00.jpg").read_bytes()
+        hand_clip = {"x": 223, "y": 926, "width": 1355, "height": 146}
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(mode="force-auto", allow_local_discard=False,
+                                           stability_pixel_delta=1.5)
+        operator.layout = load_json(project / "config" / "layout.json")
+        operator.hand_clip = hand_clip
+        operator.river_clip = {"x": 740, "y": 520, "width": 430, "height": 300}
+        operator.cached_open_melds = 1
+        operator.screencast_session = Mock()
+        operator.latest_screencast_frame = frame
+        operator.screencast_draw_generation = 9
+        operator.log = Mock()
+        operator.confirm_discard = Mock(return_value={"confirmation": "live-frame-confirmed"})
+        page = Mock()
+        evaluation = {
+            "decision": {"selectedAction": {"action": "discard", "tile": "7m"}},
+            # Eleven tiles prove the compact one-meld self-turn geometry even
+            # though the old generic proposal promoted the top-level count.
+            "recognition": {"tiles": ["1m"] * 10 + ["7m"], "safe": True},
+            "clickIndex": 10,
+            "clickPoint": {"x": 1247, "y": 999},
+            "openMelds": 4,
+        }
+
+        receipt = operator.execute(
+            page, evaluation,
+            evaluated_hand=crop_screenshot(frame, hand_clip),
+            evaluated_full=frame,
+            evaluated_draw_generation=9,
+        )
+
+        self.assertTrue(receipt["clicked"])
+        operator.log.assert_any_call(
+            "open_meld_revalidation_anchored",
+            confirmedOpenMelds=1,
+            rejectedInferredOpenMelds=4,
+            recognizedConcealedTiles=11,
+        )
+        page.mouse.click.assert_called_once_with(1247, 999, click_count=2, delay=80)
+
+    def test_pre_click_meld_anchor_rejects_genuine_compact_geometry_change(self) -> None:
+        project = Path(__file__).resolve().parents[1]
+        frame = (project / "artifacts" / "debug-300" / "frames" /
+                 "2026-09-21T05-03-29.704020+00-00.jpg").read_bytes()
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(mode="force-auto", allow_local_discard=False,
+                                           stability_pixel_delta=1.5)
+        operator.layout = load_json(project / "config" / "layout.json")
+        operator.hand_clip = {"x": 223, "y": 926, "width": 1355, "height": 146}
+        operator.river_clip = {"x": 740, "y": 520, "width": 430, "height": 300}
+        operator.cached_open_melds = 1
+        operator.screencast_session = Mock()
+        operator.latest_screencast_frame = frame
+        operator.screencast_draw_generation = 10
+        operator.log = Mock()
+        page = Mock()
+        evaluation = {
+            "decision": {"selectedAction": {"action": "discard", "tile": "7m"}},
+            "recognition": {"tiles": ["1m"] * 8, "safe": True},
+            "clickIndex": 7,
+            "clickPoint": {"x": 1100, "y": 999},
+            "openMelds": 2,
+        }
+
+        with self.assertRaisesRegex(RetryableSafetyAbort, "expected 11 concealed tiles, recognized 8"):
+            operator.execute(
+                page, evaluation,
+                evaluated_hand=crop_screenshot(frame, operator.hand_clip),
+                evaluated_full=frame,
+                evaluated_draw_generation=10,
             )
         page.mouse.click.assert_not_called()
 

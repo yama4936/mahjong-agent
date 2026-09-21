@@ -5,7 +5,7 @@ import { cachedPublicStatePatch, type CachedPublicObservation } from "../agent/p
 import { isHandPlanCompatible, JevClient } from "../jev/client.js";
 import { parseGameState, parsePublicGameState } from "../game/state.js";
 import { parseGameTile } from "../game/tiles.js";
-import { proposeLiveHandLayout } from "./handLayoutProposal.js";
+import { proposeHandLayout, proposeLiveHandLayout } from "./handLayoutProposal.js";
 import { layoutSchema } from "./layout.js";
 import { recognizeHand, recognizeTileSlots, warmTemplateCache, type MatcherOptions } from "./templateMatcher.js";
 
@@ -68,7 +68,9 @@ for await (const line of lines) {
     const activeLayout = request.dynamicLayout
       ? {
           ...layout,
-          ...(await proposeLiveHandLayout(request.screenshot)),
+          ...(request.openMelds !== undefined && request.openMelds > 0
+            ? await proposeHandLayout(request.screenshot, [14 - request.openMelds * 3])
+            : await proposeLiveHandLayout(request.screenshot)),
           tileMatcher: layout.tileMatcher,
           minimumTileConfidence: layout.minimumTileConfidence,
           minimumTilePresence: layout.minimumTilePresence,
