@@ -1712,6 +1712,34 @@ class AwayDialogDetectionTest(unittest.TestCase):
         page.mouse.click.assert_not_called()
         operator.log.assert_not_called()
 
+    def test_ranked_result_confirms_once_then_navigation_reaches_reservation(self) -> None:
+        project = Path(__file__).resolve().parents[1]
+        result = project / "artifacts" / "ranked-current-check.png"
+        lobby = project / "artifacts" / "ranked-transition-2.png"
+        menu = project / "artifacts" / "ranked-menu-current.png"
+        reserved = project / "artifacts" / "ranked-loop-live.png"
+        self.assertEqual(classify_screen(result, {}), ("match_result", 1.0))
+        self.assertEqual(classify_screen(lobby, {}), ("lobby", 1.0))
+        self.assertEqual(classify_screen(menu, {}), ("ranked_menu", 1.0))
+        self.assertEqual(classify_screen(reserved, {}), ("matchmaking", 1.0))
+
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(ranked_loop=True)
+        operator.layout = {"viewport": {"width": 1920, "height": 1080}}
+        operator.result_screen_advanced = False
+        operator.last_ranked_loop_state = None
+        operator.last_ranked_loop_click_at = 0.0
+        operator.log = Mock()
+        page = Mock()
+        self.assertTrue(operator.advance_result_screen_once(page, "match_result", 1.0))
+        self.assertFalse(operator.advance_result_screen_once(page, "match_result", 1.0))
+        operator.result_screen_advanced = False
+        self.assertTrue(operator.advance_ranked_loop(page, "lobby", 1.0))
+        operator.last_ranked_loop_state = None
+        self.assertTrue(operator.advance_ranked_loop(page, "ranked_menu", 1.0))
+        self.assertFalse(operator.advance_ranked_loop(page, "matchmaking", 1.0))
+        self.assertEqual(page.mouse.click.call_count, 3)
+
     def test_compact_hand_requires_a_previously_observed_call(self) -> None:
         self.assertTrue(PythonAutoOperator.compact_hand_is_proven(0, False))
         self.assertTrue(PythonAutoOperator.compact_hand_is_proven(1, True))

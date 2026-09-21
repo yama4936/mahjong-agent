@@ -56,6 +56,21 @@ def _is_round_result_summary(image: Image.Image) -> bool:
     return 0.25 <= blue <= 0.75 and bright >= 0.05
 
 
+def _is_ranked_match_result(image: Image.Image) -> bool:
+    """Detect the four-place result board plus its yellow confirm button."""
+    width, height = image.size
+    if width < 1200 or height < 700:
+        return False
+    button = image.crop((width * 0.84, height * 0.88, width * 0.98, height * 0.97)).convert("RGB")
+    pixels = list(button.getdata())
+    yellow = sum(1 for red, green, blue in pixels if red > 180 and green > 130 and blue < 120) / max(1, len(pixels))
+    board = image.crop((width * 0.42, height * 0.16, width * 0.94, height * 0.87)).convert("RGB")
+    board_pixels = list(board.getdata())
+    dark = sum(1 for pixel in board_pixels if max(pixel) < 100) / max(1, len(board_pixels))
+    white = sum(1 for pixel in board_pixels if min(pixel) > 180) / max(1, len(board_pixels))
+    return yellow >= 0.25 and dark >= 0.25 and white >= 0.03
+
+
 def _is_cherry_blossom_lobby(image: Image.Image) -> bool:
     """Recognize the current WQHD lobby from its three stacked mode panels."""
     width, height = image.size
@@ -120,6 +135,8 @@ def classify_screen(
     image = _open(screenshot)
     if _is_round_result_summary(image):
         return "round_result", 1.0
+    if _is_ranked_match_result(image):
+        return "match_result", 1.0
     if _is_cherry_blossom_matchmaking(image):
         return "matchmaking", 1.0
     if _is_cherry_blossom_ranked_menu(image):

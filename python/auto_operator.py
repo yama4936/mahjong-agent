@@ -756,6 +756,7 @@ class PythonAutoOperator:
         self.round_terminal_result_observed = False
         self.last_ranked_loop_state: str | None = None
         self.last_ranked_loop_click_at = 0.0
+        self.result_screen_advanced = False
         if self.log_path.exists():
             for line in reversed(self.log_path.read_text(encoding="utf-8").splitlines()):
                 try:
@@ -1193,6 +1194,18 @@ class PythonAutoOperator:
         self.last_ranked_loop_state = state
         self.last_ranked_loop_click_at = now
         self.log("ranked_loop_advanced", state=state, confidence=confidence, clickPoint=point)
+        return True
+
+    def advance_result_screen_once(self, page: Page, state: str, confidence: float) -> bool:
+        """Confirm one terminal result once; wait for a different screen afterward."""
+        if state not in {"round_result", "match_result"} or self.result_screen_advanced:
+            return False
+        y_ratio = 0.92 if state == "match_result" else 0.935
+        point = {"x": self.layout["viewport"]["width"] * 0.91,
+                 "y": self.layout["viewport"]["height"] * y_ratio}
+        page.mouse.click(point["x"], point["y"])
+        self.result_screen_advanced = True
+        self.log("screen_advanced", state=state, confidence=confidence, clickPoint=point)
         return True
 
     def record_replay(
@@ -1932,6 +1945,7 @@ class PythonAutoOperator:
                     early_state, early_confidence = classify_screen(gate_frame, self.screen_references) \
                         if gate_frame else ("unknown", 0.0)
                     if early_state in {"lobby", "ranked_menu", "ranked_room", "matchmaking"}:
+                        self.result_screen_advanced = False
                         if not self.advance_ranked_loop(page, early_state, early_confidence):
                             self.log("screen_state_bypassed", state=early_state,
                                      confidence=early_confidence, gameplayClicks=0)
@@ -2069,12 +2083,11 @@ class PythonAutoOperator:
                     self.armed = True
                     self.attach_outcome("match" if screen_state == "match_result" else "round", full_screen, screen_confidence)
                     if self.args.advance_screens:
-                        y_ratio = 0.92 if screen_state == "match_result" else 0.935
-                        point = {"x": self.layout["viewport"]["width"] * 0.91, "y": self.layout["viewport"]["height"] * y_ratio}
-                        page.mouse.click(point["x"], point["y"])
-                        self.log("screen_advanced", state=screen_state, clickPoint=point)
+                        self.advance_result_screen_once(page, screen_state, screen_confidence)
                         time.sleep(self.args.poll)
                         continue
+                else:
+                    self.result_screen_advanced = False
                 if getattr(self, "round_terminal_latched", False):
                     if getattr(self, "round_terminal_result_observed", False) and screen_state == "match" \
                             and closed_concealed_row_visible(full_screen, self.layout):
