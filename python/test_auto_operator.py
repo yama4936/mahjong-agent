@@ -611,6 +611,41 @@ class AwayDialogDetectionTest(unittest.TestCase):
         self.assertIsNotNone(button)
         self.assertEqual(button["center"], {"x": 950.0, "y": 696.5})
 
+    def test_live_magenta_ron_is_not_promoted_to_a_fourth_pon(self) -> None:
+        project = Path(__file__).resolve().parents[1]
+        layout = load_json(project / "config" / "layout.json")
+        prompt = (project / "artifacts" / "friend-5-20" / "frames" /
+                  "2026-09-21T08-38-54.094464+00-00.png").read_bytes()
+        result = (project / "artifacts" / "friend-5-20-four-meld-stall.png").read_bytes()
+        pass_region = layout["actionButtonRegions"]["pass"]
+
+        self.assertEqual(force_auto_call_buttons(prompt, layout["viewport"]), [])
+        button = force_auto_reaction_win_button(prompt, layout["viewport"], pass_region)
+        self.assertIsNotNone(button)
+
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(mode="force-auto", confirmation_timeout=1)
+        operator.layout = layout
+        operator.last_processed_hand = "old"
+        operator.armed = False
+        operator.pending_post_call_discard = True
+        operator.pending_post_call_started_at = time.monotonic()
+        operator.round_terminal_latched = False
+        operator.round_terminal_result_observed = False
+        operator.log = Mock()
+        page = Mock()
+        page.screenshot.return_value = result
+
+        started = time.monotonic()
+        receipt = operator.execute_force_auto_reaction_win(page, prompt, button)
+
+        self.assertEqual(receipt["action"], "ron")
+        self.assertLess(time.monotonic() - started, 5.0)
+        self.assertTrue(operator.round_terminal_latched)
+        self.assertFalse(operator.pending_post_call_discard)
+        operator.log.assert_called_once()
+        self.assertEqual(operator.log.call_args.kwargs["action"], "ron")
+
     def test_single_call_arms_compact_hand_discard_after_button_disappears(self) -> None:
         viewport = {"width": 1600, "height": 900}
         prompt = Image.new("RGB", (1600, 900), (25, 55, 85))

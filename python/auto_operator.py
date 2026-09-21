@@ -264,7 +264,15 @@ def force_auto_call_buttons(screenshot: bytes, viewport: dict[str, int]) -> list
             current["x"] = previous_right + 10
             current["width"] = max(0, current_right - current["x"])
             current["center"]["x"] = current["x"] + current["width"] / 2
-    return [button for button in buttons if button["width"] >= viewport["width"] * 0.07]
+    with Image.open(io.BytesIO(screenshot)) as image:
+        pixels = image.convert("RGB")
+        filtered = []
+        for button in buttons:
+            crop = pixels.crop((button["x"], button["y"], button["x"] + button["width"], button["y"] + button["height"]))
+            magenta = fraction_matching(crop, lambda red, green, blue: red > 100 and blue > 70 and red - green > 25 and blue - green > 10)
+            if button["width"] >= viewport["width"] * 0.07 and magenta < 0.015:
+                filtered.append(button)
+    return filtered
 
 
 def post_call_transition(call_action: str, prior_open_melds: int) -> dict[str, Any]:
@@ -370,9 +378,39 @@ def force_auto_reaction_win_button(
     screenshot: bytes, viewport: dict[str, int], pass_region: dict[str, float] | None,
 ) -> dict[str, Any] | None:
     """Return one orange/red ron button only while a reaction prompt is visible."""
-    if not pass_region or not is_force_auto_pass_prompt(screenshot, pass_region):
+    if not pass_region or not (
+        is_force_auto_pass_prompt(screenshot, pass_region)
+        or is_contextual_reaction_pass(screenshot, pass_region, 1)
+    ):
         return None
     buttons = force_auto_self_action_buttons(screenshot, viewport)
+    if not buttons:
+        left, right = round(viewport["width"] * 0.35), round(viewport["width"] * 0.75)
+        top, bottom = round(viewport["height"] * 0.68), round(viewport["height"] * 0.875)
+        with Image.open(io.BytesIO(screenshot)) as image:
+            pixels = image.convert("RGB")
+            columns = []
+            for x in range(left, right):
+                ys = []
+                for y in range(top, bottom):
+                    red, green, blue = pixels.getpixel((x, y))
+                    if red > 100 and blue > 70 and red - green > 25 and blue - green > 10:
+                        ys.append(y)
+                if len(ys) >= 5:
+                    columns.append((x, min(ys), max(ys)))
+        groups: list[list[tuple[int, int, int]]] = []
+        for column in columns:
+            if not groups or column[0] - groups[-1][-1][0] > 10:
+                groups.append([column])
+            else:
+                groups[-1].append(column)
+        buttons = [{
+            "x": group[0][0], "y": min(column[1] for column in group),
+            "width": group[-1][0] - group[0][0],
+            "height": max(column[2] for column in group) - min(column[1] for column in group),
+            "center": {"x": (group[0][0] + group[-1][0]) / 2,
+                       "y": (min(column[1] for column in group) + max(column[2] for column in group)) / 2},
+        } for group in groups if group[-1][0] - group[0][0] >= viewport["width"] * 0.07]
     return buttons[0] if len(buttons) == 1 else None
 
 
@@ -1817,6 +1855,8 @@ class PythonAutoOperator:
             if not force_auto_reaction_win_button(after, self.layout["viewport"], pass_region):
                 self.last_processed_hand = None
                 self.armed = True
+                self.pending_post_call_discard = False
+                self.pending_post_call_started_at = None
                 self.round_terminal_latched = True
                 self.round_terminal_result_observed = False
                 return {
