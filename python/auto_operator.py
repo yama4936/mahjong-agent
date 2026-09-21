@@ -446,6 +446,25 @@ def discard_point_in_hand_geometry(
     return left <= float(point["x"]) <= right and top <= float(point["y"]) <= bottom
 
 
+def stable_hand_comparison_region(
+    layout: dict[str, Any], open_melds: int,
+) -> dict[str, float] | None:
+    """Tile-face-only ROI, excluding meld/call animation and bottom effects."""
+    slots = layout.get("handSlots", [])
+    if not slots:
+        return None
+    draw_slot = open_hand_draw_slot(layout, open_melds) if open_melds > 0 else layout.get("drawSlot")
+    if not draw_slot:
+        return None
+    left = float(slots[0]["x"]) + 10
+    top = float(slots[0]["y"]) + 10
+    right = float(draw_slot["x"] + draw_slot["width"]) - 8
+    bottom = min(float(slot["y"] + slot["height"]) for slot in slots) - 28
+    if right <= left or bottom <= top:
+        return None
+    return {"x": left, "y": top, "width": right - left, "height": bottom - top}
+
+
 def local_discard_allowed(args: argparse.Namespace, evaluation: dict[str, Any]) -> bool:
     decision = evaluation.get("decision", {})
     return bool(
@@ -1442,8 +1461,14 @@ class PythonAutoOperator:
             if force_auto and screencast_session is not None else None
         current_streamed_hand = crop_screenshot(current_streamed_full, self.hand_clip) \
             if current_streamed_full is not None else None
-        streamed_delta = mean_pixel_delta(evaluated_hand, current_streamed_hand) \
-            if evaluated_hand is not None and current_streamed_hand is not None else None
+        trusted_open_melds = getattr(self, "cached_open_melds", 0)
+        stable_region = stable_hand_comparison_region(self.layout, trusted_open_melds)
+        focused_evaluated_hand = crop_screenshot(evaluated_full, stable_region) \
+            if evaluated_full is not None and stable_region is not None else evaluated_hand
+        focused_streamed_hand = crop_screenshot(current_streamed_full, stable_region) \
+            if current_streamed_full is not None and stable_region is not None else current_streamed_hand
+        streamed_delta = mean_pixel_delta(focused_evaluated_hand, focused_streamed_hand) \
+            if focused_evaluated_hand is not None and focused_streamed_hand is not None else None
         streamed_turn_is_current = bool(
             evaluated_draw_generation is not None
             and getattr(self, "screencast_draw_generation", None) == evaluated_draw_generation
@@ -1463,7 +1488,9 @@ class PythonAutoOperator:
             if evaluated_hand is None:
                 raise RuntimeError("force-auto requires the stable evaluated hand image")
             if not streamed_turn_is_current:
-                evaluated_delta = mean_pixel_delta(evaluated_hand, hand_before)
+                focused_hand_before = crop_screenshot(pre_click_full, stable_region) \
+                    if stable_region is not None else hand_before
+                evaluated_delta = mean_pixel_delta(focused_evaluated_hand, focused_hand_before)
                 if evaluated_delta > self.args.stability_pixel_delta:
                     raise RetryableSafetyAbort(
                         f"hand changed since evaluation (pixel delta={evaluated_delta:.3f})"
