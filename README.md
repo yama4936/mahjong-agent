@@ -1,6 +1,6 @@
 # Jantama Advisor
 
-判定GUIは`npm run dashboard -- --operator-log artifacts/python-face-trial/python-operator.jsonl`で起動できます。ライブ画面とは別に、保存ログの判定時刻・認識手牌・推奨打牌・認識スコア・クリック実行記録・停止理由を表示します。操作者を別のログ保存先で起動した場合は`--operator-log`も変更してください。GUIは閲覧専用で、自動操作を開始しません。
+判定GUIは操作者と同時に `http://127.0.0.1:8787` で起動し、操作者の `--artifacts` 配下にある `python-operator.jsonl` を自動的に参照します。ライブ画面とは別に、保存ログの判定時刻・認識手牌・推奨打牌・選択確率・認識スコア・クリック実行記録・停止理由を表示します。GUIは閲覧専用です。GUIが不要な起動では `--no-dashboard` を指定できます。単独起動する場合は`npm run dashboard -- --operator-log artifacts/python-face-trial/python-operator.jsonl`も使用できます。
 
 雀魂のスクリーンショットを固定座標＋牌テンプレートで読み取り、合法な打牌候補のシャンテン・受け入れを計算し、任意でTypeSafe Jevに最終候補を選択させるMVPです。
 

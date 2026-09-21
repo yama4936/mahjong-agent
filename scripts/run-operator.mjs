@@ -1,5 +1,5 @@
 import { existsSync, readdirSync } from "node:fs";
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import path from "node:path";
 
 const root = path.resolve(import.meta.dirname, "..");
@@ -36,6 +36,37 @@ if (mode !== "observer") defaults.push("--resume-away");
 const actionTemplates = path.join(root, "templates", "actions");
 if (existsSync(actionTemplates)) defaults.push("--action-templates", actionTemplates);
 
-const result = spawnSync(python, [...defaults, ...process.argv.slice(3)], { cwd: root, stdio: "inherit" });
-if (result.error) throw result.error;
-process.exit(result.status ?? 1);
+const forwarded = process.argv.slice(3);
+const dashboardDisabled = forwarded.includes("--no-dashboard");
+const operatorArgs = forwarded.filter((value) => value !== "--no-dashboard");
+const artifactsIndex = operatorArgs.findIndex((value) => value === "--artifacts");
+const artifactsEquals = operatorArgs.find((value) => value.startsWith("--artifacts="));
+const artifacts = artifactsIndex >= 0 && operatorArgs[artifactsIndex + 1]
+  ? operatorArgs[artifactsIndex + 1]
+  : artifactsEquals?.slice("--artifacts=".length) || "artifacts/python-auto";
+const operatorLog = path.resolve(root, artifacts, "python-operator.jsonl");
+
+let dashboard;
+if (!dashboardDisabled) {
+  dashboard = spawn(python, [
+    path.join(root, "python", "dashboard.py"),
+    "--operator-log", operatorLog,
+  ], { cwd: root, stdio: "inherit", windowsHide: true });
+  dashboard.on("error", (error) => console.error(`Dashboard failed to start: ${error.message}`));
+}
+
+const operator = spawn(python, [...defaults, ...operatorArgs], { cwd: root, stdio: "inherit" });
+const stopChildren = (signal) => {
+  if (!operator.killed) operator.kill(signal);
+  if (dashboard && !dashboard.killed) dashboard.kill(signal);
+};
+process.once("SIGINT", () => stopChildren("SIGINT"));
+process.once("SIGTERM", () => stopChildren("SIGTERM"));
+operator.on("error", (error) => {
+  stopChildren("SIGTERM");
+  throw error;
+});
+operator.on("exit", (code, signal) => {
+  if (dashboard && !dashboard.killed) dashboard.kill("SIGTERM");
+  process.exitCode = code ?? (signal ? 1 : 0);
+});
