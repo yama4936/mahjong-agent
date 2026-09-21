@@ -639,6 +639,7 @@ class PythonAutoOperator:
         self.restart_open_hand_probe_hash: str | None = None
         self.open_meld_candidate: int | None = None
         self.open_meld_candidate_frames: set[str] = set()
+        self.closed_new_round_candidate_frames: set[str] = set()
         self.round_terminal_latched = False
         self.round_terminal_result_observed = False
         self.last_ranked_loop_state: str | None = None
@@ -1047,6 +1048,17 @@ class PythonAutoOperator:
             self.open_meld_candidate_frames = set()
         self.open_meld_candidate_frames.add(hashlib.sha256(frame).hexdigest())
         return candidate if len(self.open_meld_candidate_frames) >= 2 else None
+
+    def stable_closed_new_round(self, frame: bytes) -> bool:
+        """Confirm a closed new hand twice before clearing prior meld state."""
+        if not closed_concealed_row_visible(frame, self.layout) \
+                or geometric_open_meld_count(frame, self.layout) is not None:
+            self.closed_new_round_candidate_frames = set()
+            return False
+        if not hasattr(self, "closed_new_round_candidate_frames"):
+            self.closed_new_round_candidate_frames = set()
+        self.closed_new_round_candidate_frames.add(hashlib.sha256(frame).hexdigest())
+        return len(self.closed_new_round_candidate_frames) >= 2
 
     def advance_ranked_loop(self, page: Page, state: str, confidence: float) -> bool:
         """Enter or re-enter Bronze Room four-player East after every match."""
@@ -1758,6 +1770,27 @@ class PythonAutoOperator:
                     )
                     geometric_open_melds = geometric_open_meld_count(gate_frame, self.layout) \
                         if gate_frame else None
+                    if gate_frame and self.cached_open_melds > 0 \
+                            and self.stable_closed_new_round(gate_frame):
+                        previous_open_melds = self.cached_open_melds
+                        self.cached_concealed_tiles = None
+                        self.cached_open_melds = 0
+                        self.dynamic_layout_required = False
+                        self.pending_post_call_discard = False
+                        self.pending_post_call_started_at = None
+                        self.restart_open_hand_probe_hash = None
+                        self.open_meld_candidate = None
+                        self.open_meld_candidate_frames = set()
+                        self.cached_public_observation = None
+                        self.public_cache_generation += 1
+                        self.public_cache_last_frame_hash = None
+                        restart_open_melds = None
+                        geometric_open_melds = None
+                        self.log(
+                            "new_round_hand_state_reset",
+                            previousOpenMelds=previous_open_melds,
+                            source="stable_closed_13_tile_row",
+                        )
                     if self.cached_open_melds > 0:
                         # A call executed and confirmed by this process is
                         # stronger than asynchronously promoted public melds.
@@ -1854,6 +1887,7 @@ class PythonAutoOperator:
                     self.restart_open_hand_probe_hash = None
                     self.open_meld_candidate = None
                     self.open_meld_candidate_frames = set()
+                    self.closed_new_round_candidate_frames = set()
                     self.public_cache_generation += 1
                     self.public_cache_last_frame_hash = None
                     self.cached_public_observation = None

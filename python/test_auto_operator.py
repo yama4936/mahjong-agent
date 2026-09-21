@@ -328,6 +328,22 @@ class AwayDialogDetectionTest(unittest.TestCase):
         ):
             self.assertEqual(geometric_open_meld_count((frames / name).read_bytes(), layout), 3)
 
+    def test_closed_new_round_requires_two_frames_and_clears_prior_meld_evidence(self) -> None:
+        project = Path(__file__).resolve().parents[1]
+        layout = load_json(project / "config" / "layout.json")
+        frames = project / "artifacts" / "friend-5-20" / "frames"
+        first = (frames / "2026-09-21T06-15-22.969232+00-00.jpg").read_bytes()
+        second = (frames / "2026-09-21T06-15-24.317758+00-00.jpg").read_bytes()
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.layout = layout
+        operator.closed_new_round_candidate_frames = set()
+
+        self.assertFalse(operator.stable_closed_new_round(first))
+        self.assertTrue(operator.stable_closed_new_round(second))
+        # An open hand in the same round must not satisfy the reset proof.
+        open_frame = (frames / "2026-09-21T05-46-33.088404+00-00.jpg").read_bytes()
+        self.assertFalse(operator.stable_closed_new_round(open_frame))
+
     def test_run_loop_reaches_post_pon_next_draw_with_trusted_open_meld_count(self) -> None:
         project = Path(__file__).resolve().parents[1]
         layout = load_json(project / "config" / "layout.json")
