@@ -9,7 +9,7 @@ import tempfile
 import json
 from unittest.mock import Mock, patch
 
-from auto_operator import PythonAutoOperator, away_resume_geometry, force_auto_call_buttons, force_auto_reaction_win_button, force_auto_self_action_buttons, is_away_resume_dialog, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, merge_public_observations, post_call_transition, send_discard_click, should_guard_tenpai_reaction, should_process_reaction_prompt
+from auto_operator import PythonAutoOperator, RetryableSafetyAbort, away_resume_geometry, crop_screenshot, discard_point_in_hand_geometry, force_auto_call_buttons, force_auto_reaction_win_button, force_auto_self_action_buttons, geometric_open_meld_count, is_away_resume_dialog, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, merge_public_observations, open_hand_draw_slot, post_call_transition, send_discard_click, should_guard_tenpai_reaction, should_process_reaction_prompt
 from screen_state import classify_screen, load_references
 
 
@@ -25,6 +25,101 @@ class RecordingMouse:
 
 
 class AwayDialogDetectionTest(unittest.TestCase):
+    def test_screencast_rejects_resized_frame_and_clears_stale_gate(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.layout = {
+            "viewport": {"width": 1920, "height": 1080},
+            "drawSlot": {"x": 1600, "y": 900, "width": 100, "height": 100},
+        }
+        operator.latest_screencast_frame = b"stale calibrated frame"
+        operator.screencast_sequence = 4
+        operator.screencast_draw_occupied = True
+        operator.screencast_draw_generation = 2
+        operator.rejected_screencast_size = None
+        operator.log = Mock()
+        resized = io.BytesIO()
+        Image.new("RGB", (1058, 1080), "white").save(resized, format="JPEG")
+
+        self.assertFalse(operator.accept_screencast_frame(resized.getvalue()))
+
+        self.assertIsNone(operator.latest_screencast_frame)
+        self.assertIsNone(operator.screencast_draw_occupied)
+        self.assertEqual(operator.screencast_draw_generation, 2)
+        self.assertEqual(operator.screencast_sequence, 5)
+        operator.log.assert_called_once_with(
+            "screencast_frame_rejected", expected=[1920, 1080], actual=[1058, 1080],
+        )
+
+    def test_screencast_accepts_calibrated_frame_after_resize(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.layout = {
+            "viewport": {"width": 1920, "height": 1080},
+            "drawSlot": {"x": 1600, "y": 900, "width": 100, "height": 100},
+        }
+        operator.latest_screencast_frame = None
+        operator.screencast_sequence = 1
+        operator.screencast_draw_occupied = None
+        operator.screencast_draw_generation = 0
+        operator.rejected_screencast_size = (1058, 1080)
+        operator.log = Mock()
+        calibrated = io.BytesIO()
+        Image.new("RGB", (1920, 1080), "white").save(calibrated, format="JPEG")
+
+        self.assertTrue(operator.accept_screencast_frame(calibrated.getvalue()))
+
+        self.assertEqual(operator.latest_screencast_frame, calibrated.getvalue())
+        self.assertTrue(operator.screencast_draw_occupied)
+        self.assertEqual(operator.screencast_draw_generation, 1)
+        self.assertIsNone(operator.rejected_screencast_size)
+
+    def test_silent_screencast_is_seeded_from_exact_size_screenshot_once(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.layout = {
+            "viewport": {"width": 1920, "height": 1080},
+            "drawSlot": {"x": 1600, "y": 900, "width": 100, "height": 100},
+        }
+        operator.screencast_session = Mock()
+        operator.latest_screencast_frame = None
+        operator.screencast_sequence = 0
+        operator.screencast_draw_occupied = None
+        operator.screencast_draw_generation = 0
+        operator.rejected_screencast_size = None
+        operator.log = Mock()
+        frame = io.BytesIO()
+        Image.new("RGB", (1920, 1080), "white").save(frame, format="PNG")
+        page = Mock()
+        page.screenshot.return_value = frame.getvalue()
+
+        self.assertTrue(operator.seed_silent_screencast_gate(page))
+        self.assertFalse(operator.seed_silent_screencast_gate(page))
+
+        self.assertEqual(operator.latest_screencast_frame, frame.getvalue())
+        self.assertEqual(operator.screencast_sequence, 1)
+        page.screenshot.assert_called_once_with(animations="disabled")
+        operator.log.assert_called_once_with(
+            "screencast_gate_seeded", source="one_shot_screenshot",
+        )
+
+    def test_real_stream_frame_wins_seed_race_without_duplicate_gate_event(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.screencast_session = Mock()
+        operator.latest_screencast_frame = None
+        operator.screencast_sequence = 0
+        operator.log = Mock()
+        page = Mock()
+
+        def stream_arrives(**_kwargs):
+            operator.latest_screencast_frame = b"stream"
+            operator.screencast_sequence = 1
+            return b"screenshot"
+
+        page.screenshot.side_effect = stream_arrives
+
+        self.assertFalse(operator.seed_silent_screencast_gate(page))
+        self.assertEqual(operator.latest_screencast_frame, b"stream")
+        self.assertEqual(operator.screencast_sequence, 1)
+        operator.log.assert_not_called()
+
     def test_public_cache_only_grows_rivers_and_preserves_riichi(self) -> None:
         previous = {
             "doraIndicators": ["4m"], "ownDiscards": ["1p"], "ownRiichiDeclared": True,
@@ -77,6 +172,118 @@ class AwayDialogDetectionTest(unittest.TestCase):
         opponent_turn = io.BytesIO()
         Image.new("RGB", (300, 200), (25, 55, 85)).save(opponent_turn, format="PNG")
         self.assertFalse(is_draw_slot_occupied(opponent_turn.getvalue(), region))
+
+    def test_open_hand_draw_slot_shifts_three_tile_pitches_per_meld(self) -> None:
+        layout = {
+            "viewport": {"width": 1920, "height": 1080},
+            "handSlots": [
+                {"x": 223, "y": 926, "width": 92, "height": 146},
+                {"x": 318, "y": 926, "width": 92, "height": 146},
+                {"x": 413, "y": 926, "width": 92, "height": 146},
+            ],
+            "drawSlot": {"x": 1486, "y": 926, "width": 92, "height": 146},
+        }
+
+        self.assertEqual(open_hand_draw_slot(layout, 1), {
+            "x": 1201.0, "y": 926.0, "width": 92.0, "height": 146.0,
+        })
+        self.assertEqual(open_hand_draw_slot(layout, 2), {
+            "x": 916.0, "y": 926.0, "width": 92.0, "height": 146.0,
+        })
+        self.assertIsNone(open_hand_draw_slot(layout, 0))
+
+    def test_shifted_open_hand_draw_slot_does_not_match_empty_opponent_turn(self) -> None:
+        region = {"x": 1201, "y": 926, "width": 92, "height": 146}
+        own_turn = io.BytesIO()
+        image = Image.new("RGB", (1920, 1080), (25, 55, 85))
+        ImageDraw.Draw(image).rectangle((1201, 926, 1293, 1072), fill=(230, 225, 210))
+        image.save(own_turn, format="PNG")
+        self.assertTrue(is_draw_slot_occupied(own_turn.getvalue(), region))
+
+        opponent_turn = io.BytesIO()
+        Image.new("RGB", (1920, 1080), (25, 55, 85)).save(opponent_turn, format="PNG")
+        self.assertFalse(is_draw_slot_occupied(opponent_turn.getvalue(), region))
+
+    def test_live_compact_hand_geometry_recovers_unpromoted_own_meld(self) -> None:
+        project = Path(__file__).resolve().parents[1]
+        layout = load_json(project / "config" / "layout.json")
+        frame = (project / "artifacts" / "debug-300-live-now2.png").read_bytes()
+
+        self.assertEqual(geometric_open_meld_count(frame, layout), 1)
+
+    def test_run_loop_initializes_public_observation_before_geometry_exact_gate(self) -> None:
+        project = Path(__file__).resolve().parents[1]
+        layout = load_json(project / "config" / "layout.json")
+        frame = (project / "artifacts" / "debug-300-live-now2.png").read_bytes()
+        with tempfile.TemporaryDirectory() as directory:
+            operator = PythonAutoOperator.__new__(PythonAutoOperator)
+            operator.args = argparse.Namespace(mode="force-auto", max_iterations=2, poll=0.001)
+            operator.layout = layout
+            operator.hand_clip = {
+                "x": 223, "y": 926, "width": 1355, "height": 146,
+            }
+            operator.action_clip = None
+            operator.frames = Path(directory)
+            operator.screen_references = {}
+            operator.screencast_session = Mock()
+            operator.latest_screencast_frame = frame
+            operator.screencast_sequence = 1
+            operator.screencast_draw_occupied = False
+            operator.screencast_draw_generation = 0
+            operator.cached_public_observation = None
+            operator.cached_concealed_tiles = None
+            operator.cached_open_melds = 0
+            operator.dynamic_layout_required = False
+            operator.pending_post_call_discard = False
+            operator.pending_post_call_started_at = None
+            operator.restart_open_hand_probe_hash = None
+            operator.last_processed_hand = None
+            operator.armed = True
+            operator.previous_public_observation = None
+            operator.last_shanten = None
+            operator.poll_public_recognition = Mock()
+            operator.ensure_viewport = Mock()
+            operator.start_screencast_gate = Mock()
+            operator.schedule_periodic_public_recognition = Mock()
+            operator.resume_if_away = Mock(return_value=False)
+            operator.advance_ranked_loop = Mock(return_value=False)
+            operator.recognize_resident = Mock(return_value={"status": "not_ready"})
+            operator.force_auto_reaction_fallback = Mock(return_value=None)
+            operator.stable_open_meld_count = Mock(return_value=1)
+            operator.log = Mock()
+            page = Mock()
+            page.url = "https://mahjongsoul.game.yo-star.com/"
+
+            with patch("auto_operator.classify_screen", return_value=("match", 1.0)):
+                operator.run(page)
+
+            operator.recognize_resident.assert_called_once()
+            self.assertTrue(operator.dynamic_layout_required)
+            self.assertEqual(operator.cached_open_melds, 1)
+            self.assertTrue(any(
+                call.args and call.args[0] == "open_hand_geometry_gate"
+                for call in operator.log.call_args_list
+            ))
+
+    def test_compact_geometry_rejects_opponent_turn_without_own_meld_surface(self) -> None:
+        layout = {
+            "viewport": {"width": 1920, "height": 1080},
+            "handSlots": [
+                {"x": 223 + index * 95, "y": 926, "width": 92, "height": 146}
+                for index in range(13)
+            ],
+            "drawSlot": {"x": 1486, "y": 926, "width": 92, "height": 146},
+        }
+        frame = io.BytesIO()
+        image = Image.new("RGB", (1920, 1080), (25, 55, 85))
+        draw = ImageDraw.Draw(image)
+        for slot in layout["handSlots"][:10]:
+            draw.rectangle((
+                slot["x"], slot["y"], slot["x"] + slot["width"], slot["y"] + slot["height"],
+            ), fill=(230, 225, 210))
+        image.save(frame, format="PNG")
+
+        self.assertIsNone(geometric_open_meld_count(frame.getvalue(), layout))
 
     def test_force_auto_pass_prompt_requires_dark_button_and_warm_neutral_text(self) -> None:
         region = {"x": 100, "y": 50, "width": 200, "height": 80}
@@ -217,6 +424,64 @@ class AwayDialogDetectionTest(unittest.TestCase):
         self.assertFalse(should_process_reaction_prompt(True))
         self.assertTrue(should_process_reaction_prompt(False))
 
+    def test_restart_accepts_compact_hand_with_complete_visible_meld(self) -> None:
+        observation = {
+            "ownMelds": [{
+                "type": "pon", "tiles": ["5p", "5p", "5p"], "confidence": 0.93,
+            }],
+            "ownMeldTiles": ["5p", "5p", "5p"],
+        }
+
+        self.assertEqual(
+            PythonAutoOperator.verified_visible_open_meld_count(1, observation), 1,
+        )
+        self.assertTrue(PythonAutoOperator.compact_hand_is_proven(1, False, observation))
+
+    def test_restart_rejects_compact_hand_with_incomplete_or_ambiguous_meld(self) -> None:
+        incomplete = {
+            "ownMelds": [],
+            "ownMeldTiles": ["5p", "5p", "5p"],
+        }
+        unexplained_tile = {
+            "ownMelds": [{
+                "type": "pon", "tiles": ["5p", "5p", "5p"], "confidence": 0.93,
+            }],
+            "ownMeldTiles": ["5p", "5p", "5p", "7s"],
+        }
+
+        for observation in (None, incomplete, unexplained_tile):
+            with self.subTest(observation=observation):
+                self.assertIsNone(
+                    PythonAutoOperator.verified_visible_open_meld_count(1, observation),
+                )
+                self.assertFalse(PythonAutoOperator.compact_hand_is_proven(1, False, observation))
+
+    def test_restart_open_discard_gate_accepts_only_self_turn_tile_count(self) -> None:
+        observation = {
+            "ownMelds": [{
+                "type": "pon", "tiles": ["5p", "5p", "5p"], "confidence": 0.93,
+            }],
+            "ownMeldTiles": ["5p", "5p", "5p"],
+        }
+
+        self.assertEqual(
+            PythonAutoOperator.restart_open_discard_meld_count(11, observation), 1,
+        )
+        # Ten concealed tiles is the stable post-discard/opponent-turn state.
+        self.assertIsNone(
+            PythonAutoOperator.restart_open_discard_meld_count(10, observation),
+        )
+
+    def test_restart_open_discard_gate_rejects_incomplete_meld_evidence(self) -> None:
+        observation = {
+            "ownMelds": [],
+            "ownMeldTiles": ["5p", "5p", "5p"],
+        }
+
+        self.assertIsNone(
+            PythonAutoOperator.restart_open_discard_meld_count(11, observation),
+        )
+
     def test_force_auto_reaction_fallback_requires_thirteen_concealed_tiles(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             operator = PythonAutoOperator.__new__(PythonAutoOperator)
@@ -344,6 +609,40 @@ class AwayDialogDetectionTest(unittest.TestCase):
             viewport={"width": 1920, "height": 1080},
         )
 
+    def test_operator_restarts_screencast_after_viewport_restore(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.layout = {"viewport": {"width": 1920, "height": 1080}}
+        operator.log = Mock()
+        operator.screencast_session = Mock()
+        operator.restart_screencast_gate = Mock()
+        page = Mock()
+        page.evaluate.side_effect = [
+            {"width": 1920, "height": 1119},
+            {"width": 1920, "height": 1080},
+        ]
+
+        operator.ensure_viewport(page)
+
+        operator.restart_screencast_gate.assert_called_once_with(page)
+
+    def test_restart_screencast_replaces_silent_subscription(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        old_session = Mock()
+        operator.screencast_session = old_session
+        operator.latest_screencast_frame = b"stale"
+        operator.screencast_draw_occupied = True
+        operator.start_screencast_gate = Mock()
+        page = Mock()
+
+        operator.restart_screencast_gate(page)
+
+        old_session.send.assert_called_once_with("Page.stopScreencast")
+        old_session.detach.assert_called_once_with()
+        self.assertIsNone(operator.screencast_session)
+        self.assertIsNone(operator.latest_screencast_frame)
+        self.assertIsNone(operator.screencast_draw_occupied)
+        operator.start_screencast_gate.assert_called_once_with(page)
+
     def test_operator_leaves_matching_viewport_unchanged(self) -> None:
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
         operator.layout = {"viewport": {"width": 1920, "height": 1080}}
@@ -455,6 +754,106 @@ class AwayDialogDetectionTest(unittest.TestCase):
 
         run.assert_not_called()
         page.mouse.click.assert_not_called()
+
+    def test_live_open_hand_stream_reaches_discard_receipt_with_equivalent_capture(self) -> None:
+        project = Path(__file__).resolve().parents[1]
+        source = Image.open(project / "artifacts" / "debug-300-live-now2.png").convert("RGB")
+        encoded = io.BytesIO()
+        source.save(encoded, format="JPEG", quality=55)
+        streamed_full = encoded.getvalue()
+        hand_clip = {"x": 223, "y": 926, "width": 1355, "height": 146}
+        evaluated_hand = crop_screenshot(streamed_full, hand_clip)
+
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(
+            mode="force-auto", allow_local_discard=False,
+            stability_pixel_delta=1.5,
+        )
+        operator.hand_clip = hand_clip
+        operator.river_clip = {"x": 740, "y": 520, "width": 430, "height": 300}
+        operator.layout = load_json(project / "config" / "layout.json")
+        operator.cached_open_melds = 1
+        operator.screencast_session = Mock()
+        operator.latest_screencast_frame = streamed_full
+        operator.screencast_draw_generation = 4
+        operator.log = Mock()
+        operator.confirm_discard = Mock(return_value={
+            "confirmation": "hand_and_own_river_changed",
+            "tileMultisetVerification": {"verified": True},
+        })
+        page = Mock()
+        evaluation = {
+            "decision": {
+                "selectedAction": {"action": "discard", "tile": "3s"},
+            },
+            "recognition": {"tiles": ["4m", "1p", "2p", "3p", "4p", "5p",
+                                      "6p", "7p", "8s", "8s", "3s"], "safe": True},
+            "clickIndex": 10,
+            "clickPoint": {"x": 1247, "y": 999},
+            "openMelds": 1,
+        }
+
+        receipt = operator.execute(
+            page, evaluation,
+            evaluated_hand=evaluated_hand,
+            evaluated_full=streamed_full,
+            evaluated_draw_generation=4,
+        )
+
+        self.assertTrue(receipt["clicked"])
+        self.assertEqual(receipt["confirmation"], "hand_and_own_river_changed")
+        self.assertTrue(receipt["tileMultisetVerification"]["verified"])
+        operator.confirm_discard.assert_called_once()
+        page.mouse.click.assert_called_once_with(1247, 999, click_count=2, delay=80)
+
+    def test_live_over_inferred_meld_count_and_out_of_hand_click_are_rejected(self) -> None:
+        project = Path(__file__).resolve().parents[1]
+        layout = load_json(project / "config" / "layout.json")
+        self.assertFalse(discard_point_in_hand_geometry(
+            {"x": 1612.5, "y": 821.5}, layout, 1,
+        ))
+
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(mode="force-auto", allow_local_discard=False,
+                                           stability_pixel_delta=1.5)
+        operator.layout = layout
+        operator.hand_clip = {"x": 223, "y": 926, "width": 1355, "height": 146}
+        operator.river_clip = {"x": 740, "y": 520, "width": 430, "height": 300}
+        operator.cached_open_melds = 1
+        operator.screencast_session = Mock()
+        frame = (project / "artifacts" / "debug-300" / "frames" /
+                 "2026-09-21T04-23-11.396987+00-00.jpg").read_bytes()
+        operator.latest_screencast_frame = frame
+        operator.screencast_draw_generation = 2
+        operator.log = Mock()
+        page = Mock()
+        evaluation = {
+            "decision": {"selectedAction": {"action": "discard", "tile": "6p"}},
+            "recognition": {"tiles": ["6p", "6p"], "safe": False},
+            "clickIndex": 1,
+            "clickPoint": {"x": 1612.5, "y": 821.5},
+            "openMelds": 4,
+        }
+
+        with self.assertRaisesRegex(RetryableSafetyAbort, "open meld count changed"):
+            operator.execute(
+                page, evaluation,
+                evaluated_hand=crop_screenshot(frame, operator.hand_clip),
+                evaluated_full=frame,
+                evaluated_draw_generation=2,
+            )
+        page.mouse.click.assert_not_called()
+
+    def test_open_meld_count_requires_distinct_frames_and_rejects_jump(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.cached_open_melds = 0
+        operator.open_meld_candidate = None
+        operator.open_meld_candidate_frames = set()
+        self.assertIsNone(operator.stable_open_meld_count(1, b"frame-a"))
+        self.assertIsNone(operator.stable_open_meld_count(1, b"frame-a"))
+        self.assertEqual(operator.stable_open_meld_count(1, b"frame-b"), 1)
+        operator.cached_open_melds = 1
+        self.assertIsNone(operator.stable_open_meld_count(2, b"frame-c"))
 
     def test_private_env_loader_passes_only_jev_settings(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

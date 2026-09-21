@@ -331,6 +331,82 @@ def is_draw_slot_clip_occupied(screenshot: bytes) -> bool:
     return light >= 0.20
 
 
+def open_hand_draw_slot(layout: dict[str, Any], open_melds: int) -> dict[str, float] | None:
+    """Shift the calibrated closed-hand draw slot by three tiles per open meld."""
+    draw_slot = layout.get("drawSlot")
+    hand_slots = layout.get("handSlots", [])
+    if not draw_slot or open_melds <= 0 or len(hand_slots) < 2:
+        return None
+    pitches = sorted(
+        float(right["x"]) - float(left["x"])
+        for left, right in zip(hand_slots, hand_slots[1:])
+    )
+    pitch = pitches[len(pitches) // 2]
+    shifted = {key: float(draw_slot[key]) for key in ("x", "y", "width", "height")}
+    shifted["x"] -= open_melds * 3 * pitch
+    viewport_width = float(layout.get("viewport", {}).get("width", 0))
+    if shifted["x"] < 0 or shifted["x"] + shifted["width"] > viewport_width:
+        return None
+    return shifted
+
+
+def geometric_open_meld_count(screenshot: bytes, layout: dict[str, Any]) -> int | None:
+    """Infer compact open-hand geometry without trusting tile classifications."""
+    hand_slots = layout.get("handSlots", [])
+    viewport = layout.get("viewport", {})
+    if len(hand_slots) < 13 or not viewport:
+        return None
+    # Own exposed melds occupy a dedicated lower-right strip, separated from
+    # the concealed row. Require a substantial ivory tile surface there.
+    meld_region = {
+        "x": float(viewport["width"]) * 0.80,
+        "y": float(viewport["height"]) * 0.84,
+        "width": float(viewport["width"]) * 0.18,
+        "height": float(viewport["height"]) * 0.16,
+    }
+    with Image.open(io.BytesIO(screenshot)) as image:
+        meld_image = image.convert("RGB").crop((
+            meld_region["x"], meld_region["y"],
+            meld_region["x"] + meld_region["width"],
+            meld_region["y"] + meld_region["height"],
+        ))
+        meld_light = fraction_matching(
+            meld_image, lambda red, green, blue: red > 145 and green > 145 and blue > 135,
+        )
+    if meld_light < 0.12:
+        return None
+    occupied = [is_draw_slot_occupied(screenshot, slot) for slot in hand_slots]
+    # Prefer the smallest count: a longer one-meld row is also a prefix of
+    # shorter multi-meld layouts. Closed 13-tile rows are rejected by the
+    # required empty final calibrated slot.
+    for open_melds in range(1, 5):
+        concealed_before_draw = 13 - open_melds * 3
+        dynamic_slot = open_hand_draw_slot(layout, open_melds)
+        if concealed_before_draw < 1 or dynamic_slot is None:
+            continue
+        if all(occupied[:concealed_before_draw]) \
+                and not occupied[-1] \
+                and is_draw_slot_occupied(screenshot, dynamic_slot):
+            return open_melds
+    return None
+
+
+def discard_point_in_hand_geometry(
+    point: dict[str, float], layout: dict[str, Any], open_melds: int,
+) -> bool:
+    slots = layout.get("handSlots", [])
+    if not slots:
+        return False
+    draw_slot = open_hand_draw_slot(layout, open_melds) if open_melds > 0 else layout.get("drawSlot")
+    if not draw_slot:
+        return False
+    left = float(slots[0]["x"])
+    right = float(draw_slot["x"] + draw_slot["width"])
+    top = min(float(slot["y"]) for slot in slots)
+    bottom = max(float(slot["y"] + slot["height"]) for slot in slots)
+    return left <= float(point["x"]) <= right and top <= float(point["y"]) <= bottom
+
+
 def local_discard_allowed(args: argparse.Namespace, evaluation: dict[str, Any]) -> bool:
     decision = evaluation.get("decision", {})
     return bool(
@@ -499,8 +575,12 @@ class PythonAutoOperator:
         self.screencast_sequence = 0
         self.screencast_draw_occupied: bool | None = None
         self.screencast_draw_generation = 0
+        self.rejected_screencast_size: tuple[int, int] | None = None
         self.pending_post_call_discard = False
         self.pending_post_call_started_at: float | None = None
+        self.restart_open_hand_probe_hash: str | None = None
+        self.open_meld_candidate: int | None = None
+        self.open_meld_candidate_frames: set[str] = set()
         self.last_ranked_loop_state: str | None = None
         self.last_ranked_loop_click_at = 0.0
         if self.log_path.exists():
@@ -639,14 +719,7 @@ class PythonAutoOperator:
         def receive_frame(event: dict[str, Any]) -> None:
             try:
                 frame = base64.b64decode(event["data"])
-                self.latest_screencast_frame = frame
-                self.screencast_sequence += 1
-                draw_slot = self.layout.get("drawSlot")
-                if draw_slot:
-                    occupied = is_draw_slot_clip_occupied(crop_screenshot(frame, draw_slot))
-                    if occupied and self.screencast_draw_occupied is not True:
-                        self.screencast_draw_generation += 1
-                    self.screencast_draw_occupied = occupied
+                self.accept_screencast_frame(frame)
             finally:
                 session.send("Page.screencastFrameAck", {"sessionId": event["sessionId"]})
 
@@ -659,6 +732,72 @@ class PythonAutoOperator:
             "everyNthFrame": 1,
         })
         self.screencast_session = session
+
+    def accept_screencast_frame(self, frame: bytes) -> bool:
+        """Publish only frames whose pixels match the calibrated viewport."""
+        self.screencast_sequence += 1
+        try:
+            with Image.open(io.BytesIO(frame)) as image:
+                actual = image.size
+        except Exception:
+            actual = (0, 0)
+        expected = (
+            int(self.layout["viewport"]["width"]),
+            int(self.layout["viewport"]["height"]),
+        )
+        if actual != expected:
+            # Never retain a previously valid action gate while Chrome is
+            # emitting resized pixels. Fixed ROIs against the observed
+            # 1058x1080 frame caused both PIL index and Sharp extract errors.
+            self.latest_screencast_frame = None
+            self.screencast_draw_occupied = None
+            if actual != self.rejected_screencast_size:
+                self.log("screencast_frame_rejected", expected=list(expected), actual=list(actual))
+                self.rejected_screencast_size = actual
+            return False
+        self.rejected_screencast_size = None
+        self.latest_screencast_frame = frame
+        draw_slot = self.layout.get("drawSlot")
+        if draw_slot:
+            occupied = is_draw_slot_clip_occupied(crop_screenshot(frame, draw_slot))
+            if occupied and self.screencast_draw_occupied is not True:
+                self.screencast_draw_generation += 1
+            self.screencast_draw_occupied = occupied
+        return True
+
+    def seed_silent_screencast_gate(self, page: Page) -> bool:
+        """Seed a newly silent stream once from an exact-size current screenshot."""
+        if self.screencast_session is None or self.latest_screencast_frame is not None:
+            return False
+        sequence_before = self.screencast_sequence
+        frame = page.screenshot(animations="disabled")
+        # Playwright may dispatch the first screencast event while the
+        # screenshot command is in flight. In that race the real streamed
+        # frame wins and the seed must not create a second gate event.
+        if self.latest_screencast_frame is not None or self.screencast_sequence != sequence_before:
+            return False
+        if not self.accept_screencast_frame(frame):
+            return False
+        self.log("screencast_gate_seeded", source="one_shot_screenshot")
+        return True
+
+    def restart_screencast_gate(self, page: Page) -> None:
+        """Re-subscribe after a viewport override invalidates Chrome's stream."""
+        session = self.screencast_session
+        if session is None:
+            return
+        try:
+            session.send("Page.stopScreencast")
+            session.detach()
+        except Exception:
+            # A viewport change may already have invalidated the old CDP
+            # subscription. It is still safe and necessary to replace it.
+            pass
+        finally:
+            self.screencast_session = None
+            self.latest_screencast_frame = None
+            self.screencast_draw_occupied = None
+        self.start_screencast_gate(page)
 
     def recognize_resident(
         self, screenshot: Path, *, concealed_only: bool = False, draw_only: bool = False,
@@ -711,6 +850,11 @@ class PythonAutoOperator:
             raise RuntimeError(f"viewport restore failed: expected={expected}, actual={confirmed}")
         if actual != confirmed:
             self.log("viewport_restored", previous=actual, viewport=confirmed)
+            # Page.set_viewport_size can leave the existing CDP screencast
+            # subscription silent. A fresh subscription is required for the
+            # reaction/turn gate to resume after the restore.
+            if getattr(self, "screencast_session", None) is not None:
+                self.restart_screencast_gate(page)
 
     def resume_if_away(self, page: Page, screenshot: bytes | None = None) -> bool:
         if not self.args.resume_away:
@@ -753,8 +897,75 @@ class PythonAutoOperator:
         return {"x": viewport["width"] * ratio[0], "y": viewport["height"] * ratio[1]}
 
     @staticmethod
-    def compact_hand_is_proven(open_melds: int, dynamic_layout_was_required: bool) -> bool:
-        return open_melds == 0 or dynamic_layout_was_required
+    def verified_visible_open_meld_count(
+        inferred_open_melds: int, public_observation: dict[str, Any] | None,
+    ) -> int | None:
+        """Accept restart recovery only from complete, internally consistent meld evidence."""
+        if inferred_open_melds <= 0 or not public_observation:
+            return None
+        melds = public_observation.get("ownMelds")
+        visible_tiles = public_observation.get("ownMeldTiles")
+        if not isinstance(melds, list) or len(melds) != inferred_open_melds \
+                or not isinstance(visible_tiles, list):
+            return None
+        promoted_tiles: list[str] = []
+        for meld in melds:
+            if not isinstance(meld, dict) or meld.get("type") not in {"chi", "pon", "minkan"}:
+                return None
+            tiles = meld.get("tiles")
+            expected_tiles = 4 if meld.get("type") == "minkan" else 3
+            if not isinstance(tiles, list) or len(tiles) != expected_tiles:
+                return None
+            confidence = meld.get("confidence")
+            if not isinstance(confidence, (int, float)) or confidence <= 0:
+                return None
+            promoted_tiles.extend(tiles)
+        # Extra or missing safe tiles mean the public recognizer did not
+        # explain the complete visible meld region, so retain fail-closed.
+        if promoted_tiles != visible_tiles:
+            return None
+        return inferred_open_melds
+
+    @classmethod
+    def verified_visible_open_melds(
+        cls, public_observation: dict[str, Any] | None,
+    ) -> int | None:
+        """Return the visible meld count only when every meld is fully explained."""
+        melds = public_observation.get("ownMelds") if public_observation else None
+        if not isinstance(melds, list) or not melds:
+            return None
+        return cls.verified_visible_open_meld_count(len(melds), public_observation)
+
+    @classmethod
+    def restart_open_discard_meld_count(
+        cls, concealed_tile_count: int, public_observation: dict[str, Any] | None,
+    ) -> int | None:
+        """Distinguish a post-call discard state from the ordinary opponent turn."""
+        open_melds = cls.verified_visible_open_melds(public_observation)
+        if open_melds is None:
+            return None
+        expected_discard_count = 14 - open_melds * 3
+        return open_melds if concealed_tile_count == expected_discard_count else None
+
+    @classmethod
+    def compact_hand_is_proven(
+        cls, open_melds: int, dynamic_layout_was_required: bool,
+        public_observation: dict[str, Any] | None = None,
+    ) -> bool:
+        return open_melds == 0 or dynamic_layout_was_required \
+            or cls.verified_visible_open_meld_count(open_melds, public_observation) is not None
+
+    def stable_open_meld_count(self, candidate: int | None, frame: bytes) -> int | None:
+        """Reject count jumps and require two distinct frames before adoption."""
+        if candidate is None:
+            return None
+        if self.cached_open_melds > 0:
+            return candidate if candidate == self.cached_open_melds else None
+        if candidate != self.open_meld_candidate:
+            self.open_meld_candidate = candidate
+            self.open_meld_candidate_frames = set()
+        self.open_meld_candidate_frames.add(hashlib.sha256(frame).hexdigest())
+        return candidate if len(self.open_meld_candidate_frames) >= 2 else None
 
     def advance_ranked_loop(self, page: Page, state: str, confidence: float) -> bool:
         """Enter or re-enter Bronze Room four-player East after every match."""
@@ -1161,20 +1372,27 @@ class PythonAutoOperator:
         if force_auto and screencast_session is not None:
             # Dispatch frames queued while the resident recognizer was busy.
             page.wait_for_timeout(1)
+        current_streamed_full = getattr(self, "latest_screencast_frame", None) \
+            if force_auto and screencast_session is not None else None
+        current_streamed_hand = crop_screenshot(current_streamed_full, self.hand_clip) \
+            if current_streamed_full is not None else None
+        streamed_delta = mean_pixel_delta(evaluated_hand, current_streamed_hand) \
+            if evaluated_hand is not None and current_streamed_hand is not None else None
         streamed_turn_is_current = bool(
-            force_auto
-            and screencast_session is not None
-            and evaluated_full is not None
-            and evaluated_draw_generation is not None
-            and getattr(self, "screencast_draw_occupied", None) is True
+            evaluated_draw_generation is not None
             and getattr(self, "screencast_draw_generation", None) == evaluated_draw_generation
+            and streamed_delta is not None
+            and streamed_delta <= self.args.stability_pixel_delta
         )
-        pre_click_full = evaluated_full if streamed_turn_is_current else page.screenshot(animations="disabled")
+        # Compare screencast JPEG to the newest screencast JPEG. A fresh PNG
+        # has a stable ~4-point codec/background delta on the live compact
+        # hand and is not a valid stale-frame comparison.
+        pre_click_full = current_streamed_full or page.screenshot(animations="disabled")
         if is_away_resume_dialog(pre_click_full, self.layout["viewport"]):
             self.resume_if_away(page, pre_click_full)
             raise RetryableSafetyAbort("decision canceled because away dialog appeared during evaluation")
 
-        hand_before = evaluated_hand if streamed_turn_is_current and evaluated_hand is not None else crop_screenshot(pre_click_full, self.hand_clip)
+        hand_before = current_streamed_hand or crop_screenshot(pre_click_full, self.hand_clip)
         if force_auto:
             if evaluated_hand is None:
                 raise RuntimeError("force-auto requires the stable evaluated hand image")
@@ -1216,6 +1434,17 @@ class PythonAutoOperator:
                         "clickPoint": point, **action_receipt}
 
         point = dynamic_click_point if has_dynamic_click_point else points[click_index]
+        if force_auto and needs_tile_click:
+            trusted_open_melds = getattr(self, "cached_open_melds", 0)
+            evaluated_open_melds = evaluation.get("openMelds", 0)
+            if trusted_open_melds > 0 and evaluated_open_melds != trusted_open_melds:
+                raise RetryableSafetyAbort(
+                    f"evaluated open meld count changed from {trusted_open_melds} to {evaluated_open_melds}"
+                )
+            if not discard_point_in_hand_geometry(point, self.layout, trusted_open_melds):
+                raise RetryableSafetyAbort(
+                    f"discard click point is outside current hand geometry: {point}"
+                )
         clicked_at = datetime.now(timezone.utc).isoformat()
         self.log(
             "click_sent",
@@ -1352,6 +1581,8 @@ class PythonAutoOperator:
             deadline = time.monotonic() + 2
             while self.latest_screencast_frame is None and time.monotonic() < deadline:
                 page.wait_for_timeout(25)
+            if self.latest_screencast_frame is None:
+                self.seed_silent_screencast_gate(page)
         self.log("started", mode=self.args.mode, page=page.url,
                  turnGate="cdp_screencast" if self.screencast_session else "screenshot")
         iterations = 0
@@ -1366,6 +1597,11 @@ class PythonAutoOperator:
                 return
             try:
                 self.poll_public_recognition()
+                # Force-auto quick/exact gates consume the newest completed
+                # public snapshot. Establish it before either branch; the
+                # non-force path captures synchronously later in the loop.
+                public_observation = self.cached_public_observation \
+                    if self.args.mode == "force-auto" else None
                 self.ensure_viewport(page)
                 gate_frame = None
                 quick_draw = False
@@ -1377,7 +1613,30 @@ class PythonAutoOperator:
                         page.wait_for_timeout(max(20, min(100, round(self.args.poll * 1000))))
                     gate_frame = self.latest_screencast_frame
                     last_gate_sequence = self.screencast_sequence
-                    quick_draw = self.screencast_draw_occupied is True or self.pending_post_call_discard
+                    restart_open_melds = self.verified_visible_open_melds(
+                        self.cached_public_observation,
+                    )
+                    geometric_open_melds = geometric_open_meld_count(gate_frame, self.layout) \
+                        if gate_frame else None
+                    candidate_open_melds = restart_open_melds or geometric_open_melds
+                    if restart_open_melds is not None and geometric_open_melds is not None \
+                            and restart_open_melds != geometric_open_melds:
+                        candidate_open_melds = None
+                    gate_open_melds = self.stable_open_meld_count(
+                        candidate_open_melds, gate_frame,
+                    ) if gate_frame else None
+                    dynamic_draw_slot = open_hand_draw_slot(self.layout, gate_open_melds or 0)
+                    dynamic_draw_occupied = bool(
+                        gate_frame and dynamic_draw_slot
+                        and is_draw_slot_occupied(gate_frame, dynamic_draw_slot)
+                    )
+                    restart_probe_hash = perceptual_hash(crop_screenshot(gate_frame, self.hand_clip)) \
+                        if gate_frame and restart_open_melds is not None else None
+                    restart_open_hand_probe = restart_probe_hash is not None \
+                        and restart_probe_hash != self.restart_open_hand_probe_hash
+                    quick_draw = self.screencast_draw_occupied is True \
+                        or dynamic_draw_occupied \
+                        or self.pending_post_call_discard or restart_open_hand_probe
                     pass_region = self.layout.get("actionButtonRegions", {}).get("pass")
                     if not quick_draw and pass_region and gate_frame:
                         quick_pass = is_force_auto_pass_clip(
@@ -1423,6 +1682,9 @@ class PythonAutoOperator:
                     self.dynamic_layout_required = False
                     self.pending_post_call_discard = False
                     self.pending_post_call_started_at = None
+                    self.restart_open_hand_probe_hash = None
+                    self.open_meld_candidate = None
+                    self.open_meld_candidate_frames = set()
                     self.public_cache_generation += 1
                     self.public_cache_last_frame_hash = None
                     self.cached_public_observation = None
@@ -1562,32 +1824,75 @@ class PythonAutoOperator:
                     # the lossless evaluation frame directly; template
                     # classification belongs only to frames that still have
                     # an occupied draw slot.
-                    exact_draw_occupied = is_draw_slot_occupied(evaluation_frame, self.layout["drawSlot"])
+                    verified_open_melds = self.verified_visible_open_melds(public_observation)
+                    geometric_open_melds = geometric_open_meld_count(evaluation_frame, self.layout)
+                    exact_open_melds = verified_open_melds or geometric_open_melds
+                    if verified_open_melds is not None and geometric_open_melds is not None \
+                            and verified_open_melds != geometric_open_melds:
+                        exact_open_melds = None
+                    if gate_open_melds is not None and exact_open_melds != gate_open_melds:
+                        exact_open_melds = None
+                    exact_draw_slot = open_hand_draw_slot(self.layout, exact_open_melds or 0) \
+                        or self.layout["drawSlot"]
+                    exact_draw_occupied = is_draw_slot_occupied(evaluation_frame, exact_draw_slot)
+                    if exact_draw_occupied and geometric_open_melds is not None \
+                            and exact_open_melds == geometric_open_melds:
+                        self.cached_open_melds = geometric_open_melds
+                        self.dynamic_layout_required = True
+                        self.log(
+                            "open_hand_geometry_gate",
+                            screenshot=str(screenshot_path),
+                            openMelds=geometric_open_melds,
+                            evidence={
+                                "compactConcealedTiles": 13 - geometric_open_melds * 3,
+                                "shiftedDrawSlot": exact_draw_slot,
+                                "ownMeldRegion": "lower_right_ivory_surface",
+                            },
+                        )
                     if not exact_draw_occupied and not self.pending_post_call_discard:
-                        if self.cached_concealed_tiles is None:
-                            concealed = self.recognize_resident(screenshot_path, concealed_only=True)
-                            concealed_tiles = concealed.get("tiles", [])
-                            if len(concealed_tiles) == 13:
+                        concealed = self.recognize_resident(screenshot_path, concealed_only=True)
+                        concealed_tiles = concealed.get("tiles", [])
+                        recovered_open_melds = self.restart_open_discard_meld_count(
+                            len(concealed_tiles), public_observation,
+                        )
+                        if self.cached_open_melds > 0 \
+                                and recovered_open_melds != self.cached_open_melds:
+                            recovered_open_melds = None
+                        if recovered_open_melds is not None:
+                            self.cached_open_melds = recovered_open_melds
+                            self.dynamic_layout_required = True
+                            self.pending_post_call_discard = True
+                            self.pending_post_call_started_at = time.monotonic()
+                            self.log(
+                                "open_hand_discard_gate_recovered",
+                                screenshot=str(screenshot_path),
+                                concealedTileCount=len(concealed_tiles),
+                                openMelds=recovered_open_melds,
+                                source="verified_visible_own_melds",
+                            )
+                        else:
+                            self.restart_open_hand_probe_hash = perceptual_hash(hand)
+                            if self.cached_concealed_tiles is None and len(concealed_tiles) == 13:
                                 self.cached_concealed_tiles = concealed_tiles
                                 self.cached_open_melds = 0
                                 self.dynamic_layout_required = False
                                 self.log("concealed_hand_cached", screenshot=str(screenshot_path),
                                          tileCount=len(concealed_tiles))
-                        self.last_processed_hand = hand_hash
-                        self.armed = False
-                        self.log("opponent_turn_confirmed", screenshot=str(screenshot_path),
-                                 source="evaluated_frame_draw_slot_pixels",
-                                 priorHeuristicOccupied=draw_slot_heuristic_occupied)
-                        time.sleep(self.args.poll)
-                        continue
+                            self.last_processed_hand = hand_hash
+                            self.armed = False
+                            self.log("opponent_turn_confirmed", screenshot=str(screenshot_path),
+                                     source="evaluated_frame_draw_slot_pixels",
+                                     priorHeuristicOccupied=draw_slot_heuristic_occupied)
+                            time.sleep(self.args.poll)
+                            continue
                     if not draw_slot_heuristic_occupied:
                         self.log("self_turn_detected", screenshot=str(screenshot_path),
                                  source="evaluated_frame_draw_slot_pixels")
                 self.poll_public_recognition()
                 # Force-auto never waits for public recognition on our turn;
                 # it consumes the newest completed opponent-turn snapshot.
-                public_observation = self.cached_public_observation \
-                    if self.args.mode == "force-auto" else self.observe_public_board(screenshot_path)
+                if self.args.mode != "force-auto":
+                    public_observation = self.observe_public_board(screenshot_path)
                 pending_discard = None if self.args.mode == "force-auto" \
                     else self.infer_pending_discard(self.previous_public_observation, public_observation)
                 if public_observation and self.args.mode != "force-auto":
@@ -1631,8 +1936,12 @@ class PythonAutoOperator:
                             )
                             page.wait_for_timeout(max(20, round(self.args.poll * 1000)))
                             continue
+                    inferred_open_melds = evaluation.get("openMelds", 0)
+                    verified_visible_open_melds = self.verified_visible_open_meld_count(
+                        inferred_open_melds, public_observation,
+                    )
                     if evaluation.get("status") == "decision" and not self.compact_hand_is_proven(
-                        evaluation.get("openMelds", 0), dynamic_layout_was_required,
+                        inferred_open_melds, dynamic_layout_was_required, public_observation,
                     ):
                         # During the opening deal, a temporary 11/8/5/2-tile
                         # row can look exactly like a compact post-call hand.
@@ -1650,6 +1959,16 @@ class PythonAutoOperator:
                         )
                         page.wait_for_timeout(max(20, round(self.args.poll * 1000)))
                         continue
+                    if evaluation.get("status") == "decision" \
+                            and verified_visible_open_melds is not None \
+                            and not dynamic_layout_was_required:
+                        self.cached_open_melds = verified_visible_open_melds
+                        self.dynamic_layout_required = True
+                        self.log(
+                            "open_hand_recovered",
+                            openMelds=verified_visible_open_melds,
+                            source="verified_visible_own_melds",
+                        )
                 elif self.cached_concealed_tiles is not None and not pending_discard:
                     draw_recognition = self.recognize_resident(screenshot_path, draw_only=True)
                     if len(draw_recognition.get("tiles", [])) == 1:
