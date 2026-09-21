@@ -257,7 +257,7 @@ npm run dashboard
 ```
 
 ```bash
-./scripts/setup-python-operator.sh
+npm run operator:setup
 
 # 読み取り・構造化だけ（クリックなし）
 npm run operator:observe

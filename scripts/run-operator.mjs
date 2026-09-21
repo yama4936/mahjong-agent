@@ -21,7 +21,7 @@ const python = process.platform === "win32"
   ? path.join(root, ".runtime", "python-auto-venv", "Scripts", "python.exe")
   : path.join(root, ".runtime", "python-auto-venv", "bin", "python");
 if (!existsSync(python)) {
-  console.error("Python operator environment is missing. Run ./scripts/setup-python-operator.sh first.");
+  console.error("Python operator environment is missing. Run npm run operator:setup first.");
   process.exit(1);
 }
 
