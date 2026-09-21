@@ -1198,10 +1198,10 @@ class PythonAutoOperator:
 
     def advance_result_screen_once(self, page: Page, state: str, confidence: float) -> bool:
         """Confirm each distinct terminal-result stage exactly once."""
-        if state not in {"round_result", "match_result", "rank_progress"} \
+        if state not in {"round_result", "match_result", "rank_progress", "post_match_reward"} \
                 or self.result_screen_advanced == state:
             return False
-        y_ratio = 0.92 if state in {"match_result", "rank_progress"} else 0.935
+        y_ratio = 0.92 if state in {"match_result", "rank_progress", "post_match_reward"} else 0.935
         point = {"x": self.layout["viewport"]["width"] * 0.91,
                  "y": self.layout["viewport"]["height"] * y_ratio}
         page.mouse.click(point["x"], point["y"])
@@ -1211,7 +1211,7 @@ class PythonAutoOperator:
 
     def handle_early_non_gameplay_screen(self, page: Page, state: str, confidence: float) -> bool:
         """Handle verified non-gameplay screens before latency quick gates."""
-        if state in {"round_result", "match_result", "rank_progress"}:
+        if state in {"round_result", "match_result", "rank_progress", "post_match_reward"}:
             self.pending_post_call_discard = False
             self.pending_post_call_started_at = None
             self.round_terminal_latched = True
@@ -2078,7 +2078,7 @@ class PythonAutoOperator:
                     # Match and away references share almost the entire table.
                     # The stricter popup/button geometry remains authoritative.
                     screen_state = "match"
-                if screen_state in {"round_result", "match_result", "rank_progress"}:
+                if screen_state in {"round_result", "match_result", "rank_progress", "post_match_reward"}:
                     if getattr(self, "round_terminal_latched", False):
                         self.round_terminal_result_observed = True
                     # A new hand (or a new match) must never inherit tiles or
@@ -2098,7 +2098,7 @@ class PythonAutoOperator:
                     self.last_shanten = None
                     self.last_processed_hand = None
                     self.armed = True
-                    if screen_state != "rank_progress":
+                    if screen_state not in {"rank_progress", "post_match_reward"}:
                         self.attach_outcome("match" if screen_state == "match_result" else "round", full_screen, screen_confidence)
                     if self.args.advance_screens:
                         self.advance_result_screen_once(page, screen_state, screen_confidence)

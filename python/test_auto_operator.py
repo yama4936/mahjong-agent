@@ -1716,11 +1716,13 @@ class AwayDialogDetectionTest(unittest.TestCase):
         project = Path(__file__).resolve().parents[1]
         result = project / "artifacts" / "ranked-current-check.png"
         progress = project / "artifacts" / "ranked-after-confirm.png"
+        reward = project / "artifacts" / "ranked-after-progress-confirm.png"
         lobby = project / "artifacts" / "ranked-transition-2.png"
         menu = project / "artifacts" / "ranked-menu-current.png"
         reserved = project / "artifacts" / "ranked-loop-live.png"
         self.assertEqual(classify_screen(result, {}), ("match_result", 1.0))
         self.assertEqual(classify_screen(progress, {}), ("rank_progress", 1.0))
+        self.assertEqual(classify_screen(reward, {}), ("post_match_reward", 1.0))
         self.assertEqual(classify_screen(lobby, {}), ("lobby", 1.0))
         self.assertEqual(classify_screen(menu, {}), ("ranked_menu", 1.0))
         self.assertEqual(classify_screen(reserved, {}), ("matchmaking", 1.0))
@@ -1737,12 +1739,37 @@ class AwayDialogDetectionTest(unittest.TestCase):
         self.assertFalse(operator.advance_result_screen_once(page, "match_result", 1.0))
         self.assertTrue(operator.advance_result_screen_once(page, "rank_progress", 1.0))
         self.assertFalse(operator.advance_result_screen_once(page, "rank_progress", 1.0))
+        self.assertTrue(operator.advance_result_screen_once(page, "post_match_reward", 1.0))
+        self.assertFalse(operator.advance_result_screen_once(page, "post_match_reward", 1.0))
         operator.result_screen_advanced = None
         self.assertTrue(operator.advance_ranked_loop(page, "lobby", 1.0))
         operator.last_ranked_loop_state = None
         self.assertTrue(operator.advance_ranked_loop(page, "ranked_menu", 1.0))
         self.assertFalse(operator.advance_ranked_loop(page, "matchmaking", 1.0))
-        self.assertEqual(page.mouse.click.call_count, 4)
+        self.assertEqual(page.mouse.click.call_count, 5)
+
+    def test_post_match_reward_uses_yellow_confirmation_exactly_once(self) -> None:
+        project = Path(__file__).resolve().parents[1]
+        state, confidence = classify_screen(
+            project / "artifacts" / "ranked-after-progress-confirm.png", {}
+        )
+        self.assertEqual((state, confidence), ("post_match_reward", 1.0))
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(ranked_loop=True, advance_screens=False)
+        operator.layout = {"viewport": {"width": 1920, "height": 1080}}
+        operator.result_screen_advanced = "rank_progress"
+        operator.pending_post_call_discard = False
+        operator.pending_post_call_started_at = None
+        operator.round_terminal_latched = True
+        operator.round_terminal_result_observed = True
+        operator.log = Mock()
+        page = Mock()
+
+        self.assertTrue(operator.handle_early_non_gameplay_screen(page, state, confidence))
+        self.assertTrue(operator.handle_early_non_gameplay_screen(page, state, confidence))
+        # The yellow confirmation is on the right; the blue replay button is
+        # deliberately not selected by the bounded ranked-loop transition.
+        page.mouse.click.assert_called_once_with(1747.2, 993.6)
 
     def test_rank_progress_early_branch_confirms_once_without_gameplay(self) -> None:
         project = Path(__file__).resolve().parents[1]

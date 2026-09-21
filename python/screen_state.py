@@ -9,7 +9,7 @@ from PIL import Image, ImageChops, ImageStat
 ScreenState = Literal[
     "login", "account_modal", "lobby", "ranked_menu", "ranked_room",
     "matchmaking", "match", "away", "round_result", "match_result", "rank_progress",
-    "exit_confirm", "unknown",
+    "post_match_reward", "exit_confirm", "unknown",
 ]
 
 REFERENCE_FILES: list[tuple[ScreenState, str]] = [
@@ -95,6 +95,25 @@ def _is_rank_progress(image: Image.Image) -> bool:
     return yellow >= 0.25 and cyan >= 0.025
 
 
+def _is_post_match_reward(image: Image.Image) -> bool:
+    """Detect the achievement reward overlay by its paired action buttons."""
+    width, height = image.size
+    if width < 1200 or height < 700:
+        return False
+    confirm = image.crop((width * 0.84, height * 0.88, width * 0.98, height * 0.97)).convert("RGB")
+    confirm_pixels = list(confirm.getdata())
+    yellow = sum(
+        1 for red, green, blue in confirm_pixels if red > 180 and green > 130 and blue < 120
+    ) / max(1, len(confirm_pixels))
+    replay = image.crop((width * 0.68, height * 0.88, width * 0.83, height * 0.97)).convert("RGB")
+    replay_pixels = list(replay.getdata())
+    blue = sum(
+        1 for red, green, value in replay_pixels
+        if value > 100 and value > red * 1.2 and value > green * 0.8 and red < 130
+    ) / max(1, len(replay_pixels))
+    return yellow >= 0.25 and blue >= 0.40
+
+
 def _is_cherry_blossom_lobby(image: Image.Image) -> bool:
     """Recognize the current WQHD lobby from its three stacked mode panels."""
     width, height = image.size
@@ -159,6 +178,8 @@ def classify_screen(
     image = _open(screenshot)
     if _is_round_result_summary(image):
         return "round_result", 1.0
+    if _is_post_match_reward(image):
+        return "post_match_reward", 1.0
     if _is_rank_progress(image):
         return "rank_progress", 1.0
     if _is_ranked_match_result(image):
