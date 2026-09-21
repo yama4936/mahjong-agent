@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { createInterface } from "node:readline";
 import { decideForceAutoWithJevDeadline } from "../agent/decision.js";
 import { cachedPublicStatePatch, type CachedPublicObservation } from "../agent/publicCache.js";
-import { JevClient } from "../jev/client.js";
+import { isHandPlanCompatible, JevClient } from "../jev/client.js";
 import { parseGameState, parsePublicGameState } from "../game/state.js";
 import { parseGameTile } from "../game/tiles.js";
 import { proposeLiveHandLayout } from "./handLayoutProposal.js";
@@ -88,6 +88,9 @@ for await (const line of lines) {
         throw new Error(`force-auto evaluation requires 14/11/8/5/2 concealed tiles; got ${recognition.tiles.length}`);
       }
       const concealed = recognition.tiles;
+      const handPlan = request.publicObservation?.handPlan;
+      const compatibleHandPlan = handPlan && isHandPlanCompatible(handPlan, concealed, inferredOpenMelds)
+        ? handPlan : undefined;
       const capturedAtMs = request.publicObservation ? Date.parse(request.publicObservation.capturedAt) : undefined;
       const cacheAgeMs = capturedAtMs !== undefined && Number.isFinite(capturedAtMs)
         ? Math.max(0, Date.now() - capturedAtMs)
@@ -125,6 +128,7 @@ for await (const line of lines) {
       }
       const decision = await decideForceAutoWithJevDeadline(state, {
         ...(jev ? { jev } : {}),
+        ...(compatibleHandPlan ? { handPlan: compatibleHandPlan } : {}),
         deadlineMs: forceAutoDeadlineMs,
       });
       const clickIndex = decision.selectedAction.action === "discard" || decision.selectedAction.action === "riichi"
@@ -164,6 +168,16 @@ for await (const line of lines) {
             : publicCacheIgnoredReason ? { ignoredReason: publicCacheIgnoredReason } : {}),
         },
         processingElapsedMs: Math.max(0, Math.round(performance.now() - processingStartedAt)),
+        handPlan: {
+          applied: Boolean(compatibleHandPlan),
+          ...(handPlan ? {
+            selected: handPlan.planId,
+            confidence: handPlan.confidence,
+            latencyMs: handPlan.latencyMs,
+            createdAt: handPlan.createdAt,
+          } : {}),
+          ...(handPlan && !compatibleHandPlan ? { ignoredReason: "incompatible_with_current_hand" } : {}),
+        },
       };
     }
     process.stdout.write(`${JSON.stringify({ id, result })}\n`);

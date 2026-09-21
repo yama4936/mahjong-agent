@@ -277,6 +277,7 @@ def merge_public_observations(
         *[tile for opponent in opponents for tile in opponent.get("discards", [])],
         *all_meld_tiles,
     ]
+    hand_plan = current.get("handPlan") or previous.get("handPlan")
     return {
         **current,
         "doraIndicators": dora,
@@ -288,6 +289,7 @@ def merge_public_observations(
         "allMeldTiles": all_meld_tiles,
         "otherVisibleTiles": other_visible,
         "acceptedTiles": len(dora) + len(own_discards) + len(other_visible),
+        **({"handPlan": hand_plan} if hand_plan else {}),
     }
 
 
@@ -459,6 +461,10 @@ class PythonAutoOperator:
                     raise RuntimeError("public recognition server pipes are unavailable")
                 server.stdin.write(json.dumps({
                     "id": request_id, "screenshot": str(frame_path), "capturedAt": captured_at,
+                    "concealedTiles": self.cached_concealed_tiles,
+                    "openMelds": self.cached_open_melds,
+                    "seat": self.public_state.get("seat", "east"),
+                    "round": self.public_state.get("round", "unknown"),
                 }) + "\n")
                 server.stdin.flush()
                 line = server.stdout.readline()
@@ -498,6 +504,8 @@ class PythonAutoOperator:
             acceptedTiles=self.cached_public_observation.get("acceptedTiles"),
             detectedCandidates=self.cached_public_observation.get("detectedCandidates"),
             configuredRegions=self.cached_public_observation.get("configuredRegions"),
+            handPlan=self.cached_public_observation.get("handPlan", {}).get("planId"),
+            handPlanConfidence=self.cached_public_observation.get("handPlan", {}).get("confidence"),
         )
 
     def start_screencast_gate(self, page: Page) -> None:

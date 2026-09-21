@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createServer } from "node:http";
 import { once } from "node:events";
-import { buildJevReactionRequest, buildJevRequest, JevClient } from "../src/jev/client.js";
+import {
+  buildJevHandPlanRequest, buildJevReactionRequest, buildJevRequest,
+  isHandPlanCompatible, JevClient, type JevHandPlan,
+} from "../src/jev/client.js";
 import { deterministicAdvice } from "../src/evaluation/advisor.js";
 import { parseGameState } from "../src/game/state.js";
 
@@ -41,13 +44,13 @@ test("Jev adapter sends bounded choices and validates a response", async () => {
     assert.equal(result.actionId, candidates[0]!.actionId);
     assert.equal(result.confidence, 1);
     assert.equal(observedAuthorization, "Bearer test-key");
-    assert.equal(result.promptVersion, "mahjong-discard-v2");
+    assert.equal(result.promptVersion, "mahjong-discard-hierarchical-v3");
     assert.equal(result.usage?.input_tokens, 100);
     assert.equal(observedState.honba, 0);
     assert.deepEqual(observedState.ownDiscards, []);
     assert.deepEqual(observedState.opponents, []);
     assert.equal(observedState.openMelds, 0);
-    assert.equal(observedState.promptVersion, "mahjong-discard-v2");
+    assert.equal(observedState.promptVersion, "mahjong-discard-hierarchical-v3");
     assert.equal(observedState.candidates, undefined);
   } finally {
     server.close();
@@ -59,8 +62,52 @@ test("balanced Jev prompt uses structured criteria without duplicate candidates"
   const request = buildJevRequest(state, candidates, "jev-test", "balanced-v2");
   assert.equal(request.state.candidates, undefined);
   assert.equal(request.state.promptVersion, "mahjong-discard-v2");
+  assert.equal(request.state.data_quality, undefined);
+  assert.equal((request.questions.action.criteria[candidates[0]!.actionId] as any).comparison_to_best, undefined);
   assert.equal(typeof request.questions.action.instructions, "object");
   assert.equal(typeof request.questions.action.criteria[candidates[0]!.actionId], "object");
+});
+
+test("hierarchical prompt carries only a compatible cached hand plan as a soft prior", () => {
+  const candidates = deterministicAdvice(state).candidates;
+  const plan: JevHandPlan = {
+    actionId: "closed_sequence", planId: "closed_sequence", confidence: 0.72,
+    probabilities: { efficient_standard: 0.28, closed_sequence: 0.72 },
+    model: "jev-test", promptVersion: "mahjong-hand-plan-v1", latencyMs: 520,
+    sourceHand: state.hand, openMelds: 0, createdAt: new Date().toISOString(),
+  };
+  const request = buildJevRequest(state, candidates, "jev-test", "hierarchical-v3", plan);
+  assert.equal((request.state.cached_hand_plan as any).selected, "closed_sequence");
+  assert.match(JSON.stringify(request.questions.action.instructions), /soft tie-breaker/);
+
+  const incompatible = { ...plan, sourceHand: [...state.hand.slice(0, -1), "N"] };
+  const withoutPlan = buildJevRequest(state, candidates, "jev-test", "hierarchical-v3", incompatible);
+  assert.equal(withoutPlan.state.cached_hand_plan, undefined);
+});
+
+test("hand-plan prompt offers realistic shape-driven plans", () => {
+  const request = buildJevHandPlanRequest({
+    hand: ["2m", "3m", "4m", "2p", "3p", "4p", "2s", "3s", "4s", "6s", "6s", "P", "P"],
+    openMelds: 0, seat: "east", round: "east1",
+  }, "jev-test");
+  const ids = Object.keys(request.questions.action.criteria);
+  assert.ok(ids.includes("efficient_standard"));
+  assert.ok(ids.includes("closed_sequence"));
+  assert.ok(ids.includes("yakuhai"));
+  assert.ok(ids.includes("sanshoku"));
+  assert.equal(request.state.board_information_intentionally_omitted, true);
+});
+
+test("cached hand plan is valid only for the exact pre-draw hand and meld count", () => {
+  const plan: JevHandPlan = {
+    actionId: "efficient_standard", planId: "efficient_standard", confidence: 0.8,
+    probabilities: { efficient_standard: 0.8, tanyao: 0.2 }, model: "jev-test",
+    promptVersion: "mahjong-hand-plan-v1", latencyMs: 500,
+    sourceHand: state.hand, openMelds: 0, createdAt: new Date().toISOString(),
+  };
+  assert.equal(isHandPlanCompatible(plan, [...state.hand, "6p"], 0), true);
+  assert.equal(isHandPlanCompatible(plan, [...state.hand.slice(0, -1), "N", "6p"], 0), false);
+  assert.equal(isHandPlanCompatible(plan, [...state.hand, "6p"], 1), false);
 });
 
 test("legacy Jev prompt remains available for A/B evaluation", () => {

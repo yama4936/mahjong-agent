@@ -1,6 +1,6 @@
 import type { GameState } from "../game/state.js";
 import { deterministicAdvice, type AdvisorResult } from "../evaluation/advisor.js";
-import { JevClient, type JevDecision } from "../jev/client.js";
+import { JevClient, type JevDecision, type JevHandPlan } from "../jev/client.js";
 import { generateLegalActions, type LegalAction } from "../game/actions.js";
 import { calculateShanten } from "../game/shanten.js";
 import { evaluateDiscards } from "../game/ukeire.js";
@@ -22,6 +22,7 @@ export interface DecisionOptions {
   jev?: JevClient;
   minJevConfidence?: number;
   signal?: AbortSignal;
+  handPlan?: JevHandPlan;
 }
 
 export interface ForceAutoArbitration {
@@ -75,7 +76,7 @@ export async function decide(state: GameState, options: DecisionOptions): Promis
       const jevCandidates = options.mode === "force-auto" && !underThreat && minimumShanten !== undefined
         ? base.candidates.filter((candidate) => candidate.shanten === minimumShanten)
         : base.candidates;
-      jev = await options.jev.chooseDiscard(state, jevCandidates, options.signal);
+      jev = await options.jev.chooseDiscard(state, jevCandidates, options.signal, options.handPlan);
       const candidate = base.candidates.find((item) => item.actionId === jev!.actionId);
       if (!candidate) throw new Error("Jev selected an unknown candidate");
       selected = candidate;
@@ -127,7 +128,7 @@ export async function decide(state: GameState, options: DecisionOptions): Promis
  */
 export async function decideForceAutoWithJevDeadline(
   state: GameState,
-  options: { jev?: JevClient; deadlineMs?: number },
+  options: { jev?: JevClient; deadlineMs?: number; handPlan?: JevHandPlan },
 ): Promise<DecisionResult> {
   const deadlineMs = options.deadlineMs ?? 700;
   if (!Number.isFinite(deadlineMs) || deadlineMs <= 0) throw new Error("Jev deadline must be positive");
@@ -158,7 +159,10 @@ export async function decideForceAutoWithJevDeadline(
   const deadline = new Promise<{ kind: "timeout" }>((resolve) => {
     timeout = setTimeout(() => resolve({ kind: "timeout" }), deadlineMs);
   });
-  const remote = decide(state, { mode: "force-auto", jev: options.jev, signal: controller.signal });
+  const remote = decide(state, {
+    mode: "force-auto", jev: options.jev, signal: controller.signal,
+    ...(options.handPlan ? { handPlan: options.handPlan } : {}),
+  });
   const outcome = await Promise.race([
     remote.then((decision) => ({ kind: "decision" as const, decision })),
     deadline,

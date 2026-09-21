@@ -40,6 +40,7 @@ class AwayDialogDetectionTest(unittest.TestCase):
                 {"seat": "south", "discards": [], "riichiDeclared": False, "melds": []},
             ],
             "capturedAt": "now", "recognitionLatencyMs": 350,
+            "handPlan": {"planId": "tanyao", "confidence": 0.7},
         }
 
         merged = merge_public_observations(previous, current)
@@ -49,6 +50,7 @@ class AwayDialogDetectionTest(unittest.TestCase):
         self.assertEqual(merged["opponentDiscards"][0]["discards"], ["E"])
         self.assertTrue(merged["opponentDiscards"][0]["riichiDeclared"])
         self.assertTrue(merged["ownRiichiDeclared"])
+        self.assertEqual(merged["handPlan"]["planId"], "tanyao")
 
     def test_draw_slot_presence_distinguishes_own_and_opponent_turns(self) -> None:
         region = {"x": 100, "y": 50, "width": 100, "height": 100}

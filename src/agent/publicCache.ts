@@ -1,11 +1,13 @@
 import { normalizeTile, parseGameTile, type GameTile } from "../game/tiles.js";
 import type { PublicTileObservation } from "../recognition/publicTileRecognizer.js";
+import type { JevHandPlan } from "../jev/client.js";
 
 export interface CachedPublicObservation extends PublicTileObservation {
   capturedAt: string;
   recognizedAt: string;
   recognitionLatencyMs: number;
   configuredRegions: string[];
+  handPlan?: JevHandPlan;
 }
 
 export function cachedPublicStatePatch(
