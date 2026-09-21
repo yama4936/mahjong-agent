@@ -57,6 +57,7 @@ for await (const line of lines) {
       publicObservation?: CachedPublicObservation;
     };
     id = request.id;
+    const processingStartedAt = performance.now();
     const activeLayout = request.dynamicLayout
       ? {
           ...layout,
@@ -162,6 +163,7 @@ for await (const line of lines) {
             ? { ignoredReason: cacheFreshnessIgnoredReason }
             : publicCacheIgnoredReason ? { ignoredReason: publicCacheIgnoredReason } : {}),
         },
+        processingElapsedMs: Math.max(0, Math.round(performance.now() - processingStartedAt)),
       };
     }
     process.stdout.write(`${JSON.stringify({ id, result })}\n`);

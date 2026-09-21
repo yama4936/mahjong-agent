@@ -27,6 +27,12 @@ class DashboardTest(unittest.TestCase):
         self.assertIn("d?.jev?.probabilities", HTML)
         self.assertIn("percent(probabilities[id])", HTML)
 
+    def test_dashboard_renders_total_and_decision_processing_times(self):
+        self.assertIn('id="processingTime"', HTML)
+        self.assertIn("e.processingElapsedMs", HTML)
+        self.assertIn("d?.arbitration?.elapsedMs", HTML)
+        self.assertIn("(v/1000).toFixed(3)+'秒'", HTML)
+
     def test_dashboard_renders_reaction_actions_without_a_discard_tile(self):
         self.assertIn("selected.action||d.recommendedAction", HTML)
         self.assertIn("pon:'ポン'", HTML)

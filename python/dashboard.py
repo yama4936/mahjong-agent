@@ -32,13 +32,14 @@ small{color:#aca692}.ok{color:#82d9a0}.stop{color:#ff9c91}
 <span class="pill" id="state">state: …</span><span class="pill" id="confidence">confidence: …</span>
 <span class="pill" id="updated">updated: …</span><span class="pill stop">READ ONLY</span></div>
 <section class="panel" aria-label="判定情報"><h2>判定モニター <small>保存ログ・現在の画面とは別時点</small></h2>
-<p id="judgedAt" class="muted">判定待ち</p><div class="metrics"><span id="recommendation">推奨：未判定</span><span id="tileScore">認識スコア：—</span><span id="margin">候補差：—</span><span id="execution">クリック：—</span></div>
+<p id="judgedAt" class="muted">判定待ち</p><div class="metrics"><span id="recommendation">推奨：未判定</span><span id="processingTime">処理時間：—</span><span id="tileScore">認識スコア：—</span><span id="margin">候補差：—</span><span id="execution">クリック：—</span></div>
 <div id="tiles" class="tiles" aria-label="認識手牌"></div><h3>選択肢 <small id="probabilityNote"></small></h3><div id="choices" class="choices" aria-label="選択肢と選択確率"></div><p id="reason" role="status"></p><p id="operator" class="muted"></p>
 <details><summary>判定データ</summary><pre id="judgmentJson"></pre></details></section>
 <strong>現在の画面（ライブ）</strong><img id="screen" alt="現在の雀魂画面"><small id="detail"></small><script>
 const el=id=>document.getElementById(id);
 const number=v=>typeof v==='number'?v.toFixed(3):'—';
 const percent=v=>typeof v==='number'?(v*100).toFixed(1)+'%':'—';
+const duration=v=>typeof v==='number'?(v/1000).toFixed(3)+'秒':'—';
 const actionName=a=>({discard:'打牌',riichi:'リーチ',tsumo:'ツモ',ron:'ロン',chi:'チー',pon:'ポン',minkan:'明槓',ankan:'暗槓',kakan:'加槓',pass:'見送り'}[a]||a||'未判定');
 function renderChoices(d){
  const probabilities=d?.jev?.probabilities||{};
@@ -59,6 +60,9 @@ function renderJudgment(j){
  const tile=selected.tile||d.tile;
  el('judgedAt').textContent=j?.timestamp?'判定時刻：'+new Date(j.timestamp).toLocaleString()+' ／ 保存ログ（ライブ判定ではありません）':'判定ログなし';
  el('recommendation').textContent='推奨：'+actionName(action)+(tile?' '+tile:'')+(e.status==='reaction_prompt'?'（盤面を特定できないため安全側）':'');
+ const total=e.processingElapsedMs,decision=d?.arbitration?.elapsedMs;
+ el('processingTime').textContent='処理時間：'+duration(total)+(typeof decision==='number'?'（判断 '+duration(decision)+'）':'');
+ el('processingTime').title='手牌認識の開始から判断完了まで。括弧内はJevを含む判断処理の時間です。';
  el('tileScore').textContent='認識スコア：'+number(r.confidence)+'（正解確率ではありません）';
  el('margin').textContent='候補差：'+number(r.ambiguityMargin);
  el('execution').textContent='クリック：'+(x.clicked===true?'送信済み'+(x.tileMultisetVerification?.verified?'・結果確認済み':''):x.clicked===false?'未実行':'実行記録なし');
