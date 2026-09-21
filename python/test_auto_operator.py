@@ -9,7 +9,7 @@ import tempfile
 import json
 from unittest.mock import Mock, patch
 
-from auto_operator import PythonAutoOperator, RetryableSafetyAbort, away_resume_geometry, crop_screenshot, discard_point_in_hand_geometry, force_auto_call_buttons, force_auto_reaction_win_button, force_auto_self_action_buttons, geometric_open_meld_count, is_away_resume_dialog, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, merge_public_observations, open_hand_draw_slot, post_call_transition, send_discard_click, should_guard_tenpai_reaction, should_process_reaction_prompt
+from auto_operator import PythonAutoOperator, RetryableSafetyAbort, away_resume_geometry, crop_screenshot, discard_point_in_hand_geometry, force_auto_call_buttons, force_auto_reaction_win_button, force_auto_self_action_buttons, geometric_open_meld_count, is_away_resume_dialog, is_contextual_reaction_pass, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, merge_public_observations, open_hand_draw_slot, post_call_transition, send_discard_click, should_guard_tenpai_reaction, should_process_reaction_prompt
 from screen_state import classify_screen, load_references
 
 
@@ -119,6 +119,87 @@ class AwayDialogDetectionTest(unittest.TestCase):
         self.assertEqual(operator.latest_screencast_frame, b"stream")
         self.assertEqual(operator.screencast_sequence, 1)
         operator.log.assert_not_called()
+
+    def test_stalled_stream_refreshes_to_captured_closed_hand_reaction_prompt(self) -> None:
+        project = Path(__file__).resolve().parents[1]
+        prompt = (project / "artifacts" / "debug-300-monitor.png").read_bytes()
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.layout = load_json(project / "config" / "layout.json")
+        operator.screencast_session = Mock()
+        operator.screencast_sequence = 7
+        operator.latest_screencast_frame = b"stale"
+        operator.screencast_draw_occupied = False
+        operator.screencast_draw_generation = 0
+        operator.rejected_screencast_size = None
+        operator.log = Mock()
+        page = Mock()
+        page.screenshot.return_value = prompt
+
+        self.assertTrue(operator.refresh_silent_screencast_gate(page))
+
+        pass_region = operator.layout["actionButtonRegions"]["pass"]
+        calls = force_auto_call_buttons(operator.latest_screencast_frame, operator.layout["viewport"])
+        self.assertTrue(calls)
+        self.assertTrue(is_contextual_reaction_pass(
+            operator.latest_screencast_frame, pass_region, len(calls),
+        ))
+        self.assertEqual(operator.screencast_sequence, 8)
+
+    def test_run_loop_routes_captured_prompt_after_screencast_stalls(self) -> None:
+        project = Path(__file__).resolve().parents[1]
+        prompt = (project / "artifacts" / "debug-300-monitor.png").read_bytes()
+        blank_buffer = io.BytesIO()
+        Image.new("RGB", (1920, 1080), (25, 55, 85)).save(blank_buffer, format="PNG")
+        with tempfile.TemporaryDirectory() as directory:
+            operator = PythonAutoOperator.__new__(PythonAutoOperator)
+            operator.args = argparse.Namespace(
+                mode="force-auto", max_iterations=7, poll=0.001,
+                accept_single_call=False, action_templates="",
+            )
+            operator.layout = load_json(project / "config" / "layout.json")
+            operator.hand_clip = {"x": 223, "y": 926, "width": 1355, "height": 146}
+            operator.action_clip = None
+            operator.frames = Path(directory)
+            operator.screen_references = {}
+            operator.screencast_session = Mock()
+            operator.latest_screencast_frame = blank_buffer.getvalue()
+            operator.screencast_sequence = 1
+            operator.screencast_draw_occupied = False
+            operator.screencast_draw_generation = 0
+            operator.rejected_screencast_size = None
+            operator.cached_public_observation = None
+            operator.cached_concealed_tiles = None
+            operator.cached_open_melds = 0
+            operator.dynamic_layout_required = False
+            operator.pending_post_call_discard = False
+            operator.pending_post_call_started_at = None
+            operator.restart_open_hand_probe_hash = None
+            operator.open_meld_candidate = None
+            operator.open_meld_candidate_frames = set()
+            operator.last_processed_hand = None
+            operator.armed = True
+            operator.previous_public_observation = None
+            operator.last_shanten = 1
+            operator.poll_public_recognition = Mock()
+            operator.ensure_viewport = Mock()
+            operator.start_screencast_gate = Mock()
+            operator.schedule_periodic_public_recognition = Mock()
+            operator.resume_if_away = Mock(return_value=False)
+            operator.advance_ranked_loop = Mock(return_value=False)
+            operator.recognize_resident = Mock(return_value={"tiles": ["1m"] * 13})
+            operator.execute_reaction_pass = Mock(return_value={"clicked": True, "action": "pass"})
+            operator.log = Mock()
+            page = Mock()
+            page.url = "https://game.mahjongsoul.com/index.html"
+            page.screenshot.return_value = prompt
+
+            with patch("auto_operator.classify_screen", return_value=("match", 1.0)):
+                operator.run(page)
+
+            operator.execute_reaction_pass.assert_called_once()
+            reaction = operator.execute_reaction_pass.call_args.args[1]
+            self.assertEqual(reaction["status"], "reaction_prompt")
+            self.assertEqual(reaction["actionButton"]["action"], "pass")
 
     def test_public_cache_only_grows_rivers_and_preserves_riichi(self) -> None:
         previous = {
@@ -504,6 +585,37 @@ class AwayDialogDetectionTest(unittest.TestCase):
             self.assertEqual(result["status"], "reaction_prompt")
             self.assertEqual(result["actionButton"]["center"], {"x": 200.0, "y": 90.0})
             operator.recognize_resident.assert_called_once_with(screenshot, concealed_only=True)
+
+    def test_live_open_hand_chi_skip_prompt_uses_contextual_reaction_gate(self) -> None:
+        project = Path(__file__).resolve().parents[1]
+        frame = (project / "artifacts" / "debug-300-current-end.png").read_bytes()
+        layout = load_json(project / "config" / "layout.json")
+        pass_region = layout["actionButtonRegions"]["pass"]
+        calls = force_auto_call_buttons(frame, layout["viewport"])
+
+        self.assertTrue(calls)
+        self.assertFalse(is_force_auto_pass_prompt(frame, pass_region))
+        self.assertTrue(is_contextual_reaction_pass(frame, pass_region, len(calls)))
+        self.assertFalse(is_contextual_reaction_pass(frame, pass_region, 0))
+
+    def test_contextual_open_hand_pass_accepts_compact_concealed_count(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            operator = PythonAutoOperator.__new__(PythonAutoOperator)
+            operator.args = argparse.Namespace(mode="force-auto", action_templates="")
+            operator.layout = {"actionButtonRegions": {
+                "pass": {"x": 100, "y": 50, "width": 200, "height": 80},
+            }}
+            operator.cached_open_melds = 1
+            operator.recognize_resident = Mock(return_value={"tiles": ["1m"] * 10})
+            screenshot = Path(directory) / "prompt.png"
+            Image.new("RGB", (400, 200), "navy").save(screenshot)
+
+            result = operator.force_auto_reaction_fallback(
+                screenshot, contextual_prompt_verified=True,
+            )
+
+            self.assertEqual(result["status"], "reaction_prompt")
+            self.assertEqual(result["actionButton"]["action"], "pass")
 
     def test_force_auto_post_discard_verifier_keeps_exact_multiset_check(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

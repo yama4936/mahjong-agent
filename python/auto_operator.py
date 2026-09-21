@@ -166,6 +166,24 @@ def is_force_auto_pass_clip(screenshot: bytes) -> bool:
     return dark >= 0.25 and warm >= 0.005 and neutral >= 0.02
 
 
+def is_contextual_reaction_pass(
+    screenshot: bytes, region: dict[str, float], action_button_count: int,
+) -> bool:
+    """Accept the stylized skip button only beside an independently found action."""
+    if action_button_count <= 0:
+        return False
+    with Image.open(io.BytesIO(screenshot)) as image:
+        button = image.convert("RGB").crop((
+            region["x"], region["y"],
+            region["x"] + region["width"], region["y"] + region["height"],
+        ))
+        dark = fraction_matching(button, lambda red, green, blue: red < 80 and green < 90 and blue < 100)
+        neutral = fraction_matching(
+            button, lambda red, green, blue: abs(red - green) < 25 and red > 110 and blue < 120,
+        )
+    return dark >= 0.25 and neutral >= 0.02
+
+
 def force_auto_call_buttons(screenshot: bytes, viewport: dict[str, int]) -> list[dict[str, Any]]:
     """Locate green/cyan chi/pon/kan buttons without confusing the hand row."""
     left = round(viewport["width"] * 0.35)
@@ -781,6 +799,19 @@ class PythonAutoOperator:
         self.log("screencast_gate_seeded", source="one_shot_screenshot")
         return True
 
+    def refresh_silent_screencast_gate(self, page: Page) -> bool:
+        """Refresh a stalled stream without racing a newly delivered frame."""
+        if self.screencast_session is None:
+            return False
+        sequence_before = self.screencast_sequence
+        frame = page.screenshot(animations="disabled")
+        if self.screencast_sequence != sequence_before:
+            return False
+        if not self.accept_screencast_frame(frame):
+            return False
+        self.log("screencast_gate_refreshed", source="silent_stream_one_shot")
+        return True
+
     def restart_screencast_gate(self, page: Page) -> None:
         """Re-subscribe after a viewport override invalidates Chrome's stream."""
         session = self.screencast_session
@@ -1108,15 +1139,19 @@ class PythonAutoOperator:
             raise RuntimeError((result.stderr or result.stdout or "frame evaluator failed").strip())
         return json.loads(result.stdout)
 
-    def force_auto_reaction_fallback(self, screenshot: Path) -> dict[str, Any] | None:
+    def force_auto_reaction_fallback(
+        self, screenshot: Path, *, contextual_prompt_verified: bool = False,
+    ) -> dict[str, Any] | None:
         """Build a pass-only reaction result when action templates are absent."""
         if self.args.mode != "force-auto" or self.args.action_templates:
             return None
         region = self.layout.get("actionButtonRegions", {}).get("pass")
-        if not region or not is_force_auto_pass_prompt(screenshot.read_bytes(), region):
+        if not region or (not contextual_prompt_verified
+                          and not is_force_auto_pass_prompt(screenshot.read_bytes(), region)):
             return None
         recognition = self.recognize_resident(screenshot, concealed_only=True)
-        if len(recognition.get("tiles", [])) != 13:
+        expected_concealed = 13 - getattr(self, "cached_open_melds", 0) * 3
+        if len(recognition.get("tiles", [])) != expected_concealed:
             return None
         point = {
             "x": region["x"] + region["width"] / 2,
@@ -1556,6 +1591,9 @@ class PythonAutoOperator:
             return {"clicked": False, "reason": "force_auto_only"}
         pass_region = self.layout.get("actionButtonRegions", {}).get("pass")
         current = force_auto_reaction_win_button(screenshot, self.layout["viewport"], pass_region)
+        if current is None and button.get("source") == "contextual_reaction_prompt":
+            contextual = force_auto_self_action_buttons(screenshot, self.layout["viewport"])
+            current = contextual[0] if len(contextual) == 1 else None
         if not current:
             raise RetryableSafetyAbort("reaction win button was not stable before click")
         point = current["center"]
@@ -1591,6 +1629,7 @@ class PythonAutoOperator:
         pass_gate_streak = 0
         call_gate_streak = 0
         reaction_win_gate_streak = 0
+        silent_gate_polls = 0
         while True:
             iterations += 1
             if self.args.max_iterations and iterations > self.args.max_iterations:
@@ -1610,7 +1649,12 @@ class PythonAutoOperator:
                 quick_reaction_win = False
                 if self.args.mode == "force-auto" and self.layout.get("drawSlot"):
                     if self.screencast_sequence == last_gate_sequence:
+                        silent_gate_polls += 1
                         page.wait_for_timeout(max(20, min(100, round(self.args.poll * 1000))))
+                        if silent_gate_polls >= 5 and self.refresh_silent_screencast_gate(page):
+                            silent_gate_polls = 0
+                    else:
+                        silent_gate_polls = 0
                     gate_frame = self.latest_screencast_frame
                     last_gate_sequence = self.screencast_sequence
                     restart_open_melds = self.verified_visible_open_melds(
@@ -1638,17 +1682,22 @@ class PythonAutoOperator:
                         or dynamic_draw_occupied \
                         or self.pending_post_call_discard or restart_open_hand_probe
                     pass_region = self.layout.get("actionButtonRegions", {}).get("pass")
-                    if not quick_draw and pass_region and gate_frame:
-                        quick_pass = is_force_auto_pass_clip(
-                            crop_screenshot(gate_frame, pass_region)
+                    quick_self_actions: list[dict[str, Any]] = []
+                    if gate_frame and pass_region and not self.pending_post_call_discard:
+                        quick_calls = force_auto_call_buttons(gate_frame, self.layout["viewport"])
+                        quick_self_actions = force_auto_self_action_buttons(
+                            gate_frame, self.layout["viewport"],
                         )
+                        quick_pass = is_force_auto_pass_clip(crop_screenshot(gate_frame, pass_region)) \
+                            or is_contextual_reaction_pass(
+                                gate_frame, pass_region, len(quick_calls) + len(quick_self_actions),
+                            )
                     if gate_frame and quick_pass and not self.pending_post_call_discard:
                         # Reaction prompts are independent of the draw-slot
                         # gate and must be inspected on every streamed frame.
-                        quick_calls = force_auto_call_buttons(gate_frame, self.layout["viewport"])
                         quick_reaction_win = force_auto_reaction_win_button(
                             gate_frame, self.layout["viewport"], pass_region,
-                        ) is not None
+                        ) is not None or bool(quick_self_actions)
                     draw_gate_streak = draw_gate_streak + 1 if quick_draw else 0
                     pass_gate_streak = pass_gate_streak + 1 if quick_pass else 0
                     call_gate_streak = call_gate_streak + 1 if quick_calls else 0
@@ -1724,9 +1773,13 @@ class PythonAutoOperator:
                     pass_region = self.layout.get("actionButtonRegions", {}).get("pass")
                     call_buttons = force_auto_call_buttons(full_screen, self.layout["viewport"]) \
                         if should_process_reaction_prompt(self.pending_post_call_discard) else []
-                    pass_prompt_present = bool(
-                        pass_region and is_force_auto_pass_prompt(full_screen, pass_region)
-                    )
+                    orange_buttons = force_auto_self_action_buttons(full_screen, self.layout["viewport"])
+                    pass_prompt_present = bool(pass_region and (
+                        is_force_auto_pass_prompt(full_screen, pass_region)
+                        or is_contextual_reaction_pass(
+                            full_screen, pass_region, len(call_buttons) + len(orange_buttons),
+                        )
+                    ))
                     has_reaction_prompt = bool(
                         should_process_reaction_prompt(self.pending_post_call_discard)
                         and pass_prompt_present
@@ -1737,6 +1790,8 @@ class PythonAutoOperator:
                         reaction_win = force_auto_reaction_win_button(
                             full_screen, self.layout["viewport"], pass_region,
                         )
+                        if reaction_win is None and len(orange_buttons) == 1:
+                            reaction_win = {**orange_buttons[0], "source": "contextual_reaction_prompt"}
                         if reaction_win:
                             receipt = self.execute_force_auto_reaction_win(page, full_screen, reaction_win)
                             self.log("reaction_win", screenshot=str(screenshot_path), execution=receipt)
@@ -1760,7 +1815,9 @@ class PythonAutoOperator:
                                      reason="reaction may contain ron; refusing blind pass")
                             time.sleep(max(self.args.poll, 1))
                             continue
-                        reaction = self.force_auto_reaction_fallback(screenshot_path)
+                        reaction = self.force_auto_reaction_fallback(
+                            screenshot_path, contextual_prompt_verified=pass_prompt_present,
+                        )
                         if reaction:
                             receipt = self.execute_reaction_pass(page, reaction)
                             self.log("reaction_prompt", screenshot=str(screenshot_path), evaluation=reaction, execution=receipt)
