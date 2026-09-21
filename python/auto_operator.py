@@ -804,9 +804,17 @@ class PythonAutoOperator:
         if self.screencast_session is None:
             return False
         sequence_before = self.screencast_sequence
+        prior_frame = self.latest_screencast_frame
+        prior_hash = perceptual_hash(prior_frame) if prior_frame is not None else None
+        first = page.screenshot(animations="disabled")
+        page.wait_for_timeout(20)
         frame = page.screenshot(animations="disabled")
-        if self.screencast_sequence != sequence_before:
+        if mean_pixel_delta(first, frame) > self.args.stability_pixel_delta:
             return False
+        if self.screencast_sequence != sequence_before:
+            streamed = self.latest_screencast_frame
+            if streamed is not None and perceptual_hash(streamed) != prior_hash:
+                return False
         if not self.accept_screencast_frame(frame):
             return False
         self.log("screencast_gate_refreshed", source="silent_stream_one_shot")
@@ -1630,6 +1638,8 @@ class PythonAutoOperator:
         call_gate_streak = 0
         reaction_win_gate_streak = 0
         silent_gate_polls = 0
+        unchanged_gate_content_polls = 0
+        last_gate_content_hash: str | None = None
         while True:
             iterations += 1
             if self.args.max_iterations and iterations > self.args.max_iterations:
@@ -1647,15 +1657,29 @@ class PythonAutoOperator:
                 quick_pass = False
                 quick_calls: list[dict[str, Any]] = []
                 quick_reaction_win = False
+                refreshed_stable_gate = False
                 if self.args.mode == "force-auto" and self.layout.get("drawSlot"):
                     if self.screencast_sequence == last_gate_sequence:
                         silent_gate_polls += 1
                         page.wait_for_timeout(max(20, min(100, round(self.args.poll * 1000))))
                         if silent_gate_polls >= 5 and self.refresh_silent_screencast_gate(page):
                             silent_gate_polls = 0
+                            refreshed_stable_gate = True
                     else:
                         silent_gate_polls = 0
                     gate_frame = self.latest_screencast_frame
+                    gate_content_hash = perceptual_hash(gate_frame) if gate_frame else None
+                    if gate_content_hash is not None and gate_content_hash == last_gate_content_hash:
+                        unchanged_gate_content_polls += 1
+                    else:
+                        unchanged_gate_content_polls = 0
+                    last_gate_content_hash = gate_content_hash
+                    if unchanged_gate_content_polls >= 5 \
+                            and self.refresh_silent_screencast_gate(page):
+                        gate_frame = self.latest_screencast_frame
+                        last_gate_content_hash = perceptual_hash(gate_frame) if gate_frame else None
+                        unchanged_gate_content_polls = 0
+                        refreshed_stable_gate = True
                     last_gate_sequence = self.screencast_sequence
                     restart_open_melds = self.verified_visible_open_melds(
                         self.cached_public_observation,
@@ -1702,6 +1726,13 @@ class PythonAutoOperator:
                     pass_gate_streak = pass_gate_streak + 1 if quick_pass else 0
                     call_gate_streak = call_gate_streak + 1 if quick_calls else 0
                     reaction_win_gate_streak = reaction_win_gate_streak + 1 if quick_reaction_win else 0
+                    if refreshed_stable_gate:
+                        if quick_pass:
+                            pass_gate_streak = max(pass_gate_streak, 2)
+                        if quick_calls:
+                            call_gate_streak = max(call_gate_streak, 2)
+                        if quick_reaction_win:
+                            reaction_win_gate_streak = max(reaction_win_gate_streak, 2)
                     if ((quick_draw and draw_gate_streak < 2)
                             or (quick_pass and pass_gate_streak < 2)
                             or (quick_calls and call_gate_streak < 2)

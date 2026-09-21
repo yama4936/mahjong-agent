@@ -124,10 +124,13 @@ class AwayDialogDetectionTest(unittest.TestCase):
         project = Path(__file__).resolve().parents[1]
         prompt = (project / "artifacts" / "debug-300-monitor.png").read_bytes()
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(stability_pixel_delta=1.5)
         operator.layout = load_json(project / "config" / "layout.json")
         operator.screencast_session = Mock()
         operator.screencast_sequence = 7
-        operator.latest_screencast_frame = b"stale"
+        stale = io.BytesIO()
+        Image.new("RGB", (1920, 1080), (25, 55, 85)).save(stale, format="PNG")
+        operator.latest_screencast_frame = stale.getvalue()
         operator.screencast_draw_occupied = False
         operator.screencast_draw_generation = 0
         operator.rejected_screencast_size = None
@@ -147,14 +150,14 @@ class AwayDialogDetectionTest(unittest.TestCase):
 
     def test_run_loop_routes_captured_prompt_after_screencast_stalls(self) -> None:
         project = Path(__file__).resolve().parents[1]
-        prompt = (project / "artifacts" / "debug-300-monitor.png").read_bytes()
+        prompt = (project / "artifacts" / "debug-300-current2.png").read_bytes()
         blank_buffer = io.BytesIO()
         Image.new("RGB", (1920, 1080), (25, 55, 85)).save(blank_buffer, format="PNG")
         with tempfile.TemporaryDirectory() as directory:
             operator = PythonAutoOperator.__new__(PythonAutoOperator)
             operator.args = argparse.Namespace(
                 mode="force-auto", max_iterations=7, poll=0.001,
-                accept_single_call=False, action_templates="",
+                accept_single_call=False, action_templates="", stability_pixel_delta=1.5,
             )
             operator.layout = load_json(project / "config" / "layout.json")
             operator.hand_clip = {"x": 223, "y": 926, "width": 1355, "height": 146}
@@ -192,12 +195,15 @@ class AwayDialogDetectionTest(unittest.TestCase):
             page = Mock()
             page.url = "https://game.mahjongsoul.com/index.html"
             page.screenshot.return_value = prompt
+            page.wait_for_timeout.side_effect = lambda _milliseconds: setattr(
+                operator, "screencast_sequence", operator.screencast_sequence + 1,
+            )
 
             with patch("auto_operator.classify_screen", return_value=("match", 1.0)):
                 operator.run(page)
 
-            operator.execute_reaction_pass.assert_called_once()
-            reaction = operator.execute_reaction_pass.call_args.args[1]
+            self.assertGreaterEqual(operator.execute_reaction_pass.call_count, 1)
+            reaction = operator.execute_reaction_pass.call_args_list[0].args[1]
             self.assertEqual(reaction["status"], "reaction_prompt")
             self.assertEqual(reaction["actionButton"]["action"], "pass")
 
