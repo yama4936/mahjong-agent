@@ -95,6 +95,27 @@ def mean_pixel_delta(first: bytes, second: bytes) -> float:
         return sum(ImageStat.Stat(difference).mean) / 3
 
 
+def tile_face_structure_delta(first: bytes, second: bytes, threshold: int = 120) -> float:
+    """Percent of dark/light tile-face pixels that changed.
+
+    Three-meld call effects can relight every remaining concealed tile for
+    several seconds.  Comparing a dark/light glyph mask ignores that moving
+    illumination while still making a changed tile face a large difference.
+    """
+    with Image.open(io.BytesIO(first)) as first_image, Image.open(io.BytesIO(second)) as second_image:
+        first_mask = first_image.convert("L").point(lambda value: 255 if value < threshold else 0)
+        second_mask = second_image.convert("L").point(lambda value: 255 if value < threshold else 0)
+        difference = ImageChops.difference(first_mask, second_mask)
+        return ImageStat.Stat(difference).mean[0] / 255 * 100
+
+
+def stable_hand_delta(first: bytes, second: bytes, open_melds: int) -> float:
+    """Compare equivalent hand evidence, tolerating late three-meld relighting."""
+    if open_melds >= 3:
+        return tile_face_structure_delta(first, second)
+    return mean_pixel_delta(first, second)
+
+
 def crop_screenshot(screenshot: bytes, clip: dict[str, float]) -> bytes:
     """Crop a PNG in memory so one CDP capture can serve several checks."""
     with Image.open(io.BytesIO(screenshot)) as image:
@@ -1486,7 +1507,9 @@ class PythonAutoOperator:
             if evaluated_full is not None and stable_region is not None else evaluated_hand
         focused_streamed_hand = crop_screenshot(current_streamed_full, stable_region) \
             if current_streamed_full is not None and stable_region is not None else current_streamed_hand
-        streamed_delta = mean_pixel_delta(focused_evaluated_hand, focused_streamed_hand) \
+        streamed_delta = stable_hand_delta(
+            focused_evaluated_hand, focused_streamed_hand, trusted_open_melds,
+        ) \
             if focused_evaluated_hand is not None and focused_streamed_hand is not None else None
         streamed_turn_is_current = bool(
             evaluated_draw_generation is not None
@@ -1509,7 +1532,9 @@ class PythonAutoOperator:
             if not streamed_turn_is_current:
                 focused_hand_before = crop_screenshot(pre_click_full, stable_region) \
                     if stable_region is not None else hand_before
-                evaluated_delta = mean_pixel_delta(focused_evaluated_hand, focused_hand_before)
+                evaluated_delta = stable_hand_delta(
+                    focused_evaluated_hand, focused_hand_before, trusted_open_melds,
+                )
                 if evaluated_delta > self.args.stability_pixel_delta:
                     raise RetryableSafetyAbort(
                         f"hand changed since evaluation (pixel delta={evaluated_delta:.3f})"

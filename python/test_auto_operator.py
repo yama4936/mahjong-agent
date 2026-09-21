@@ -11,7 +11,7 @@ import json
 import time
 from unittest.mock import Mock, patch
 
-from auto_operator import PythonAutoOperator, RetryableSafetyAbort, away_resume_geometry, closed_concealed_row_visible, crop_screenshot, discard_point_in_hand_geometry, force_auto_call_buttons, force_auto_reaction_win_button, force_auto_self_action_buttons, geometric_open_meld_count, is_away_resume_dialog, is_contextual_reaction_pass, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, mean_pixel_delta, merge_public_observations, open_hand_draw_slot, own_meld_surface_visible, post_call_transition, send_discard_click, should_guard_tenpai_reaction, should_process_reaction_prompt, stable_hand_comparison_region
+from auto_operator import PythonAutoOperator, RetryableSafetyAbort, away_resume_geometry, closed_concealed_row_visible, crop_screenshot, discard_point_in_hand_geometry, force_auto_call_buttons, force_auto_reaction_win_button, force_auto_self_action_buttons, geometric_open_meld_count, is_away_resume_dialog, is_contextual_reaction_pass, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, mean_pixel_delta, merge_public_observations, open_hand_draw_slot, own_meld_surface_visible, post_call_transition, send_discard_click, should_guard_tenpai_reaction, should_process_reaction_prompt, stable_hand_comparison_region, stable_hand_delta
 from screen_state import classify_screen, load_references
 
 
@@ -1109,6 +1109,59 @@ class AwayDialogDetectionTest(unittest.TestCase):
         self.assertTrue(receipt["clicked"])
         self.assertLess(time.monotonic() - started, 5.0)
         page.mouse.click.assert_called_once_with(1217.5, 996.5, click_count=2, delay=80)
+
+    def test_three_meld_relighting_uses_glyph_structure_and_discards_within_clock(self) -> None:
+        project = Path(__file__).resolve().parents[1]
+        frames = project / "artifacts" / "friend-5-20" / "frames"
+        evaluated_full = (frames / "2026-09-21T06-33-10.603818+00-00.jpg").read_bytes()
+        current_full = (frames / "2026-09-21T06-33-12.833862+00-00.jpg").read_bytes()
+        layout = load_json(project / "config" / "layout.json")
+        hand_clip = {"x": 223, "y": 926, "width": 1355, "height": 146}
+        stable_region = stable_hand_comparison_region(layout, 3)
+        self.assertIsNotNone(stable_region)
+        evaluated_faces = crop_screenshot(evaluated_full, stable_region)
+        current_faces = crop_screenshot(current_full, stable_region)
+        self.assertGreater(mean_pixel_delta(evaluated_faces, current_faces), 1.5)
+        self.assertLess(stable_hand_delta(evaluated_faces, current_faces, 3), 1.5)
+
+        changed = io.BytesIO()
+        Image.new("RGB", (454, 108), "black").save(changed, format="PNG")
+        unchanged = io.BytesIO()
+        Image.new("RGB", (454, 108), "white").save(unchanged, format="PNG")
+        self.assertGreater(stable_hand_delta(changed.getvalue(), unchanged.getvalue(), 3), 1.5)
+
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(mode="force-auto", allow_local_discard=False,
+                                           stability_pixel_delta=1.5)
+        operator.layout = layout
+        operator.hand_clip = hand_clip
+        operator.river_clip = {"x": 740, "y": 520, "width": 430, "height": 300}
+        operator.cached_open_melds = 3
+        operator.screencast_session = Mock()
+        operator.latest_screencast_frame = current_full
+        operator.screencast_draw_generation = 11
+        operator.log = Mock()
+        operator.confirm_discard = Mock(return_value={"confirmation": "hand_and_own_river_changed"})
+        page = Mock()
+        evaluation = {
+            "decision": {"selectedAction": {"action": "discard", "tile": "5p"}},
+            "recognition": {"tiles": ["1p", "2p", "3p", "4p", "5p"], "safe": True},
+            "clickIndex": 0,
+            "clickPoint": {"x": 268.5, "y": 999.5},
+            "openMelds": 3,
+        }
+
+        started = time.monotonic()
+        receipt = operator.execute(
+            page, evaluation,
+            evaluated_hand=crop_screenshot(evaluated_full, hand_clip),
+            evaluated_full=evaluated_full,
+            evaluated_draw_generation=11,
+        )
+
+        self.assertTrue(receipt["clicked"])
+        self.assertLess(time.monotonic() - started, 5.0)
+        page.mouse.click.assert_called_once_with(268.5, 999.5, click_count=2, delay=80)
 
     def test_live_over_inferred_meld_count_and_out_of_hand_click_are_rejected(self) -> None:
         project = Path(__file__).resolve().parents[1]
