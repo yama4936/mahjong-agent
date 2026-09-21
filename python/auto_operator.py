@@ -179,7 +179,7 @@ def is_contextual_reaction_pass(
         ))
         dark = fraction_matching(button, lambda red, green, blue: red < 80 and green < 90 and blue < 100)
         neutral = fraction_matching(
-            button, lambda red, green, blue: abs(red - green) < 25 and red > 110 and blue < 120,
+            button, lambda red, green, blue: abs(red - green) < 30 and red > 110 and blue < 125,
         )
     return dark >= 0.25 and neutral >= 0.02
 
@@ -1726,6 +1726,13 @@ class PythonAutoOperator:
                     pass_gate_streak = pass_gate_streak + 1 if quick_pass else 0
                     call_gate_streak = call_gate_streak + 1 if quick_calls else 0
                     reaction_win_gate_streak = reaction_win_gate_streak + 1 if quick_reaction_win else 0
+                    if quick_pass and pass_gate_streak == 1:
+                        self.log(
+                            "reaction_gate_candidate",
+                            callButtonCount=len(quick_calls),
+                            orangeButtonCount=len(quick_self_actions),
+                            contextual=not is_force_auto_pass_clip(crop_screenshot(gate_frame, pass_region)),
+                        )
                     if refreshed_stable_gate:
                         if quick_pass:
                             pass_gate_streak = max(pass_gate_streak, 2)

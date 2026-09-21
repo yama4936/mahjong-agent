@@ -148,15 +148,16 @@ class AwayDialogDetectionTest(unittest.TestCase):
         ))
         self.assertEqual(operator.screencast_sequence, 8)
 
-    def test_run_loop_routes_captured_prompt_after_screencast_stalls(self) -> None:
+    def test_run_loop_routes_existing_jpeg_prompt_immediately_after_startup(self) -> None:
         project = Path(__file__).resolve().parents[1]
-        prompt = (project / "artifacts" / "debug-300-current2.png").read_bytes()
-        blank_buffer = io.BytesIO()
-        Image.new("RGB", (1920, 1080), (25, 55, 85)).save(blank_buffer, format="PNG")
+        prompt_image = Image.open(project / "artifacts" / "debug-300-after-hash-fix.png").convert("RGB")
+        prompt_buffer = io.BytesIO()
+        prompt_image.save(prompt_buffer, format="JPEG", quality=55)
+        prompt = prompt_buffer.getvalue()
         with tempfile.TemporaryDirectory() as directory:
             operator = PythonAutoOperator.__new__(PythonAutoOperator)
             operator.args = argparse.Namespace(
-                mode="force-auto", max_iterations=7, poll=0.001,
+                mode="force-auto", max_iterations=2, poll=0.001,
                 accept_single_call=False, action_templates="", stability_pixel_delta=1.5,
             )
             operator.layout = load_json(project / "config" / "layout.json")
@@ -165,7 +166,7 @@ class AwayDialogDetectionTest(unittest.TestCase):
             operator.frames = Path(directory)
             operator.screen_references = {}
             operator.screencast_session = Mock()
-            operator.latest_screencast_frame = blank_buffer.getvalue()
+            operator.latest_screencast_frame = prompt
             operator.screencast_sequence = 1
             operator.screencast_draw_occupied = False
             operator.screencast_draw_generation = 0
@@ -195,9 +196,6 @@ class AwayDialogDetectionTest(unittest.TestCase):
             page = Mock()
             page.url = "https://game.mahjongsoul.com/index.html"
             page.screenshot.return_value = prompt
-            page.wait_for_timeout.side_effect = lambda _milliseconds: setattr(
-                operator, "screencast_sequence", operator.screencast_sequence + 1,
-            )
 
             with patch("auto_operator.classify_screen", return_value=("match", 1.0)):
                 operator.run(page)
@@ -206,6 +204,10 @@ class AwayDialogDetectionTest(unittest.TestCase):
             reaction = operator.execute_reaction_pass.call_args_list[0].args[1]
             self.assertEqual(reaction["status"], "reaction_prompt")
             self.assertEqual(reaction["actionButton"]["action"], "pass")
+            self.assertTrue(any(
+                call.args and call.args[0] == "reaction_gate_candidate"
+                for call in operator.log.call_args_list
+            ))
 
     def test_public_cache_only_grows_rivers_and_preserves_riichi(self) -> None:
         previous = {
