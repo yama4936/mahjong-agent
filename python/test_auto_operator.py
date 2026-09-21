@@ -9,7 +9,7 @@ import tempfile
 import json
 from unittest.mock import Mock, patch
 
-from auto_operator import PythonAutoOperator, away_resume_geometry, force_auto_call_buttons, force_auto_self_action_buttons, is_away_resume_dialog, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, merge_public_observations, send_discard_click, should_guard_tenpai_reaction
+from auto_operator import PythonAutoOperator, away_resume_geometry, force_auto_call_buttons, force_auto_reaction_win_button, force_auto_self_action_buttons, is_away_resume_dialog, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, merge_public_observations, send_discard_click, should_guard_tenpai_reaction
 from screen_state import classify_screen, load_references
 
 
@@ -125,6 +125,21 @@ class AwayDialogDetectionTest(unittest.TestCase):
         buttons = force_auto_self_action_buttons(output.getvalue(), viewport)
         self.assertEqual(len(buttons), 1)
         self.assertEqual(buttons[0]["center"], {"x": 1012.0, "y": 740.0})
+
+    def test_force_auto_reaction_win_requires_pass_and_one_orange_button(self) -> None:
+        viewport = {"width": 1600, "height": 900}
+        pass_region = {"x": 1170, "y": 650, "width": 275, "height": 105}
+        image = Image.new("RGB", (1600, 900), (25, 55, 85))
+        draw = ImageDraw.Draw(image)
+        draw.rectangle((850, 650, 1050, 743), fill=(190, 90, 35))
+        draw.rectangle((1170, 650, 1445, 755), fill=(35, 40, 45))
+        draw.rectangle((1210, 675, 1240, 690), fill=(180, 150, 70))
+        draw.rectangle((1260, 675, 1320, 690), fill=(150, 145, 90))
+        output = io.BytesIO()
+        image.save(output, format="PNG")
+        button = force_auto_reaction_win_button(output.getvalue(), viewport, pass_region)
+        self.assertIsNotNone(button)
+        self.assertEqual(button["center"], {"x": 950.0, "y": 696.5})
 
     def test_single_call_arms_compact_hand_discard_after_button_disappears(self) -> None:
         viewport = {"width": 1600, "height": 900}

@@ -243,7 +243,9 @@ def force_auto_self_action_buttons(screenshot: bytes, viewport: dict[str, int]) 
     left = round(viewport["width"] * 0.35)
     top = round(viewport["height"] * 0.68)
     right = round(viewport["width"] * 0.75)
-    bottom = round(viewport["height"] * 0.91)
+    # The concealed hand starts at roughly 85% of the viewport height. Its
+    # orange tile borders otherwise look like a huge riichi/ron button.
+    bottom = round(viewport["height"] * 0.875)
     with Image.open(io.BytesIO(screenshot)) as image:
         pixels = image.convert("RGB")
         active_columns: list[tuple[int, int, int]] = []
@@ -272,7 +274,19 @@ def force_auto_self_action_buttons(screenshot: bytes, viewport: dict[str, int]) 
         },
     } for group in groups
         if group[-1][0] - group[0][0] >= viewport["width"] * 0.07
-        and max(column[2] for column in group) - min(column[1] for column in group) >= viewport["height"] * 0.04]
+        and group[-1][0] - group[0][0] <= viewport["width"] * 0.20
+        and max(column[2] for column in group) - min(column[1] for column in group) >= viewport["height"] * 0.04
+        and max(column[2] for column in group) - min(column[1] for column in group) <= viewport["height"] * 0.16]
+
+
+def force_auto_reaction_win_button(
+    screenshot: bytes, viewport: dict[str, int], pass_region: dict[str, float] | None,
+) -> dict[str, Any] | None:
+    """Return one orange/red ron button only while a reaction prompt is visible."""
+    if not pass_region or not is_force_auto_pass_prompt(screenshot, pass_region):
+        return None
+    buttons = force_auto_self_action_buttons(screenshot, viewport)
+    return buttons[0] if len(buttons) == 1 else None
 
 
 def is_draw_slot_occupied(screenshot: bytes, region: dict[str, float]) -> bool:
@@ -1251,7 +1265,33 @@ class PythonAutoOperator:
                     "clicked": True, "policy": "force_auto", "action": "call",
                     "clickPoint": point, "confirmation": "call_button_disappeared",
                 }
-        raise RuntimeError("call button did not disappear after click")
+        raise RetryableSafetyAbort("call button did not disappear after click")
+
+    def execute_force_auto_reaction_win(
+        self, page: Page, screenshot: bytes, button: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Accept an unambiguous ron button and verify that the prompt closes."""
+        if self.args.mode != "force-auto":
+            return {"clicked": False, "reason": "force_auto_only"}
+        pass_region = self.layout.get("actionButtonRegions", {}).get("pass")
+        current = force_auto_reaction_win_button(screenshot, self.layout["viewport"], pass_region)
+        if not current:
+            raise RetryableSafetyAbort("reaction win button was not stable before click")
+        point = current["center"]
+        self.log("action_click_sent", action="ron", clickPoint=point, source="reaction_win_color")
+        page.mouse.click(point["x"], point["y"])
+        deadline = time.monotonic() + min(3.0, self.args.confirmation_timeout)
+        while time.monotonic() < deadline:
+            page.wait_for_timeout(50)
+            after = page.screenshot(animations="disabled")
+            if not force_auto_reaction_win_button(after, self.layout["viewport"], pass_region):
+                self.last_processed_hand = None
+                self.armed = True
+                return {
+                    "clicked": True, "policy": "force_auto", "action": "ron",
+                    "clickPoint": point, "confirmation": "reaction_win_button_disappeared",
+                }
+        raise RetryableSafetyAbort("reaction win button did not disappear after click")
 
     def run(self, page: Page) -> None:
         self.ensure_viewport(page, force=True)
@@ -1267,6 +1307,7 @@ class PythonAutoOperator:
         draw_gate_streak = 0
         pass_gate_streak = 0
         call_gate_streak = 0
+        reaction_win_gate_streak = 0
         while True:
             iterations += 1
             if self.args.max_iterations and iterations > self.args.max_iterations:
@@ -1278,6 +1319,7 @@ class PythonAutoOperator:
                 quick_draw = False
                 quick_pass = False
                 quick_calls: list[dict[str, Any]] = []
+                quick_reaction_win = False
                 if self.args.mode == "force-auto" and self.layout.get("drawSlot"):
                     if self.screencast_sequence == last_gate_sequence:
                         page.wait_for_timeout(max(20, min(100, round(self.args.poll * 1000))))
@@ -1293,17 +1335,22 @@ class PythonAutoOperator:
                         # Reaction prompts are independent of the draw-slot
                         # gate and must be inspected on every streamed frame.
                         quick_calls = force_auto_call_buttons(gate_frame, self.layout["viewport"])
+                        quick_reaction_win = force_auto_reaction_win_button(
+                            gate_frame, self.layout["viewport"], pass_region,
+                        ) is not None
                     draw_gate_streak = draw_gate_streak + 1 if quick_draw else 0
                     pass_gate_streak = pass_gate_streak + 1 if quick_pass else 0
                     call_gate_streak = call_gate_streak + 1 if quick_calls else 0
+                    reaction_win_gate_streak = reaction_win_gate_streak + 1 if quick_reaction_win else 0
                     if ((quick_draw and draw_gate_streak < 2)
                             or (quick_pass and pass_gate_streak < 2)
-                            or (quick_calls and call_gate_streak < 2)):
+                            or (quick_calls and call_gate_streak < 2)
+                            or (quick_reaction_win and reaction_win_gate_streak < 2)):
                         page.wait_for_timeout(20)
                         continue
                     # The small regions are the latency-critical turn gate.
                     # Keep a periodic full frame for away/result handling.
-                    if not quick_draw and not quick_pass and not quick_calls and iterations % 10:
+                    if not quick_draw and not quick_pass and not quick_calls and not quick_reaction_win and iterations % 10:
                         page.wait_for_timeout(max(20, round(self.args.poll * 1000)))
                         continue
                 full_screen = gate_frame or page.screenshot(animations="disabled")
@@ -1361,6 +1408,14 @@ class PythonAutoOperator:
                     if call_buttons or (pass_region and is_force_auto_pass_prompt(full_screen, pass_region)):
                         screenshot_path = self.frames / f"{utc_stamp()}.png"
                         screenshot_path.write_bytes(full_screen)
+                        reaction_win = force_auto_reaction_win_button(
+                            full_screen, self.layout["viewport"], pass_region,
+                        )
+                        if reaction_win:
+                            receipt = self.execute_force_auto_reaction_win(page, full_screen, reaction_win)
+                            self.log("reaction_win", screenshot=str(screenshot_path), execution=receipt)
+                            time.sleep(self.args.poll)
+                            continue
                         if getattr(self.args, "accept_single_call", False) and len(call_buttons) == 1:
                             receipt = self.execute_force_auto_call(page, full_screen, call_buttons[0])
                             self.log("reaction_call", screenshot=str(screenshot_path), execution=receipt)
