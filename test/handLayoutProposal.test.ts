@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
 import sharp from "sharp";
-import { knownOpenHandProposalFitsCalibratedRow, layoutFromHandProposal, proposeHandLayout, proposeLiveHandLayout } from "../src/recognition/handLayoutProposal.js";
+import { calibratedOpenHandProposal, knownOpenHandProposalFitsCalibratedRow, layoutFromHandProposal, proposeHandLayout, proposeLiveHandLayout } from "../src/recognition/handLayoutProposal.js";
 import { layoutSchema } from "../src/recognition/layout.js";
 
 async function calibratedLayout() {
@@ -161,6 +161,20 @@ test("accepts only a complete compact row inside the shifted draw boundary", asy
     ...translated,
     clickPoints: translated.clickPoints.map((point, index) => index === 7 ? { ...point, x: 1446.5 } : point),
   }, layout, 2), false);
+});
+
+test("rebuilds the first-pon compact row from calibration when call lighting hides components", async () => {
+  const layout = await calibratedLayout();
+  const frame = "artifacts/friend-5-20/frames/2026-09-21T06-50-21.307113+00-00.jpg";
+  await assert.rejects(proposeHandLayout(frame, [11]), /Could not isolate a 11-tile hand row/);
+  const started = performance.now();
+  const proposal = calibratedOpenHandProposal(layout, 1);
+  assert.equal(proposal.handSlots.length, 10);
+  assert.equal(proposal.clickPoints.length, 11);
+  assert.deepEqual(proposal.drawSlot, { x: 1201, y: 926, width: 92, height: 146 });
+  assert.equal(knownOpenHandProposalFitsCalibratedRow(proposal, layout, 1), true);
+  assert.ok(proposal.clickPoints.every((point) => point.y === 999));
+  assert.ok(performance.now() - started < 5_000);
 });
 
 test("converts a proposal to an Advisor-only layout", () => {

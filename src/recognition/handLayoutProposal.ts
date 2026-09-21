@@ -106,6 +106,48 @@ export function knownOpenHandProposalFitsCalibratedRow(
   );
 }
 
+/**
+ * Rebuild a compact row from the passing calibration after a confirmed call.
+ * The bright-component detector is deliberately only the first choice: the
+ * call overlay can join or dim every face for longer than the base clock.
+ * Slot recognition still has to accept every calibrated face independently.
+ */
+export function calibratedOpenHandProposal(
+  layout: Pick<ScreenLayout, "viewport" | "handSlots" | "drawSlot">,
+  openMelds: number,
+): HandLayoutProposal {
+  if (!layout.drawSlot || layout.handSlots.length < 2 || !Number.isInteger(openMelds) || openMelds < 1 || openMelds > 4) {
+    throw new Error("calibrated open hand requires a draw slot, hand pitch, and one through four melds");
+  }
+  const detectedTiles = 14 - openMelds * 3;
+  const concealedCount = detectedTiles - 1;
+  const pitches = layout.handSlots.slice(1)
+    .map((slot, index) => slot.x - layout.handSlots[index]!.x)
+    .sort((left, right) => left - right);
+  const pitch = pitches[Math.floor(pitches.length / 2)]!;
+  const handSlots = layout.handSlots.slice(0, concealedCount);
+  if (handSlots.length !== concealedCount) throw new Error("calibrated layout has too few hand slots");
+  const drawSlot = { ...layout.drawSlot, x: layout.drawSlot.x - openMelds * 3 * pitch };
+  const rects = [...handSlots, drawSlot];
+  return {
+    viewport: layout.viewport,
+    handSlots,
+    drawSlot,
+    clickPoints: rects.map((rect) => ({ x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 })),
+    evidence: {
+      detectedTiles,
+      luminanceThreshold: -1,
+      medianWidth: median(rects.map((rect) => rect.width)),
+      medianHeight: median(rects.map((rect) => rect.height)),
+      medianGap: pitch - median(handSlots.map((rect) => rect.width)),
+      drawGap: drawSlot.x - (handSlots.at(-1)!.x + handSlots.at(-1)!.width),
+      rowBottomSpread: 0,
+    },
+    confidence: 0.99,
+    requiresHoldoutValidation: true,
+  };
+}
+
 function splitSeparatedGroups(row: RegionCandidate[]): RegionCandidate[][] {
   if (row.length < 2) return [row];
   const widths = row.map((tile) => tile.width);

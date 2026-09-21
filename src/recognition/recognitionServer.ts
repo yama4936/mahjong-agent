@@ -5,7 +5,7 @@ import { cachedPublicStatePatch, type CachedPublicObservation } from "../agent/p
 import { isHandPlanCompatible, JevClient } from "../jev/client.js";
 import { parseGameState, parsePublicGameState } from "../game/state.js";
 import { parseGameTile } from "../game/tiles.js";
-import { knownOpenHandProposalFitsCalibratedRow, proposeHandLayout, proposeLiveHandLayout } from "./handLayoutProposal.js";
+import { calibratedOpenHandProposal, knownOpenHandProposalFitsCalibratedRow, proposeHandLayout, proposeLiveHandLayout } from "./handLayoutProposal.js";
 import { layoutSchema } from "./layout.js";
 import { recognizeHand, recognizeTileSlots, warmTemplateCache, type MatcherOptions } from "./templateMatcher.js";
 
@@ -67,9 +67,13 @@ for await (const line of lines) {
     const frameCapturedAtMs = (await stat(request.screenshot)).mtimeMs;
     let proposal;
     if (request.dynamicLayout) {
-      proposal = request.openMelds !== undefined && request.openMelds > 0
-        ? await proposeHandLayout(request.screenshot, [14 - request.openMelds * 3])
-        : await proposeLiveHandLayout(request.screenshot);
+      if (request.openMelds !== undefined && request.openMelds > 0) {
+        try {
+          proposal = await proposeHandLayout(request.screenshot, [14 - request.openMelds * 3]);
+        } catch {
+          proposal = calibratedOpenHandProposal(layout, request.openMelds);
+        }
+      } else proposal = await proposeLiveHandLayout(request.screenshot);
       if (request.openMelds !== undefined && request.openMelds > 0
           && !knownOpenHandProposalFitsCalibratedRow(proposal, layout, request.openMelds)) {
         throw new Error(`dynamic hand proposal is outside calibrated ${request.openMelds}-meld concealed row`);
