@@ -1295,13 +1295,11 @@ class PythonAutoOperator:
                 sequence_before = self.screencast_sequence
             else:
                 current = page.screenshot(animations="disabled")
-            if not force_auto_call_buttons(current, self.layout["viewport"]):
-                hand_delta = mean_pixel_delta(hand_before, crop_screenshot(current, self.hand_clip))
-                meld_delta = mean_pixel_delta(meld_before, crop_screenshot(current, meld_region)) \
-                    if meld_before is not None and meld_region else 0
-                if hand_delta < self.args.action_pixel_delta \
-                        or (meld_region and meld_delta < self.args.action_pixel_delta):
-                    continue
+            hand_delta = mean_pixel_delta(hand_before, crop_screenshot(current, self.hand_clip))
+            meld_delta = mean_pixel_delta(meld_before, crop_screenshot(current, meld_region)) \
+                if meld_before is not None and meld_region else 0
+            if hand_delta >= self.args.action_pixel_delta \
+                    and (not meld_region or meld_delta >= self.args.action_pixel_delta):
                 transition = post_call_transition(call_action, self.cached_open_melds)
                 self.cached_concealed_tiles = None
                 self.cached_open_melds = transition["openMelds"]
@@ -1319,7 +1317,7 @@ class PythonAutoOperator:
                     "pendingPostCallDiscard": self.pending_post_call_discard,
                     "nextAction": "discard" if self.pending_post_call_discard else "rinshan_draw",
                 }
-        raise RetryableSafetyAbort("call button did not disappear after click")
+        raise RetryableSafetyAbort("hand and own meld did not change after call click")
 
     def execute_force_auto_reaction_win(
         self, page: Page, screenshot: bytes, button: dict[str, Any],
@@ -1385,7 +1383,7 @@ class PythonAutoOperator:
                         quick_pass = is_force_auto_pass_clip(
                             crop_screenshot(gate_frame, pass_region)
                         )
-                    if gate_frame and not self.pending_post_call_discard:
+                    if gate_frame and quick_pass and not self.pending_post_call_discard:
                         # Reaction prompts are independent of the draw-slot
                         # gate and must be inspected on every streamed frame.
                         quick_calls = force_auto_call_buttons(gate_frame, self.layout["viewport"])
@@ -1464,9 +1462,12 @@ class PythonAutoOperator:
                     pass_region = self.layout.get("actionButtonRegions", {}).get("pass")
                     call_buttons = force_auto_call_buttons(full_screen, self.layout["viewport"]) \
                         if should_process_reaction_prompt(self.pending_post_call_discard) else []
+                    pass_prompt_present = bool(
+                        pass_region and is_force_auto_pass_prompt(full_screen, pass_region)
+                    )
                     has_reaction_prompt = bool(
                         should_process_reaction_prompt(self.pending_post_call_discard)
-                        and (call_buttons or (pass_region and is_force_auto_pass_prompt(full_screen, pass_region)))
+                        and pass_prompt_present
                     )
                     if has_reaction_prompt:
                         screenshot_path = self.frames / f"{utc_stamp()}.png"
@@ -1480,7 +1481,12 @@ class PythonAutoOperator:
                             time.sleep(self.args.poll)
                             continue
                         if getattr(self.args, "accept_single_call", False) and len(call_buttons) == 1:
-                            receipt = self.execute_force_auto_call(page, full_screen, call_buttons[0])
+                            try:
+                                receipt = self.execute_force_auto_call(page, full_screen, call_buttons[0])
+                            except RetryableSafetyAbort as error:
+                                self.log("reaction_call_unconfirmed", screenshot=str(screenshot_path), error=str(error))
+                                page.wait_for_timeout(max(100, round(self.args.poll * 1000)))
+                                continue
                             self.log("reaction_call", screenshot=str(screenshot_path), execution=receipt)
                             time.sleep(self.args.poll)
                             continue

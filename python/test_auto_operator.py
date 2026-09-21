@@ -169,6 +169,9 @@ class AwayDialogDetectionTest(unittest.TestCase):
         table = Image.new("RGB", (1600, 900), (25, 55, 85))
         ImageDraw.Draw(table).rectangle((100, 780, 500, 899), fill=(230, 225, 210))
         ImageDraw.Draw(table).rectangle((20, 700, 180, 770), fill=(230, 225, 210))
+        # A completed meld can still contain enough cyan/green pixels to look
+        # like an action button. Visual hand+meld change remains authoritative.
+        ImageDraw.Draw(table).rectangle((900, 650, 1080, 743), fill=(25, 145, 180))
         table.save(table_bytes, format="PNG")
         button = force_auto_call_buttons(prompt_bytes.getvalue(), viewport)[0]
 
