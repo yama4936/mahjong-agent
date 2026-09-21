@@ -1215,7 +1215,7 @@ class PythonAutoOperator:
             self.pending_post_call_started_at = None
             self.round_terminal_latched = True
             self.round_terminal_result_observed = True
-            if self.args.advance_screens:
+            if self.args.advance_screens or self.args.ranked_loop:
                 self.advance_result_screen_once(page, state, confidence)
             return True
         if state in {"lobby", "ranked_menu", "ranked_room", "matchmaking"}:

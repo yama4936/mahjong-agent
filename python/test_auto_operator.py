@@ -1744,7 +1744,9 @@ class AwayDialogDetectionTest(unittest.TestCase):
         project = Path(__file__).resolve().parents[1]
         state, confidence = classify_screen(project / "artifacts" / "ranked-current-check.png", {})
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
-        operator.args = argparse.Namespace(ranked_loop=True, advance_screens=True)
+        # Ranked-loop must advance a static result after restart even when the
+        # separate manual --advance-screens option was not supplied.
+        operator.args = argparse.Namespace(ranked_loop=True, advance_screens=False)
         operator.layout = {"viewport": {"width": 1920, "height": 1080}}
         operator.result_screen_advanced = False
         operator.last_ranked_loop_state = None
