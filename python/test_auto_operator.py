@@ -383,11 +383,17 @@ class AwayDialogDetectionTest(unittest.TestCase):
     def test_private_env_loader_passes_only_jev_settings(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / ".env.local"
-            path.write_text("TYPESAFE_API_KEY=test-secret\nIGNORED=value\nJEV_MODEL=test-model\n", encoding="utf-8")
+            path.write_text(
+                "TYPESAFE_API_KEY=test-secret\nIGNORED=value\nJEV_MODEL=test-model\n"
+                "JEV_FORCE_AUTO_DEADLINE_MS=2300\nFORCE_AUTO_CLICK_BUDGET_MS=2600\n",
+                encoding="utf-8",
+            )
             path.chmod(0o600)
             environment = load_secret_environment(Path(directory), ".env.local")
             self.assertEqual(environment["TYPESAFE_API_KEY"], "test-secret")
             self.assertEqual(environment["JEV_MODEL"], "test-model")
+            self.assertEqual(environment["JEV_FORCE_AUTO_DEADLINE_MS"], "2300")
+            self.assertEqual(environment["FORCE_AUTO_CLICK_BUDGET_MS"], "2600")
             self.assertNotIn("IGNORED", environment)
 
     def test_env_loader_rejects_group_readable_secret(self) -> None:

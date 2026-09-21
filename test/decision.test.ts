@@ -110,11 +110,11 @@ test("force-auto adopts a valid Jev decision before its deadline", async () => {
     };
   } } as any;
 
-  const result = await decideForceAutoWithJevDeadline(state, { jev, deadlineMs: 100 });
+  const result = await decideForceAutoWithJevDeadline(state, { jev, deadlineMs: 1_000 });
 
   assert.equal(result.source, "jev");
   assert.equal(result.arbitration?.selectedSource, "jev");
-  assert.equal(result.arbitration?.deadlineMs, 100);
+  assert.equal(result.arbitration?.deadlineMs, 1_000);
 });
 
 test("force-auto falls back locally when Jev exceeds its deadline", async () => {
@@ -132,7 +132,7 @@ test("force-auto falls back locally when Jev exceeds its deadline", async () => 
 test("force-auto falls back locally when Jev fails", async () => {
   const jev = { chooseDiscard: async () => { throw new Error("offline"); } } as any;
 
-  const result = await decideForceAutoWithJevDeadline(state, { jev, deadlineMs: 100 });
+  const result = await decideForceAutoWithJevDeadline(state, { jev, deadlineMs: 1_000 });
 
   assert.equal(result.source, "deterministic");
   assert.equal(result.arbitration?.selectedSource, "local");

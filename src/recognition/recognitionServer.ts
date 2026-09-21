@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { createInterface } from "node:readline";
 import { decideForceAutoWithJevDeadline } from "../agent/decision.js";
 import { cachedPublicStatePatch, type CachedPublicObservation } from "../agent/publicCache.js";
@@ -23,10 +23,15 @@ if (rawPublicState) {
   delete rawPublicState.recognition_confidence;
 }
 const publicState = rawPublicState ? parsePublicGameState(rawPublicState) : undefined;
-const forceAutoDeadlineMs = Number(process.env.JEV_FORCE_AUTO_DEADLINE_MS ?? 700);
+const forceAutoDeadlineMs = Number(process.env.JEV_FORCE_AUTO_DEADLINE_MS ?? 2_300);
 if (!Number.isFinite(forceAutoDeadlineMs) || forceAutoDeadlineMs <= 0) {
   throw new Error(`Invalid force-auto Jev deadline: ${process.env.JEV_FORCE_AUTO_DEADLINE_MS}`);
 }
+const forceAutoClickBudgetMs = Number(process.env.FORCE_AUTO_CLICK_BUDGET_MS ?? 2_600);
+if (!Number.isFinite(forceAutoClickBudgetMs) || forceAutoClickBudgetMs <= 0) {
+  throw new Error(`Invalid force-auto click budget: ${process.env.FORCE_AUTO_CLICK_BUDGET_MS}`);
+}
+const preClickReserveMs = 150;
 const maximumPublicCacheAgeMs = Number(process.env.FORCE_AUTO_PUBLIC_CACHE_MAX_AGE_MS ?? 15_000);
 if (!Number.isFinite(maximumPublicCacheAgeMs) || maximumPublicCacheAgeMs <= 0) {
   throw new Error(`Invalid force-auto public cache age: ${process.env.FORCE_AUTO_PUBLIC_CACHE_MAX_AGE_MS}`);
@@ -58,6 +63,7 @@ for await (const line of lines) {
     };
     id = request.id;
     const processingStartedAt = performance.now();
+    const frameCapturedAtMs = (await stat(request.screenshot)).mtimeMs;
     const activeLayout = request.dynamicLayout
       ? {
           ...layout,
@@ -126,10 +132,16 @@ for await (const line of lines) {
           recognitionConfidence: recognition.confidence,
         });
       }
+      const captureAgeBeforeDecisionMs = Math.max(0, Date.now() - frameCapturedAtMs);
+      const availableDecisionMs = Math.max(
+        1,
+        Math.floor(forceAutoClickBudgetMs - captureAgeBeforeDecisionMs - preClickReserveMs),
+      );
+      const decisionBudgetMs = Math.min(forceAutoDeadlineMs, availableDecisionMs);
       const decision = await decideForceAutoWithJevDeadline(state, {
         ...(jev ? { jev } : {}),
         ...(compatibleHandPlan ? { handPlan: compatibleHandPlan } : {}),
-        deadlineMs: forceAutoDeadlineMs,
+        deadlineMs: decisionBudgetMs,
       });
       const clickIndex = decision.selectedAction.action === "discard" || decision.selectedAction.action === "riichi"
         ? [...state.hand, ...(state.draw ? [state.draw] : [])].map(String).lastIndexOf(decision.selectedAction.tile)
@@ -168,6 +180,12 @@ for await (const line of lines) {
             : publicCacheIgnoredReason ? { ignoredReason: publicCacheIgnoredReason } : {}),
         },
         processingElapsedMs: Math.max(0, Math.round(performance.now() - processingStartedAt)),
+        turnTiming: {
+          clickBudgetMs: forceAutoClickBudgetMs,
+          captureAgeBeforeDecisionMs: Math.round(captureAgeBeforeDecisionMs),
+          preClickReserveMs,
+          decisionBudgetMs,
+        },
         handPlan: {
           applied: Boolean(compatibleHandPlan),
           ...(handPlan ? {

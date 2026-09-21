@@ -130,7 +130,7 @@ export async function decideForceAutoWithJevDeadline(
   state: GameState,
   options: { jev?: JevClient; deadlineMs?: number; handPlan?: JevHandPlan },
 ): Promise<DecisionResult> {
-  const deadlineMs = options.deadlineMs ?? 700;
+  const deadlineMs = options.deadlineMs ?? 2_300;
   if (!Number.isFinite(deadlineMs) || deadlineMs <= 0) throw new Error("Jev deadline must be positive");
   const startedAt = performance.now();
   const local = await decide(state, { mode: "force-auto" });
@@ -154,10 +154,13 @@ export async function decideForceAutoWithJevDeadline(
     return withArbitration(local, "local", "local_immediate_action");
   }
 
+  const remainingMs = deadlineMs - (performance.now() - startedAt);
+  if (remainingMs <= 0) return withArbitration(local, "local", "deadline_exceeded");
+
   const controller = new AbortController();
   let timeout: ReturnType<typeof setTimeout> | undefined;
   const deadline = new Promise<{ kind: "timeout" }>((resolve) => {
-    timeout = setTimeout(() => resolve({ kind: "timeout" }), deadlineMs);
+    timeout = setTimeout(() => resolve({ kind: "timeout" }), remainingMs);
   });
   const remote = decide(state, {
     mode: "force-auto", jev: options.jev, signal: controller.signal,

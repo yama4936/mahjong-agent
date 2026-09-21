@@ -166,7 +166,7 @@ async function main(): Promise<void> {
     const decision = modeArgument === "force-auto"
       ? await decideForceAutoWithJevDeadline(state, {
           ...(apiKey ? { jev: new JevClient(apiKey) } : {}),
-          deadlineMs: Number(process.env.JEV_FORCE_AUTO_DEADLINE_MS ?? 700),
+          deadlineMs: Number(process.env.JEV_FORCE_AUTO_DEADLINE_MS ?? 2_300),
         })
       : await decide(state, {
           mode: modeArgument,
