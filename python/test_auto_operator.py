@@ -9,7 +9,7 @@ import tempfile
 import json
 from unittest.mock import Mock, patch
 
-from auto_operator import PythonAutoOperator, away_resume_geometry, force_auto_call_buttons, force_auto_reaction_win_button, force_auto_self_action_buttons, is_away_resume_dialog, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, merge_public_observations, post_call_transition, send_discard_click, should_guard_tenpai_reaction
+from auto_operator import PythonAutoOperator, away_resume_geometry, force_auto_call_buttons, force_auto_reaction_win_button, force_auto_self_action_buttons, is_away_resume_dialog, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, merge_public_observations, post_call_transition, send_discard_click, should_guard_tenpai_reaction, should_process_reaction_prompt
 from screen_state import classify_screen, load_references
 
 
@@ -196,8 +196,10 @@ class AwayDialogDetectionTest(unittest.TestCase):
 
         self.assertEqual(receipt["confirmation"], "hand_and_own_meld_changed")
         self.assertEqual(receipt["action"], "chi")
+        self.assertEqual(receipt["nextAction"], "discard")
         self.assertEqual(operator.cached_open_melds, 2)
         self.assertTrue(operator.pending_post_call_discard)
+        self.assertIsNotNone(operator.pending_post_call_started_at)
         self.assertTrue(operator.dynamic_layout_required)
         self.assertTrue(operator.armed)
         page.mouse.click.assert_called_once_with(1012.0, 696.5)
@@ -209,6 +211,8 @@ class AwayDialogDetectionTest(unittest.TestCase):
         self.assertEqual(post_call_transition("minkan", 2), {
             "openMelds": 3, "dynamicLayoutRequired": True, "pendingPostCallDiscard": False,
         })
+        self.assertFalse(should_process_reaction_prompt(True))
+        self.assertTrue(should_process_reaction_prompt(False))
 
     def test_force_auto_reaction_fallback_requires_thirteen_concealed_tiles(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

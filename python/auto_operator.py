@@ -241,6 +241,11 @@ def post_call_transition(call_action: str, prior_open_melds: int) -> dict[str, A
     }
 
 
+def should_process_reaction_prompt(pending_post_call_discard: bool) -> bool:
+    """A verified chi/pon must discard before any new reaction is considered."""
+    return not pending_post_call_discard
+
+
 def should_guard_tenpai_reaction(last_shanten: int | None, call_buttons: list[dict[str, Any]]) -> bool:
     """Keep a possible win prompt untouched, but do not confuse a visible call with ron.
 
@@ -495,6 +500,7 @@ class PythonAutoOperator:
         self.screencast_draw_occupied: bool | None = None
         self.screencast_draw_generation = 0
         self.pending_post_call_discard = False
+        self.pending_post_call_started_at: float | None = None
         self.last_ranked_loop_state: str | None = None
         self.last_ranked_loop_click_at = 0.0
         if self.log_path.exists():
@@ -1301,6 +1307,8 @@ class PythonAutoOperator:
                 self.cached_open_melds = transition["openMelds"]
                 self.dynamic_layout_required = transition["dynamicLayoutRequired"]
                 self.pending_post_call_discard = transition["pendingPostCallDiscard"]
+                self.pending_post_call_started_at = time.monotonic() \
+                    if self.pending_post_call_discard else None
                 self.last_processed_hand = None
                 self.armed = True
                 return {
@@ -1309,6 +1317,7 @@ class PythonAutoOperator:
                     "handPixelDelta": hand_delta, "meldPixelDelta": meld_delta,
                     "openMelds": self.cached_open_melds,
                     "pendingPostCallDiscard": self.pending_post_call_discard,
+                    "nextAction": "discard" if self.pending_post_call_discard else "rinshan_draw",
                 }
         raise RetryableSafetyAbort("call button did not disappear after click")
 
@@ -1376,7 +1385,7 @@ class PythonAutoOperator:
                         quick_pass = is_force_auto_pass_clip(
                             crop_screenshot(gate_frame, pass_region)
                         )
-                    if gate_frame:
+                    if gate_frame and not self.pending_post_call_discard:
                         # Reaction prompts are independent of the draw-slot
                         # gate and must be inspected on every streamed frame.
                         quick_calls = force_auto_call_buttons(gate_frame, self.layout["viewport"])
@@ -1415,6 +1424,7 @@ class PythonAutoOperator:
                     self.cached_open_melds = 0
                     self.dynamic_layout_required = False
                     self.pending_post_call_discard = False
+                    self.pending_post_call_started_at = None
                     self.public_cache_generation += 1
                     self.public_cache_last_frame_hash = None
                     self.cached_public_observation = None
@@ -1452,8 +1462,13 @@ class PythonAutoOperator:
                 self.schedule_periodic_public_recognition(full_screen)
                 if self.args.mode == "force-auto":
                     pass_region = self.layout.get("actionButtonRegions", {}).get("pass")
-                    call_buttons = force_auto_call_buttons(full_screen, self.layout["viewport"])
-                    if call_buttons or (pass_region and is_force_auto_pass_prompt(full_screen, pass_region)):
+                    call_buttons = force_auto_call_buttons(full_screen, self.layout["viewport"]) \
+                        if should_process_reaction_prompt(self.pending_post_call_discard) else []
+                    has_reaction_prompt = bool(
+                        should_process_reaction_prompt(self.pending_post_call_discard)
+                        and (call_buttons or (pass_region and is_force_auto_pass_prompt(full_screen, pass_region)))
+                    )
+                    if has_reaction_prompt:
                         screenshot_path = self.frames / f"{utc_stamp()}.png"
                         screenshot_path.write_bytes(full_screen)
                         reaction_win = force_auto_reaction_win_button(
@@ -1700,6 +1715,7 @@ class PythonAutoOperator:
                 self.last_shanten = selected_candidate.get("shanten") if selected_candidate else None
                 if receipt.get("clicked") and receipt.get("confirmation") == "hand_and_own_river_changed":
                     self.pending_post_call_discard = False
+                    self.pending_post_call_started_at = None
                     recognized_tiles = evaluation.get("recognition", {}).get("tiles", [])
                     click_index = evaluation.get("clickIndex")
                     if isinstance(click_index, int) and len(recognized_tiles) == 14:
