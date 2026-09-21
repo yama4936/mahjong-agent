@@ -442,6 +442,7 @@ class PythonAutoOperator:
         self.public_recognition_request_id = 0
         self.public_cache_generation = 0
         self.public_cache_last_frame_hash: str | None = None
+        self.last_public_scan_at = 0.0
         self.cached_public_observation: dict[str, Any] | None = None
         if args.mode == "force-auto" and args.public_cache:
             try:
@@ -570,6 +571,20 @@ class PythonAutoOperator:
 
         self.public_recognition_thread = threading.Thread(target=recognize, daemon=True)
         self.public_recognition_thread.start()
+
+    def schedule_periodic_public_recognition(
+        self, screenshot: bytes, *, now: float | None = None,
+    ) -> bool:
+        """Refresh dora and other public tiles independently of turn state."""
+        if not getattr(self.args, "public_cache", False) or not self.public_recognition_server:
+            return False
+        observed_at = time.monotonic() if now is None else now
+        interval = max(0.1, float(getattr(self.args, "public_scan_interval", 2.0)))
+        if observed_at - self.last_public_scan_at < interval:
+            return False
+        self.last_public_scan_at = observed_at
+        self.schedule_public_recognition(screenshot)
+        return True
 
     def poll_public_recognition(self) -> None:
         with self.public_recognition_lock:
@@ -1402,6 +1417,9 @@ class PythonAutoOperator:
                 if self.resume_if_away(page, full_screen):
                     time.sleep(self.args.poll)
                     continue
+                # Dora can change after any kan and must not depend on whether
+                # this is currently classified as our turn or an opponent's.
+                self.schedule_periodic_public_recognition(full_screen)
                 if self.args.mode == "force-auto":
                     pass_region = self.layout.get("actionButtonRegions", {}).get("pass")
                     call_buttons = force_auto_call_buttons(full_screen, self.layout["viewport"])
@@ -1445,7 +1463,7 @@ class PythonAutoOperator:
                         # away/result handling. Public tiles are classified by
                         # a separate resident worker so this turn gate remains
                         # responsive while opponents are acting.
-                        self.schedule_public_recognition(full_screen)
+                        self.schedule_periodic_public_recognition(full_screen)
                         page.wait_for_timeout(max(20, round(self.args.poll * 1000)))
                         continue
                 if self.args.mode == "force-auto" and self.screencast_session is not None:
@@ -1721,6 +1739,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--public-cache", action=argparse.BooleanOptionalAction, default=True,
         help="recognize dora/rivers/melds asynchronously during opponent turns",
+    )
+    parser.add_argument(
+        "--public-scan-interval", type=float, default=2.0,
+        help="seconds between asynchronous dora/public-board refresh attempts",
     )
     parser.add_argument(
         "--ranked-loop", action=argparse.BooleanOptionalAction, default=False,

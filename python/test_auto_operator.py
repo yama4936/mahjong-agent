@@ -52,6 +52,20 @@ class AwayDialogDetectionTest(unittest.TestCase):
         self.assertTrue(merged["ownRiichiDeclared"])
         self.assertEqual(merged["handPlan"]["planId"], "tanyao")
 
+    def test_public_board_scan_runs_periodically_on_any_turn(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(public_cache=True, public_scan_interval=2.0)
+        operator.public_recognition_server = Mock()
+        operator.last_public_scan_at = 0.0
+        operator.schedule_public_recognition = Mock()
+
+        self.assertTrue(operator.schedule_periodic_public_recognition(b"first", now=10.0))
+        self.assertFalse(operator.schedule_periodic_public_recognition(b"too-soon", now=11.9))
+        self.assertTrue(operator.schedule_periodic_public_recognition(b"second", now=12.0))
+        self.assertEqual(operator.schedule_public_recognition.call_count, 2)
+        self.assertEqual(operator.schedule_public_recognition.call_args_list[0].args, (b"first",))
+        self.assertEqual(operator.schedule_public_recognition.call_args_list[1].args, (b"second",))
+
     def test_draw_slot_presence_distinguishes_own_and_opponent_turns(self) -> None:
         region = {"x": 100, "y": 50, "width": 100, "height": 100}
         own_turn = io.BytesIO()
