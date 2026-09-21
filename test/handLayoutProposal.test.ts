@@ -106,6 +106,48 @@ test("rejects the exposed-meld row selected from the live 5+20 opponent turn", a
   assert.equal(knownOpenHandProposalFitsCalibratedRow(falseTwoTileHand, layout, 4), false);
 });
 
+test("rejects every transient off-row five-tile proposal from the live three-meld hand", async () => {
+  const layout = await calibratedLayout();
+  const frames = [
+    "2026-09-21T05-24-26.726820+00-00.jpg",
+    "2026-09-21T05-24-37.785345+00-00.jpg",
+    "2026-09-21T05-24-44.138042+00-00.jpg",
+    "2026-09-21T05-24-46.615576+00-00.jpg",
+  ];
+  let rejectedOffRowProposals = 0;
+  for (const name of frames) {
+    try {
+      const proposal = await proposeHandLayout(`artifacts/friend-5-20/frames/${name}`, [5]);
+      assert.equal(
+        knownOpenHandProposalFitsCalibratedRow(proposal, layout, 3),
+        false,
+        `${name} must not expose an off-row candidate`,
+      );
+      rejectedOffRowProposals += 1;
+    } catch (error) {
+      assert.match(String(error), /Could not isolate a 5-tile hand row/);
+    }
+  }
+  assert.ok(rejectedOffRowProposals >= 2);
+});
+
+test("rejects transient off-row proposals for a known one-meld hand too", async () => {
+  const layout = await calibratedLayout();
+  const frames = [
+    "2026-09-21T05-27-17.276781+00-00.jpg",
+    "2026-09-21T05-27-23.727737+00-00.jpg",
+    "2026-09-21T05-27-26.166034+00-00.jpg",
+  ];
+  for (const name of frames) {
+    try {
+      const proposal = await proposeHandLayout(`artifacts/friend-5-20/frames/${name}`, [11]);
+      assert.equal(knownOpenHandProposalFitsCalibratedRow(proposal, layout, 1), false);
+    } catch (error) {
+      assert.match(String(error), /Could not isolate a 11-tile hand row/);
+    }
+  }
+});
+
 test("accepts only a complete compact row inside the shifted draw boundary", async () => {
   const layout = await calibratedLayout();
   const proposal = await proposeHandLayout(await syntheticHand(14, 8), [8]);

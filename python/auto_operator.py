@@ -2039,7 +2039,6 @@ class PythonAutoOperator:
                         )
                     except RuntimeError as initial_error:
                         self.cached_concealed_tiles = None
-                        self.cached_open_melds = 0
                         try:
                             evaluation = self.recognize_resident(
                                 screenshot_path, evaluate_force_auto=True, dynamic_layout=True,
