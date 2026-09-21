@@ -1926,6 +1926,18 @@ class PythonAutoOperator:
                         unchanged_gate_content_polls = 0
                         refreshed_stable_gate = True
                     last_gate_sequence = self.screencast_sequence
+                    # Navigation screens can contain large colored panels that
+                    # resemble action buttons. Classify them before *any*
+                    # reaction/draw gate and never run gameplay clicks there.
+                    early_state, early_confidence = classify_screen(gate_frame, self.screen_references) \
+                        if gate_frame else ("unknown", 0.0)
+                    if early_state in {"lobby", "ranked_menu", "ranked_room", "matchmaking"}:
+                        if not self.advance_ranked_loop(page, early_state, early_confidence):
+                            self.log("screen_state_bypassed", state=early_state,
+                                     confidence=early_confidence, gameplayClicks=0)
+                        page.wait_for_timeout(max(20, round(self.args.poll * 1000)))
+                        continue
+                    gameplay_reactions_allowed = early_state == "match"
                     restart_open_melds = self.verified_visible_open_melds(
                         self.cached_public_observation,
                     )
@@ -1980,7 +1992,8 @@ class PythonAutoOperator:
                         or self.pending_post_call_discard or restart_open_hand_probe
                     pass_region = self.layout.get("actionButtonRegions", {}).get("pass")
                     quick_self_actions: list[dict[str, Any]] = []
-                    if gate_frame and pass_region and not self.pending_post_call_discard:
+                    if gate_frame and pass_region and gameplay_reactions_allowed \
+                            and not self.pending_post_call_discard:
                         quick_calls = force_auto_call_buttons(gate_frame, self.layout["viewport"])
                         quick_self_actions = force_auto_self_action_buttons(
                             gate_frame, self.layout["viewport"],

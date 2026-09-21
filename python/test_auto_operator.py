@@ -1655,6 +1655,46 @@ class AwayDialogDetectionTest(unittest.TestCase):
         self.assertIsNone(PythonAutoOperator.ranked_loop_click_point("matchmaking", viewport))
         self.assertIsNone(PythonAutoOperator.ranked_loop_click_point("match", viewport))
 
+    def test_current_cherry_lobby_classifies_and_advances_ranked_loop(self) -> None:
+        project = Path(__file__).resolve().parents[1]
+        frame = project / "artifacts" / "ranked-transition-2.png"
+        state, confidence = classify_screen(frame, {})
+        self.assertEqual(state, "lobby")
+        self.assertEqual(confidence, 1.0)
+
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(ranked_loop=True)
+        operator.layout = {"viewport": {"width": 1920, "height": 1080}}
+        operator.last_ranked_loop_state = None
+        operator.last_ranked_loop_click_at = 0.0
+        operator.log = Mock()
+        page = Mock()
+
+        self.assertTrue(operator.advance_ranked_loop(page, state, confidence))
+        page.mouse.click.assert_called_once_with(1390.08, 324.0)
+        operator.log.assert_called_once_with(
+            "ranked_loop_advanced", state="lobby", confidence=1.0,
+            clickPoint={"x": 1390.08, "y": 324.0},
+        )
+
+    def test_current_cherry_ranked_menu_is_navigation_not_gameplay(self) -> None:
+        project = Path(__file__).resolve().parents[1]
+        frame = project / "artifacts" / "ranked-menu-current.png"
+        state, confidence = classify_screen(frame, {})
+        self.assertEqual((state, confidence), ("ranked_menu", 1.0))
+
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(ranked_loop=True)
+        operator.layout = {"viewport": {"width": 1920, "height": 1080}}
+        operator.last_ranked_loop_state = None
+        operator.last_ranked_loop_click_at = 0.0
+        operator.log = Mock()
+        page = Mock()
+        self.assertTrue(operator.advance_ranked_loop(page, state, confidence))
+        # The only allowed click is navigation to Bronze Room; no reaction
+        # detector is consulted on this classified frame.
+        page.mouse.click.assert_called_once_with(1390.08, 410.4)
+
     def test_compact_hand_requires_a_previously_observed_call(self) -> None:
         self.assertTrue(PythonAutoOperator.compact_hand_is_proven(0, False))
         self.assertTrue(PythonAutoOperator.compact_hand_is_proven(1, True))

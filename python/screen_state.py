@@ -56,6 +56,43 @@ def _is_round_result_summary(image: Image.Image) -> bool:
     return 0.25 <= blue <= 0.75 and bright >= 0.05
 
 
+def _is_cherry_blossom_lobby(image: Image.Image) -> bool:
+    """Recognize the current WQHD lobby from its three stacked mode panels."""
+    width, height = image.size
+    if width < 1200 or height < 700 or width / max(1, height) < 1.6:
+        return False
+    panels = (
+        (0.56, 0.22, 0.89, 0.42),
+        (0.56, 0.43, 0.89, 0.63),
+        (0.56, 0.64, 0.89, 0.84),
+    )
+    evidence = []
+    for left, top, right, bottom in panels:
+        region = image.crop((width * left, height * top, width * right, height * bottom)).convert("RGB")
+        pixels = list(region.getdata())
+        dark = sum(1 for pixel in pixels if max(pixel) < 100) / max(1, len(pixels))
+        white_ink = sum(1 for pixel in pixels if min(pixel) > 180 and max(pixel) - min(pixel) < 60) / max(1, len(pixels))
+        evidence.append(dark >= 0.10 and white_ink >= 0.04)
+    return all(evidence)
+
+
+def _is_cherry_blossom_ranked_menu(image: Image.Image) -> bool:
+    """Recognize the stacked dark-blue ranked-room panels on the current skin."""
+    width, height = image.size
+    if width < 1200 or height < 700:
+        return False
+    panels = (
+        (0.59, 0.31, 0.86, 0.45),
+        (0.59, 0.47, 0.86, 0.61),
+        (0.59, 0.63, 0.86, 0.77),
+    )
+    dark_fractions = []
+    for left, top, right, bottom in panels:
+        pixels = list(image.crop((width * left, height * top, width * right, height * bottom)).convert("RGB").getdata())
+        dark_fractions.append(sum(1 for pixel in pixels if max(pixel) < 100) / max(1, len(pixels)))
+    return all(fraction >= 0.45 for fraction in dark_fractions)
+
+
 def load_references(directory: Path) -> dict[str, tuple[ScreenState, Image.Image]]:
     return {
         f"{state}:{index}": (state, _open(directory / filename))
@@ -72,6 +109,10 @@ def classify_screen(
     image = _open(screenshot)
     if _is_round_result_summary(image):
         return "round_result", 1.0
+    if _is_cherry_blossom_ranked_menu(image):
+        return "ranked_menu", 1.0
+    if _is_cherry_blossom_lobby(image):
+        return "lobby", 1.0
     if not references:
         return "unknown", 0.0
     scored = sorted((_distance(image, reference), state) for state, reference in references.values())
