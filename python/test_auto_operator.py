@@ -1163,6 +1163,52 @@ class AwayDialogDetectionTest(unittest.TestCase):
         self.assertLess(time.monotonic() - started, 5.0)
         page.mouse.click.assert_called_once_with(268.5, 999.5, click_count=2, delay=80)
 
+    def test_two_meld_post_pon_sequence_discards_before_calibrated_fallback(self) -> None:
+        project = Path(__file__).resolve().parents[1]
+        frames = project / "artifacts" / "friend-5-20" / "frames"
+        evaluated_full = (frames / "2026-09-21T07-14-38.165982+00-00.jpg").read_bytes()
+        current_full = (frames / "2026-09-21T07-14-40.481981+00-00.jpg").read_bytes()
+        layout = load_json(project / "config" / "layout.json")
+        hand_clip = {"x": 223, "y": 926, "width": 1355, "height": 146}
+        stable_region = stable_hand_comparison_region(layout, 2)
+        evaluated_faces = crop_screenshot(evaluated_full, stable_region)
+        current_faces = crop_screenshot(current_full, stable_region)
+        self.assertGreater(mean_pixel_delta(evaluated_faces, current_faces), 1.5)
+        self.assertLess(stable_hand_delta(evaluated_faces, current_faces, 2), 1.5)
+
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(mode="force-auto", allow_local_discard=False,
+                                           stability_pixel_delta=1.5)
+        operator.layout = layout
+        operator.hand_clip = hand_clip
+        operator.river_clip = {"x": 740, "y": 520, "width": 430, "height": 300}
+        operator.cached_open_melds = 2
+        operator.screencast_session = Mock()
+        operator.latest_screencast_frame = current_full
+        operator.screencast_draw_generation = 19
+        operator.log = Mock()
+        operator.confirm_discard = Mock(return_value={"confirmation": "hand_and_own_river_changed"})
+        page = Mock()
+        evaluation = {
+            "decision": {"selectedAction": {"action": "discard", "tile": "8p"}},
+            "recognition": {"tiles": ["1m", "3m", "4m", "4p", "7p", "8p", "1s", "5m"], "safe": False},
+            "clickIndex": 5,
+            "clickPoint": {"x": 743, "y": 996.5},
+            "openMelds": 2,
+        }
+
+        started = time.monotonic()
+        receipt = operator.execute(
+            page, evaluation,
+            evaluated_hand=crop_screenshot(evaluated_full, hand_clip),
+            evaluated_full=evaluated_full,
+            evaluated_draw_generation=19,
+        )
+
+        self.assertTrue(receipt["clicked"])
+        self.assertLess(time.monotonic() - started, 5.0)
+        page.mouse.click.assert_called_once_with(743, 996.5, click_count=2, delay=80)
+
     def test_live_over_inferred_meld_count_and_out_of_hand_click_are_rejected(self) -> None:
         project = Path(__file__).resolve().parents[1]
         layout = load_json(project / "config" / "layout.json")

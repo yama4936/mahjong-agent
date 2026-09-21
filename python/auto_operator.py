@@ -110,8 +110,8 @@ def tile_face_structure_delta(first: bytes, second: bytes, threshold: int = 120)
 
 
 def stable_hand_delta(first: bytes, second: bytes, open_melds: int) -> float:
-    """Compare equivalent hand evidence, tolerating late three-meld relighting."""
-    if open_melds >= 3:
+    """Compare equivalent hand evidence, tolerating post-call relighting."""
+    if open_melds > 0:
         return tile_face_structure_delta(first, second)
     return mean_pixel_delta(first, second)
 
