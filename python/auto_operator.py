@@ -374,17 +374,10 @@ def open_hand_draw_slot(layout: dict[str, Any], open_melds: int) -> dict[str, fl
     return shifted
 
 
-def geometric_open_meld_count(screenshot: bytes, layout: dict[str, Any]) -> int | None:
-    """Infer compact open-hand geometry without trusting tile classifications."""
-    hand_slots = layout.get("handSlots", [])
+def own_meld_surface_visible(screenshot: bytes, layout: dict[str, Any]) -> bool:
     viewport = layout.get("viewport", {})
-    if len(hand_slots) < 13 or not viewport:
-        return None
-    pitches = sorted(
-        float(right["x"]) - float(left["x"])
-        for left, right in zip(hand_slots, hand_slots[1:])
-    )
-    pitch = pitches[len(pitches) // 2]
+    if not viewport:
+        return False
     # Own exposed melds occupy a dedicated lower-right strip, separated from
     # the concealed row. Require a substantial ivory tile surface there.
     meld_region = {
@@ -402,7 +395,21 @@ def geometric_open_meld_count(screenshot: bytes, layout: dict[str, Any]) -> int 
         meld_light = fraction_matching(
             meld_image, lambda red, green, blue: red > 145 and green > 145 and blue > 135,
         )
-    if meld_light < 0.12:
+    return meld_light >= 0.12
+
+
+def geometric_open_meld_count(screenshot: bytes, layout: dict[str, Any]) -> int | None:
+    """Infer compact open-hand geometry without trusting tile classifications."""
+    hand_slots = layout.get("handSlots", [])
+    viewport = layout.get("viewport", {})
+    if len(hand_slots) < 13 or not viewport:
+        return None
+    pitches = sorted(
+        float(right["x"]) - float(left["x"])
+        for left, right in zip(hand_slots, hand_slots[1:])
+    )
+    pitch = pitches[len(pitches) // 2]
+    if not own_meld_surface_visible(screenshot, layout):
         return None
     occupied = [is_draw_slot_occupied(screenshot, slot) for slot in hand_slots]
     # Prefer the smallest count: a longer one-meld row is also a prefix of
@@ -2169,6 +2176,37 @@ class PythonAutoOperator:
                     verified_visible_open_melds = self.verified_visible_open_meld_count(
                         inferred_open_melds, public_observation,
                     )
+                    recognized_tiles = evaluation.get("recognition", {}).get("tiles", [])
+                    evaluated_point = evaluation.get("clickPoint")
+                    compact_row_matches = bool(
+                        inferred_open_melds > 0
+                        and len(recognized_tiles) == 14 - inferred_open_melds * 3
+                        and isinstance(evaluated_point, dict)
+                        and discard_point_in_hand_geometry(evaluated_point, self.layout, inferred_open_melds)
+                        and own_meld_surface_visible(evaluation_frame, self.layout)
+                    )
+                    if evaluation.get("status") == "decision" and compact_row_matches \
+                            and not dynamic_layout_was_required:
+                        recovered = self.stable_open_meld_count(inferred_open_melds, evaluation_frame)
+                        latest_frame = self.latest_screencast_frame
+                        compact_region = stable_hand_comparison_region(self.layout, inferred_open_melds)
+                        if latest_frame is not None and latest_frame != evaluation_frame \
+                                and compact_region is not None \
+                                and own_meld_surface_visible(latest_frame, self.layout) \
+                                and mean_pixel_delta(
+                                    crop_screenshot(evaluation_frame, compact_region),
+                                    crop_screenshot(latest_frame, compact_region),
+                                ) <= self.args.stability_pixel_delta:
+                            recovered = self.stable_open_meld_count(inferred_open_melds, latest_frame) or recovered
+                        if recovered is not None:
+                            self.cached_open_melds = recovered
+                            self.dynamic_layout_required = True
+                            dynamic_layout_was_required = True
+                            self.log(
+                                "open_hand_recovered",
+                                openMelds=recovered,
+                                source="stable_compact_row_and_own_meld_surface",
+                            )
                     if evaluation.get("status") == "decision" and not self.compact_hand_is_proven(
                         inferred_open_melds, dynamic_layout_was_required, public_observation,
                     ):

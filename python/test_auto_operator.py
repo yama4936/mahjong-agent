@@ -11,7 +11,7 @@ import json
 import time
 from unittest.mock import Mock, patch
 
-from auto_operator import PythonAutoOperator, RetryableSafetyAbort, away_resume_geometry, closed_concealed_row_visible, crop_screenshot, discard_point_in_hand_geometry, force_auto_call_buttons, force_auto_reaction_win_button, force_auto_self_action_buttons, geometric_open_meld_count, is_away_resume_dialog, is_contextual_reaction_pass, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, mean_pixel_delta, merge_public_observations, open_hand_draw_slot, post_call_transition, send_discard_click, should_guard_tenpai_reaction, should_process_reaction_prompt, stable_hand_comparison_region
+from auto_operator import PythonAutoOperator, RetryableSafetyAbort, away_resume_geometry, closed_concealed_row_visible, crop_screenshot, discard_point_in_hand_geometry, force_auto_call_buttons, force_auto_reaction_win_button, force_auto_self_action_buttons, geometric_open_meld_count, is_away_resume_dialog, is_contextual_reaction_pass, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, mean_pixel_delta, merge_public_observations, open_hand_draw_slot, own_meld_surface_visible, post_call_transition, send_discard_click, should_guard_tenpai_reaction, should_process_reaction_prompt, stable_hand_comparison_region
 from screen_state import classify_screen, load_references
 
 
@@ -343,6 +343,31 @@ class AwayDialogDetectionTest(unittest.TestCase):
         # An open hand in the same round must not satisfy the reset proof.
         open_frame = (frames / "2026-09-21T05-46-33.088404+00-00.jpg").read_bytes()
         self.assertFalse(operator.stable_closed_new_round(open_frame))
+
+    def test_restart_after_call_has_stable_meld_surface_without_closed_round_proof(self) -> None:
+        project = Path(__file__).resolve().parents[1]
+        layout = load_json(project / "config" / "layout.json")
+        frames = project / "artifacts" / "friend-5-20" / "frames"
+        first = (frames / "2026-09-21T06-21-57.847655+00-00.jpg").read_bytes()
+        second = (frames / "2026-09-21T06-22-00.877593+00-00.jpg").read_bytes()
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.layout = layout
+        operator.cached_open_melds = 0
+        operator.open_meld_candidate = None
+        operator.open_meld_candidate_frames = set()
+
+        started = time.monotonic()
+        self.assertTrue(own_meld_surface_visible(first, layout))
+        self.assertTrue(own_meld_surface_visible(second, layout))
+        self.assertFalse(closed_concealed_row_visible(first, layout))
+        compact_region = stable_hand_comparison_region(layout, 2)
+        self.assertLess(mean_pixel_delta(
+            crop_screenshot(first, compact_region), crop_screenshot(second, compact_region),
+        ), 1.5)
+        self.assertFalse(operator.stable_open_meld_count(2, first))
+        self.assertEqual(operator.stable_open_meld_count(2, second), 2)
+        self.assertTrue(discard_point_in_hand_geometry({"x": 838, "y": 996.5}, layout, 2))
+        self.assertLess(time.monotonic() - started, 5.0)
 
     def test_run_loop_reaches_post_pon_next_draw_with_trusted_open_meld_count(self) -> None:
         project = Path(__file__).resolve().parents[1]
