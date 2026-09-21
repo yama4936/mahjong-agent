@@ -1,4 +1,5 @@
 import io
+import hashlib
 import unittest
 from pathlib import Path
 
@@ -7,6 +8,7 @@ from PIL import Image, ImageDraw
 import argparse
 import tempfile
 import json
+import time
 from unittest.mock import Mock, patch
 
 from auto_operator import PythonAutoOperator, RetryableSafetyAbort, away_resume_geometry, closed_concealed_row_visible, crop_screenshot, discard_point_in_hand_geometry, force_auto_call_buttons, force_auto_reaction_win_button, force_auto_self_action_buttons, geometric_open_meld_count, is_away_resume_dialog, is_contextual_reaction_pass, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, merge_public_observations, open_hand_draw_slot, post_call_transition, send_discard_click, should_guard_tenpai_reaction, should_process_reaction_prompt
@@ -316,6 +318,16 @@ class AwayDialogDetectionTest(unittest.TestCase):
 
         self.assertEqual(geometric_open_meld_count(frame, layout), 1)
 
+    def test_restart_geometry_recovers_three_melds_despite_closed_slot_overlap(self) -> None:
+        project = Path(__file__).resolve().parents[1]
+        layout = load_json(project / "config" / "layout.json")
+        frames = project / "artifacts" / "friend-5-20" / "frames"
+        for name in (
+            "2026-09-21T05-46-30.872131+00-00.jpg",
+            "2026-09-21T05-46-33.088404+00-00.jpg",
+        ):
+            self.assertEqual(geometric_open_meld_count((frames / name).read_bytes(), layout), 3)
+
     def test_run_loop_reaches_post_pon_next_draw_with_trusted_open_meld_count(self) -> None:
         project = Path(__file__).resolve().parents[1]
         layout = load_json(project / "config" / "layout.json")
@@ -369,6 +381,69 @@ class AwayDialogDetectionTest(unittest.TestCase):
                 call.args and call.args[0] == "open_hand_geometry_gate"
                 for call in operator.log.call_args_list
             ))
+
+    def test_restarted_run_loop_acts_after_two_live_three_meld_frames(self) -> None:
+        project = Path(__file__).resolve().parents[1]
+        layout = load_json(project / "config" / "layout.json")
+        frames = project / "artifacts" / "friend-5-20" / "frames"
+        first = (frames / "2026-09-21T05-46-30.872131+00-00.jpg").read_bytes()
+        second = (frames / "2026-09-21T05-46-33.088404+00-00.jpg").read_bytes()
+        with tempfile.TemporaryDirectory() as directory:
+            operator = PythonAutoOperator.__new__(PythonAutoOperator)
+            operator.args = argparse.Namespace(mode="force-auto", max_iterations=2, poll=0.001,
+                                               stop_on_error=True)
+            operator.layout = layout
+            operator.hand_clip = {"x": 223, "y": 926, "width": 1355, "height": 146}
+            operator.action_clip = None
+            operator.frames = Path(directory)
+            operator.screen_references = {}
+            operator.screencast_session = Mock()
+            operator.latest_screencast_frame = second
+            operator.screencast_sequence = 2
+            operator.screencast_draw_occupied = False
+            operator.screencast_draw_generation = 1
+            operator.cached_public_observation = None
+            operator.cached_concealed_tiles = None
+            operator.cached_open_melds = 0
+            operator.dynamic_layout_required = False
+            operator.pending_post_call_discard = False
+            operator.pending_post_call_started_at = None
+            operator.restart_open_hand_probe_hash = None
+            operator.open_meld_candidate = 3
+            operator.open_meld_candidate_frames = {hashlib.sha256(first).hexdigest()}
+            operator.last_processed_hand = None
+            operator.armed = True
+            operator.previous_public_observation = None
+            operator.last_shanten = None
+            operator.round_terminal_latched = False
+            operator.poll_public_recognition = Mock()
+            operator.ensure_viewport = Mock()
+            operator.start_screencast_gate = Mock()
+            operator.schedule_periodic_public_recognition = Mock()
+            operator.resume_if_away = Mock(return_value=False)
+            operator.advance_ranked_loop = Mock(return_value=False)
+            operator.force_auto_reaction_fallback = Mock(return_value=None)
+            operator.recognize_resident = Mock(return_value={
+                "status": "decision", "openMelds": 3,
+                "recognition": {"tiles": ["1p"] * 5},
+                "decision": {"selectedAction": {"action": "discard", "tile": "1p"}},
+                "clickIndex": 0,
+            })
+            operator.execute = Mock(return_value={
+                "clicked": True, "confirmation": "hand_and_own_river_changed",
+            })
+            operator.record_replay = Mock(return_value=Path(directory) / "replay.json")
+            operator.log = Mock()
+            page = Mock()
+            page.url = "https://mahjongsoul.game.yo-star.com/"
+
+            started = time.monotonic()
+            with patch("auto_operator.classify_screen", return_value=("match", 1.0)):
+                operator.run(page)
+
+            operator.execute.assert_called_once()
+            self.assertEqual(operator.cached_open_melds, 3)
+            self.assertLess(time.monotonic() - started, 5.0)
 
     def test_compact_geometry_rejects_opponent_turn_without_own_meld_surface(self) -> None:
         layout = {
