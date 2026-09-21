@@ -167,29 +167,40 @@ def is_force_auto_pass_clip(screenshot: bytes) -> bool:
 
 
 def force_auto_call_buttons(screenshot: bytes, viewport: dict[str, int]) -> list[dict[str, Any]]:
-    """Locate green chi/pon/kan buttons without confusing orange self-turn actions."""
+    """Locate green/cyan chi/pon/kan buttons without confusing the hand row."""
     left = round(viewport["width"] * 0.35)
     top = round(viewport["height"] * 0.68)
     right = round(viewport["width"] * 0.75)
-    bottom = round(viewport["height"] * 0.99)
+    # Reaction buttons end above the concealed hand. Keeping this ROI out of
+    # the hand row prevents a cyan pon button from joining bamboo tile ink
+    # into one oversized component.
+    bottom = round(viewport["height"] * 0.85)
     with Image.open(io.BytesIO(screenshot)) as image:
         pixels = image.convert("RGB")
-        active_columns: list[tuple[int, int, int]] = []
-        for x in range(left, right):
-            matching_y = []
-            for y in range(top, bottom):
-                red, green, blue = pixels.getpixel((x, y))
-                if green > 80 and green - red > 15 and green - blue > 10:
-                    matching_y.append(y)
-            if len(matching_y) >= 5:
-                active_columns.append((x, min(matching_y), max(matching_y)))
-
-    groups: list[list[tuple[int, int, int]]] = []
-    for column in active_columns:
-        if not groups or column[0] - groups[-1][-1][0] > 10:
-            groups.append([column])
-        else:
-            groups[-1].append(column)
+        groups: list[list[tuple[int, int, int]]] = []
+        # Scan the two button palettes separately. Their glow regions can
+        # touch, so a combined color mask would fuse adjacent chi and pon
+        # buttons into one apparently unambiguous component.
+        for palette in ("green", "cyan"):
+            active_columns: list[tuple[int, int, int]] = []
+            for x in range(left, right):
+                matching_y = []
+                for y in range(top, bottom):
+                    red, green, blue = pixels.getpixel((x, y))
+                    matches = (green > 80 and green - red > 15 and green - blue > 10) \
+                        if palette == "green" \
+                        else (blue > 80 and green > 80 and min(green, blue) - red > 15 and blue - green > 25)
+                    if matches:
+                        matching_y.append(y)
+                if len(matching_y) >= 5:
+                    active_columns.append((x, min(matching_y), max(matching_y)))
+            palette_groups: list[list[tuple[int, int, int]]] = []
+            for column in active_columns:
+                if not palette_groups or column[0] - palette_groups[-1][-1][0] > 10:
+                    palette_groups.append([column])
+                else:
+                    palette_groups[-1].append(column)
+            groups.extend(palette_groups)
 
     buttons = []
     for group in groups:
@@ -202,7 +213,18 @@ def force_auto_call_buttons(screenshot: bytes, viewport: dict[str, int]) -> list
             "x": x1, "y": y1, "width": x2 - x1, "height": y2 - y1,
             "center": {"x": (x1 + x2) / 2, "y": (y1 + y2) / 2},
         })
-    return buttons
+    buttons.sort(key=lambda button: button["x"])
+    # A cyan glow may include highlights from the neighboring green button.
+    # Preserve both candidates by trimming the later box instead of merging
+    # them into the dangerous single-call path.
+    for previous, current in zip(buttons, buttons[1:]):
+        previous_right = previous["x"] + previous["width"]
+        if current["x"] <= previous_right:
+            current_right = current["x"] + current["width"]
+            current["x"] = previous_right + 10
+            current["width"] = max(0, current_right - current["x"])
+            current["center"]["x"] = current["x"] + current["width"] / 2
+    return [button for button in buttons if button["width"] >= viewport["width"] * 0.07]
 
 
 def should_guard_tenpai_reaction(last_shanten: int | None, call_buttons: list[dict[str, Any]]) -> bool:

@@ -83,15 +83,15 @@ class AwayDialogDetectionTest(unittest.TestCase):
         viewport = {"width": 1600, "height": 900}
         image = Image.new("RGB", (1600, 900), (25, 55, 85))
         draw = ImageDraw.Draw(image)
-        draw.rectangle((893, 779, 1131, 872), fill=(45, 130, 70))
+        draw.rectangle((893, 650, 1131, 743), fill=(45, 130, 70))
         output = io.BytesIO()
         image.save(output, format="PNG")
         buttons = force_auto_call_buttons(output.getvalue(), viewport)
         self.assertEqual(len(buttons), 1)
-        self.assertEqual(buttons[0]["center"], {"x": 1012.0, "y": 825.5})
+        self.assertEqual(buttons[0]["center"], {"x": 1012.0, "y": 696.5})
 
         orange = Image.new("RGB", (1600, 900), (25, 55, 85))
-        ImageDraw.Draw(orange).rectangle((893, 779, 1131, 872), fill=(190, 110, 35))
+        ImageDraw.Draw(orange).rectangle((893, 650, 1131, 743), fill=(190, 110, 35))
         output = io.BytesIO()
         orange.save(output, format="PNG")
         self.assertEqual(force_auto_call_buttons(output.getvalue(), viewport), [])
@@ -100,11 +100,16 @@ class AwayDialogDetectionTest(unittest.TestCase):
         viewport = {"width": 1600, "height": 900}
         image = Image.new("RGB", (1600, 900), (25, 55, 85))
         draw = ImageDraw.Draw(image)
-        draw.rectangle((650, 779, 790, 872), fill=(45, 130, 70))
-        draw.rectangle((850, 779, 990, 872), fill=(45, 130, 70))
+        draw.rectangle((650, 650, 790, 743), fill=(45, 130, 70))
+        draw.rectangle((850, 650, 990, 743), fill=(25, 145, 180))
+        # Bamboo-colored pixels in the concealed-hand row must not merge with
+        # the cyan pon button above them.
+        draw.rectangle((870, 780, 930, 899), fill=(30, 120, 100))
         output = io.BytesIO()
         image.save(output, format="PNG")
-        self.assertEqual(len(force_auto_call_buttons(output.getvalue(), viewport)), 2)
+        buttons = force_auto_call_buttons(output.getvalue(), viewport)
+        self.assertEqual(len(buttons), 2)
+        self.assertLess(max(button["height"] for button in buttons), 100)
 
     def test_tenpai_guard_allows_pass_when_a_green_call_is_visible(self) -> None:
         self.assertTrue(should_guard_tenpai_reaction(0, []))
@@ -124,7 +129,7 @@ class AwayDialogDetectionTest(unittest.TestCase):
     def test_single_call_arms_compact_hand_discard_after_button_disappears(self) -> None:
         viewport = {"width": 1600, "height": 900}
         prompt = Image.new("RGB", (1600, 900), (25, 55, 85))
-        ImageDraw.Draw(prompt).rectangle((893, 779, 1131, 872), fill=(45, 130, 70))
+        ImageDraw.Draw(prompt).rectangle((893, 650, 1131, 743), fill=(45, 130, 70))
         prompt_bytes = io.BytesIO()
         prompt.save(prompt_bytes, format="PNG")
         table_bytes = io.BytesIO()
@@ -154,7 +159,7 @@ class AwayDialogDetectionTest(unittest.TestCase):
         self.assertTrue(operator.pending_post_call_discard)
         self.assertTrue(operator.dynamic_layout_required)
         self.assertTrue(operator.armed)
-        page.mouse.click.assert_called_once_with(1012.0, 825.5)
+        page.mouse.click.assert_called_once_with(1012.0, 696.5)
 
     def test_force_auto_reaction_fallback_requires_thirteen_concealed_tiles(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
