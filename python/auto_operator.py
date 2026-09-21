@@ -322,6 +322,30 @@ def should_process_reaction_prompt(pending_post_call_discard: bool) -> bool:
     return not pending_post_call_discard
 
 
+ACTION_DEADLINE_MS = 5_000
+
+
+def action_deadline_timing(
+    evidence_started_at: float | None, decision_started_at: float | None, clicked_at: float,
+) -> dict[str, Any]:
+    """Return one comparable detect/decide/click clock for every action path."""
+    detected = evidence_started_at if evidence_started_at is not None else decision_started_at
+    decided = decision_started_at if decision_started_at is not None else clicked_at
+    detected = min(detected if detected is not None else clicked_at, clicked_at)
+    decided = min(max(decided, detected), clicked_at)
+    detection_to_decision_ms = round((decided - detected) * 1000)
+    decision_to_click_ms = round((clicked_at - decided) * 1000)
+    total_ms = round((clicked_at - detected) * 1000)
+    return {
+        "deadlineMs": ACTION_DEADLINE_MS,
+        "detectionToDecisionMs": detection_to_decision_ms,
+        "decisionToClickMs": decision_to_click_ms,
+        "evidenceToClickMs": total_ms,
+        "remainingMsAtClick": ACTION_DEADLINE_MS - total_ms,
+        "deadlineMet": total_ms <= ACTION_DEADLINE_MS,
+    }
+
+
 def should_guard_tenpai_reaction(last_shanten: int | None, call_buttons: list[dict[str, Any]]) -> bool:
     """Keep a possible win prompt untouched, but do not confuse a visible call with ron.
 
@@ -757,6 +781,10 @@ class PythonAutoOperator:
         self.last_ranked_loop_state: str | None = None
         self.last_ranked_loop_click_at = 0.0
         self.result_screen_advanced: str | None = None
+        self.action_evidence_started_at: float | None = None
+        self.action_evidence_kind: str | None = None
+        self.last_action_clicked_at: float | None = None
+        self.action_evidence_last_seen_at: float | None = None
         if self.log_path.exists():
             for line in reversed(self.log_path.read_text(encoding="utf-8").splitlines()):
                 try:
@@ -772,6 +800,43 @@ class PythonAutoOperator:
                     self.last_shanten = candidate.get("shanten")
                 break
         self.armed = True
+
+    def mark_action_evidence(self, kind: str, *, observed_at: float | None = None) -> None:
+        """Latch first visible evidence; later recognition must not reset the SLA clock."""
+        seen_at = time.monotonic() if observed_at is None else observed_at
+        self.action_evidence_last_seen_at = seen_at
+        if getattr(self, "action_evidence_started_at", None) is not None:
+            return
+        self.action_evidence_started_at = seen_at
+        self.action_evidence_kind = kind
+        self.last_action_clicked_at = None
+        self.log("action_deadline_started", actionKind=kind, deadlineMs=ACTION_DEADLINE_MS)
+
+    def action_timing(self, decision_started_at: float | None = None, *, clear: bool = False) -> dict[str, Any]:
+        clicked_at = getattr(self, "last_action_clicked_at", None) or time.monotonic()
+        timing = action_deadline_timing(
+            getattr(self, "action_evidence_started_at", None), decision_started_at, clicked_at,
+        )
+        timing["actionKind"] = getattr(self, "action_evidence_kind", None)
+        if clear:
+            self.action_evidence_started_at = None
+            self.action_evidence_kind = None
+            self.last_action_clicked_at = None
+            self.action_evidence_last_seen_at = None
+        return timing
+
+    def action_deadline_remaining_ms(self) -> int:
+        started = getattr(self, "action_evidence_started_at", None)
+        if started is None:
+            return ACTION_DEADLINE_MS
+        return max(0, ACTION_DEADLINE_MS - round((time.monotonic() - started) * 1000))
+
+    def require_action_deadline(self) -> None:
+        remaining = self.action_deadline_remaining_ms()
+        if remaining <= 0:
+            timing = self.action_timing()
+            self.log("action_deadline_expired", actionTiming=timing)
+            raise RetryableSafetyAbort("five-second action deadline expired before safe click")
 
     def close(self) -> None:
         if self.screencast_session is not None:
@@ -1018,6 +1083,7 @@ class PythonAutoOperator:
             "openMelds": open_melds,
             "publicObservation": public_observation,
             "forceAutoActionButtons": force_auto_action_buttons,
+            "actionDeadlineRemainingMs": self.action_deadline_remaining_ms(),
         }) + "\n")
         self.recognition_server.stdin.flush()
         response_line = self.recognition_server.stdout.readline()
@@ -1320,7 +1386,8 @@ class PythonAutoOperator:
 
     def evaluate(self, screenshot: Path, pending_discard: dict[str, str] | None = None,
                  public_observation: dict[str, Any] | None = None,
-                 recognition: dict[str, Any] | None = None) -> dict[str, Any]:
+                 recognition: dict[str, Any] | None = None,
+                 available_ui_actions: list[str] | None = None) -> dict[str, Any]:
         evaluator_mode = "advisor" if self.args.mode == "observer" else self.args.mode
         command = [
             "node", "dist/src/cli.js", "evaluate-frame", str(screenshot),
@@ -1339,6 +1406,8 @@ class PythonAutoOperator:
             recognition_path = self.frames / f"{utc_stamp()}.recognition.json"
             recognition_path.write_text(json.dumps(recognition, ensure_ascii=False), encoding="utf-8")
             command.append(f"--recognition-file={recognition_path}")
+        if available_ui_actions:
+            command.append(f"--available-ui-actions={','.join(available_ui_actions)}")
         result = subprocess.run(
             command,
             cwd=self.root,
@@ -1351,6 +1420,47 @@ class PythonAutoOperator:
         if result.returncode != 0:
             raise RuntimeError((result.stderr or result.stdout or "frame evaluator failed").strip())
         return json.loads(result.stdout)
+
+    def evaluate_force_auto_call_policy(
+        self, screenshot: Path, call_action: str,
+    ) -> dict[str, Any] | None:
+        """Run a visually unambiguous call through the normal legal policy.
+
+        A lone green button proves only the UI action variant.  It does not
+        prove that opening the hand is strategically sound, nor which discard
+        triggered it.  Without one exact river append we fail closed to pass.
+        """
+        public_observation = self.cached_public_observation
+        pending = self.infer_pending_discard(self.previous_public_observation, public_observation)
+        if not pending:
+            self.log("reaction_call_policy_rejected", action=call_action,
+                     reason="pending_discard_not_verified")
+            return None
+        recognition = self.recognize_resident(screenshot, concealed_only=True)
+        expected = 13 - getattr(self, "cached_open_melds", 0) * 3
+        if len(recognition.get("tiles", [])) != expected:
+            self.log("reaction_call_policy_rejected", action=call_action,
+                     reason="concealed_hand_not_verified", recognized=len(recognition.get("tiles", [])),
+                     expected=expected)
+            return None
+        evaluation = self.evaluate(
+            screenshot, pending, public_observation, recognition,
+            [call_action, "pass"],
+        )
+        decision = evaluation.get("decision", {})
+        selected = decision.get("selectedAction", {})
+        if evaluation.get("status") != "decision" or selected.get("action") != call_action:
+            self.log("reaction_call_policy_rejected", action=call_action,
+                     reason="strategy_selected_pass", handPlan=decision.get("handPlan"),
+                     callAssessments=decision.get("callAssessments"))
+            return None
+        assessment = next((item for item in decision.get("callAssessments", [])
+                           if item.get("actionId") == selected.get("id")), None)
+        if not assessment or not assessment.get("approved"):
+            self.log("reaction_call_policy_rejected", action=call_action,
+                     reason="call_not_certified", assessment=assessment)
+            return None
+        return evaluation
 
     def force_auto_reaction_fallback(
         self, screenshot: Path, *, contextual_prompt_verified: bool = False,
@@ -1707,7 +1817,9 @@ class PythonAutoOperator:
             if mean_pixel_delta(button_before, page.screenshot(clip=button_clip, animations="disabled")) > self.args.stability_pixel_delta:
                 raise RuntimeError(f"{button_action} button changed during pre-click stability check")
             point = observed["center"]
+            self.require_action_deadline()
             self.log("action_click_sent", action=button_action, clickPoint=point)
+            self.last_action_clicked_at = time.monotonic()
             page.mouse.click(point["x"], point["y"])
             action_receipt = self.confirm_action_button(
                 page, button_action, button_before, hand_before, meld_before,
@@ -1750,6 +1862,7 @@ class PythonAutoOperator:
                     f"discard click point is outside current hand geometry: {point}"
                 )
         clicked_at = datetime.now(timezone.utc).isoformat()
+        self.require_action_deadline()
         self.log(
             "click_sent",
             policy="force_auto" if force_auto else "certified_auto" if certified_auto else "local_discard_only",
@@ -1757,6 +1870,7 @@ class PythonAutoOperator:
             clickIndex=click_index,
             clickPoint=point,
         )
+        self.last_action_clicked_at = time.monotonic()
         send_discard_click(page.mouse, point, self.layout["viewport"])
         receipt = self.confirm_discard(page, hand_before, river_before, recognition["tiles"], click_index)
         return {
@@ -1791,8 +1905,10 @@ class PythonAutoOperator:
         if mean_pixel_delta(before, page.screenshot(clip=button_clip, animations="disabled")) > self.args.stability_pixel_delta:
             raise RuntimeError("pass button changed during pre-click stability check")
         point = observed["center"]
+        self.require_action_deadline()
         self.log("action_click_sent", action="pass", clickPoint=point,
                  availableUiActions=evaluation.get("availableUiActions", []))
+        self.last_action_clicked_at = time.monotonic()
         page.mouse.click(point["x"], point["y"])
         receipt = self.confirm_action_button(page, "pass", before)
         return {"clicked": True, "policy": "force_auto" if self.args.mode == "force-auto" else "certified_auto", "action": "pass",
@@ -1816,8 +1932,10 @@ class PythonAutoOperator:
         hand_before = crop_screenshot(screenshot, self.hand_clip)
         meld_region = self.layout.get("publicTileRegions", {}).get("ownMelds")
         meld_before = crop_screenshot(screenshot, meld_region) if meld_region else None
+        self.require_action_deadline()
         self.log("action_click_sent", action=call_action, clickPoint=point, source="single_call_button")
         sequence_before = self.screencast_sequence
+        self.last_action_clicked_at = time.monotonic()
         page.mouse.click(point["x"], point["y"])
         deadline = time.monotonic() + min(3.0, self.args.confirmation_timeout)
         current = screenshot
@@ -1878,7 +1996,9 @@ class PythonAutoOperator:
         if not current:
             raise RetryableSafetyAbort("reaction win button was not stable before click")
         point = current["center"]
+        self.require_action_deadline()
         self.log("action_click_sent", action="ron", clickPoint=point, source="reaction_win_color")
+        self.last_action_clicked_at = time.monotonic()
         page.mouse.click(point["x"], point["y"])
         deadline = time.monotonic() + min(3.0, self.args.confirmation_timeout)
         while time.monotonic() < deadline:
@@ -2043,6 +2163,17 @@ class PythonAutoOperator:
                     pass_gate_streak = pass_gate_streak + 1 if quick_pass else 0
                     call_gate_streak = call_gate_streak + 1 if quick_calls else 0
                     reaction_win_gate_streak = reaction_win_gate_streak + 1 if quick_reaction_win else 0
+                    if quick_reaction_win:
+                        self.mark_action_evidence("win")
+                    elif quick_pass or quick_calls:
+                        self.mark_action_evidence("reaction")
+                    elif quick_draw:
+                        self.mark_action_evidence("discard")
+                    elif getattr(self, "action_evidence_started_at", None) is not None \
+                            and time.monotonic() - (getattr(self, "action_evidence_last_seen_at", None) or 0) > 0.75:
+                        self.action_evidence_started_at = None
+                        self.action_evidence_kind = None
+                        self.action_evidence_last_seen_at = None
                     if quick_pass and pass_gate_streak == 1:
                         self.log(
                             "reaction_gate_candidate",
@@ -2157,6 +2288,7 @@ class PythonAutoOperator:
                         and pass_prompt_present
                     )
                     if has_reaction_prompt:
+                        decision_started_at = time.monotonic()
                         screenshot_path = self.frames / f"{utc_stamp()}.png"
                         screenshot_path.write_bytes(full_screen)
                         reaction_win = force_auto_reaction_win_button(
@@ -2166,19 +2298,25 @@ class PythonAutoOperator:
                             reaction_win = {**orange_buttons[0], "source": "contextual_reaction_prompt"}
                         if reaction_win:
                             receipt = self.execute_force_auto_reaction_win(page, full_screen, reaction_win)
+                            receipt["actionTiming"] = self.action_timing(decision_started_at, clear=True)
                             self.log("reaction_win", screenshot=str(screenshot_path), execution=receipt)
                             time.sleep(self.args.poll)
                             continue
                         if getattr(self.args, "accept_single_call", False) and len(call_buttons) == 1:
-                            try:
-                                receipt = self.execute_force_auto_call(page, full_screen, call_buttons[0])
-                            except RetryableSafetyAbort as error:
-                                self.log("reaction_call_unconfirmed", screenshot=str(screenshot_path), error=str(error))
-                                page.wait_for_timeout(max(100, round(self.args.poll * 1000)))
+                            call_action = call_buttons[0].get("action")
+                            policy = self.evaluate_force_auto_call_policy(screenshot_path, call_action)
+                            if policy:
+                                try:
+                                    receipt = self.execute_force_auto_call(page, full_screen, call_buttons[0])
+                                except RetryableSafetyAbort as error:
+                                    self.log("reaction_call_unconfirmed", screenshot=str(screenshot_path), error=str(error))
+                                    page.wait_for_timeout(max(100, round(self.args.poll * 1000)))
+                                    continue
+                                receipt["actionTiming"] = self.action_timing(decision_started_at, clear=True)
+                                self.log("reaction_call", screenshot=str(screenshot_path), evaluation=policy,
+                                         execution=receipt)
+                                time.sleep(self.args.poll)
                                 continue
-                            self.log("reaction_call", screenshot=str(screenshot_path), execution=receipt)
-                            time.sleep(self.args.poll)
-                            continue
                         if len(call_buttons) > 1:
                             self.log("reaction_call_ambiguous", screenshot=str(screenshot_path),
                                      buttonCount=len(call_buttons))
@@ -2192,6 +2330,7 @@ class PythonAutoOperator:
                         )
                         if reaction:
                             receipt = self.execute_reaction_pass(page, reaction)
+                            receipt["actionTiming"] = self.action_timing(decision_started_at, clear=True)
                             self.log("reaction_prompt", screenshot=str(screenshot_path), evaluation=reaction, execution=receipt)
                             self.last_processed_hand = None
                             self.armed = True
@@ -2218,10 +2357,12 @@ class PythonAutoOperator:
                     if gate_frame is None:
                         page.wait_for_timeout(20)
                         continue
+                    decision_started_at = time.monotonic()
                     evaluation_frame = gate_frame
                     hand = crop_screenshot(evaluation_frame, self.hand_clip)
                     action_image = crop_screenshot(evaluation_frame, self.action_clip) if self.action_clip else b""
                 else:
+                    decision_started_at = time.monotonic()
                     hand = page.screenshot(clip=self.hand_clip, animations="disabled")
                     page.wait_for_timeout(self.args.stability_ms)
                     hand_second = page.screenshot(clip=self.hand_clip, animations="disabled")
@@ -2348,6 +2489,31 @@ class PythonAutoOperator:
                         )
                     except RuntimeError as initial_error:
                         self.cached_concealed_tiles = None
+                        # A prompt can arrive while the resident recognizer is
+                        # synchronously evaluating a draw. Never start another
+                        # blocking recognition retry ahead of that reaction.
+                        latest = self.latest_screencast_frame
+                        latest_pass_region = self.layout.get("actionButtonRegions", {}).get("pass")
+                        if latest is not None and latest_pass_region is not None \
+                                and not self.pending_post_call_discard:
+                            latest_calls = force_auto_call_buttons(latest, self.layout["viewport"])
+                            latest_actions = force_auto_self_action_buttons(latest, self.layout["viewport"])
+                            latest_pass = is_force_auto_pass_clip(crop_screenshot(latest, latest_pass_region)) \
+                                or is_contextual_reaction_pass(
+                                    latest, latest_pass_region, len(latest_calls) + len(latest_actions),
+                                )
+                            if latest_pass:
+                                self.mark_action_evidence(
+                                    "win" if latest_actions else "reaction",
+                                )
+                                self.log(
+                                    "recognition_retry_preempted_by_reaction",
+                                    screenshot=str(screenshot_path),
+                                    initialError=str(initial_error),
+                                )
+                                self.last_processed_hand = None
+                                self.armed = True
+                                continue
                         try:
                             evaluation = self.recognize_resident(
                                 screenshot_path, evaluate_force_auto=True, dynamic_layout=True,
@@ -2494,6 +2660,8 @@ class PythonAutoOperator:
                     self.armed = False
                     self.record_replay(evaluation, screenshot_path, execution_error=str(error))
                     raise
+                receipt["actionTiming"] = self.action_timing(decision_started_at, clear=True)
+                evaluation["actionTiming"] = receipt["actionTiming"]
                 replay_path = self.record_replay(evaluation, screenshot_path, execution=receipt)
                 self.log("decision", screenshot=str(screenshot_path), evaluation=evaluation, execution=receipt)
                 self.log("replay_saved", replay=str(replay_path))

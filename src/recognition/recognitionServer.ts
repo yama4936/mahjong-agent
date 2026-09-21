@@ -61,6 +61,7 @@ for await (const line of lines) {
       openMelds?: number;
       publicObservation?: CachedPublicObservation;
       forceAutoActionButtons?: Array<{ x: number; y: number; width: number; height: number; center: { x: number; y: number } }>;
+      actionDeadlineRemainingMs?: number;
     };
     id = request.id;
     const processingStartedAt = performance.now();
@@ -158,7 +159,10 @@ for await (const line of lines) {
         1,
         Math.floor(forceAutoClickBudgetMs - captureAgeBeforeDecisionMs - preClickReserveMs),
       );
-      const decisionBudgetMs = Math.min(forceAutoDeadlineMs, availableDecisionMs);
+      const actionDeadlineRemainingMs = Number.isFinite(request.actionDeadlineRemainingMs)
+        ? Math.max(1, Math.floor(request.actionDeadlineRemainingMs! - preClickReserveMs))
+        : forceAutoDeadlineMs;
+      const decisionBudgetMs = Math.min(forceAutoDeadlineMs, availableDecisionMs, actionDeadlineRemainingMs);
       const decision = await decideForceAutoWithJevDeadline(state, {
         ...(jev ? { jev } : {}),
         ...(compatibleHandPlan ? { handPlan: compatibleHandPlan } : {}),

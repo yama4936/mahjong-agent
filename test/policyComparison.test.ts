@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { decide } from "../src/agent/decision.js";
 import { parseGameState } from "../src/game/state.js";
-import { compareReplayPolicies, deterministicReplayPolicy, type ReplayPolicy } from "../src/logging/policyComparison.js";
+import { compareReplayPolicies, deterministicReplayPolicy, strategyReplayPolicies, type ReplayPolicy } from "../src/logging/policyComparison.js";
 import type { DecisionRecord } from "../src/logging/replay.js";
 
 test("policy comparison runs the same replay through extensible policies", async () => {
@@ -22,6 +22,20 @@ test("policy comparison runs the same replay through extensible policies", async
   assert.equal(result.summary["future-search"]!.expertAccuracy, 0);
   assert.equal(result.pairwiseAgreement["recorded::deterministic-current"]!.rate, 1);
   assert.equal(result.pairwiseAgreement["recorded::future-search"]!.rate, 0);
+});
+
+test("standard A/B suite exposes stable profile IDs and per-policy metrics", async () => {
+  assert.deepEqual(strategyReplayPolicies().map((policy) => policy.name), [
+    "current", "no-unconditional-call", "phase-efficiency", "placement-push-fold",
+  ]);
+  const state = parseGameState({
+    hand: ["1m", "2m", "3m", "4m", "5m", "6m", "3p", "4p", "5p", "7s", "8s", "9s", "E"], draw: "6p",
+  });
+  const decision = await decide(state, { mode: "advisor" });
+  const record: DecisionRecord = { schemaVersion: 1, id: "metrics", timestamp: new Date(0).toISOString(), state, decision };
+  const result = await compareReplayPolicies([record], strategyReplayPolicies());
+  assert.equal(result.summary.current!.metrics.decisions, 1);
+  assert.equal(result.summary["phase-efficiency"]!.metrics.averageSelectedShanten, decision.candidates[0]?.shanten);
 });
 
 test("policy comparison records one policy failure without aborting the corpus", async () => {

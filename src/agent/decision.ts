@@ -4,6 +4,7 @@ import { JevClient, type JevDecision, type JevHandPlan } from "../jev/client.js"
 import { generateLegalActions, type LegalAction } from "../game/actions.js";
 import { calculateShanten } from "../game/shanten.js";
 import { evaluateDiscards } from "../game/ukeire.js";
+import { isTerminalOrHonor, normalizeTile, tileIndex } from "../game/tiles.js";
 
 export type AgentMode = "observer" | "advisor" | "auto" | "force-auto";
 
@@ -15,6 +16,34 @@ export interface DecisionResult extends AdvisorResult {
   selectedAction: LegalAction;
   legalActions: LegalAction[];
   arbitration?: ForceAutoArbitration;
+  handPlan: StrategyHandPlan;
+  callAssessments?: CallAssessment[];
+}
+
+export interface StrategyHandPlan {
+  primaryTarget: string;
+  secondaryTarget?: string;
+  callsAllowed: boolean;
+  requiredTiles: string[];
+  estimatedPoints: number;
+  phase: "early_efficiency" | "middle_balance" | "late_tenpai_defense";
+  placement: { rank: number; scoreGapToLeader?: number; allLast: boolean };
+  changeReason: string;
+}
+
+export interface CallAssessment {
+  actionId: string;
+  action: "chi" | "pon" | "minkan";
+  currentShanten: number;
+  resultingShanten: number;
+  shantenImprovement: number;
+  ukeire: number;
+  confirmedYaku: string[];
+  candidateYaku: string[];
+  estimatedPoints: number;
+  defenseLoss: number;
+  approved: boolean;
+  reasons: string[];
 }
 
 export interface DecisionOptions {
@@ -31,6 +60,76 @@ export interface ForceAutoArbitration {
   selectedSource: "jev" | "local";
   elapsedMs: number;
   fallbackReason?: "jev_unavailable" | "deadline_exceeded" | "jev_error" | "local_immediate_action";
+}
+
+function placementContext(state: GameState): StrategyHandPlan["placement"] {
+  const own = state.scores[state.seat];
+  const known = Object.values(state.scores);
+  const sorted = [...known].sort((a, b) => b - a);
+  const rank = own === undefined || sorted.length < 4 ? 2 : sorted.indexOf(own) + 1;
+  const leader = sorted[0];
+  return {
+    rank,
+    ...(own !== undefined && leader !== undefined ? { scoreGapToLeader: leader - own } : {}),
+    allLast: /^(south|west|north)_4$/i.test(state.round),
+  };
+}
+
+function strategyPhase(turn: number): StrategyHandPlan["phase"] {
+  if (turn <= 6) return "early_efficiency";
+  if (turn <= 11) return "middle_balance";
+  return "late_tenpai_defense";
+}
+
+function valueHonors(state: GameState): Set<string> {
+  const roundWind = state.round.match(/^(east|south|west|north)/i)?.[1]?.[0]?.toUpperCase();
+  return new Set(["P", "F", "C", state.seat[0]!.toUpperCase(), ...(roundWind ? [roundWind] : [])]);
+}
+
+function inferPlanTargets(state: GameState): Array<{ id: string; score: number }> {
+  const tiles = [...state.hand, ...(state.draw ? [state.draw] : [])].map(normalizeTile);
+  const counts = new Map<string, number>();
+  for (const tile of tiles) counts.set(tile, (counts.get(tile) ?? 0) + 1);
+  const honors = tiles.filter((tile) => tile.length === 1);
+  const terminals = tiles.filter((tile) => tile.length > 1 && isTerminalOrHonor(tileIndex(tile)));
+  const pairs = [...counts.values()].filter((count) => count >= 2).length;
+  const plans = [{ id: state.openMelds === 0 ? "riichi/efficient_standard" : "efficient_standard", score: 10 }];
+  if (honors.length + terminals.length <= 3) plans.push({ id: "tanyao", score: 15 - honors.length - terminals.length });
+  const yakuhaiPairs = [...valueHonors(state)].filter((tile) => (counts.get(tile) ?? 0) >= 2);
+  if (yakuhaiPairs.length) plans.push({ id: `yakuhai:${yakuhaiPairs.join(",")}`, score: 18 + yakuhaiPairs.length });
+  if (pairs >= 5 && state.openMelds === 0) plans.push({ id: "chiitoitsu", score: 12 + pairs });
+  if (pairs >= 4) plans.push({ id: "toitoi", score: 10 + pairs });
+  for (const suit of ["m", "p", "s"]) {
+    const suited = tiles.filter((tile) => tile.endsWith(suit)).length;
+    if (suited + honors.length >= tiles.length - 2) plans.push({ id: `honitsu_${suit}`, score: suited + honors.length });
+  }
+  return plans.sort((left, right) => right.score - left.score);
+}
+
+export function buildStrategyHandPlan(state: GameState): StrategyHandPlan {
+  const phase = strategyPhase(state.turn);
+  const placement = placementContext(state);
+  const targets = inferPlanTargets(state);
+  const evaluated = state.phase === "self_turn"
+    ? evaluateDiscards([...state.hand, ...(state.draw ? [state.draw] : [])], [], state.openMelds)
+    : [];
+  const requiredTiles = [...new Set((evaluated[0]?.effectiveTiles ?? []).map(({ tile }) => tile))].slice(0, 8);
+  const primary = targets[0]?.id ?? "efficient_standard";
+  const callsAllowed = !state.riichiDeclared && !(phase === "late_tenpai_defense" && placement.rank === 1);
+  return {
+    primaryTarget: primary,
+    ...(targets[1] ? { secondaryTarget: targets[1].id } : {}),
+    callsAllowed,
+    requiredTiles,
+    estimatedPoints: primary.startsWith("honitsu") ? 3900 : primary.startsWith("yakuhai") ? 2000 : state.openMelds === 0 ? 2600 : 1000,
+    phase,
+    placement,
+    changeReason: phase === "early_efficiency"
+      ? "1-6巡目はシャンテンと受入枚数を優先"
+      : phase === "middle_balance" ? "7-11巡目は速度・打点・安全度を均衡"
+        : placement.allLast && placement.rank === 4 ? "オーラスのラス目なのでテンパイ到達を優先"
+          : placement.rank === 1 ? "終盤のトップ目なので放銃回避を強化" : "終盤なのでテンパイ価値と守備を強化",
+  };
 }
 
 function publicStateSafetyReasons(state: GameState): string[] {
@@ -118,6 +217,7 @@ export async function decide(state: GameState, options: DecisionOptions): Promis
     legalActions,
     ...(jev ? { jev } : {}),
     executable: options.mode === "force-auto" || (options.mode === "auto" && safety.allowed),
+    handPlan: buildStrategyHandPlan(state),
   };
 }
 
@@ -216,6 +316,7 @@ function decideImmediateSelfAction(
     selectedAction,
     legalActions,
     executable: options.mode === "force-auto" || (options.mode === "auto" && safety.allowed),
+    handPlan: buildStrategyHandPlan(state),
   };
 }
 
@@ -225,16 +326,71 @@ function removeSafetyReason(reasons: string[], reason: string): void {
 
 type CallAction = LegalAction & { action: "chi" | "pon" | "minkan"; consumedTiles: string[] };
 
-function callImprovement(state: GameState, action: CallAction): number {
+function callPostDiscard(state: GameState, action: CallAction) {
   const remaining = [...state.hand];
   for (const tile of action.consumedTiles) {
-    const index = remaining.findIndex((value) => value === tile || (value[1] === tile[1] && (value[0] === "0" ? "5" : value[0]) === (tile[0] === "0" ? "5" : tile[0])));
-    if (index < 0) return Number.NEGATIVE_INFINITY;
+    const normalized = normalizeTile(tile);
+    const index = remaining.findIndex((value) => normalizeTile(value) === normalized);
+    if (index < 0) return undefined;
     remaining.splice(index, 1);
   }
-  if (action.action === "minkan") return calculateShanten(remaining, state.openMelds + 1).shanten;
-  const candidates = evaluateDiscards(remaining, [], state.openMelds + 1);
-  return candidates[0]?.shanten ?? Number.POSITIVE_INFINITY;
+  if (action.action === "minkan") {
+    return { shanten: calculateShanten(remaining, state.openMelds + 1).shanten, ukeire: 0, effectiveTiles: [] as string[] };
+  }
+  const best = evaluateDiscards(remaining, [], state.openMelds + 1)[0];
+  return best && { shanten: best.shanten, ukeire: best.ukeire, effectiveTiles: best.effectiveTiles.map(({ tile }) => tile) };
+}
+
+function yakuForCall(state: GameState, action: CallAction): { confirmed: string[]; candidates: string[] } {
+  const honors = valueHonors(state);
+  const confirmed: string[] = [];
+  const candidates: string[] = [];
+  const called = normalizeTile(action.tile);
+  if ((action.action === "pon" || action.action === "minkan") && honors.has(called)) confirmed.push(`yakuhai:${called}`);
+  for (const meld of state.melds) {
+    const tile = normalizeTile(meld.tiles[0]!);
+    if (meld.type !== "chi" && honors.has(tile)) confirmed.push(`yakuhai:${tile}`);
+  }
+  const after = [...state.hand.filter((tile) => !action.consumedTiles.some((used) => normalizeTile(used) === normalizeTile(tile))), action.tile];
+  if (after.every((tile) => !isTerminalOrHonor(tileIndex(normalizeTile(tile))))
+    && state.melds.every((meld) => meld.tiles.every((tile) => !isTerminalOrHonor(tileIndex(normalizeTile(tile)))))) {
+    candidates.push("tanyao");
+  }
+  const counts = new Map<string, number>();
+  for (const tile of state.hand.map(normalizeTile)) counts.set(tile, (counts.get(tile) ?? 0) + 1);
+  if ([...honors].some((tile) => (counts.get(tile) ?? 0) >= 2)) candidates.push("yakuhai");
+  if (state.melds.every((meld) => meld.type !== "chi") && action.action !== "chi") candidates.push("toitoi");
+  return { confirmed: [...new Set(confirmed)], candidates: [...new Set(candidates)] };
+}
+
+export function assessReactionCalls(state: GameState, legalActions: readonly LegalAction[]): CallAssessment[] {
+  const currentShanten = calculateShanten(state.hand, state.openMelds).shanten;
+  const plan = buildStrategyHandPlan(state);
+  const threat = state.opponents.some((opponent) => opponent.riichi || opponent.openMelds >= 2);
+  return legalActions.filter((action): action is CallAction =>
+    action.action === "chi" || action.action === "pon" || action.action === "minkan")
+    .map((action) => {
+      const post = callPostDiscard(state, action);
+      const resultingShanten = post?.shanten ?? Number.POSITIVE_INFINITY;
+      const improvement = currentShanten - resultingShanten;
+      const yaku = yakuForCall(state, action);
+      const estimatedPoints = yaku.confirmed.length ? 2000 : yaku.candidates.includes("tanyao") ? 1000 : 0;
+      const defenseLoss = Math.min(1, 0.12 + (threat ? 0.35 : 0) + (plan.phase === "late_tenpai_defense" ? 0.2 : 0)
+        + (plan.placement.rank === 1 ? 0.18 : 0) - (plan.placement.allLast && plan.placement.rank === 4 ? 0.22 : 0));
+      const reasons: string[] = [];
+      if (improvement <= 0) reasons.push("no_strict_shanten_improvement");
+      if (!yaku.confirmed.length && !yaku.candidates.length) reasons.push("no_viable_yaku_path");
+      if (!plan.callsAllowed) reasons.push("hand_plan_disallows_calls");
+      if (plan.phase === "late_tenpai_defense" && resultingShanten > 0) reasons.push("late_call_does_not_reach_tenpai");
+      const placementUrgency = plan.placement.allLast && plan.placement.rank === 4;
+      if (threat && !placementUrgency && (resultingShanten > 0 || !yaku.confirmed.length)) reasons.push("defense_loss_under_pressure");
+      return {
+        actionId: action.id, action: action.action, currentShanten, resultingShanten,
+        shantenImprovement: improvement, ukeire: post?.ukeire ?? 0,
+        confirmedYaku: yaku.confirmed, candidateYaku: yaku.candidates,
+        estimatedPoints, defenseLoss, approved: reasons.length === 0, reasons,
+      };
+    });
 }
 
 function reactionAdvisorShape(state: GameState): AdvisorResult {
@@ -264,16 +420,14 @@ async function decideReaction(state: GameState, legalActions: LegalAction[], opt
   }
   let selectedAction: LegalAction = initialAction;
   let jev: JevDecision | undefined;
+  const callAssessments = assessReactionCalls(state, legalActions);
 
   if (!state.opponents.some((opponent) => opponent.riichi)) {
-    const currentShanten = calculateShanten(state.hand, state.openMelds).shanten;
-    const calls = legalActions.filter((action): action is CallAction =>
-      action.action === "chi" || action.action === "pon" || action.action === "minkan");
-    const improved = calls
-      .map((action) => ({ action, shanten: callImprovement(state, action) }))
-      .filter((candidate) => candidate.shanten < currentShanten)
-      .sort((left, right) => left.shanten - right.shanten || (left.action.action === "pon" ? -1 : 1));
-    if (improved[0]) selectedAction = improved[0].action;
+    const certified = callAssessments.filter((assessment) => assessment.approved)
+      .sort((left, right) => left.resultingShanten - right.resultingShanten
+        || right.ukeire - left.ukeire || right.estimatedPoints - left.estimatedPoints
+        || left.defenseLoss - right.defenseLoss);
+    if (certified[0]) selectedAction = legalActions.find((action) => action.id === certified[0]!.actionId)!;
   }
 
   if (options.jev) {
@@ -281,7 +435,10 @@ async function decideReaction(state: GameState, legalActions: LegalAction[], opt
       jev = await options.jev.chooseReaction(state, legalActions, options.signal);
       const choice = legalActions.find((action) => action.id === jev!.actionId);
       if (!choice) throw new Error("Jev selected an unknown reaction");
-      selectedAction = choice;
+      const callAssessment = callAssessments.find((assessment) => assessment.actionId === choice.id);
+      selectedAction = callAssessment && !callAssessment.approved
+        ? legalActions.find((action) => action.action === "pass") ?? initialAction
+        : choice;
       if (jev.confidence < (options.minJevConfidence ?? 0.55)) safetyReasons.push("jev_confidence_below_threshold");
     } catch (error) {
       safetyReasons.push(`jev_error:${error instanceof Error ? error.message : String(error)}`);
@@ -307,5 +464,7 @@ async function decideReaction(state: GameState, legalActions: LegalAction[], opt
     legalActions,
     ...(jev ? { jev, source: "jev" as const } : {}),
     executable: options.mode === "force-auto" || (options.mode === "auto" && safety.allowed),
+    handPlan: buildStrategyHandPlan(state),
+    callAssessments,
   };
 }

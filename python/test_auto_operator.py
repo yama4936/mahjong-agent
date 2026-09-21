@@ -11,7 +11,7 @@ import json
 import time
 from unittest.mock import Mock, patch
 
-from auto_operator import PythonAutoOperator, RetryableSafetyAbort, away_resume_geometry, closed_concealed_row_visible, crop_screenshot, discard_point_in_hand_geometry, force_auto_call_buttons, force_auto_chi_choice_points, force_auto_reaction_win_button, force_auto_self_action_buttons, geometric_open_meld_count, is_away_resume_dialog, is_contextual_reaction_pass, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, mean_pixel_delta, merge_public_observations, open_hand_draw_slot, own_meld_surface_visible, post_call_transition, selected_tile_comparison_region, send_discard_click, should_guard_tenpai_reaction, should_process_reaction_prompt, stable_hand_comparison_region, stable_hand_delta
+from auto_operator import PythonAutoOperator, RetryableSafetyAbort, action_deadline_timing, away_resume_geometry, closed_concealed_row_visible, crop_screenshot, discard_point_in_hand_geometry, force_auto_call_buttons, force_auto_chi_choice_points, force_auto_reaction_win_button, force_auto_self_action_buttons, geometric_open_meld_count, is_away_resume_dialog, is_contextual_reaction_pass, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, mean_pixel_delta, merge_public_observations, open_hand_draw_slot, own_meld_surface_visible, post_call_transition, selected_tile_comparison_region, send_discard_click, should_guard_tenpai_reaction, should_process_reaction_prompt, stable_hand_comparison_region, stable_hand_delta
 from screen_state import classify_screen, load_references
 
 
@@ -26,7 +26,118 @@ class RecordingMouse:
         self.calls.append(("move", x, y))
 
 
+class ActionDeadlineTest(unittest.TestCase):
+    def assert_fast_path(self, kind: str, decision_delay: float, click_delay: float) -> None:
+        timing = action_deadline_timing(100.0, 100.0 + decision_delay, 100.0 + click_delay)
+        self.assertTrue(timing["deadlineMet"], kind)
+        self.assertEqual(timing["evidenceToClickMs"], round(click_delay * 1000))
+        self.assertEqual(timing["detectionToDecisionMs"] + timing["decisionToClickMs"], timing["evidenceToClickMs"])
+
+    def test_discard_path_is_measured_from_draw_evidence(self) -> None:
+        self.assert_fast_path("discard", 0.35, 2.4)
+
+    def test_call_path_is_measured_from_reaction_evidence(self) -> None:
+        self.assert_fast_path("call", 0.05, 0.25)
+
+    def test_win_path_is_measured_from_reaction_evidence(self) -> None:
+        self.assert_fast_path("win", 0.04, 0.18)
+
+    def test_deadline_overrun_is_explicit(self) -> None:
+        timing = action_deadline_timing(10.0, 14.0, 15.001)
+        self.assertFalse(timing["deadlineMet"])
+        self.assertLess(timing["remainingMsAtClick"], 0)
+
+
 class AwayDialogDetectionTest(unittest.TestCase):
+    def run_reaction_frame(self, frame: bytes, *, accept_call: bool) -> PythonAutoOperator:
+        project = Path(__file__).resolve().parents[1]
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(
+            mode="force-auto", max_iterations=2, poll=0.001,
+            accept_single_call=accept_call, action_templates="", stability_pixel_delta=1.5,
+        )
+        operator.layout = load_json(project / "config" / "layout.json")
+        operator.hand_clip = {"x": 223, "y": 926, "width": 1355, "height": 146}
+        operator.action_clip = None
+        operator.frames = Path(directory.name)
+        operator.screen_references = {}
+        operator.screencast_session = Mock()
+        operator.latest_screencast_frame = frame
+        operator.screencast_sequence = 1
+        operator.screencast_draw_occupied = False
+        operator.screencast_draw_generation = 0
+        operator.rejected_screencast_size = None
+        operator.cached_public_observation = None
+        operator.cached_concealed_tiles = None
+        operator.cached_open_melds = 0
+        operator.dynamic_layout_required = False
+        operator.pending_post_call_discard = False
+        operator.pending_post_call_started_at = None
+        operator.restart_open_hand_probe_hash = None
+        operator.open_meld_candidate = None
+        operator.open_meld_candidate_frames = set()
+        operator.last_processed_hand = None
+        operator.armed = True
+        operator.previous_public_observation = None
+        operator.last_shanten = 1
+        operator.round_terminal_latched = False
+        operator.action_evidence_started_at = None
+        operator.action_evidence_last_seen_at = None
+        operator.action_evidence_kind = None
+        operator.last_action_clicked_at = None
+        operator.poll_public_recognition = Mock()
+        operator.ensure_viewport = Mock()
+        operator.start_screencast_gate = Mock()
+        operator.schedule_periodic_public_recognition = Mock()
+        operator.resume_if_away = Mock(return_value=False)
+        operator.advance_ranked_loop = Mock(return_value=False)
+        operator.execute_force_auto_call = Mock(return_value={"clicked": True, "action": "pon"})
+        operator.evaluate_force_auto_call_policy = Mock(return_value={
+            "status": "decision",
+            "decision": {"selectedAction": {"id": "pon_P", "action": "pon"},
+                         "callAssessments": [{"actionId": "pon_P", "approved": True}]},
+        })
+        operator.execute_force_auto_reaction_win = Mock(return_value={"clicked": True, "action": "ron"})
+        operator.execute_reaction_pass = Mock(return_value={"clicked": True, "action": "pass"})
+        operator.log = Mock()
+        page = Mock()
+        page.url = "https://game.mahjongsoul.com/index.html"
+        page.screenshot.return_value = frame
+        with patch("auto_operator.classify_screen", return_value=("match", 1.0)):
+            operator.run(page)
+        return operator
+
+    def test_run_loop_call_path_meets_end_to_end_deadline(self) -> None:
+        project = Path(__file__).resolve().parents[1]
+        image = Image.open(project / "artifacts" / "debug-300-after-hash-fix.png").convert("RGB")
+        output = io.BytesIO()
+        image.save(output, format="JPEG", quality=55)
+        operator = self.run_reaction_frame(output.getvalue(), accept_call=True)
+        operator.execute_force_auto_call.assert_called_once()
+        operator.evaluate_force_auto_call_policy.assert_called_once()
+        event = next(c for c in operator.log.call_args_list if c.args[0] == "reaction_call")
+        self.assertTrue(event.kwargs["execution"]["actionTiming"]["deadlineMet"])
+
+    def test_run_loop_win_path_meets_end_to_end_deadline(self) -> None:
+        project = Path(__file__).resolve().parents[1]
+        image = Image.open(project / "artifacts" / "debug-300-after-hash-fix.png").convert("RGB")
+        # Preserve the captured certified pass prompt and add the calibrated
+        # orange win button pixels from the live Ron frame.
+        ron = Image.open(project / "artifacts" / "friend-5-20" / "frames" /
+                         "2026-09-21T08-38-54.094464+00-00.png").convert("RGB")
+        image.paste(ron.crop((850, 700, 1150, 900)), (850, 700))
+        output = io.BytesIO()
+        image.save(output, format="PNG")
+        win = {"center": {"x": 1010.5, "y": 823.0}}
+        with patch("auto_operator.force_auto_self_action_buttons", return_value=[win]), \
+                patch("auto_operator.force_auto_reaction_win_button", return_value=win):
+            operator = self.run_reaction_frame(output.getvalue(), accept_call=True)
+        operator.execute_force_auto_reaction_win.assert_called_once()
+        event = next(c for c in operator.log.call_args_list if c.args[0] == "reaction_win")
+        self.assertTrue(event.kwargs["execution"]["actionTiming"]["deadlineMet"])
+
     def test_screencast_rejects_resized_frame_and_clears_stale_gate(self) -> None:
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
         operator.layout = {
@@ -210,6 +321,9 @@ class AwayDialogDetectionTest(unittest.TestCase):
                 call.args and call.args[0] == "reaction_gate_candidate"
                 for call in operator.log.call_args_list
             ))
+            logged = next(call for call in operator.log.call_args_list
+                          if call.args and call.args[0] == "reaction_prompt")
+            self.assertTrue(logged.kwargs["execution"]["actionTiming"]["deadlineMet"])
 
     def test_public_cache_only_grows_rivers_and_preserves_riichi(self) -> None:
         previous = {
@@ -511,6 +625,31 @@ class AwayDialogDetectionTest(unittest.TestCase):
             operator.execute.assert_called_once()
             self.assertEqual(operator.cached_open_melds, 3)
             self.assertLess(time.monotonic() - started, 5.0)
+            logged = next(call for call in operator.log.call_args_list
+                          if call.args and call.args[0] == "decision")
+            self.assertTrue(logged.kwargs["execution"]["actionTiming"]["deadlineMet"])
+
+    def test_expired_deadline_is_fail_closed_before_click(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.action_evidence_started_at = time.monotonic() - 5.1
+        operator.action_evidence_kind = "reaction"
+        operator.last_action_clicked_at = None
+        operator.log = Mock()
+        with self.assertRaisesRegex(RetryableSafetyAbort, "deadline expired"):
+            operator.require_action_deadline()
+        self.assertTrue(any(call.args[0] == "action_deadline_expired"
+                            for call in operator.log.call_args_list))
+
+    def test_single_missing_frame_does_not_clear_first_evidence(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.action_evidence_started_at = 10.0
+        operator.action_evidence_last_seen_at = 10.1
+        operator.action_evidence_kind = "win"
+        operator.last_action_clicked_at = None
+        operator.log = Mock()
+        with patch("auto_operator.time.monotonic", return_value=10.2):
+            operator.mark_action_evidence("win")
+        self.assertEqual(operator.action_evidence_started_at, 10.0)
 
     def test_compact_geometry_rejects_opponent_turn_without_own_meld_surface(self) -> None:
         layout = {
@@ -697,6 +836,34 @@ class AwayDialogDetectionTest(unittest.TestCase):
         self.assertTrue(operator.dynamic_layout_required)
         self.assertTrue(operator.armed)
         page.mouse.click.assert_called_once_with(1012.0, 696.5)
+
+    def test_single_call_policy_requires_verified_discard_and_approved_assessment(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.cached_public_observation = {"opponentDiscards": [
+            {"seat": "east", "discards": ["P"]}, {"seat": "west", "discards": []},
+            {"seat": "north", "discards": []},
+        ]}
+        operator.previous_public_observation = {"opponentDiscards": [
+            {"seat": "east", "discards": []}, {"seat": "west", "discards": []},
+            {"seat": "north", "discards": []},
+        ]}
+        operator.cached_open_melds = 0
+        operator.log = Mock()
+        operator.recognize_resident = Mock(return_value={"tiles": ["1m"] * 13, "safe": True})
+        approved = {"status": "decision", "decision": {
+            "selectedAction": {"id": "pon_P", "action": "pon"},
+            "callAssessments": [{"actionId": "pon_P", "approved": True}],
+        }}
+        operator.evaluate = Mock(return_value=approved)
+        screenshot = Path("prompt.png")
+        self.assertEqual(operator.evaluate_force_auto_call_policy(screenshot, "pon"), approved)
+        operator.evaluate.assert_called_once()
+        self.assertEqual(operator.evaluate.call_args.args[-1], ["pon", "pass"])
+
+        operator.evaluate.reset_mock()
+        operator.previous_public_observation = operator.cached_public_observation
+        self.assertIsNone(operator.evaluate_force_auto_call_policy(screenshot, "pon"))
+        operator.evaluate.assert_not_called()
 
     def test_post_call_transition_distinguishes_discard_and_rinshan_draw(self) -> None:
         self.assertEqual(post_call_transition("pon", 1), {

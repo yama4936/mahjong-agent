@@ -31,11 +31,28 @@ export function deterministicAdvice(state: GameState): AdvisorResult {
   ).map((candidate) => evaluateRoundValue({ ...candidate, danger: evaluateTileDanger(candidate.tile, state).combinedProbability }, state));
   const minimumShanten = Math.min(...evaluated.map((candidate) => candidate.shanten));
   const underThreat = state.opponents.some((opponent) => opponent.riichi || opponent.openMelds >= 2);
+  const ownScore = state.scores[state.seat];
+  const scores = Object.values(state.scores).sort((a, b) => b - a);
+  const rank = ownScore === undefined || scores.length < 4 ? 2 : scores.indexOf(ownScore) + 1;
+  const allLast = /^(south|west|north)_4$/i.test(state.round);
+  const phase = state.turn <= 6 ? "early" : state.turn <= 11 ? "middle" : "late";
+  const urgentPush = allLast && rank === 4;
+  const protectLead = rank === 1;
   const candidates = evaluated.sort((left, right) => {
-    if (!underThreat && left.shanten !== right.shanten) return left.shanten - right.shanten;
+    if (phase === "early" && !underThreat) {
+      return left.shanten - right.shanten || right.ukeire - left.ukeire
+        || (right.expectedRoundValue ?? Number.NEGATIVE_INFINITY) - (left.expectedRoundValue ?? Number.NEGATIVE_INFINITY);
+    }
+    if (!underThreat && phase !== "late" && left.shanten !== right.shanten) return left.shanten - right.shanten;
     const leftInRange = left.shanten <= minimumShanten + 1;
     const rightInRange = right.shanten <= minimumShanten + 1;
     if (leftInRange !== rightInRange) return leftInRange ? -1 : 1;
+    if ((underThreat || phase === "late") && !urgentPush && leftInRange && rightInRange) {
+      const defenseWeight = protectLead ? 1.5 : 1;
+      const leftAdjusted = (left.expectedRoundValue ?? Number.NEGATIVE_INFINITY) - (left.dealInProbability ?? left.danger ?? 0) * 8000 * defenseWeight;
+      const rightAdjusted = (right.expectedRoundValue ?? Number.NEGATIVE_INFINITY) - (right.dealInProbability ?? right.danger ?? 0) * 8000 * defenseWeight;
+      if (leftAdjusted !== rightAdjusted) return rightAdjusted - leftAdjusted;
+    }
     if (underThreat && leftInRange && rightInRange && left.expectedRoundValue !== right.expectedRoundValue) {
       return (right.expectedRoundValue ?? Number.NEGATIVE_INFINITY) - (left.expectedRoundValue ?? Number.NEGATIVE_INFINITY);
     }

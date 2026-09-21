@@ -24,6 +24,8 @@ export interface TurnEvidence {
   };
   execution?: ActionExecutionReceipt | UiActionExecutionReceipt | { action: "riichi"; declaration: UiActionExecutionReceipt; discard: ActionExecutionReceipt };
   executionError?: string;
+  /** Number of recognition retries before this decision became actionable. */
+  recognitionRetries?: number;
 }
 
 export interface ExecutionEvidence {
@@ -67,6 +69,8 @@ const actualResultSchema = z.object({
   tenpaiAtDraw: z.boolean().optional(),
   pointsDelta: z.number().int().optional(),
   finalRank: z.number().int().min(1).max(4).optional(),
+  roundId: z.string().min(1).max(200).optional(),
+  winTurn: z.number().int().min(1).max(30).optional(),
   round: outcomeEvidenceSchema.optional(),
   match: outcomeEvidenceSchema.optional(),
   note: z.string().max(2000).optional(),

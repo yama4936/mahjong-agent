@@ -84,6 +84,7 @@ Status values: `todo`, `doing`, `done`, `blocked`.
 - [x] `done` Select tsumo/ron immediately, bind riichi to the chosen tenpai discard, call only for a strict shanten improvement, pass under riichi pressure, and rank viable discards by threat-adjusted round EV.
 - [x] `done` Add versioned Jev prompt profiles, remove duplicated candidate context in `balanced-v2`, and add expert-label A/B metrics for accuracy, log loss and confidence coverage.
 - [ ] `todo` Feed calibrated public state, danger and expected-value fields into live Jev decisions.
+- [x] `done` Replace unconditional/single-button calls with phase-, placement-, yaku-, shanten-, ukeire-, value-, and defense-aware call certification; expose primary/secondary hand plans and add regressions.
 - [ ] `todo` Collect independent expert discard labels before changing the provisional Jev confidence threshold or promoting a prompt profile on quality claims.
 
 ## E. Full action execution and replay
@@ -96,9 +97,12 @@ Status values: `todo`, `doing`, `done`, `blocked`.
 - [ ] `blocked` Execute non-discard UI actions only after each action has at least 20 independent live holdouts, 100% accuracy and zero false positives.
 - [x] `done` Attach explicit verified/failed/not-attempted execution evidence to every new replay record; the Python operator now adds classified result-screen evidence and screenshots to every pending decision at round and match completion.
 - [x] `done` Add a shared replay-policy comparison runner with recorded/current-deterministic decisions, pairwise agreement, expert-label accuracy and per-policy error isolation; Jev can be enabled explicitly.
+- [x] `done` Add denominator-safe decision/session metrics (win, deal-in, riichi, calls, called-round wins, win turn, tenpai, five-second misses, recognition retries, selected shanten/ukeire and Jev/local disagreement), four stable strategy A/B profiles, and dashboard strategy/deadline telemetry.
 - [ ] `todo` Expand the replay corpus, run current Jev on it, and add a search policy before making policy-quality claims.
 
 ## Completion definition
+
+- [x] `done` Enforce and expose an end-to-end five-second action deadline from first visible turn/reaction evidence to click. The current 2.6-second budget starts only after a valid hand is captured, dashboard `processingElapsedMs` excludes gate-detection and post-click confirmation, and a live ranked pon candidate at 2026-09-21T14:37:02.269Z was not clicked until 14:37:06.583Z; earlier undetected prompt time can push the real response beyond five seconds. Timestamp first gate evidence, prevent synchronous recognition retries from starving reaction routing, preserve fail-closed click validation, add deadline/latency fields to logs and dashboard, and add end-to-end regressions for discard, call, and win paths.
 
 - [x] `done` Recognize the current cherry-blossom lobby/menu safely for `--ranked-loop` and never run reaction actions outside a verified match. At 19:43+09 the WQHD lobby showed 段位戦/大会戦/友人戦 but was classified `unknown`; after manually opening 段位戦, the operator misclassified a menu element as Ron and logged/clicked `action_click_sent action=ron` at 19:43:58 (`artifacts/ranked-infinite/python-operator.jsonl`, screenshots `artifacts/ranked-transition-2.png` and `artifacts/ranked-menu-current.png`). Add both current skins to fail-closed classification, hard-gate reaction detection on verified in-match evidence, and add live-frame regressions proving ranked-loop navigation with zero gameplay clicks on lobby/menu screens.
 - [x] `done` Recognize the live Bronze Room reservation screen and stop ranked navigation click spam. After successfully reserving 銅の間・四人東, the operator continued classifying the reservation screen as `ranked_menu` and clicked `(1390.08,410.4)` every ~1.6 seconds from 19:48:37 onward (`artifacts/ranked-infinite/python-operator.jsonl`, screenshot `artifacts/ranked-loop-live.png`). Classify this frame as `matchmaking` (or verified reserved state), perform zero navigation/gameplay clicks while reserved, and add a real-frame regression proving the loop waits safely for match start.

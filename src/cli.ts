@@ -14,7 +14,8 @@ import { HybridTileRecognizer } from "./recognition/hybridTileRecognizer.js";
 import { decide, decideForceAutoWithJevDeadline } from "./agent/decision.js";
 import { appendDecisionLog, attachActualResult, readDecisionDataset, readDecisionLog } from "./logging/replay.js";
 import { summarizeBenchmark } from "./logging/benchmark.js";
-import { compareReplayPolicies, deterministicReplayPolicy, jevReplayPolicy } from "./logging/policyComparison.js";
+import { summarizeDecisionMetrics } from "./logging/metrics.js";
+import { compareReplayPolicies, jevReplayPolicy, strategyReplayPolicies } from "./logging/policyComparison.js";
 import { collectHandTemplates } from "./recognition/templateCollector.js";
 import { AUTO_MINIMUM_HOLDOUTS, fingerprintTemplateDirectory, validateTemplateDirectory } from "./recognition/templateValidator.js";
 import { connectJantama } from "./jantama/browser.js";
@@ -74,6 +75,7 @@ async function main(): Promise<void> {
     const pendingDiscardArgument = process.argv.find((argument) => argument.startsWith("--pending-discard="))?.slice(18);
     const publicObservationArgument = process.argv.find((argument) => argument.startsWith("--public-observation="))?.slice(21);
     const recognitionArgument = process.argv.find((argument) => argument.startsWith("--recognition-file="))?.slice(19);
+    const availableUiActionsArgument = process.argv.find((argument) => argument.startsWith("--available-ui-actions="))?.slice(23);
     if (!screenshot || !layoutPath || !templates || !stateArgument) {
       throw new Error("Usage: evaluate-frame <screenshot.png> <layout.json> <templates> --state=public-state.json [--mode=advisor|auto|force-auto]");
     }
@@ -154,7 +156,9 @@ async function main(): Promise<void> {
       ...publicState,
       hand: recognition.tiles.slice(0, 13),
       ...(publicState.phase === "self_turn" ? { draw: recognition.tiles[13] } : {}),
-      availableUiActions: actionMatches.length ? detectedActions : publicState.availableUiActions,
+      availableUiActions: actionMatches.length ? detectedActions
+        : availableUiActionsArgument ? availableUiActionsArgument.split(",").filter(Boolean)
+          : publicState.availableUiActions,
       recognitionConfidence: recognition.confidence,
     });
     const apiKey = process.env.TYPESAFE_API_KEY;
@@ -490,13 +494,21 @@ async function main(): Promise<void> {
   if (command === "benchmark") {
     if (!path) throw new Error("Usage: benchmark <replay-directory|decisions.jsonl|decision.json>");
     const records = await readDecisionDataset(path);
-    console.log(JSON.stringify(summarizeBenchmark(records), null, 2));
+    console.log(JSON.stringify({ ...summarizeBenchmark(records), decisionMetrics: summarizeDecisionMetrics(records) }, null, 2));
     return;
   }
   if (command === "policy-compare") {
     if (!path) throw new Error("Usage: policy-compare <replay-directory|decisions.jsonl|decision.json> [--jev]");
     const records = await readDecisionDataset(path);
-    const policies = [deterministicReplayPolicy()];
+    const requestedProfiles = process.argv.find((argument) => argument.startsWith("--profiles="))?.slice(11);
+    const suite = strategyReplayPolicies();
+    const policies = requestedProfiles
+      ? requestedProfiles.split(",").map((name) => {
+          const selected = suite.find((policy) => policy.name === name);
+          if (!selected) throw new Error(`Unknown policy profile: ${name}`);
+          return selected;
+        })
+      : suite;
     if (process.argv.includes("--jev")) {
       const apiKey = process.env.TYPESAFE_API_KEY ?? "";
       if (!apiKey) throw new Error("TYPESAFE_API_KEY is required with --jev");

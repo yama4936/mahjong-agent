@@ -173,7 +173,7 @@ test("reaction policy wins immediately and folds calls against riichi", async ()
   assert.equal((await decide(threatened, { mode: "advisor" })).selectedAction.action, "pass");
 });
 
-test("reaction policy calls only when the call improves shanten", async () => {
+test("reaction policy rejects a shanten-improving call without a viable yaku", async () => {
   const callable = parseGameState({
     phase: "reaction",
     seat: "south",
@@ -181,7 +181,9 @@ test("reaction policy calls only when the call improves shanten", async () => {
     pendingDiscard: { tile: "3m", fromSeat: "east" },
     availableUiActions: ["chi", "pass"],
   });
-  assert.equal((await decide(callable, { mode: "advisor" })).selectedAction.action, "chi");
+  const local = await decide(callable, { mode: "advisor" });
+  assert.equal(local.selectedAction.action, "pass");
+  assert.deepEqual(local.callAssessments?.[0]?.reasons, ["no_viable_yaku_path"]);
   const jev = { chooseReaction: async (_state: unknown, actions: any[]) => ({
     actionId: actions.find((action) => action.action === "pass").id,
     confidence: 0.88,
@@ -192,4 +194,37 @@ test("reaction policy calls only when the call improves shanten", async () => {
   assert.equal(judged.selectedAction.action, "pass");
   assert.equal(judged.source, "jev");
   assert.equal(judged.jev?.promptVersion, "mahjong-reaction-v1");
+});
+
+test("reaction policy certifies a strict-improvement yakuhai pon", async () => {
+  const callable = parseGameState({
+    phase: "reaction", seat: "south",
+    hand: ["P", "P", "3s", "8p", "3p", "3s", "5s", "7s", "7m", "2p", "3p", "5m", "E"],
+    pendingDiscard: { tile: "P", fromSeat: "east" }, availableUiActions: ["pon", "pass"], turn: 5,
+  });
+  const result = await decide(callable, { mode: "advisor" });
+  assert.equal(result.selectedAction.action, "pon");
+  assert.equal(result.callAssessments?.[0]?.approved, true);
+  assert.deepEqual(result.callAssessments?.[0]?.confirmedYaku, ["yakuhai:P"]);
+  assert.equal(result.handPlan.phase, "early_efficiency");
+  assert.ok(result.handPlan.primaryTarget.length > 0);
+});
+
+test("Jev cannot override call certification and late top placement folds", async () => {
+  const state = parseGameState({
+    phase: "reaction", round: "south_4", seat: "south", turn: 13,
+    scores: { east: 18000, south: 41000, west: 22000, north: 19000 },
+    hand: ["P", "P", "3s", "8p", "3p", "3s", "5s", "7s", "7m", "2p", "3p", "5m", "E"],
+    pendingDiscard: { tile: "P", fromSeat: "east" }, availableUiActions: ["pon", "pass"],
+  });
+  const jev = { chooseReaction: async (_state: unknown, actions: any[]) => ({
+    actionId: actions.find((action) => action.action === "pon").id, confidence: 0.9,
+    probabilities: Object.fromEntries(actions.map((action) => [action.id, action.action === "pon" ? 0.9 : 0.1])),
+    model: "fake", promptVersion: "test", latencyMs: 1,
+  }) } as any;
+  const result = await decide(state, { mode: "advisor", jev });
+  assert.equal(result.selectedAction.action, "pass");
+  assert.equal(result.handPlan.phase, "late_tenpai_defense");
+  assert.equal(result.handPlan.placement.rank, 1);
+  assert.ok(result.callAssessments?.[0]?.reasons.includes("hand_plan_disallows_calls"));
 });

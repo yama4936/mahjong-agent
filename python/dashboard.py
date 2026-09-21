@@ -32,8 +32,9 @@ small{color:#aca692}.ok{color:#82d9a0}.stop{color:#ff9c91}
 <span class="pill" id="state">state: …</span><span class="pill" id="confidence">confidence: …</span>
 <span class="pill" id="updated">updated: …</span><span class="pill stop">READ ONLY</span></div>
 <section class="panel" aria-label="判定情報"><h2>判定モニター <small>保存ログ・現在の画面とは別時点</small></h2>
-<p id="judgedAt" class="muted">判定待ち</p><div class="metrics"><span id="recommendation">推奨：未判定</span><span id="processingTime">処理時間：—</span><span id="tileScore">認識スコア：—</span><span id="margin">候補差：—</span><span id="execution">クリック：—</span></div>
+<p id="judgedAt" class="muted">判定待ち</p><div class="metrics"><span id="recommendation">推奨：未判定</span><span id="processingTime">処理時間：—</span><span id="deadline">5秒期限：—</span><span id="tileScore">認識スコア：—</span><span id="margin">候補差：—</span><span id="execution">クリック：—</span></div>
 <div id="tiles" class="tiles" aria-label="認識手牌"></div><h3>選択肢 <small id="probabilityNote"></small></h3><div id="choices" class="choices" aria-label="選択肢と選択確率"></div><p id="reason" role="status"></p><p id="operator" class="muted"></p>
+<h3>戦略・セッション指標</h3><div class="metrics"><span id="targetYaku">狙い役：—</span><span id="pushFold">押し引き：—</span><span id="shape">選択時：—</span><span id="sessionMetrics">期限超過/再認識：—</span></div>
 <details><summary>判定データ</summary><pre id="judgmentJson"></pre></details></section>
 <strong>現在の画面（ライブ）</strong><img id="screen" alt="現在の雀魂画面"><small id="detail"></small><script>
 const el=id=>document.getElementById(id);
@@ -63,9 +64,17 @@ function renderJudgment(j){
  const total=e.processingElapsedMs,decision=d?.arbitration?.elapsedMs;
  el('processingTime').textContent='処理時間：'+duration(total)+(typeof decision==='number'?'（判断 '+duration(decision)+'）':'');
  el('processingTime').title='手牌認識の開始から判断完了まで。括弧内はJevを含む判断処理の時間です。';
+ const timing=x.actionTiming||e.actionTiming;
+ el('deadline').textContent=timing?'5秒期限：検出→判断 '+duration(timing.detectionToDecisionMs)+' ／ 判断→クリック '+duration(timing.decisionToClickMs)+' ／ 合計 '+duration(timing.evidenceToClickMs)+(timing.deadlineMet?' ✓':' 超過'):'5秒期限：—';
+ el('deadline').className=timing?(timing.deadlineMet?'ok':'stop'):'';
  el('tileScore').textContent='認識スコア：'+number(r.confidence)+'（正解確率ではありません）';
  el('margin').textContent='候補差：'+number(r.ambiguityMargin);
  el('execution').textContent='クリック：'+(x.clicked===true?'送信済み'+(x.tileMultisetVerification?.verified?'・結果確認済み':''):x.clicked===false?'未実行':'実行記録なし');
+ const plan=d.handPlan||e.handPlan||{};const goals=plan.primaryYaku||plan.primary||plan.targetYaku;
+ el('targetYaku').textContent='狙い役：'+(Array.isArray(goals)?goals.join('・'):(goals||'—'));
+ el('pushFold').textContent='押し引き：'+(plan.pushFold||plan.posture||d.pushFold||'—');
+ const chosen=(d.candidates||[]).find(c=>(c.actionId||c.id)===d.selectedActionId);
+ el('shape').textContent='選択時：シャンテン '+(chosen?.shanten??'—')+' ／ 受け入れ '+(chosen?.ukeire??'—');
  el('tiles').replaceChildren(...(r.tiles||[]).map((t,i)=>{const n=document.createElement('span');n.className='tile';n.textContent=t;n.title=(i===13?'ツモ牌':'手牌 '+(i+1));return n}));
  renderChoices(d);
  const reasons=[];if(r.turnReady===false)reasons.push('手番・手牌枚数を確認できません');if(r.safe===false)reasons.push('認識基準未達：クリック対象に採用しません');if(x.reason)reasons.push(x.reason);if(d.reason)reasons.push(typeof d.reason==='string'?d.reason:JSON.stringify(d.reason));
@@ -79,6 +88,7 @@ const image=document.querySelector('#screen'); async function refresh(){
  el('updated').textContent='画面更新: '+new Date(s.capturedAt).toLocaleTimeString();
  el('detail').textContent=s.pageUrl;renderJudgment(s.judgment);
  el('operator').textContent='操作者の最終記録：'+(s.lastEvent||'なし')+(s.lastEventAt?' ／ '+new Date(s.lastEventAt).toLocaleString():'')+(s.lastError?' ／ '+s.lastError:'');
+ const m=s.metrics||{};el('sessionMetrics').textContent='期限超過 '+(m.deadlineMisses??0)+'/'+(m.deadlineSamples??0)+' ／ 再認識 '+(m.recognitionRetries??0)+' ／ Jev≠local '+(m.jevLocalDifferences??0)+'/'+(m.jevLocalComparable??0);
  }catch(e){el('detail').textContent='更新失敗（表示内容は古い可能性があります）: '+e}finally{setTimeout(refresh,100)} }
 refresh();</script></body></html>"""
 
@@ -95,7 +105,9 @@ class SharedFrame:
 
 
 def read_operator_status(path: Path | None) -> dict[str, Any]:
-    empty = {"lastEvent": None, "lastEventAt": None, "lastError": None, "judgment": None}
+    empty = {"lastEvent": None, "lastEventAt": None, "lastError": None, "judgment": None,
+             "metrics": {"deadlineSamples": 0, "deadlineMisses": 0, "recognitionRetries": 0,
+                         "jevLocalComparable": 0, "jevLocalDifferences": 0}}
     if not path or not path.exists():
         return empty
     try:
@@ -117,9 +129,33 @@ def read_operator_status(path: Path | None) -> dict[str, Any]:
         latest = records[-1]
         # Never display an earlier run's recommendation as the new run's result.
         start = next((i for i in range(len(records)-1, -1, -1) if records[i].get("event") == "started"), 0)
-        judgment = next((r for r in reversed(records[start:]) if isinstance(r.get("evaluation"), dict)), None)
+        judgment = next((r for r in reversed(records[start:])
+                         if isinstance(r.get("evaluation"), dict)
+                         or isinstance(r.get("execution", {}).get("actionTiming"), dict)), None)
+        session = records[start:]
+        timings = []
+        retries = 0
+        comparable = differences = 0
+        for record in session:
+            evaluation = record.get("evaluation") if isinstance(record.get("evaluation"), dict) else {}
+            execution = record.get("execution") if isinstance(record.get("execution"), dict) else {}
+            timing = execution.get("actionTiming") or evaluation.get("actionTiming")
+            if isinstance(timing, dict) and isinstance(timing.get("deadlineMet"), bool):
+                timings.append(timing)
+            retries += int(record.get("recognitionRetries", evaluation.get("recognitionRetries", 0)) or 0)
+            decision = evaluation.get("decision") if isinstance(evaluation.get("decision"), dict) else {}
+            jev_id = (decision.get("jev") or {}).get("actionId") if isinstance(decision.get("jev"), dict) else None
+            candidates = decision.get("candidates") if isinstance(decision.get("candidates"), list) else []
+            local_id = candidates[0].get("actionId") if candidates and isinstance(candidates[0], dict) else None
+            if jev_id and local_id:
+                comparable += 1
+                differences += int(jev_id != local_id)
+        metrics = {"deadlineSamples": len(timings),
+                   "deadlineMisses": sum(not timing["deadlineMet"] for timing in timings),
+                   "recognitionRetries": retries, "jevLocalComparable": comparable,
+                   "jevLocalDifferences": differences}
         return {"lastEvent": latest.get("event"), "lastEventAt": latest.get("timestamp"),
-                "lastError": latest.get("error"), "judgment": judgment}
+                "lastError": latest.get("error"), "judgment": judgment, "metrics": metrics}
     except (OSError, ValueError, TypeError):
         return empty
 
