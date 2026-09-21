@@ -493,6 +493,23 @@ def stable_hand_comparison_region(
     return {"x": left, "y": top, "width": right - left, "height": bottom - top}
 
 
+def selected_tile_comparison_region(
+    layout: dict[str, Any], point: dict[str, float], open_melds: int,
+) -> dict[str, float] | None:
+    """Tile-face ROI at a verified discard point during compact-row settling."""
+    if not discard_point_in_hand_geometry(point, layout, open_melds):
+        return None
+    slots = layout.get("handSlots", [])
+    if not slots:
+        return None
+    width = min(float(slot["width"]) for slot in slots) - 20
+    top = min(float(slot["y"]) for slot in slots) + 10
+    bottom = min(float(slot["y"] + slot["height"]) for slot in slots) - 28
+    if width <= 0 or bottom <= top:
+        return None
+    return {"x": float(point["x"]) - width / 2, "y": top, "width": width, "height": bottom - top}
+
+
 def local_discard_allowed(args: argparse.Namespace, evaluation: dict[str, Any]) -> bool:
     decision = evaluation.get("decision", {})
     return bool(
@@ -1511,11 +1528,35 @@ class PythonAutoOperator:
             focused_evaluated_hand, focused_streamed_hand, trusted_open_melds,
         ) \
             if focused_evaluated_hand is not None and focused_streamed_hand is not None else None
-        streamed_turn_is_current = bool(
+        same_draw_generation = bool(
             evaluated_draw_generation is not None
             and getattr(self, "screencast_draw_generation", None) == evaluated_draw_generation
+        )
+        selected_tile_delta = None
+        if (
+            same_draw_generation
+            and getattr(self, "pending_post_call_discard", False)
+            and has_dynamic_click_point
+            and evaluated_full is not None
+            and current_streamed_full is not None
+        ):
+            selected_region = selected_tile_comparison_region(
+                self.layout, dynamic_click_point, trusted_open_melds,
+            )
+            if selected_region is not None:
+                selected_tile_delta = stable_hand_delta(
+                    crop_screenshot(evaluated_full, selected_region),
+                    crop_screenshot(current_streamed_full, selected_region),
+                    trusted_open_melds,
+                )
+        streamed_turn_is_current = bool(
+            same_draw_generation
             and streamed_delta is not None
-            and streamed_delta <= self.args.stability_pixel_delta
+            and (
+                streamed_delta <= self.args.stability_pixel_delta
+                or selected_tile_delta is not None
+                and selected_tile_delta <= self.args.stability_pixel_delta
+            )
         )
         # Compare screencast JPEG to the newest screencast JPEG. A fresh PNG
         # has a stable ~4-point codec/background delta on the live compact
