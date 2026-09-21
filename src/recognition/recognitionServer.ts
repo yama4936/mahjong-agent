@@ -60,6 +60,7 @@ for await (const line of lines) {
       dynamicLayout?: boolean;
       openMelds?: number;
       publicObservation?: CachedPublicObservation;
+      forceAutoActionButtons?: Array<{ x: number; y: number; width: number; height: number; center: { x: number; y: number } }>;
     };
     id = request.id;
     const processingStartedAt = performance.now();
@@ -115,6 +116,9 @@ for await (const line of lines) {
         state = parseGameState({
           ...publicState,
           ...(cachedPatch?.patch ?? {}),
+          ...(request.forceAutoActionButtons?.length === 1 ? {
+            availableUiActions: ["riichi", "tsumo", "kan", "kyuushu"],
+          } : {}),
           openMelds: inferredOpenMelds,
           melds: [],
           hand: recognition.tiles.slice(0, -1),
@@ -125,6 +129,9 @@ for await (const line of lines) {
         publicCacheIgnoredReason = error instanceof Error ? error.message : String(error);
         state = parseGameState({
           ...publicState,
+          ...(request.forceAutoActionButtons?.length === 1 ? {
+            availableUiActions: ["riichi", "tsumo", "kan", "kyuushu"],
+          } : {}),
           openMelds: inferredOpenMelds,
           melds: [],
           hand: recognition.tiles.slice(0, -1),
@@ -158,6 +165,14 @@ for await (const line of lines) {
           safe: recognition.safe,
         },
         decision,
+        ...(decision.selectedAction.action !== "discard" && request.forceAutoActionButtons?.length === 1 ? {
+          actionButton: {
+            action: decision.selectedAction.action === "ankan" || decision.selectedAction.action === "kakan"
+              ? "kan" : decision.selectedAction.action,
+            ...request.forceAutoActionButtons[0],
+            source: "force_auto_single_self_action_button",
+          },
+        } : {}),
         ...(clickIndex !== undefined ? { clickIndex } : {}),
         ...(clickIndex !== undefined && activeLayout.clickPoints[clickIndex]
           ? { clickPoint: activeLayout.clickPoints[clickIndex] }

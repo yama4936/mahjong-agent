@@ -205,6 +205,54 @@ def force_auto_call_buttons(screenshot: bytes, viewport: dict[str, int]) -> list
     return buttons
 
 
+def should_guard_tenpai_reaction(last_shanten: int | None, call_buttons: list[dict[str, Any]]) -> bool:
+    """Keep a possible win prompt untouched, but do not confuse a visible call with ron.
+
+    The green chi/pon/kan buttons are detected independently from the fixed
+    pass button.  When at least one of them is present, a pass-only fallback
+    is safe even after the previous turn reached tenpai: Mahjong Soul shows
+    ron as a separate orange action, not as one of these green call buttons.
+    """
+    return last_shanten == 0 and not call_buttons
+
+
+def force_auto_self_action_buttons(screenshot: bytes, viewport: dict[str, int]) -> list[dict[str, Any]]:
+    """Locate orange self-turn action buttons (riichi/tsumo/kan/kyuushu)."""
+    left = round(viewport["width"] * 0.35)
+    top = round(viewport["height"] * 0.68)
+    right = round(viewport["width"] * 0.75)
+    bottom = round(viewport["height"] * 0.91)
+    with Image.open(io.BytesIO(screenshot)) as image:
+        pixels = image.convert("RGB")
+        active_columns: list[tuple[int, int, int]] = []
+        for x in range(left, right):
+            matching_y = []
+            for y in range(top, bottom):
+                red, green, blue = pixels.getpixel((x, y))
+                if red > 120 and red - green > 25 and green > 55 and green - blue > 15:
+                    matching_y.append(y)
+            if len(matching_y) >= 5:
+                active_columns.append((x, min(matching_y), max(matching_y)))
+
+    groups: list[list[tuple[int, int, int]]] = []
+    for column in active_columns:
+        if not groups or column[0] - groups[-1][-1][0] > 10:
+            groups.append([column])
+        else:
+            groups[-1].append(column)
+    return [{
+        "x": group[0][0], "y": min(column[1] for column in group),
+        "width": group[-1][0] - group[0][0],
+        "height": max(column[2] for column in group) - min(column[1] for column in group),
+        "center": {
+            "x": (group[0][0] + group[-1][0]) / 2,
+            "y": (min(column[1] for column in group) + max(column[2] for column in group)) / 2,
+        },
+    } for group in groups
+        if group[-1][0] - group[0][0] >= viewport["width"] * 0.07
+        and max(column[2] for column in group) - min(column[1] for column in group) >= viewport["height"] * 0.04]
+
+
 def is_draw_slot_occupied(screenshot: bytes, region: dict[str, float]) -> bool:
     """Cheaply distinguish our 14-tile turn from an opponent's turn.
 
@@ -546,6 +594,7 @@ class PythonAutoOperator:
         concealed_tiles: list[str] | None = None, evaluate_force_auto: bool = False,
         dynamic_layout: bool = False, open_melds: int | None = None,
         public_observation: dict[str, Any] | None = None,
+        force_auto_action_buttons: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         if self.recognition_server.poll() is not None:
             raise RuntimeError("resident recognition server is not running")
@@ -563,6 +612,7 @@ class PythonAutoOperator:
             "dynamicLayout": dynamic_layout,
             "openMelds": open_melds,
             "publicObservation": public_observation,
+            "forceAutoActionButtons": force_auto_action_buttons,
         }) + "\n")
         self.recognition_server.stdin.flush()
         response_line = self.recognition_server.stdout.readline()
@@ -937,8 +987,9 @@ class PythonAutoOperator:
     def confirm_action_button(
         self, page: Page, action: str, before: bytes,
         hand_before: bytes | None = None, meld_before: bytes | None = None,
+        region_override: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        region = self.layout.get("actionButtonRegions", {}).get(action)
+        region = region_override or self.layout.get("actionButtonRegions", {}).get(action)
         if not region:
             raise RuntimeError(f"layout has no calibrated {action} button region")
         clip = {key: region[key] for key in ("x", "y", "width", "height")}
@@ -1069,11 +1120,11 @@ class PythonAutoOperator:
             if stability_delta > self.args.stability_pixel_delta:
                 raise RetryableSafetyAbort("hand changed during Python pre-click stability check")
         if selected_action != "discard":
-            button_action = "kan" if selected_action in {"minkan", "ankan"} else selected_action
+            button_action = "kan" if selected_action in {"minkan", "ankan", "kakan"} else selected_action
             observed = evaluation.get("actionButton") if force_auto else self.validate_action_certificate(button_action, evaluation)
             if not observed or observed.get("action") != button_action:
                 raise RuntimeError(f"evaluated frame has no {button_action} button candidate")
-            region = self.layout["actionButtonRegions"][button_action]
+            region = observed if force_auto else self.layout["actionButtonRegions"][button_action]
             button_clip = {key: region[key] for key in ("x", "y", "width", "height")}
             button_before = page.screenshot(clip=button_clip, animations="disabled")
             meld_region = self.layout.get("publicTileRegions", {}).get("ownMelds")
@@ -1085,7 +1136,10 @@ class PythonAutoOperator:
             point = observed["center"]
             self.log("action_click_sent", action=button_action, clickPoint=point)
             page.mouse.click(point["x"], point["y"])
-            action_receipt = self.confirm_action_button(page, button_action, button_before, hand_before, meld_before)
+            action_receipt = self.confirm_action_button(
+                page, button_action, button_before, hand_before, meld_before,
+                region_override=region if force_auto else None,
+            )
             if selected_action != "riichi":
                 return {"clicked": True, "policy": "certified_auto", "action": selected_action,
                         "clickPoint": point, **action_receipt}
@@ -1190,6 +1244,7 @@ class PythonAutoOperator:
         last_gate_sequence = -1
         draw_gate_streak = 0
         pass_gate_streak = 0
+        call_gate_streak = 0
         while True:
             iterations += 1
             if self.args.max_iterations and iterations > self.args.max_iterations:
@@ -1200,6 +1255,7 @@ class PythonAutoOperator:
                 gate_frame = None
                 quick_draw = False
                 quick_pass = False
+                quick_calls: list[dict[str, Any]] = []
                 if self.args.mode == "force-auto" and self.layout.get("drawSlot"):
                     if self.screencast_sequence == last_gate_sequence:
                         page.wait_for_timeout(max(20, min(100, round(self.args.poll * 1000))))
@@ -1211,14 +1267,21 @@ class PythonAutoOperator:
                         quick_pass = is_force_auto_pass_clip(
                             crop_screenshot(gate_frame, pass_region)
                         )
+                    if gate_frame:
+                        # Reaction prompts are independent of the draw-slot
+                        # gate and must be inspected on every streamed frame.
+                        quick_calls = force_auto_call_buttons(gate_frame, self.layout["viewport"])
                     draw_gate_streak = draw_gate_streak + 1 if quick_draw else 0
                     pass_gate_streak = pass_gate_streak + 1 if quick_pass else 0
-                    if (quick_draw and draw_gate_streak < 2) or (quick_pass and pass_gate_streak < 2):
+                    call_gate_streak = call_gate_streak + 1 if quick_calls else 0
+                    if ((quick_draw and draw_gate_streak < 2)
+                            or (quick_pass and pass_gate_streak < 2)
+                            or (quick_calls and call_gate_streak < 2)):
                         page.wait_for_timeout(20)
                         continue
                     # The small regions are the latency-critical turn gate.
                     # Keep a periodic full frame for away/result handling.
-                    if not quick_draw and not quick_pass and iterations % 10:
+                    if not quick_draw and not quick_pass and not quick_calls and iterations % 10:
                         page.wait_for_timeout(max(20, round(self.args.poll * 1000)))
                         continue
                 full_screen = gate_frame or page.screenshot(animations="disabled")
@@ -1272,10 +1335,10 @@ class PythonAutoOperator:
                     continue
                 if self.args.mode == "force-auto":
                     pass_region = self.layout.get("actionButtonRegions", {}).get("pass")
-                    if pass_region and is_force_auto_pass_prompt(full_screen, pass_region):
+                    call_buttons = force_auto_call_buttons(full_screen, self.layout["viewport"])
+                    if call_buttons or (pass_region and is_force_auto_pass_prompt(full_screen, pass_region)):
                         screenshot_path = self.frames / f"{utc_stamp()}.png"
                         screenshot_path.write_bytes(full_screen)
-                        call_buttons = force_auto_call_buttons(full_screen, self.layout["viewport"])
                         if getattr(self.args, "accept_single_call", False) and len(call_buttons) == 1:
                             receipt = self.execute_force_auto_call(page, full_screen, call_buttons[0])
                             self.log("reaction_call", screenshot=str(screenshot_path), execution=receipt)
@@ -1284,7 +1347,7 @@ class PythonAutoOperator:
                         if len(call_buttons) > 1:
                             self.log("reaction_call_ambiguous", screenshot=str(screenshot_path),
                                      buttonCount=len(call_buttons))
-                        if self.last_shanten == 0:
+                        if should_guard_tenpai_reaction(self.last_shanten, call_buttons):
                             self.log("tenpai_reaction_guard", screenshot=str(screenshot_path),
                                      reason="reaction may contain ron; refusing blind pass")
                             time.sleep(max(self.args.poll, 1))
@@ -1384,6 +1447,9 @@ class PythonAutoOperator:
                 if public_observation and self.args.mode != "force-auto":
                     self.previous_public_observation = public_observation
                 if self.args.mode == "force-auto" and not pending_discard:
+                    self_action_buttons = force_auto_self_action_buttons(
+                        evaluation_frame, self.layout["viewport"],
+                    )
                     dynamic_layout_was_required = self.dynamic_layout_required
                     try:
                         evaluation = self.recognize_resident(
@@ -1394,6 +1460,7 @@ class PythonAutoOperator:
                             dynamic_layout=self.dynamic_layout_required,
                             open_melds=self.cached_open_melds if self.cached_concealed_tiles is not None else None,
                             public_observation=public_observation,
+                            force_auto_action_buttons=self_action_buttons,
                         )
                     except RuntimeError as initial_error:
                         self.cached_concealed_tiles = None
@@ -1402,6 +1469,7 @@ class PythonAutoOperator:
                             evaluation = self.recognize_resident(
                                 screenshot_path, evaluate_force_auto=True, dynamic_layout=True,
                                 public_observation=public_observation,
+                                force_auto_action_buttons=self_action_buttons,
                             )
                         except RuntimeError as retry_error:
                             # Deal animations can briefly place 15-20 bright
@@ -1582,7 +1650,7 @@ def parse_args() -> argparse.Namespace:
         help="continuously enter Bronze Room four-player East from lobby/result screens",
     )
     parser.add_argument(
-        "--accept-single-call", action=argparse.BooleanOptionalAction, default=False,
+        "--accept-single-call", action=argparse.BooleanOptionalAction, default=True,
         help="in force-auto, accept one unambiguous green chi/pon/kan button and then discard",
     )
     parser.add_argument(

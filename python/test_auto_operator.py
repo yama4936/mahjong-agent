@@ -9,7 +9,7 @@ import tempfile
 import json
 from unittest.mock import Mock, patch
 
-from auto_operator import PythonAutoOperator, away_resume_geometry, force_auto_call_buttons, is_away_resume_dialog, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, merge_public_observations, send_discard_click
+from auto_operator import PythonAutoOperator, away_resume_geometry, force_auto_call_buttons, force_auto_self_action_buttons, is_away_resume_dialog, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, merge_public_observations, send_discard_click, should_guard_tenpai_reaction
 from screen_state import classify_screen, load_references
 
 
@@ -105,6 +105,21 @@ class AwayDialogDetectionTest(unittest.TestCase):
         output = io.BytesIO()
         image.save(output, format="PNG")
         self.assertEqual(len(force_auto_call_buttons(output.getvalue(), viewport)), 2)
+
+    def test_tenpai_guard_allows_pass_when_a_green_call_is_visible(self) -> None:
+        self.assertTrue(should_guard_tenpai_reaction(0, []))
+        self.assertFalse(should_guard_tenpai_reaction(0, [{"center": {"x": 100, "y": 100}}]))
+        self.assertFalse(should_guard_tenpai_reaction(1, []))
+
+    def test_force_auto_self_action_button_finds_visible_riichi_colored_button(self) -> None:
+        viewport = {"width": 1600, "height": 900}
+        image = Image.new("RGB", (1600, 900), (25, 55, 85))
+        ImageDraw.Draw(image).rectangle((893, 700, 1131, 780), fill=(190, 110, 35))
+        output = io.BytesIO()
+        image.save(output, format="PNG")
+        buttons = force_auto_self_action_buttons(output.getvalue(), viewport)
+        self.assertEqual(len(buttons), 1)
+        self.assertEqual(buttons[0]["center"], {"x": 1012.0, "y": 740.0})
 
     def test_single_call_arms_compact_hand_discard_after_button_disappears(self) -> None:
         viewport = {"width": 1600, "height": 900}
