@@ -8,7 +8,8 @@ from PIL import Image, ImageChops, ImageStat
 
 ScreenState = Literal[
     "login", "account_modal", "lobby", "ranked_menu", "ranked_room",
-    "matchmaking", "match", "away", "round_result", "match_result", "exit_confirm", "unknown",
+    "matchmaking", "match", "away", "round_result", "match_result", "rank_progress",
+    "exit_confirm", "unknown",
 ]
 
 REFERENCE_FILES: list[tuple[ScreenState, str]] = [
@@ -69,6 +70,29 @@ def _is_ranked_match_result(image: Image.Image) -> bool:
     dark = sum(1 for pixel in board_pixels if max(pixel) < 100) / max(1, len(board_pixels))
     white = sum(1 for pixel in board_pixels if min(pixel) > 180) / max(1, len(board_pixels))
     return yellow >= 0.25 and dark >= 0.25 and white >= 0.03
+
+
+def _is_rank_progress(image: Image.Image) -> bool:
+    """Detect the post-result rank gauge and its second confirm button.
+
+    This overlay shares the darkened ranked-room background with matchmaking,
+    so require both the yellow confirmation control and the cyan circular gauge.
+    """
+    width, height = image.size
+    if width < 1200 or height < 700:
+        return False
+    button = image.crop((width * 0.84, height * 0.88, width * 0.98, height * 0.97)).convert("RGB")
+    button_pixels = list(button.getdata())
+    yellow = sum(
+        1 for red, green, blue in button_pixels if red > 180 and green > 130 and blue < 120
+    ) / max(1, len(button_pixels))
+    gauge = image.crop((width * 0.70, height * 0.30, width * 0.89, height * 0.67)).convert("RGB")
+    gauge_pixels = list(gauge.getdata())
+    cyan = sum(
+        1 for red, green, blue in gauge_pixels
+        if green > 100 and blue > 120 and blue - red > 30 and green - red > 20
+    ) / max(1, len(gauge_pixels))
+    return yellow >= 0.25 and cyan >= 0.025
 
 
 def _is_cherry_blossom_lobby(image: Image.Image) -> bool:
@@ -135,6 +159,8 @@ def classify_screen(
     image = _open(screenshot)
     if _is_round_result_summary(image):
         return "round_result", 1.0
+    if _is_rank_progress(image):
+        return "rank_progress", 1.0
     if _is_ranked_match_result(image):
         return "match_result", 1.0
     if _is_cherry_blossom_matchmaking(image):

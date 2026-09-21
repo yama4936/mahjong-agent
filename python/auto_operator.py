@@ -756,7 +756,7 @@ class PythonAutoOperator:
         self.round_terminal_result_observed = False
         self.last_ranked_loop_state: str | None = None
         self.last_ranked_loop_click_at = 0.0
-        self.result_screen_advanced = False
+        self.result_screen_advanced: str | None = None
         if self.log_path.exists():
             for line in reversed(self.log_path.read_text(encoding="utf-8").splitlines()):
                 try:
@@ -1197,20 +1197,21 @@ class PythonAutoOperator:
         return True
 
     def advance_result_screen_once(self, page: Page, state: str, confidence: float) -> bool:
-        """Confirm one terminal result once; wait for a different screen afterward."""
-        if state not in {"round_result", "match_result"} or self.result_screen_advanced:
+        """Confirm each distinct terminal-result stage exactly once."""
+        if state not in {"round_result", "match_result", "rank_progress"} \
+                or self.result_screen_advanced == state:
             return False
-        y_ratio = 0.92 if state == "match_result" else 0.935
+        y_ratio = 0.92 if state in {"match_result", "rank_progress"} else 0.935
         point = {"x": self.layout["viewport"]["width"] * 0.91,
                  "y": self.layout["viewport"]["height"] * y_ratio}
         page.mouse.click(point["x"], point["y"])
-        self.result_screen_advanced = True
+        self.result_screen_advanced = state
         self.log("screen_advanced", state=state, confidence=confidence, clickPoint=point)
         return True
 
     def handle_early_non_gameplay_screen(self, page: Page, state: str, confidence: float) -> bool:
         """Handle verified non-gameplay screens before latency quick gates."""
-        if state in {"round_result", "match_result"}:
+        if state in {"round_result", "match_result", "rank_progress"}:
             self.pending_post_call_discard = False
             self.pending_post_call_started_at = None
             self.round_terminal_latched = True
@@ -1219,7 +1220,7 @@ class PythonAutoOperator:
                 self.advance_result_screen_once(page, state, confidence)
             return True
         if state in {"lobby", "ranked_menu", "ranked_room", "matchmaking"}:
-            self.result_screen_advanced = False
+            self.result_screen_advanced = None
             if not self.advance_ranked_loop(page, state, confidence):
                 self.log("screen_state_bypassed", state=state,
                          confidence=confidence, gameplayClicks=0)
@@ -2077,7 +2078,7 @@ class PythonAutoOperator:
                     # Match and away references share almost the entire table.
                     # The stricter popup/button geometry remains authoritative.
                     screen_state = "match"
-                if screen_state in {"round_result", "match_result"}:
+                if screen_state in {"round_result", "match_result", "rank_progress"}:
                     if getattr(self, "round_terminal_latched", False):
                         self.round_terminal_result_observed = True
                     # A new hand (or a new match) must never inherit tiles or
@@ -2097,13 +2098,14 @@ class PythonAutoOperator:
                     self.last_shanten = None
                     self.last_processed_hand = None
                     self.armed = True
-                    self.attach_outcome("match" if screen_state == "match_result" else "round", full_screen, screen_confidence)
+                    if screen_state != "rank_progress":
+                        self.attach_outcome("match" if screen_state == "match_result" else "round", full_screen, screen_confidence)
                     if self.args.advance_screens:
                         self.advance_result_screen_once(page, screen_state, screen_confidence)
                         time.sleep(self.args.poll)
                         continue
                 else:
-                    self.result_screen_advanced = False
+                    self.result_screen_advanced = None
                 if getattr(self, "round_terminal_latched", False):
                     if getattr(self, "round_terminal_result_observed", False) and screen_state == "match" \
                             and closed_concealed_row_visible(full_screen, self.layout):
