@@ -280,6 +280,35 @@ def post_call_transition(call_action: str, prior_open_melds: int) -> dict[str, A
     }
 
 
+def force_auto_chi_choice_points(screenshot: bytes, viewport: dict[str, int]) -> list[dict[str, float]]:
+    """Locate complete two-tile choices in Mahjong Soul's post-chi selector."""
+    left, right = round(viewport["width"] * 0.25), round(viewport["width"] * 0.75)
+    top, bottom = round(viewport["height"] * 0.65), round(viewport["height"] * 0.82)
+    with Image.open(io.BytesIO(screenshot)) as image:
+        pixels = image.convert("RGB")
+        active = []
+        for x in range(left, right):
+            count = 0
+            for y in range(top, bottom):
+                red, green, blue = pixels.getpixel((x, y))
+                if min(red, green, blue) >= 145 and max(red, green, blue) - min(red, green, blue) <= 85:
+                    count += 1
+            if count >= (bottom - top) * 0.35:
+                active.append(x)
+    groups: list[list[int]] = []
+    for x in active:
+        if not groups or x - groups[-1][-1] > 16:
+            groups.append([x])
+        else:
+            groups[-1].append(x)
+    points = []
+    for group in groups:
+        width = group[-1] - group[0]
+        if viewport["width"] * 0.07 <= width <= viewport["width"] * 0.13:
+            points.append({"x": (group[0] + group[-1]) / 2, "y": (top + bottom) / 2})
+    return points
+
+
 def should_process_reaction_prompt(pending_post_call_discard: bool) -> bool:
     """A verified chi/pon must discard before any new reaction is considered."""
     return not pending_post_call_discard
@@ -1105,6 +1134,13 @@ class PythonAutoOperator:
         self.closed_new_round_candidate_frames.add(hashlib.sha256(frame).hexdigest())
         return len(self.closed_new_round_candidate_frames) >= 2
 
+    def should_reset_open_hand_state(self, frame: bytes) -> bool:
+        """Never treat a pre-call/choice animation as closed-new-round proof."""
+        if getattr(self, "pending_post_call_discard", False):
+            self.closed_new_round_candidate_frames = set()
+            return False
+        return self.cached_open_melds > 0 and self.stable_closed_new_round(frame)
+
     def advance_ranked_loop(self, page: Page, state: str, confidence: float) -> bool:
         """Enter or re-enter Bronze Room four-player East after every match."""
         if not self.args.ranked_loop or confidence < 0.25:
@@ -1715,6 +1751,7 @@ class PythonAutoOperator:
         page.mouse.click(point["x"], point["y"])
         deadline = time.monotonic() + min(3.0, self.args.confirmation_timeout)
         current = screenshot
+        chi_choice_sent = False
         while time.monotonic() < deadline:
             page.wait_for_timeout(50)
             if self.screencast_sequence != sequence_before and self.latest_screencast_frame is not None:
@@ -1722,6 +1759,16 @@ class PythonAutoOperator:
                 sequence_before = self.screencast_sequence
             else:
                 current = page.screenshot(animations="disabled")
+            if call_action == "chi" and not chi_choice_sent:
+                choices = force_auto_chi_choice_points(current, self.layout["viewport"])
+                if choices:
+                    choice = choices[0]
+                    self.log("action_click_sent", action="chi_choice", clickPoint=choice,
+                             choiceCount=len(choices), source="complete_two_tile_choice")
+                    page.mouse.click(choice["x"], choice["y"])
+                    chi_choice_sent = True
+                    sequence_before = self.screencast_sequence
+                    continue
             hand_delta = mean_pixel_delta(hand_before, crop_screenshot(current, self.hand_clip))
             meld_delta = mean_pixel_delta(meld_before, crop_screenshot(current, meld_region)) \
                 if meld_before is not None and meld_region else 0
@@ -1734,6 +1781,7 @@ class PythonAutoOperator:
                 self.pending_post_call_discard = transition["pendingPostCallDiscard"]
                 self.pending_post_call_started_at = time.monotonic() \
                     if self.pending_post_call_discard else None
+                self.closed_new_round_candidate_frames = set()
                 self.last_processed_hand = None
                 self.armed = True
                 return {
@@ -1843,8 +1891,7 @@ class PythonAutoOperator:
                     )
                     geometric_open_melds = geometric_open_meld_count(gate_frame, self.layout) \
                         if gate_frame else None
-                    if gate_frame and self.cached_open_melds > 0 \
-                            and self.stable_closed_new_round(gate_frame):
+                    if gate_frame and self.should_reset_open_hand_state(gate_frame):
                         previous_open_melds = self.cached_open_melds
                         self.cached_concealed_tiles = None
                         self.cached_open_melds = 0

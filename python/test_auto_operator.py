@@ -11,7 +11,7 @@ import json
 import time
 from unittest.mock import Mock, patch
 
-from auto_operator import PythonAutoOperator, RetryableSafetyAbort, away_resume_geometry, closed_concealed_row_visible, crop_screenshot, discard_point_in_hand_geometry, force_auto_call_buttons, force_auto_reaction_win_button, force_auto_self_action_buttons, geometric_open_meld_count, is_away_resume_dialog, is_contextual_reaction_pass, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, mean_pixel_delta, merge_public_observations, open_hand_draw_slot, own_meld_surface_visible, post_call_transition, selected_tile_comparison_region, send_discard_click, should_guard_tenpai_reaction, should_process_reaction_prompt, stable_hand_comparison_region, stable_hand_delta
+from auto_operator import PythonAutoOperator, RetryableSafetyAbort, away_resume_geometry, closed_concealed_row_visible, crop_screenshot, discard_point_in_hand_geometry, force_auto_call_buttons, force_auto_chi_choice_points, force_auto_reaction_win_button, force_auto_self_action_buttons, geometric_open_meld_count, is_away_resume_dialog, is_contextual_reaction_pass, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, mean_pixel_delta, merge_public_observations, open_hand_draw_slot, own_meld_surface_visible, post_call_transition, selected_tile_comparison_region, send_discard_click, should_guard_tenpai_reaction, should_process_reaction_prompt, stable_hand_comparison_region, stable_hand_delta
 from screen_state import classify_screen, load_references
 
 
@@ -344,6 +344,32 @@ class AwayDialogDetectionTest(unittest.TestCase):
         open_frame = (frames / "2026-09-21T05-46-33.088404+00-00.jpg").read_bytes()
         self.assertFalse(operator.stable_closed_new_round(open_frame))
 
+    def test_pending_post_chi_cannot_be_reset_by_stale_closed_row_evidence(self) -> None:
+        project = Path(__file__).resolve().parents[1]
+        layout = load_json(project / "config" / "layout.json")
+        frame = (project / "artifacts" / "friend-5-20" / "frames" /
+                 "2026-09-21T08-18-08.901402+00-00.png").read_bytes()
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.layout = layout
+        operator.cached_open_melds = 1
+        operator.pending_post_call_discard = True
+        operator.closed_new_round_candidate_frames = {"stale-before-call-a", "stale-before-call-b"}
+
+        self.assertFalse(operator.should_reset_open_hand_state(frame))
+        self.assertEqual(operator.closed_new_round_candidate_frames, set())
+
+    def test_live_first_chi_selector_exposes_only_complete_two_tile_choices(self) -> None:
+        project = Path(__file__).resolve().parents[1]
+        frame = (project / "artifacts" / "friend-5-20" / "frames" /
+                 "2026-09-21T08-18-13.104524+00-00.public-cache.jpg").read_bytes()
+        started = time.monotonic()
+        choices = force_auto_chi_choice_points(frame, {"width": 1920, "height": 1080})
+
+        self.assertEqual(len(choices), 3)
+        self.assertLess(time.monotonic() - started, 5.0)
+        self.assertTrue(all(650 <= choice["x"] <= 1230 for choice in choices))
+        self.assertTrue(all(790 <= choice["y"] <= 800 for choice in choices))
+
     def test_restart_after_call_has_stable_meld_surface_without_closed_round_proof(self) -> None:
         project = Path(__file__).resolve().parents[1]
         layout = load_json(project / "config" / "layout.json")
@@ -617,6 +643,7 @@ class AwayDialogDetectionTest(unittest.TestCase):
         operator.cached_open_melds = 1
         operator.dynamic_layout_required = False
         operator.pending_post_call_discard = False
+        operator.closed_new_round_candidate_frames = {"stale-closed-row"}
         operator.last_processed_hand = "old"
         operator.armed = False
         operator.log = Mock()
@@ -630,6 +657,7 @@ class AwayDialogDetectionTest(unittest.TestCase):
         self.assertEqual(receipt["nextAction"], "discard")
         self.assertEqual(operator.cached_open_melds, 2)
         self.assertTrue(operator.pending_post_call_discard)
+        self.assertEqual(operator.closed_new_round_candidate_frames, set())
         self.assertIsNotNone(operator.pending_post_call_started_at)
         self.assertTrue(operator.dynamic_layout_required)
         self.assertTrue(operator.armed)
