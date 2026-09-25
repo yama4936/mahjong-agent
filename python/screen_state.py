@@ -8,7 +8,7 @@ from typing import Literal
 from PIL import Image, ImageChops, ImageStat
 
 ScreenState = Literal[
-    "login", "account_modal", "session_conflict", "lobby", "ranked_menu", "ranked_room",
+    "login", "account_modal", "session_conflict", "connection_error", "lobby", "ranked_menu", "ranked_room",
     "matchmaking", "match", "away", "round_result", "match_result", "rank_progress",
     "post_match_reward", "exit_confirm", "unknown",
 ]
@@ -46,7 +46,10 @@ def _distance(left: Image.Image, right: Image.Image) -> float:
 
 def _is_session_conflict(image: Image.Image) -> bool:
     """Match the static login-conflict dialog, ignoring the changing table behind it."""
-    reference = _session_conflict_reference()
+    return _matches_blocking_dialog(image, _blocking_dialog_reference("session-conflict.png"))
+
+
+def _matches_blocking_dialog(image: Image.Image, reference: Image.Image | None) -> bool:
     if reference is None or image.width / max(1, image.height) < 1.6:
         return False
     if image.size != reference.size:
@@ -55,9 +58,9 @@ def _is_session_conflict(image: Image.Image) -> bool:
     return _distance(image.crop(box), reference.crop(box)) < .035
 
 
-@lru_cache(maxsize=1)
-def _session_conflict_reference() -> Image.Image | None:
-    path = Path(__file__).resolve().parent.parent / "artifacts" / "live" / "session-conflict.png"
+@lru_cache(maxsize=2)
+def _blocking_dialog_reference(filename: str) -> Image.Image | None:
+    path = Path(__file__).resolve().parent.parent / "artifacts" / "live" / filename
     return _open(path) if path.exists() else None
 
 
@@ -204,6 +207,8 @@ def classify_screen(
         return "match_result", 1.0
     if _is_session_conflict(image):
         return "session_conflict", 1.0
+    if _matches_blocking_dialog(image, _blocking_dialog_reference("connection-error.png")):
+        return "connection_error", 1.0
     if _is_cherry_blossom_matchmaking(image):
         return "matchmaking", 1.0
     if _is_cherry_blossom_ranked_menu(image):

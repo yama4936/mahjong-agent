@@ -2095,8 +2095,18 @@ class AwayDialogDetectionTest(unittest.TestCase):
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
         operator.log = Mock()
         page = Mock()
-        with self.assertRaisesRegex(RuntimeError, "session was opened elsewhere"):
+        with self.assertRaisesRegex(RuntimeError, "session_conflict dialog blocks"):
             operator.handle_early_non_gameplay_screen(page, "session_conflict", 1.0)
+        page.mouse.click.assert_not_called()
+
+    def test_connection_error_stops_without_click(self) -> None:
+        frame = Path(__file__).resolve().parents[1] / "artifacts" / "live" / "connection-error.png"
+        self.assertEqual(classify_screen(frame, {}), ("connection_error", 1.0))
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.log = Mock()
+        page = Mock()
+        with self.assertRaisesRegex(RuntimeError, "connection_error dialog blocks"):
+            operator.handle_early_non_gameplay_screen(page, "connection_error", 1.0)
         page.mouse.click.assert_not_called()
 
     def test_saved_screens_are_classified_and_unknown_fails_closed(self) -> None:

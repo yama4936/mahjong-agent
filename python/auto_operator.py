@@ -1319,9 +1319,9 @@ class PythonAutoOperator:
 
     def handle_early_non_gameplay_screen(self, page: Page, state: str, confidence: float) -> bool:
         """Handle verified non-gameplay screens before latency quick gates."""
-        if state == "session_conflict":
-            self.log("session_conflict_stop", confidence=confidence, gameplayClicks=0)
-            raise RuntimeError("Mahjong Soul session was opened elsewhere; operator stopped without confirming the dialog")
+        if state in {"session_conflict", "connection_error"}:
+            self.log("blocking_dialog_stop", state=state, confidence=confidence, gameplayClicks=0)
+            raise RuntimeError(f"Mahjong Soul {state} dialog blocks the table; operator stopped without confirming it")
         if state in {"round_result", "match_result", "rank_progress", "post_match_reward"}:
             self.pending_post_call_discard = False
             self.pending_post_call_started_at = None
