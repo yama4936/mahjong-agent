@@ -243,6 +243,8 @@ npm run watch -- examples/state.json config/layout.json templates/bootstrap \
 
 検証時は`--max-turns=1`のように処理回数を制限できます。`Ctrl+C`で安全に監視を終了します。
 
+自動操作の実画面回帰テストには、友人戦の「300+0」設定を使います。既存の再現用フレームとログは`artifacts/debug-300/`にあります。打牌、鳴き、和了、結果画面への遷移をこの条件で確認し、段位戦での勝率・順位評価は別に記録します。
+
 `--mode=auto`は、実画面テンプレート、Jevキー、認識・判断confidence、画面安定性の全ゲートが通った場合だけクリックします。
 
 ## Python常駐オペレーター
