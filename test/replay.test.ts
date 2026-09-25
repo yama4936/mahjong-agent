@@ -93,3 +93,21 @@ test("a result screenshot without outcome labels does not count as a loss", asyn
   assert.equal(summary.overall.winRate, null);
   assert.equal(summary.overall.dealInRate, null);
 });
+
+test("benchmark counts one outcome for multiple decisions in the same round", async () => {
+  const state = parseGameState({
+    hand: ["1m", "2m", "3m", "4m", "5m", "6m", "3p", "4p", "5p", "7s", "8s", "9s", "E"], draw: "6p",
+  });
+  const decision = await decide(state, { mode: "advisor" });
+  const base = { schemaVersion: 1 as const, timestamp: new Date(0).toISOString(), state, decision };
+  const result = summarizeBenchmark([
+    { ...base, id: "a", actualResult: { roundId: "east-1", won: true, dealIn: false, pointsDelta: 1000 } },
+    { ...base, id: "b", actualResult: { roundId: "east-1", won: true, dealIn: false, pointsDelta: 1000 } },
+    { ...base, id: "c", actualResult: { roundId: "east-2", won: false, dealIn: true, pointsDelta: -2000 } },
+  ]);
+  assert.equal(result.overall.decisions, 3);
+  assert.equal(result.overall.completedOutcomes, 2);
+  assert.equal(result.overall.winRate, .5);
+  assert.equal(result.overall.dealInRate, .5);
+  assert.equal(result.overall.averagePointsDelta, -500);
+});

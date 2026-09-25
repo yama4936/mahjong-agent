@@ -1,4 +1,5 @@
 import type { DecisionRecord } from "./replay.js";
+import { groupByRound, roundBoolean } from "./roundOutcomes.js";
 
 export interface BenchmarkGroup {
   decisions: number;
@@ -12,13 +13,19 @@ export interface BenchmarkGroup {
 }
 
 function summarizeGroup(records: readonly DecisionRecord[]): BenchmarkGroup {
-  const completed = records.filter((record) => record.actualResult);
-  const winLabels = completed.filter((record) => typeof record.actualResult?.won === "boolean");
-  const dealInLabels = completed.filter((record) => typeof record.actualResult?.dealIn === "boolean");
-  const wins = winLabels.filter((record) => record.actualResult?.won === true).length;
-  const dealIns = dealInLabels.filter((record) => record.actualResult?.dealIn === true).length;
-  const pointDeltas = completed.flatMap((record) => typeof record.actualResult?.pointsDelta === "number" ? [record.actualResult.pointsDelta] : []);
-  const ranks = completed.flatMap((record) => typeof record.actualResult?.finalRank === "number" ? [record.actualResult.finalRank] : []);
+  const completed = groupByRound(records).filter((group) => group.some((record) => record.actualResult));
+  const winLabels = completed.filter((group) => roundBoolean(group, "won") !== null);
+  const dealInLabels = completed.filter((group) => roundBoolean(group, "dealIn") !== null);
+  const wins = winLabels.filter((group) => roundBoolean(group, "won") === true).length;
+  const dealIns = dealInLabels.filter((group) => roundBoolean(group, "dealIn") === true).length;
+  const pointDeltas = completed.flatMap((group) => {
+    const values = new Set(group.flatMap((record) => typeof record.actualResult?.pointsDelta === "number" ? [record.actualResult.pointsDelta] : []));
+    return values.size === 1 ? [...values] : [];
+  });
+  const ranks = completed.flatMap((group) => {
+    const values = new Set(group.flatMap((record) => typeof record.actualResult?.finalRank === "number" ? [record.actualResult.finalRank] : []));
+    return values.size === 1 ? [...values] : [];
+  });
   return {
     decisions: records.length,
     completedOutcomes: completed.length,

@@ -1,4 +1,5 @@
 import type { DecisionRecord } from "./replay.js";
+import { groupByRound, roundBoolean } from "./roundOutcomes.js";
 
 export interface DecisionMetrics {
   decisions: number;
@@ -38,19 +39,21 @@ const average = (values: number[]): number | null => values.length
  * explicit for live/A-B dashboards.
  */
 export function summarizeDecisionMetrics(records: readonly DecisionRecord[]): DecisionMetrics {
-  const completed = records.filter((record) => record.actualResult
-    && (typeof record.actualResult.won === "boolean" || typeof record.actualResult.dealIn === "boolean"));
-  const wins = completed.filter((record) => record.actualResult?.won === true).length;
-  const dealIns = completed.filter((record) => record.actualResult?.dealIn === true).length;
+  const rounds = groupByRound(records);
+  const completed = rounds.filter((group) => roundBoolean(group, "won") !== null || roundBoolean(group, "dealIn") !== null);
+  const winLabels = completed.filter((group) => roundBoolean(group, "won") !== null);
+  const dealInLabels = completed.filter((group) => roundBoolean(group, "dealIn") !== null);
+  const wins = winLabels.filter((group) => roundBoolean(group, "won") === true).length;
+  const dealIns = dealInLabels.filter((group) => roundBoolean(group, "dealIn") === true).length;
   const actions = records.map((record) => record.decision.selectedAction?.action);
   const riichi = actions.filter((action) => action === "riichi").length;
   const callActions = new Set(["chi", "pon", "minkan", "ankan", "kakan"]);
   const calls = actions.filter((action) => action && callActions.has(action)).length;
-  const roundKey = (record: DecisionRecord) => String((record.actualResult as any)?.roundId
-    ?? record.actualResult?.round?.observedAt ?? record.id);
+  const roundKey = (record: DecisionRecord) => String(record.actualResult?.round?.observedAt
+    ?? record.actualResult?.roundId ?? record.id);
   const calledRoundKeys = new Set(records.filter((record) => callActions.has(record.decision.selectedAction?.action))
     .map(roundKey));
-  const wonRoundKeys = new Set(records.filter((record) => record.actualResult?.won === true).map(roundKey));
+  const wonRoundKeys = new Set(rounds.filter((group) => roundBoolean(group, "won") === true).map((group) => roundKey(group[0]!)));
   const selectedCandidates = records.flatMap((record) => {
     const selected = record.decision.candidates?.find((candidate) => candidate.actionId === record.decision.selectedActionId);
     return selected ? [selected] : [];
@@ -72,7 +75,7 @@ export function summarizeDecisionMetrics(records: readonly DecisionRecord[]): De
   const differences = comparable.filter(({ local, jev }) => local !== jev).length;
   return {
     decisions: records.length, completedRounds: completed.length,
-    wins, winRate: rate(wins, completed.length), dealIns, dealInRate: rate(dealIns, completed.length),
+    wins, winRate: rate(wins, winLabels.length), dealIns, dealInRate: rate(dealIns, dealInLabels.length),
     riichi, riichiRate: rate(riichi, records.length), calls, callRate: rate(calls, records.length),
     calledRounds: calledRoundKeys.size,
     calledRoundWins: [...calledRoundKeys].filter((key) => wonRoundKeys.has(key)).length,
