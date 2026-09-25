@@ -688,6 +688,31 @@ class AwayDialogDetectionTest(unittest.TestCase):
         self.assertEqual(operator.action_evidence_last_seen_at, 10.1)
         self.assertEqual(operator.action_evidence_kind, "reaction")
 
+    def test_live_300_closed_draw_replaces_stale_reaction_deadline(self) -> None:
+        project = Path(__file__).resolve().parents[1]
+        layout = load_json(project / "config" / "layout.json")
+        frame = (project / "artifacts" / "friend-300-20260925" / "frames" /
+                 "2026-09-25T04-19-21.922394+00-00.jpg").read_bytes()
+        self.assertTrue(is_draw_slot_occupied(frame, layout["drawSlot"]))
+        self.assertIsNone(geometric_open_meld_count(frame, layout))
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.cached_open_melds = 0
+        operator.screencast_sequence = 10
+        operator.action_evidence_started_at = time.monotonic() - 11
+        operator.action_evidence_last_seen_at = time.monotonic() - 10
+        operator.action_evidence_kind = "reaction"
+        operator.action_evidence_generation = 4
+        operator.last_action_clicked_at = None
+        operator.log = Mock()
+        self.assertTrue(operator.supersede_reaction_on_verified_draw(
+            draw_occupied=True, exact_open_melds=None, geometric_open_melds=None,
+        ))
+        self.assertEqual(operator.action_evidence_kind, "discard")
+        self.assertTrue(operator.action_timing()["deadlineMet"])
+        self.assertFalse(operator.supersede_reaction_on_verified_draw(
+            draw_occupied=False, exact_open_melds=None, geometric_open_melds=None,
+        ))
+
     def test_compact_geometry_rejects_opponent_turn_without_own_meld_surface(self) -> None:
         layout = {
             "viewport": {"width": 1920, "height": 1080},
@@ -2063,6 +2088,16 @@ class AwayDialogDetectionTest(unittest.TestCase):
         self.assertTrue(PythonAutoOperator.compact_hand_is_proven(4, True))
         self.assertFalse(PythonAutoOperator.compact_hand_is_proven(1, False))
         self.assertFalse(PythonAutoOperator.compact_hand_is_proven(3, False))
+
+    def test_session_conflict_is_not_ranked_menu_and_stops_without_click(self) -> None:
+        frame = Path(__file__).resolve().parents[1] / "artifacts" / "live" / "session-conflict.png"
+        self.assertEqual(classify_screen(frame, {}), ("session_conflict", 1.0))
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.log = Mock()
+        page = Mock()
+        with self.assertRaisesRegex(RuntimeError, "session was opened elsewhere"):
+            operator.handle_early_non_gameplay_screen(page, "session_conflict", 1.0)
+        page.mouse.click.assert_not_called()
 
     def test_saved_screens_are_classified_and_unknown_fails_closed(self) -> None:
         expected_files = {

@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import io
+from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
 from PIL import Image, ImageChops, ImageStat
 
 ScreenState = Literal[
-    "login", "account_modal", "lobby", "ranked_menu", "ranked_room",
+    "login", "account_modal", "session_conflict", "lobby", "ranked_menu", "ranked_room",
     "matchmaking", "match", "away", "round_result", "match_result", "rank_progress",
     "post_match_reward", "exit_confirm", "unknown",
 ]
@@ -41,6 +42,23 @@ def _signature(image: Image.Image) -> Image.Image:
 def _distance(left: Image.Image, right: Image.Image) -> float:
     mean = ImageStat.Stat(ImageChops.difference(_signature(left), _signature(right))).mean
     return sum(mean) / (3 * 255)
+
+
+def _is_session_conflict(image: Image.Image) -> bool:
+    """Match the static login-conflict dialog, ignoring the changing table behind it."""
+    reference = _session_conflict_reference()
+    if reference is None or image.width / max(1, image.height) < 1.6:
+        return False
+    if image.size != reference.size:
+        return False
+    box = (image.width * .35, image.height * .4, image.width * .65, image.height * .69)
+    return _distance(image.crop(box), reference.crop(box)) < .035
+
+
+@lru_cache(maxsize=1)
+def _session_conflict_reference() -> Image.Image | None:
+    path = Path(__file__).resolve().parent.parent / "artifacts" / "live" / "session-conflict.png"
+    return _open(path) if path.exists() else None
 
 
 def _is_round_result_summary(image: Image.Image) -> bool:
@@ -184,6 +202,8 @@ def classify_screen(
         return "rank_progress", 1.0
     if _is_ranked_match_result(image):
         return "match_result", 1.0
+    if _is_session_conflict(image):
+        return "session_conflict", 1.0
     if _is_cherry_blossom_matchmaking(image):
         return "matchmaking", 1.0
     if _is_cherry_blossom_ranked_menu(image):

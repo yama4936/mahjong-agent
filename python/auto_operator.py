@@ -852,6 +852,21 @@ class PythonAutoOperator:
             self.action_evidence_last_seen_at = None
         return timing
 
+    def supersede_reaction_on_verified_draw(
+        self, *, draw_occupied: bool, exact_open_melds: int | None,
+        geometric_open_melds: int | None,
+    ) -> bool:
+        closed_draw = draw_occupied and self.cached_open_melds == 0 \
+            and exact_open_melds in {None, 0}
+        open_draw = draw_occupied and geometric_open_melds is not None \
+            and exact_open_melds == geometric_open_melds
+        if not (closed_draw or open_draw) or self.action_evidence_kind not in {"reaction", "win"}:
+            return False
+        self.mark_action_evidence(
+            "discard", gate_generation=self.screencast_sequence, supersede=True,
+        )
+        return True
+
     def action_deadline_remaining_ms(self) -> int:
         started = getattr(self, "action_evidence_started_at", None)
         if started is None:
@@ -1304,6 +1319,9 @@ class PythonAutoOperator:
 
     def handle_early_non_gameplay_screen(self, page: Page, state: str, confidence: float) -> bool:
         """Handle verified non-gameplay screens before latency quick gates."""
+        if state == "session_conflict":
+            self.log("session_conflict_stop", confidence=confidence, gameplayClicks=0)
+            raise RuntimeError("Mahjong Soul session was opened elsewhere; operator stopped without confirming the dialog")
         if state in {"round_result", "match_result", "rank_progress", "post_match_reward"}:
             self.pending_post_call_discard = False
             self.pending_post_call_started_at = None
@@ -2463,12 +2481,13 @@ class PythonAutoOperator:
                     exact_draw_slot = open_hand_draw_slot(self.layout, exact_open_melds or 0) \
                         or self.layout["drawSlot"]
                     exact_draw_occupied = is_draw_slot_occupied(evaluation_frame, exact_draw_slot)
+                    self.supersede_reaction_on_verified_draw(
+                        draw_occupied=exact_draw_occupied,
+                        exact_open_melds=exact_open_melds,
+                        geometric_open_melds=geometric_open_melds,
+                    )
                     if exact_draw_occupied and geometric_open_melds is not None \
                             and exact_open_melds == geometric_open_melds:
-                        if self.action_evidence_kind in {"reaction", "win"}:
-                            self.mark_action_evidence(
-                                "discard", gate_generation=self.screencast_sequence, supersede=True,
-                            )
                         self.cached_open_melds = geometric_open_melds
                         self.dynamic_layout_required = True
                         self.log(
