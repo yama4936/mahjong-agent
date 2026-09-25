@@ -782,6 +782,16 @@ class AwayDialogDetectionTest(unittest.TestCase):
         self.assertEqual([button["action"] for button in buttons], ["chi", "pon"])
         self.assertLess(max(button["height"] for button in buttons), 100)
 
+    def test_force_auto_call_buttons_reject_wide_table_coloring(self) -> None:
+        viewport = {"width": 1920, "height": 1080}
+        image = Image.new("RGB", (1920, 1080), (25, 55, 85))
+        draw = ImageDraw.Draw(image)
+        draw.rectangle((741, 734, 1164, 855), fill=(25, 145, 180))
+        output = io.BytesIO()
+        image.save(output, format="PNG")
+
+        self.assertEqual(force_auto_call_buttons(output.getvalue(), viewport), [])
+
     def test_tenpai_guard_allows_pass_when_a_green_call_is_visible(self) -> None:
         self.assertTrue(should_guard_tenpai_reaction(0, []))
         self.assertFalse(should_guard_tenpai_reaction(0, [{"center": {"x": 100, "y": 100}}]))
