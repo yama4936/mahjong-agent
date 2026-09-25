@@ -196,6 +196,23 @@ test("reaction policy rejects a shanten-improving call without a viable yaku", a
   assert.equal(judged.jev?.promptVersion, "mahjong-reaction-v1");
 });
 
+test("force-auto restricts Jev to safer tiles under threat", async () => {
+  const threatened = parseGameState({
+    ...state, turn: 12,
+    opponents: [{ seat: "south", discards: ["E"], riichi: true }],
+  });
+  let offered: any[] = [];
+  const jev = { chooseDiscard: async (_state: unknown, candidates: any[]) => {
+    offered = candidates;
+    return { actionId: candidates[0].actionId, confidence: 1, probabilities: {}, model: "fake", promptVersion: "test", latencyMs: 1 };
+  } } as any;
+  const result = await decide(threatened, { mode: "force-auto", jev });
+  assert.ok(offered.length > 0);
+  const eligible = result.candidates.filter((candidate) => candidate.shanten <= Math.min(...result.candidates.map((item) => item.shanten)) + 1);
+  const safest = Math.min(...eligible.map((candidate) => candidate.danger ?? 1));
+  assert.ok(offered.every((candidate) => (candidate.danger ?? 1) <= safest + 0.02));
+});
+
 test("reaction policy certifies a strict-improvement yakuhai pon", async () => {
   const callable = parseGameState({
     phase: "reaction", seat: "south",

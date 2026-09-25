@@ -172,9 +172,15 @@ export async function decide(state: GameState, options: DecisionOptions): Promis
     try {
       const underThreat = state.opponents.some((opponent) => opponent.riichi || opponent.openMelds >= 2);
       const minimumShanten = base.candidates[0]?.shanten;
-      const jevCandidates = options.mode === "force-auto" && !underThreat && minimumShanten !== undefined
-        ? base.candidates.filter((candidate) => candidate.shanten === minimumShanten)
-        : base.candidates;
+      const defensible = underThreat && minimumShanten !== undefined
+        ? base.candidates.filter((candidate) => candidate.shanten <= minimumShanten + 1)
+        : [];
+      const safestDanger = Math.min(...defensible.map((candidate) => candidate.danger ?? 1));
+      const jevCandidates = underThreat && defensible.length
+        ? defensible.filter((candidate) => (candidate.danger ?? 1) <= safestDanger + 0.02)
+        : options.mode === "force-auto" && minimumShanten !== undefined
+          ? base.candidates.filter((candidate) => candidate.shanten === minimumShanten)
+          : base.candidates;
       jev = await options.jev.chooseDiscard(state, jevCandidates, options.signal, options.handPlan);
       const candidate = base.candidates.find((item) => item.actionId === jev!.actionId);
       if (!candidate) throw new Error("Jev selected an unknown candidate");
@@ -380,6 +386,10 @@ export function assessReactionCalls(state: GameState, legalActions: readonly Leg
       const reasons: string[] = [];
       if (improvement <= 0) reasons.push("no_strict_shanten_improvement");
       if (!yaku.confirmed.length && !yaku.candidates.length) reasons.push("no_viable_yaku_path");
+      if (!yaku.confirmed.length && yaku.candidates.length > 0
+        && state.openMelds === 0 && state.round === "unknown") {
+        reasons.push("unverified_first_call_yaku");
+      }
       if (!plan.callsAllowed) reasons.push("hand_plan_disallows_calls");
       if (plan.phase === "late_tenpai_defense" && resultingShanten > 0) reasons.push("late_call_does_not_reach_tenpai");
       const placementUrgency = plan.placement.allLast && plan.placement.rank === 4;

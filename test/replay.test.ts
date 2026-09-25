@@ -76,3 +76,20 @@ test("round and match evidence are merged without discarding outcome labels", as
   assert.equal(updated!.actualResult?.round?.screenState, "round_result");
   assert.equal(updated!.actualResult?.match?.screenState, "match_result");
 });
+
+test("a result screenshot without outcome labels does not count as a loss", async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), "jantama-unlabeled-"));
+  const state = parseGameState({
+    hand: ["1m", "2m", "3m", "4m", "5m", "6m", "3p", "4p", "5p", "7s", "8s", "9s", "E"],
+    draw: "6p",
+  });
+  const decision = await decide(state, { mode: "advisor" });
+  const record = await appendDecisionLog(directory, state, decision);
+  await attachActualResult(path.join(directory, `${record.id}.json`), {
+    round: { observedAt: "2026-09-20T00:00:00.000Z", screenshot: "round.png", screenState: "round_result", screenConfidence: 1 },
+  });
+  const summary = summarizeBenchmark(await readDecisionDataset(directory));
+  assert.equal(summary.overall.completedOutcomes, 1);
+  assert.equal(summary.overall.winRate, null);
+  assert.equal(summary.overall.dealInRate, null);
+});

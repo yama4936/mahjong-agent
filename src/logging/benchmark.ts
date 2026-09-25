@@ -13,8 +13,10 @@ export interface BenchmarkGroup {
 
 function summarizeGroup(records: readonly DecisionRecord[]): BenchmarkGroup {
   const completed = records.filter((record) => record.actualResult);
-  const wins = completed.filter((record) => record.actualResult?.won === true).length;
-  const dealIns = completed.filter((record) => record.actualResult?.dealIn === true).length;
+  const winLabels = completed.filter((record) => typeof record.actualResult?.won === "boolean");
+  const dealInLabels = completed.filter((record) => typeof record.actualResult?.dealIn === "boolean");
+  const wins = winLabels.filter((record) => record.actualResult?.won === true).length;
+  const dealIns = dealInLabels.filter((record) => record.actualResult?.dealIn === true).length;
   const pointDeltas = completed.flatMap((record) => typeof record.actualResult?.pointsDelta === "number" ? [record.actualResult.pointsDelta] : []);
   const ranks = completed.flatMap((record) => typeof record.actualResult?.finalRank === "number" ? [record.actualResult.finalRank] : []);
   return {
@@ -22,8 +24,8 @@ function summarizeGroup(records: readonly DecisionRecord[]): BenchmarkGroup {
     completedOutcomes: completed.length,
     wins,
     dealIns,
-    winRate: completed.length ? wins / completed.length : null,
-    dealInRate: completed.length ? dealIns / completed.length : null,
+    winRate: winLabels.length ? wins / winLabels.length : null,
+    dealInRate: dealInLabels.length ? dealIns / dealInLabels.length : null,
     averagePointsDelta: pointDeltas.length ? pointDeltas.reduce((sum, value) => sum + value, 0) / pointDeltas.length : null,
     averageFinalRank: ranks.length ? ranks.reduce((sum, value) => sum + value, 0) / ranks.length : null,
   };

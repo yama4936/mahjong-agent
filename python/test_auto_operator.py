@@ -9,6 +9,7 @@ import argparse
 import tempfile
 import json
 import time
+from datetime import datetime, timezone
 from unittest.mock import Mock, patch
 
 from auto_operator import PythonAutoOperator, RetryableSafetyAbort, action_deadline_timing, away_resume_geometry, closed_concealed_row_visible, crop_screenshot, discard_point_in_hand_geometry, force_auto_call_buttons, force_auto_chi_choice_points, force_auto_reaction_win_button, force_auto_self_action_buttons, geometric_open_meld_count, is_away_resume_dialog, is_contextual_reaction_pass, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, mean_pixel_delta, merge_public_observations, open_hand_draw_slot, own_meld_surface_visible, post_call_transition, selected_tile_comparison_region, send_discard_click, should_guard_tenpai_reaction, should_process_reaction_prompt, stable_hand_comparison_region, stable_hand_delta
@@ -323,7 +324,8 @@ class AwayDialogDetectionTest(unittest.TestCase):
             ))
             logged = next(call for call in operator.log.call_args_list
                           if call.args and call.args[0] == "reaction_prompt")
-            self.assertTrue(logged.kwargs["execution"]["actionTiming"]["deadlineMet"])
+            self.assertTrue(logged.kwargs["execution"]["actionTiming"]["deadlineMet"],
+                            operator.log.call_args_list)
 
     def test_public_cache_only_grows_rivers_and_preserves_riichi(self) -> None:
         previous = {
@@ -563,7 +565,7 @@ class AwayDialogDetectionTest(unittest.TestCase):
                 for call in operator.log.call_args_list
             ))
 
-    def test_restarted_run_loop_acts_after_two_live_three_meld_frames(self) -> None:
+    def test_run_loop_supersedes_vanished_reaction_with_later_verified_draw(self) -> None:
         project = Path(__file__).resolve().parents[1]
         layout = load_json(project / "config" / "layout.json")
         frames = project / "artifacts" / "friend-5-20" / "frames"
@@ -583,7 +585,10 @@ class AwayDialogDetectionTest(unittest.TestCase):
             operator.screencast_sequence = 2
             operator.screencast_draw_occupied = False
             operator.screencast_draw_generation = 1
-            operator.cached_public_observation = None
+            operator.cached_public_observation = {
+                "capturedAt": datetime.now(timezone.utc).isoformat(),
+                "ownDiscards": ["1m"], "doraIndicators": ["2m"],
+            }
             operator.cached_concealed_tiles = None
             operator.cached_open_melds = 0
             operator.dynamic_layout_required = False
@@ -597,6 +602,13 @@ class AwayDialogDetectionTest(unittest.TestCase):
             operator.previous_public_observation = None
             operator.last_shanten = None
             operator.round_terminal_latched = False
+            # Reproduce the live sequence: a reaction prompt was latched, then
+            # disappeared, and this later frame is a verified self draw.
+            operator.action_evidence_started_at = time.monotonic() - 11.0
+            operator.action_evidence_last_seen_at = time.monotonic() - 10.0
+            operator.action_evidence_kind = "reaction"
+            operator.action_evidence_generation = 1
+            operator.last_action_clicked_at = None
             operator.poll_public_recognition = Mock()
             operator.ensure_viewport = Mock()
             operator.start_screencast_gate = Mock()
@@ -623,11 +635,21 @@ class AwayDialogDetectionTest(unittest.TestCase):
                 operator.run(page)
 
             operator.execute.assert_called_once()
+            self.assertEqual(
+                operator.recognize_resident.call_args.kwargs["public_observation"],
+                operator.cached_public_observation,
+            )
             self.assertEqual(operator.cached_open_melds, 3)
             self.assertLess(time.monotonic() - started, 5.0)
             logged = next(call for call in operator.log.call_args_list
                           if call.args and call.args[0] == "decision")
-            self.assertTrue(logged.kwargs["execution"]["actionTiming"]["deadlineMet"])
+            self.assertTrue(logged.kwargs["execution"]["actionTiming"]["deadlineMet"],
+                            operator.log.call_args_list)
+            self.assertEqual(logged.kwargs["execution"]["actionTiming"]["actionKind"], "discard")
+            self.assertTrue(any(
+                call.args and call.args[0] == "action_deadline_superseded"
+                for call in operator.log.call_args_list
+            ))
 
     def test_expired_deadline_is_fail_closed_before_click(self) -> None:
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
@@ -650,6 +672,21 @@ class AwayDialogDetectionTest(unittest.TestCase):
         with patch("auto_operator.time.monotonic", return_value=10.2):
             operator.mark_action_evidence("win")
         self.assertEqual(operator.action_evidence_started_at, 10.0)
+
+    def test_different_gate_does_not_refresh_reaction_during_frame_drop_grace(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.action_evidence_started_at = 10.0
+        operator.action_evidence_last_seen_at = 10.1
+        operator.action_evidence_kind = "reaction"
+        operator.action_evidence_generation = 4
+        operator.last_action_clicked_at = None
+        operator.log = Mock()
+        operator.mark_action_evidence(
+            "discard", observed_at=10.2, gate_generation=5, supersede=False,
+        )
+        self.assertEqual(operator.action_evidence_started_at, 10.0)
+        self.assertEqual(operator.action_evidence_last_seen_at, 10.1)
+        self.assertEqual(operator.action_evidence_kind, "reaction")
 
     def test_compact_geometry_rejects_opponent_turn_without_own_meld_surface(self) -> None:
         layout = {
@@ -1008,6 +1045,39 @@ class AwayDialogDetectionTest(unittest.TestCase):
 
             self.assertTrue(result["verified"])
             self.assertIn("--force", run.call_args.args[0])
+
+    def test_strategy_bridge_decodes_utf8_json_independent_of_windows_code_page(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            operator = PythonAutoOperator.__new__(PythonAutoOperator)
+            operator.frames = Path(directory)
+            operator.root = Path(directory)
+            operator.layout_path = Path(directory) / "layout.json"
+            operator.templates = Path(directory) / "templates"
+            operator.state_path = Path(directory) / "state.json"
+            operator.evaluator_env = {}
+            operator.args = argparse.Namespace(
+                mode="force-auto", action_templates="", evaluation_timeout=30,
+            )
+            strategy = {
+                "status": "decision",
+                "decision": {
+                    "selectedAction": {"action": "discard", "tile": "1m"},
+                    "handPlan": {"primaryYaku": "立直", "reason": "両面待ちを維持"},
+                },
+            }
+            completed = argparse.Namespace(
+                returncode=0,
+                stdout=json.dumps(strategy, ensure_ascii=False),
+                stderr="",
+            )
+
+            with patch("auto_operator.subprocess.run", return_value=completed) as run:
+                result = operator.evaluate(Path(directory) / "frame.png")
+
+            self.assertEqual(result["decision"]["handPlan"]["primaryYaku"], "立直")
+            self.assertEqual(result["decision"]["handPlan"]["reason"], "両面待ちを維持")
+            self.assertEqual(run.call_args.kwargs["encoding"], "utf-8")
+            self.assertEqual(run.call_args.kwargs["errors"], "strict")
 
     def test_force_auto_confirmation_uses_visual_change_without_repeating_recognition(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

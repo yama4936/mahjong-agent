@@ -713,6 +713,8 @@ class PythonAutoOperator:
             cwd=self.root,
             env=self.evaluator_env,
             text=True,
+            encoding="utf-8",
+            errors="strict",
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -743,6 +745,8 @@ class PythonAutoOperator:
                     cwd=self.root,
                     env=self.evaluator_env,
                     text=True,
+                    encoding="utf-8",
+                    errors="strict",
                     stdin=subprocess.PIPE,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
@@ -783,6 +787,7 @@ class PythonAutoOperator:
         self.result_screen_advanced: str | None = None
         self.action_evidence_started_at: float | None = None
         self.action_evidence_kind: str | None = None
+        self.action_evidence_generation: int | None = None
         self.last_action_clicked_at: float | None = None
         self.action_evidence_last_seen_at: float | None = None
         if self.log_path.exists():
@@ -801,14 +806,35 @@ class PythonAutoOperator:
                 break
         self.armed = True
 
-    def mark_action_evidence(self, kind: str, *, observed_at: float | None = None) -> None:
+    def mark_action_evidence(
+        self, kind: str, *, observed_at: float | None = None,
+        gate_generation: int | None = None, supersede: bool = False,
+    ) -> None:
         """Latch first visible evidence; later recognition must not reset the SLA clock."""
         seen_at = time.monotonic() if observed_at is None else observed_at
-        self.action_evidence_last_seen_at = seen_at
-        if getattr(self, "action_evidence_started_at", None) is not None:
+        previous_started = getattr(self, "action_evidence_started_at", None)
+        previous_kind = getattr(self, "action_evidence_kind", None)
+        if previous_started is not None and previous_kind == kind:
+            self.action_evidence_last_seen_at = seen_at
+            self.action_evidence_generation = gate_generation
             return
+        if previous_started is not None and not supersede:
+            # A different gate must not refresh the old evidence. In
+            # particular, draw frames following a vanished reaction prompt
+            # previously kept the reaction deadline alive indefinitely.
+            return
+        if previous_started is not None:
+            self.log(
+                "action_deadline_superseded",
+                previousActionKind=previous_kind,
+                actionKind=kind,
+                previousGateGeneration=getattr(self, "action_evidence_generation", None),
+                gateGeneration=gate_generation,
+            )
         self.action_evidence_started_at = seen_at
         self.action_evidence_kind = kind
+        self.action_evidence_generation = gate_generation
+        self.action_evidence_last_seen_at = seen_at
         self.last_action_clicked_at = None
         self.log("action_deadline_started", actionKind=kind, deadlineMs=ACTION_DEADLINE_MS)
 
@@ -821,6 +847,7 @@ class PythonAutoOperator:
         if clear:
             self.action_evidence_started_at = None
             self.action_evidence_kind = None
+            self.action_evidence_generation = None
             self.last_action_clicked_at = None
             self.action_evidence_last_seen_at = None
         return timing
@@ -1413,6 +1440,8 @@ class PythonAutoOperator:
             cwd=self.root,
             env=self.evaluator_env,
             text=True,
+            encoding="utf-8",
+            errors="strict",
             capture_output=True,
             timeout=self.args.evaluation_timeout,
             check=False,
@@ -1497,6 +1526,7 @@ class PythonAutoOperator:
             str(self.layout_path), str(self.templates), f"--seat={self.public_state.get('seat', 'east')}",
         ]
         result = subprocess.run(command, cwd=self.root, env=self.evaluator_env, text=True,
+                                encoding="utf-8", errors="strict",
                                 capture_output=True, timeout=self.args.evaluation_timeout, check=False)
         if result.returncode != 0:
             self.log("public_observation_failed", error=(result.stderr or result.stdout).strip())
@@ -1532,6 +1562,8 @@ class PythonAutoOperator:
             cwd=self.root,
             env=self.evaluator_env,
             text=True,
+            encoding="utf-8",
+            errors="strict",
             capture_output=True,
             timeout=self.args.evaluation_timeout,
             check=False,
@@ -1695,7 +1727,8 @@ class PythonAutoOperator:
                     recognize_command.append("--concealed-only")
                 result = subprocess.run(
                     recognize_command,
-                    cwd=self.root, env=self.evaluator_env, text=True, capture_output=True,
+                    cwd=self.root, env=self.evaluator_env, text=True,
+                    encoding="utf-8", errors="strict", capture_output=True,
                     timeout=self.args.evaluation_timeout, check=False,
                 )
                 if result.returncode != 0:
@@ -2164,15 +2197,36 @@ class PythonAutoOperator:
                     call_gate_streak = call_gate_streak + 1 if quick_calls else 0
                     reaction_win_gate_streak = reaction_win_gate_streak + 1 if quick_reaction_win else 0
                     if quick_reaction_win:
-                        self.mark_action_evidence("win")
+                        self.mark_action_evidence(
+                            "win", gate_generation=self.screencast_sequence,
+                        )
                     elif quick_pass or quick_calls:
-                        self.mark_action_evidence("reaction")
+                        self.mark_action_evidence(
+                            "reaction", gate_generation=self.screencast_sequence,
+                        )
                     elif quick_draw:
-                        self.mark_action_evidence("discard")
+                        prior_kind = getattr(self, "action_evidence_kind", None)
+                        reaction_vanished_for = time.monotonic() - (
+                            getattr(self, "action_evidence_last_seen_at", None) or time.monotonic()
+                        )
+                        verified_later_draw = draw_gate_streak >= 2 \
+                            and prior_kind in {"reaction", "win"} \
+                            and reaction_vanished_for > 0.75
+                        self.mark_action_evidence(
+                            "discard",
+                            gate_generation=self.screencast_sequence,
+                            supersede=verified_later_draw,
+                        )
+                        if prior_kind in {"reaction", "win"} and not verified_later_draw:
+                            # Preserve the short frame-drop grace: a single
+                            # missing prompt frame must not become a new turn.
+                            page.wait_for_timeout(20)
+                            continue
                     elif getattr(self, "action_evidence_started_at", None) is not None \
                             and time.monotonic() - (getattr(self, "action_evidence_last_seen_at", None) or 0) > 0.75:
                         self.action_evidence_started_at = None
                         self.action_evidence_kind = None
+                        self.action_evidence_generation = None
                         self.action_evidence_last_seen_at = None
                     if quick_pass and pass_gate_streak == 1:
                         self.log(
@@ -2411,6 +2465,10 @@ class PythonAutoOperator:
                     exact_draw_occupied = is_draw_slot_occupied(evaluation_frame, exact_draw_slot)
                     if exact_draw_occupied and geometric_open_melds is not None \
                             and exact_open_melds == geometric_open_melds:
+                        if self.action_evidence_kind in {"reaction", "win"}:
+                            self.mark_action_evidence(
+                                "discard", gate_generation=self.screencast_sequence, supersede=True,
+                            )
                         self.cached_open_melds = geometric_open_melds
                         self.dynamic_layout_required = True
                         self.log(
@@ -2465,7 +2523,9 @@ class PythonAutoOperator:
                 self.poll_public_recognition()
                 # Force-auto never waits for public recognition on our turn;
                 # it consumes the newest completed opponent-turn snapshot.
-                if self.args.mode != "force-auto":
+                if self.args.mode == "force-auto":
+                    public_observation = self.cached_public_observation
+                else:
                     public_observation = self.observe_public_board(screenshot_path)
                 pending_discard = None if self.args.mode == "force-auto" \
                     else self.infer_pending_discard(self.previous_public_observation, public_observation)
