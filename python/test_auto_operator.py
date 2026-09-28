@@ -1420,11 +1420,14 @@ class AwayDialogDetectionTest(unittest.TestCase):
         self.assertIsNone(operator.cached_public_observation)
 
     def test_riichi_button_is_not_merged_with_concealed_tile_borders(self) -> None:
+        from auto_operator import self_turn_draw_visible
         screenshot = (Path(__file__).resolve().parents[1] / "artifacts/live/riichi-button-hand-border-20260928.jpg").read_bytes()
         buttons = force_auto_self_action_buttons(screenshot, {"width": 1920, "height": 1080})
         self.assertEqual(len(buttons), 1)
         self.assertLess(abs(buttons[0]["center"]["x"] - 1008.5), 2)
         self.assertLess(abs(buttons[0]["center"]["y"] - 824), 2)
+        layout = load_json(Path(__file__).resolve().parents[1] / "config/layout.json")
+        self.assertTrue(self_turn_draw_visible(screenshot, layout, 0))
 
     def test_force_auto_public_prompt_uses_same_hybrid_backend_as_cache(self) -> None:
         operator = PythonAutoOperator.__new__(PythonAutoOperator)

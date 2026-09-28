@@ -473,6 +473,11 @@ def open_hand_draw_slot(layout: dict[str, Any], open_melds: int) -> dict[str, fl
     return shifted
 
 
+def self_turn_draw_visible(screenshot: bytes, layout: dict[str, Any], open_melds: int) -> bool:
+    slot = open_hand_draw_slot(layout, open_melds) if open_melds > 0 else layout.get("drawSlot")
+    return bool(slot and is_draw_slot_occupied(screenshot, slot))
+
+
 def own_meld_surface_visible(screenshot: bytes, layout: dict[str, Any]) -> bool:
     viewport = layout.get("viewport", {})
     if not viewport:
@@ -2320,6 +2325,9 @@ class PythonAutoOperator:
                             or is_contextual_reaction_pass(
                                 gate_frame, pass_region, len(quick_calls) + len(quick_self_actions),
                             )
+                    if quick_draw:
+                        quick_pass = False
+                        quick_calls = []
                     if gate_frame and quick_pass and not self.pending_post_call_discard:
                         # Reaction prompts are independent of the draw-slot
                         # gate and must be inspected on every streamed frame.
@@ -2475,6 +2483,7 @@ class PythonAutoOperator:
                     has_reaction_prompt = bool(
                         should_process_reaction_prompt(self.pending_post_call_discard)
                         and pass_prompt_present
+                        and not self_turn_draw_visible(full_screen, self.layout, self.cached_open_melds)
                     )
                     if has_reaction_prompt:
                         decision_started_at = time.monotonic()
