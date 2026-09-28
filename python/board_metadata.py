@@ -82,11 +82,12 @@ def recognize_board(image_path: Path) -> dict:
             center = box.mean(axis=0) / 3 + [780, 310]
             tokens.append({"text": text, "confidence": float(confidence),
                            "x": float(center[0]), "y": float(center[1])})
-    # Side scores are vertical. Retry their calibrated crops upright only when
+    # Other seats' scores are rotated. Retry calibrated crops upright only when
     # no high-confidence numeric token exists; retain ambiguity rejection.
     for side, x, y, box, angle in [
         ("left", 876, 423, (859, 371, 891, 474), 90),
         ("right", 1047, 419, (1031, 368, 1063, 471), 270),
+        ("opposite", 958, 364, (905, 345, 1015, 383), 180),
     ]:
         side_scores = [token for token in tokens
                        if abs(token["x"] - x) <= 24 and abs(token["y"] - y) <= 20
