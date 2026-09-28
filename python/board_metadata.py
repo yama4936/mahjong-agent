@@ -72,7 +72,8 @@ def recognize_board(image_path: Path) -> dict:
         return {"verified": False, "reason": "not_gameplay_screen", "screenState": state}
     import numpy as np
     engine = ocr_engine()
-    result = engine(np.array(image.crop((780, 310, 1160, 545)).resize((1140, 705))))
+    result = engine(np.array(image.crop((780, 310, 1160, 545)).resize((1140, 705))),
+                    use_det=True, use_cls=True, use_rec=True)
     tokens = []
     if result.txts is not None:
         for text, confidence, box in zip(result.txts, result.scores, result.boxes):

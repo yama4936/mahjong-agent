@@ -1,11 +1,22 @@
 import unittest
 import tempfile
+import importlib.util
 from pathlib import Path
 from PIL import Image
 from board_metadata import parse_board_tokens, recognize_board, remap_seats
 
 
 class BoardMetadataTest(unittest.TestCase):
+    @unittest.skipUnless(importlib.util.find_spec("rapidocr"), "optional OCR dependencies not installed")
+    def test_consecutive_real_ocr_calls_reset_detection_after_counter_reads(self):
+        frame = Path(__file__).resolve().parents[1] / "artifacts/live/board-metadata-east4-south-20260928.png"
+        for _ in range(2):
+            result = recognize_board(frame)
+            self.assertTrue(result["verified"], result)
+            self.assertEqual(result["seat"], "south")
+            self.assertEqual(result["riichiSticks"], 2)
+            self.assertEqual(result["honba"], 1)
+
     def test_seat_rotation_preserves_relative_rivers_and_meld_sources(self):
         source = {"opponentDiscards": [{"seat": "south", "discards": ["P"],
                   "melds": [{"fromSeat": "west"}]}]}
