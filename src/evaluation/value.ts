@@ -2,7 +2,7 @@ import type { GameState } from "../game/state.js";
 import { doraFromIndicator, isRedTile, isTerminalOrHonor, normalizeTile, parseGameTile, tileIndex } from "../game/tiles.js";
 import type { DiscardEvaluation } from "../game/ukeire.js";
 
-export const HEURISTIC_EVALUATION_MODEL = "heuristic-v3";
+export const HEURISTIC_EVALUATION_MODEL = "heuristic-v4";
 
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.max(minimum, Math.min(maximum, value));
@@ -14,11 +14,14 @@ function currentRank(state: GameState): number {
   return [...Object.values(state.scores)].sort((a, b) => b - a).findIndex((value) => value === score) + 1;
 }
 
-function pointValue(han: number, dealer: boolean, sevenPairs = false): number {
+export function estimateHeuristicRonPoints(han: number, dealer: boolean, sevenPairs = false): number {
+  if (!Number.isInteger(han) || han < 1) throw new Error("Estimated han must be a positive integer");
   if (sevenPairs && han < 5) {
     return Math.ceil(25 * 2 ** (han + 2) * (dealer ? 6 : 4) / 100) * 100;
   }
-  const nonDealer = [0, 1000, 2000, 3900, 7700, 8000, 12000];
+  // Cap counted hands at one yakuman, matching the independent scorer default.
+  const nonDealer = [0, 1000, 2000, 3900, 7700, 8000, 12000, 12000,
+    16000, 16000, 16000, 24000, 24000, 32000];
   const value = nonDealer[Math.min(nonDealer.length - 1, Math.max(1, han))]!;
   return dealer ? Math.round(value * 1.5 / 100) * 100 : value;
 }
@@ -42,7 +45,7 @@ export function evaluateRoundValue(candidate: DiscardEvaluation, state: GameStat
   const likelyRiichiHan = state.riichiDeclared || closed ? 1 : 0;
   const sevenPairs = closed && candidate.form === "chiitoitsu";
   const baseHan = sevenPairs ? 2 + (tiles.every(tile => !isTerminalOrHonor(tileIndex(tile))) ? 1 : 0) : 1;
-  const estimatedValue = pointValue(baseHan + likelyRiichiHan + retainedDora, state.seat === "east", sevenPairs);
+  const estimatedValue = estimateHeuristicRonPoints(baseHan + likelyRiichiHan + retainedDora, state.seat === "east", sevenPairs);
 
   const turnsLeftFactor = state.remainingTiles === undefined
     ? clamp((18 - state.turn) / 14, 0.15, 1.15)

@@ -249,7 +249,7 @@ npm run watch -- examples/state.json config/layout.json templates/bootstrap \
 
 門前手の立直/ダマの役・符・点数は、オフライン検証用の`mahjong==2.0.0`で比較できます。Windowsでは`./scripts/setup-scoring.ps1`でハッシュ固定の配布ファイルを検証専用`.runtime/scoring-venv`へインストールします（自動対局環境は変更しません）。検証例は`.runtime/scoring-venv/Scripts/python.exe python/score_closed_waits.py artifacts/live/south4-riichi-replay-20260928.json --discard 5m --wait 6m --wait 9m`。専用テストは`.runtime/scoring-venv/Scripts/python.exe -m unittest discover -s test/scoring`です。
 
-この比較は門前・副露なし限定で、通常のロン/ツモについて立直有無を評価します。一発・裏ドラ・海底/河底・本場/供託を除外し、フリテンや和了確率、順位期待値は判定しません。対局用の`heuristic-v3`を置き換えるものではありません。計算APIとルール設定は[ライブラリ公式資料](https://mahjongrepository.github.io/mahjong/modules/hand_calculating/hand.html)を参照。
+この比較は門前・副露なし限定で、通常のロン/ツモについて立直有無を評価します。一発・裏ドラ・海底/河底・本場/供託を除外し、フリテンや和了確率、順位期待値は判定しません。対局用の`heuristic-v4`を置き換えるものではありません。計算APIとルール設定は[ライブラリ公式資料](https://mahjongrepository.github.io/mahjong/modules/hand_calculating/hand.html)を参照。
 4人分の点数があれば、ロンの支払者別・ツモの支払額別に`scoreScenarios`を出力します。これは和了直後の点数と順位範囲であり、親の連荘・終局判定や最終順位は予測しません。同点の順位決定ルールは未適用です。立直前の点数を入力し、自家の供託は自家和了で戻るため相殺します（他家の既存供託は除外）。
 Jevによる打牌選択が成功して立直候補となる場合は、この計算器の結果を使って同じ打牌の立直/ダマを別途比較します。計算器未導入・失敗・不正/低確信度の応答なら従来の立直判断へ戻り、`declarationComparison`へ理由を記録します。force-autoのJev全体期限は変更しません。追加のAPI呼び出しの遅延と実戦成績への影響は検証中です。
 300+0の新しい実画面回帰では、保存済み旧レイアウトの自動選択を避けるため`--layout=config/layout-300-regression.json`を明示します。この設定は以前の実画面手牌・河の座標を保持し、右家・対面・左家の副露領域を含みます。左家は保存画像の678萬チー＋北ポンと副露なしで確認しています。左家の3～4副露や他の配置への一般化は未検証です。
@@ -351,14 +351,14 @@ npm run benchmark -- artifacts/replays
 
 状態JSONの`visibleTiles`（または`visible_tiles`）には、`doraIndicators`、`ownDiscards`、`melds`、`opponents[].discards`に既に入れた牌を重複して入れず、他フィールドで表現していない既知牌だけを指定します。`remainingTiles`、`ownDiscards`、`melds`はsnake_caseでも入力できます。
 
-候補には`estimatedValue`、`winProbability`、`tenpaiProbability`、`dealInProbability`、`expectedRoundValue`を付与します。現在の値は`heuristic-v3`による比較用推定であり、実戦ログによる校正済み確率ではありません。重複ドラ表示牌、副露内のドラ、立直済みの立直分を保持し、v3では5翻の満貫と七対子の2翻・25符・全中張牌のタンヤオを反映します。門前なら将来の立直を仮定しており、ダマの厳密採点ではありません。標準形の役・符、高翻数の打点上限、和了確率は依然として近似です。暗槓だけの既知構成は門前扱いですが、未観測の副露を門前とは推測しません。この推定値だけでAuto Modeが解禁されることはありません。
+候補には`estimatedValue`、`winProbability`、`tenpaiProbability`、`dealInProbability`、`expectedRoundValue`を付与します。現在の値は`heuristic-v4`による比較用推定であり、実戦ログによる校正済み確率ではありません。重複ドラ表示牌、副露内のドラ、立直済みの立直分、七対子の2翻・25符・全中張牌のタンヤオを反映します。v4では満貫・跳満・倍満・三倍満の上限を区別し、13翻以上の数え手は独立採点器の既定と同じ単一役満で止めます。役満役や複合役満は推定しません。門前なら将来の立直を仮定しており、ダマの厳密採点ではありません。標準形の役・符、和了確率は依然として近似です。暗槓だけの既知構成は門前扱いですが、未観測の副露を門前とは推測しません。この推定値だけでAuto Modeが解禁されることはありません。
 
 ## 未完了
 
 - 実画面に基づく座標校正と34種テンプレート採取
 - 河・副露の牌候補領域検出後の分類、および点数・巡目の認識
 - リーチ・副露・和了ボタンの実画面テンプレート採取と独立holdout認証（認識器とアクション別クリック禁止ゲートは実装済み）
-- 守備・打点・局収支EVの実戦ログ校正（`heuristic-v3`は実装済み）
+- 守備・打点・局収支EVの実戦ログ校正（`heuristic-v4`は実装済み）
 - リプレイ可視化UIと十分な実戦母数でのベンチマーク（記録・再評価・結果集計CLIは実装済み）
 
 自動操作は、実画面で認識精度を測定してから有効化してください。

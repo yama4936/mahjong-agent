@@ -3,7 +3,7 @@ import test from "node:test";
 import { decide } from "../src/agent/decision.js";
 import { deterministicAdvice } from "../src/evaluation/advisor.js";
 import { parseGameState } from "../src/game/state.js";
-import { evaluateRoundValue } from "../src/evaluation/value.js";
+import { estimateHeuristicRonPoints, evaluateRoundValue } from "../src/evaluation/value.js";
 import type { DiscardEvaluation } from "../src/game/ukeire.js";
 
 const state = parseGameState({
@@ -15,10 +15,20 @@ const state = parseGameState({
   recognitionConfidence: 1,
 });
 
+test("limit estimates preserve boundaries and cap counted hands at one yakuman", () => {
+  for (const [han, points] of [[5, 8000], [6, 12000], [7, 12000], [8, 16000],
+    [10, 16000], [11, 24000], [12, 24000], [13, 32000], [20, 32000]]) {
+    assert.equal(estimateHeuristicRonPoints(han!, false), points);
+    assert.equal(estimateHeuristicRonPoints(han!, true), points! * 1.5);
+    assert.equal(estimateHeuristicRonPoints(han!, false, true), points);
+  }
+  for (const han of [0, -1, 1.5, NaN, Infinity]) assert.throws(() => estimateHeuristicRonPoints(han, false));
+});
+
 test("advisor attaches bounded heuristic outcome estimates", () => {
   const result = deterministicAdvice(state);
   for (const candidate of result.candidates) {
-    assert.equal(candidate.evaluationModel, "heuristic-v3");
+    assert.equal(candidate.evaluationModel, "heuristic-v4");
     assert.ok(candidate.estimatedValue! >= 1000);
     assert.ok(candidate.winProbability! > 0 && candidate.winProbability! <= 1);
     assert.ok(candidate.tenpaiProbability! > 0 && candidate.tenpaiProbability! <= 1);
