@@ -262,7 +262,16 @@ async function main(): Promise<void> {
     if (!screenshot || !layoutPath || !templates) throw new Error("Usage: public-observation <screenshot.png> <layout.json> <templates> --seat=east|south|west|north");
     if (!(["east", "south", "west", "north"] as const).includes(seat as any)) throw new Error("Invalid seat");
     const layout = layoutSchema.parse(JSON.parse(await readFile(layoutPath, "utf8")));
-    const recognition = await recognizeConfiguredPublicTiles(screenshot, layout, templates);
+    const useHybrid = process.argv.includes("--backend=hybrid");
+    const recognizer = useHybrid ? new HybridTileRecognizer() : undefined;
+    let recognition;
+    try {
+      recognition = recognizer
+        ? await recognizeConfiguredPublicTilesWithVit(screenshot, layout, recognizer)
+        : await recognizeConfiguredPublicTiles(screenshot, layout, templates);
+    } finally {
+      await recognizer?.close();
+    }
     console.log(JSON.stringify(toPublicTileObservation(recognition, seat as "east" | "south" | "west" | "north")));
     return;
   }

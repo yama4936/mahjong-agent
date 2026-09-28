@@ -1395,6 +1395,20 @@ class AwayDialogDetectionTest(unittest.TestCase):
             self.assertEqual(jsonl_record["actualResult"]["match"]["screenState"], "match_result")
             self.assertEqual(operator.attach_outcome("round", b"duplicate", 1), 0)
 
+    def test_force_auto_public_prompt_uses_same_hybrid_backend_as_cache(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.root = Path.cwd()
+        operator.layout_path = Path("layout.json")
+        operator.templates = Path("templates")
+        operator.evaluator_env = {}
+        operator.public_state = {"seat": "east"}
+        for mode in ("force-auto", "auto"):
+            operator.args = argparse.Namespace(mode=mode, evaluation_timeout=30)
+            with patch("auto_operator.subprocess.run", return_value=argparse.Namespace(
+                    returncode=0, stdout='{"ownDiscards": []}')) as run:
+                self.assertEqual(operator.observe_public_board(Path("prompt.png")), {"ownDiscards": []})
+                self.assertEqual("--backend=hybrid" in run.call_args.args[0], mode == "force-auto")
+
     def test_fresh_recognition_disagreement_prevents_click(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             operator = PythonAutoOperator.__new__(PythonAutoOperator)

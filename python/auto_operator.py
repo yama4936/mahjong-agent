@@ -1632,6 +1632,8 @@ class PythonAutoOperator:
             "node", "dist/src/cli.js", "public-observation", str(screenshot),
             str(self.layout_path), str(self.templates), f"--seat={self.public_state.get('seat', 'east')}",
         ]
+        if self.args.mode == "force-auto":
+            command.append("--backend=hybrid")
         result = subprocess.run(command, cwd=self.root, env=self.evaluator_env, text=True,
                                 encoding="utf-8", errors="strict",
                                 capture_output=True, timeout=self.args.evaluation_timeout, check=False)
