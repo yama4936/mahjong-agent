@@ -614,3 +614,24 @@ jev-1.13.0は3回ともdiscard_5m（ダマ）を選ぶが、確信度0.16/0.11/0
 応答記録はconfig/declaration-replay-check-20260928.jsonへ保存。
 これは同一局面の再評価で、300+0ライブ対局・順位/勝率比較ではない。
 ビルド成功、TypeScript全148件成功・skipなし（27.949秒）。
+
+## 新しい300+0固定設定のライブ開始
+
+06:26 UTCに旧operatorの稼働と友人戦待機画面を確認。対局は進行しておらず、
+旧操作プロセスを明示停止して二重起動を回避。旧半荘ログは保持。
+ブラウザスキルのCLIは未導入のため、既存Playwright/CDP接続で画面確認と開始操作。
+ルーム78868・四人半荘・CPU簡単3人・300+0秒を画面で再確認。
+設定画像はartifacts/live/friend-300-declaration-room-20260928.pngへ保存。
+
+fa97cabでconfig/layout-300-regression.jsonを保存・push後、新operatorを起動。
+以前の実画面手牌・河座標を保持し、右家/対面副露の校正済み設定を追加。
+スキーマ検証成功、公開牌認識テスト12件成功（4.966秒）。
+実行はnode scripts/run-operator.mjs force-auto
+--layout=config/layout-300-regression.json
+--artifacts=artifacts/friend-300-declaration-20260928
+--action-deadline-ms=300000 --force-auto-click-budget-ms=8000
+--board-metadata --advance-screens --no-dashboard。
+06:28:35 UTC started、開始操作後06:29:37 UTCに最初のdecision/replay_saved。
+public_cache_updatedのconfiguredRegionsにrightMelds/oppositeMeldsを確認。
+対局は継続中で、立直/ダマの実戦比較発生・最終順位はまだ未確認。
+固定設定の機能検証であり、これだけで段位戦勝率の改善を主張しない。
