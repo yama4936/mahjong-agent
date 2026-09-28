@@ -1395,6 +1395,29 @@ class AwayDialogDetectionTest(unittest.TestCase):
             self.assertEqual(jsonl_record["actualResult"]["match"]["screenState"], "match_result")
             self.assertEqual(operator.attach_outcome("round", b"duplicate", 1), 0)
 
+    def test_early_result_invalidates_old_round_hand_and_public_cache(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(advance_screens=False, ranked_loop=False)
+        operator.cached_concealed_tiles = ["1m"]
+        operator.cached_open_melds = 1
+        operator.cached_public_observation = {"ownDiscards": ["9p"]}
+        operator.previous_public_observation = {"ownDiscards": ["8p"]}
+        operator.public_cache_generation = 7
+        operator.pending_post_call_discard = True
+        operator.armed = False
+        self.assertTrue(operator.handle_early_non_gameplay_screen(Mock(), "round_result", 1.0))
+        self.assertIsNone(operator.cached_concealed_tiles)
+        self.assertEqual(operator.cached_open_melds, 0)
+        self.assertIsNone(operator.cached_public_observation)
+        self.assertIsNone(operator.previous_public_observation)
+        self.assertEqual(operator.public_cache_generation, 8)
+        self.assertFalse(operator.pending_post_call_discard)
+        self.assertTrue(operator.armed)
+        operator.public_recognition_lock = threading.Lock()
+        operator.public_recognition_result = {"generation": 7, "result": {"ownDiscards": ["9p"]}}
+        operator.poll_public_recognition()
+        self.assertIsNone(operator.cached_public_observation)
+
     def test_force_auto_public_prompt_uses_same_hybrid_backend_as_cache(self) -> None:
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
         operator.root = Path.cwd()

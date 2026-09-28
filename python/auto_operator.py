@@ -1365,6 +1365,20 @@ class PythonAutoOperator:
             if screenshot is not None and state in {"round_result", "match_result"}:
                 self.attach_outcome("match" if state == "match_result" else "round",
                                     screenshot, confidence)
+            self.cached_concealed_tiles = None
+            self.cached_open_melds = 0
+            self.dynamic_layout_required = False
+            self.restart_open_hand_probe_hash = None
+            self.open_meld_candidate = None
+            self.open_meld_candidate_frames = set()
+            self.closed_new_round_candidate_frames = set()
+            self.public_cache_generation = getattr(self, "public_cache_generation", 0) + 1
+            self.public_cache_last_frame_hash = None
+            self.cached_public_observation = None
+            self.previous_public_observation = None
+            self.last_shanten = None
+            self.last_processed_hand = None
+            self.armed = True
             self.pending_post_call_discard = False
             self.pending_post_call_started_at = None
             self.round_terminal_latched = True
