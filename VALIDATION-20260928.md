@@ -1181,3 +1181,16 @@ confidenceは順に0.998886/0.999257/0.988409/0.897141。
 切り出し余剰領域の影響を示すが、固定高さへの一律変更は未実施。
 gridIndex14の横向き牌検出との境界、他局・他牌での回帰を確認してから
 検出領域の修正が必要。全体再実行・300+0実対局・勝率改善は未検証。
+
+## 左河の境界混入対策
+
+productionとfallbackのleftDiscardsにluminanceThreshold=200を指定。
+原画像で分類する点、confidence/margin、グリッド検証は変更しない。
+固定高さで文字を削るのではなく、明るい牌面の連結成分検出を調整。
+保存したleft-river-three-man-border-20260928.pngの実Hybrid回帰で
+17枚の牌列を目視照合した期待値と一致、三萬height35、classificationSafe=true。
+既存highlight-merged-left-riverとsouth4-riichi-before-lossの2画像は
+閾値190/200で検出数・全牌列・classificationSafe一致を確認。
+追加回帰1件成功・skipなし（2.892秒）。buildと対象diffチェック成功。
+左家立直の横向き判定は別の未解決事項。全配置・実対局復帰・勝率は未検証。
+npm test全160件成功（33.603秒、skipなし）。

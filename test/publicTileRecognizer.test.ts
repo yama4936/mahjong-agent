@@ -25,6 +25,32 @@ function publicRegion(tiles: Array<{ tile: any; x: number; y?: number; width?: n
   };
 }
 
+test("production left river excludes face-border contamination with real Hybrid", {
+  skip: !existsSync(".runtime/hybrid-vision/cvmaj-pretrained.tar") || !existsSync(".runtime/hybrid-vision/automajsoul-best-model.pt"),
+}, async () => {
+  const base = layoutSchema.parse(JSON.parse(await readFile("config/layout-300-regression.json", "utf8")));
+  const fallback = layoutSchema.parse(JSON.parse(await readFile("config/layout.example.json", "utf8")));
+  assert.deepEqual(base.publicTileRegions!.leftDiscards, fallback.publicTileRegions!.leftDiscards);
+  const layout = { ...base, publicTileRegions: { leftDiscards: base.publicTileRegions!.leftDiscards! } };
+  const recognizer = new HybridTileRecognizer();
+  try {
+    const result = await recognizeConfiguredPublicTilesWithVit("artifacts/live/left-river-three-man-border-20260928.png", layout, recognizer);
+    assert.equal(result.leftDiscards?.candidateCount, 17);
+    assert.equal(result.leftDiscards?.classificationSafe, true);
+    assert.deepEqual(result.leftDiscards?.recognized.map(tile => tile.tile),
+      ["C", "9m", "N", "9p", "1m", "8s", "6p", "P", "2p", "7m", "9s", "2m", "4p", "3m", "1p", "W", "8s"]);
+    assert.equal(result.leftDiscards!.recognized[13]!.height, 35);
+    for (const file of ["highlight-merged-left-river-20260928.png", "south4-riichi-before-loss-20260928.jpg"]) {
+      const before = await recognizeConfiguredPublicTilesWithVit(`artifacts/live/${file}`,
+        { ...layout, publicTileRegions: { leftDiscards: { ...layout.publicTileRegions.leftDiscards, luminanceThreshold: 190 } } }, recognizer);
+      const after = await recognizeConfiguredPublicTilesWithVit(`artifacts/live/${file}`, layout, recognizer);
+      assert.equal(after.leftDiscards?.candidateCount, before.leftDiscards?.candidateCount, file);
+      assert.deepEqual(after.leftDiscards?.recognized.map(tile => tile.tile), before.leftDiscards?.recognized.map(tile => tile.tile), file);
+      assert.equal(after.leftDiscards?.classificationSafe, before.leftDiscards?.classificationSafe, file);
+    }
+  } finally { await recognizer.close(); }
+});
+
 test("production dora region preserves man, pin and sou indicators with real Hybrid", {
   skip: !existsSync(".runtime/hybrid-vision/cvmaj-pretrained.tar") || !existsSync(".runtime/hybrid-vision/automajsoul-best-model.pt"),
 }, async () => {
