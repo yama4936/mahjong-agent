@@ -93,11 +93,19 @@ def recognize_board(image_path: Path) -> dict:
                        if abs(token["x"] - x) <= 24 and abs(token["y"] - y) <= 20
                        and re.fullmatch(r"-?\d{3,6}", token["text"])]
         if not any(token["confidence"] >= 0.98 for token in side_scores):
-            score = engine(np.array(image.crop(box).rotate(angle, expand=True).resize((412, 128))),
-                           use_det=False, use_cls=False, use_rec=True)
-            if score.txts is not None and len(score.txts) == 1:
-                tokens.append({"text": score.txts[0], "confidence": float(score.scores[0]),
-                               "x": x, "y": y, "source": f"upright_{side}_score_crop"})
+            upright = image.crop(box).rotate(angle, expand=True)
+            # A second aspect ratio recovers short right-seat scores without
+            # cropping digits or weakening the confidence/conservation gates.
+            for width in ([412, 328] if side == "right" else [412]):
+                score = engine(np.array(upright.resize((width, 128))),
+                               use_det=False, use_cls=False, use_rec=True)
+                if score.txts is not None and len(score.txts) == 1:
+                    text, confidence = score.txts[0], float(score.scores[0])
+                    tokens.append({"text": text, "confidence": confidence,
+                                   "x": x, "y": y, "source": f"upright_{side}_score_crop",
+                                   "cropWidth": width})
+                    if confidence >= 0.98 and re.fullmatch(r"-?\d{3,6}", text):
+                        break
     # Fixed isolated digits avoid confusing the stick icon and multiplication
     # sign with the count; never substitute zero when recognition fails.
     for box, x in [((110, 132, 155, 178), 132), ((250, 132, 285, 178), 268)]:

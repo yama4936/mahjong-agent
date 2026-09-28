@@ -57,6 +57,25 @@ class BoardMetadataTest(unittest.TestCase):
             self.assertEqual(len(fallback), 1)
             self.assertGreaterEqual(fallback[0]["confidence"], 0.98)
 
+    @unittest.skipUnless(importlib.util.find_spec("rapidocr"), "optional OCR dependencies not installed")
+    def test_four_digit_right_score_recovers_with_second_scale(self):
+        frame = Path(__file__).resolve().parents[1] / "artifacts/live/board-score-right-four-digit-low-confidence-20260928.jpg"
+        result = recognize_board(frame)
+        self.assertTrue(result["verified"], result)
+        self.assertEqual(result["seat"], "south")
+        self.assertEqual(result["round"], "east_4")
+        self.assertEqual(result["scores"], {"south": 43600, "west": 3400,
+                                            "north": 14400, "east": 38600})
+        self.assertEqual(result["riichiSticks"], 0)
+        self.assertEqual(result["honba"], 0)
+        self.assertEqual(result["remainingTiles"], 68)
+        fallback = [token for token in result["tokens"]
+                    if token.get("source") == "upright_right_score_crop"]
+        self.assertEqual([token["cropWidth"] for token in fallback], [412, 328])
+        self.assertLess(fallback[0]["confidence"], 0.98)
+        self.assertEqual(fallback[1]["text"], "3400")
+        self.assertGreaterEqual(fallback[1]["confidence"], 0.98)
+
     def test_verified_hud_stick_rotates_with_actual_own_wind(self):
         root = Path(__file__).resolve().parents[1]
         with Image.open(root / "artifacts/live/opponent-riichi-missed-20260928.jpg") as image:
@@ -143,3 +162,13 @@ class BoardMetadataTest(unittest.TestCase):
         self.assertFalse(result["verified"])
         self.assertEqual(result["reason"], "scores_and_riichi_sticks_total_mismatch")
         self.assertTrue(parse_board_tokens(tokens, expected_total_points=110000)["verified"])
+
+    def test_score_retry_does_not_accept_ambiguous_or_malformed_numbers(self):
+        tokens = self.tokens()
+        right = tokens[3]
+        self.assertFalse(parse_board_tokens(tokens + [dict(right)])["verified"])
+        for text in ["34O00", "34100pts", "1234567", "--1000"]:
+            with self.subTest(text=text):
+                changed = [dict(token) for token in tokens]
+                changed[3]["text"] = text
+                self.assertFalse(parse_board_tokens(changed)["verified"])
