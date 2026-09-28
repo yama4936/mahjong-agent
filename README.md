@@ -247,6 +247,10 @@ npm run watch -- examples/state.json config/layout.json templates/bootstrap \
 
 300+0秒での機能検証は`node scripts/run-operator.mjs force-auto --action-deadline-ms=300000 --advance-screens`で実行します。操作期限の既定値は5000msのままです。300秒指定で成功しても、短時間設定での性能を証明したことにはなりません。
 
+門前手の立直/ダマの役・符・点数は、オフライン検証用の`mahjong==2.0.0`で比較できます。Windowsでは`./scripts/setup-scoring.ps1`でハッシュ固定の配布ファイルを検証専用`.runtime/scoring-venv`へインストールします（自動対局環境は変更しません）。検証例は`.runtime/scoring-venv/Scripts/python.exe python/score_closed_waits.py artifacts/live/south4-riichi-replay-20260928.json --discard 5m --wait 6m --wait 9m`。専用テストは`.runtime/scoring-venv/Scripts/python.exe -m unittest discover -s test/scoring`です。
+
+この比較は門前・副露なし限定で、通常のロン/ツモについて立直有無を評価します。一発・裏ドラ・海底/河底・本場/供託を除外し、フリテンや和了確率、順位期待値は判定しません。対局用の`heuristic-v1`を置き換えるものではありません。計算APIとルール設定は[ライブラリ公式資料](https://mahjongrepository.github.io/mahjong/modules/hand_calculating/hand.html)を参照。
+
 局・自風・点数のOCRを使う検証では、`python/requirements-ocr.txt`を操作用Python環境へインストールし、`--board-metadata --force-auto-click-budget-ms=8000`を追加します。認識失敗時は固定の東へ戻さず再取得します。8秒は認識＋判断用の明示予算で、Jevの待ち時間上限2300msは変わりません。操作期限より大きい予算は指定できません。
 
 `--mode=auto`は、実画面テンプレート、Jevキー、認識・判断confidence、画面安定性の全ゲートが通った場合だけクリックします。
