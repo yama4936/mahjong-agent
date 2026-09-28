@@ -1424,10 +1424,21 @@ class AwayDialogDetectionTest(unittest.TestCase):
         screenshot = (Path(__file__).resolve().parents[1] / "artifacts/live/riichi-button-hand-border-20260928.jpg").read_bytes()
         buttons = force_auto_self_action_buttons(screenshot, {"width": 1920, "height": 1080})
         self.assertEqual(len(buttons), 1)
-        self.assertLess(abs(buttons[0]["center"]["x"] - 1008.5), 2)
+        self.assertLess(abs(buttons[0]["center"]["x"] - 1008.5), 3)
         self.assertLess(abs(buttons[0]["center"]["y"] - 824), 2)
         layout = load_json(Path(__file__).resolve().parents[1] / "config/layout.json")
         self.assertTrue(self_turn_draw_visible(screenshot, layout, 0))
+
+    def test_live_red_ron_prompt_is_detected_with_no_draw_tile(self) -> None:
+        from auto_operator import self_turn_draw_visible
+        root = Path(__file__).resolve().parents[1]
+        screenshot = (root / "artifacts/live/red-ron-prompt-20260928.png").read_bytes()
+        layout = load_json(root / "config/layout.json")
+        self.assertFalse(self_turn_draw_visible(screenshot, layout, 0))
+        button = force_auto_reaction_win_button(screenshot, layout["viewport"], layout["actionButtonRegions"]["pass"])
+        self.assertIsNotNone(button)
+        self.assertLess(abs(button["center"]["x"] - 1002.5), 3)
+        self.assertLess(abs(button["center"]["y"] - 828.5), 3)
 
     def test_force_auto_public_prompt_uses_same_hybrid_backend_as_cache(self) -> None:
         operator = PythonAutoOperator.__new__(PythonAutoOperator)

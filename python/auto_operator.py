@@ -384,7 +384,9 @@ def force_auto_self_action_buttons(screenshot: bytes, viewport: dict[str, int]) 
             matching_y = []
             for y in range(top, bottom):
                 red, green, blue = pixels.getpixel((x, y))
-                if red > 120 and red - green > 25 and green > 55 and green - blue > 15:
+                orange = red > 120 and red - green > 25 and green > 55 and green - blue > 15
+                ron_red = red > 120 and red - green > 60 and red - blue > 60 and green >= blue * 0.8
+                if orange or ron_red:
                     matching_y.append(y)
             if len(matching_y) >= 5:
                 active_columns.append((x, min(matching_y), max(matching_y)))
