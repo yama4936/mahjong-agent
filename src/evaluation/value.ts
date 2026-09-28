@@ -1,8 +1,8 @@
 import type { GameState } from "../game/state.js";
-import { doraFromIndicator, isRedTile, normalizeTile, parseGameTile } from "../game/tiles.js";
+import { doraFromIndicator, isRedTile, isTerminalOrHonor, normalizeTile, parseGameTile, tileIndex } from "../game/tiles.js";
 import type { DiscardEvaluation } from "../game/ukeire.js";
 
-export const HEURISTIC_EVALUATION_MODEL = "heuristic-v2";
+export const HEURISTIC_EVALUATION_MODEL = "heuristic-v3";
 
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.max(minimum, Math.min(maximum, value));
@@ -14,8 +14,11 @@ function currentRank(state: GameState): number {
   return [...Object.values(state.scores)].sort((a, b) => b - a).findIndex((value) => value === score) + 1;
 }
 
-function pointValue(han: number, dealer: boolean): number {
-  const nonDealer = [0, 1000, 2000, 3900, 7700, 12000, 12000];
+function pointValue(han: number, dealer: boolean, sevenPairs = false): number {
+  if (sevenPairs && han < 5) {
+    return Math.ceil(25 * 2 ** (han + 2) * (dealer ? 6 : 4) / 100) * 100;
+  }
+  const nonDealer = [0, 1000, 2000, 3900, 7700, 8000, 12000];
   const value = nonDealer[Math.min(nonDealer.length - 1, Math.max(1, han))]!;
   return dealer ? Math.round(value * 1.5 / 100) * 100 : value;
 }
@@ -37,7 +40,9 @@ export function evaluateRoundValue(candidate: DiscardEvaluation, state: GameStat
   const closed = state.openMelds === 0 || (state.melds.length === state.openMelds
     && state.melds.every(meld => meld.type === "ankan"));
   const likelyRiichiHan = state.riichiDeclared || closed ? 1 : 0;
-  const estimatedValue = pointValue(1 + likelyRiichiHan + retainedDora, state.seat === "east");
+  const sevenPairs = closed && candidate.form === "chiitoitsu";
+  const baseHan = sevenPairs ? 2 + (tiles.every(tile => !isTerminalOrHonor(tileIndex(tile))) ? 1 : 0) : 1;
+  const estimatedValue = pointValue(baseHan + likelyRiichiHan + retainedDora, state.seat === "east", sevenPairs);
 
   const turnsLeftFactor = state.remainingTiles === undefined
     ? clamp((18 - state.turn) / 14, 0.15, 1.15)

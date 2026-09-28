@@ -18,7 +18,7 @@ const state = parseGameState({
 test("advisor attaches bounded heuristic outcome estimates", () => {
   const result = deterministicAdvice(state);
   for (const candidate of result.candidates) {
-    assert.equal(candidate.evaluationModel, "heuristic-v2");
+    assert.equal(candidate.evaluationModel, "heuristic-v3");
     assert.ok(candidate.estimatedValue! >= 1000);
     assert.ok(candidate.winProbability! > 0 && candidate.winProbability! <= 1);
     assert.ok(candidate.tenpaiProbability! > 0 && candidate.tenpaiProbability! <= 1);
@@ -35,6 +35,7 @@ test("heuristic value counts repeated indicators, meld dora and declared riichi"
   const value = (input: typeof base) => evaluateRoundValue(candidate, input).estimatedValue;
   assert.equal(value(base), 3900);
   assert.equal(value({ ...base, doraIndicators: ["4m", "4m"] }), 7700);
+  assert.equal(value({ ...base, doraIndicators: ["4m", "4m", "4m"] }), 8000);
   assert.equal(value({ ...base, riichiDeclared: true }), value(base));
   const open = { ...base, hand: base.hand.filter(tile => !["4m", "5m", "6m"].includes(tile)), openMelds: 1,
     melds: [{ type: "chi" as const, tiles: ["4m", "0m", "6m"] as const }] };
@@ -45,6 +46,19 @@ test("heuristic value counts repeated indicators, meld dora and declared riichi"
   assert.equal(value(ankan), 2000); // concealed kan does not remove the riichi assumption
   assert.equal(value({ ...ankan, melds: [] }), 1000); // unknown group is not certified closed
   assert.throws(() => evaluateRoundValue({ ...candidate, tile: "N" }, base), /discard present/);
+});
+
+test("seven-pairs value uses two yaku han, simple tiles and fixed 25 fu", () => {
+  const paired = parseGameState({ seat: "south",
+    hand: ["2m", "2m", "3m", "3m", "4p", "4p", "5p", "5p", "6s", "6s", "7s", "7s", "8s"],
+    draw: "E", doraIndicators: ["4p"] });
+  const candidate: DiscardEvaluation = { actionId: "discard_E", action: "discard", tile: "E",
+    shanten: 0, form: "chiitoitsu", effectiveTiles: [], ukeire: 3 };
+  assert.equal(evaluateRoundValue(candidate, paired).estimatedValue, 12000);
+  assert.equal(evaluateRoundValue(candidate, { ...paired, seat: "east" }).estimatedValue, 18000);
+  assert.equal(evaluateRoundValue(candidate, { ...paired, doraIndicators: [] }).estimatedValue, 6400);
+  const honor = { ...paired, hand: paired.hand.map(tile => tile === "8s" ? "N" as const : tile), doraIndicators: [] };
+  assert.equal(evaluateRoundValue(candidate, honor).estimatedValue, 3200);
 });
 
 test("auto requires independently trusted public state", async () => {
