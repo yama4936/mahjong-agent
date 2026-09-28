@@ -20,6 +20,32 @@ from auto_operator import configure_evaluator_click_budget
 
 
 class EvaluatorClickBudgetTest(unittest.TestCase):
+    def test_pass_confirmation_requires_new_self_draw_when_button_pixels_stay_same(self):
+        root = Path(__file__).resolve().parents[1]
+        reaction = (root / "artifacts/live/pass-before-self-riichi-20260928.png").read_bytes()
+        self_turn = (root / "artifacts/live/pass-to-self-riichi-20260928.png").read_bytes()
+        buffer = io.BytesIO()
+        Image.new("RGB", (100, 40), "black").save(buffer, format="PNG")
+        unchanged_button = buffer.getvalue()
+        for prior, current, accepted in [(reaction, self_turn, True),
+                                         (reaction, reaction, False),
+                                         (self_turn, self_turn, False)]:
+            with self.subTest(accepted=accepted, already_self_turn=prior == self_turn):
+                operator = PythonAutoOperator.__new__(PythonAutoOperator)
+                operator.layout = load_json(root / "config/layout.json")
+                operator.layout["actionButtonRegions"] = {
+                    "pass": {"x": 10, "y": 20, "width": 100, "height": 40}}
+                operator.args = argparse.Namespace(confirmation_timeout=0.02, action_pixel_delta=3)
+                page = Mock()
+                page.screenshot.side_effect = lambda **kwargs: unchanged_button if "clip" in kwargs else current
+                if accepted:
+                    receipt = operator.confirm_action_button(page, "pass", unchanged_button, screen_before=prior)
+                    self.assertEqual(receipt["confirmation"], "reaction_to_self_draw")
+                    self.assertEqual(receipt["buttonPixelDelta"], 0)
+                else:
+                    with self.assertRaisesRegex(RuntimeError, "not confirmed"):
+                        operator.confirm_action_button(page, "pass", unchanged_button, screen_before=prior)
+
     def test_default_preserves_environment_and_explicit_test_budget_is_bounded(self):
         environment = {"FORCE_AUTO_CLICK_BUDGET_MS": "2600", "OTHER": "unchanged"}
         self.assertIs(configure_evaluator_click_budget(environment, None, 5000), environment)

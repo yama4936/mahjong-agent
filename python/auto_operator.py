@@ -1647,6 +1647,7 @@ class PythonAutoOperator:
         return {
             "schemaVersion": 1,
             "status": "reaction_prompt",
+            "reactionFrame": str(screenshot),
             "recognition": recognition,
             "availableUiActions": ["pass"],
             "actionButton": {
@@ -1825,12 +1826,15 @@ class PythonAutoOperator:
         self, page: Page, action: str, before: bytes,
         hand_before: bytes | None = None, meld_before: bytes | None = None,
         region_override: dict[str, Any] | None = None,
+        screen_before: bytes | None = None,
     ) -> dict[str, Any]:
         region = region_override or self.layout.get("actionButtonRegions", {}).get(action)
         if not region:
             raise RuntimeError(f"layout has no calibrated {action} button region")
         clip = {key: region[key] for key in ("x", "y", "width", "height")}
         started = time.monotonic()
+        expect_new_draw = action == "pass" and screen_before is not None and not self_turn_draw_visible(
+            screen_before, self.layout, getattr(self, "cached_open_melds", 0))
         while time.monotonic() - started < self.args.confirmation_timeout:
             page.wait_for_timeout(100)
             delta = mean_pixel_delta(before, page.screenshot(clip=clip, animations="disabled"))
@@ -1849,6 +1853,12 @@ class PythonAutoOperator:
                     "buttonPixelDelta": delta,
                     **({"handPixelDelta": hand_delta, "meldPixelDelta": meld_delta} if is_call else {}),
                 }
+            if expect_new_draw and self_turn_draw_visible(
+                page.screenshot(animations="disabled"), self.layout, getattr(self, "cached_open_melds", 0)
+            ):
+                return {"confirmation": "reaction_to_self_draw",
+                        "confirmationLatencyMs": round((time.monotonic() - started) * 1000),
+                        "buttonPixelDelta": delta}
         raise RuntimeError(f"{action} click was not confirmed by its button region changing")
 
     def validate_action_certificate(self, action: str, evaluation: dict[str, Any]) -> dict[str, Any]:
@@ -2108,7 +2118,9 @@ class PythonAutoOperator:
                  availableUiActions=evaluation.get("availableUiActions", []))
         self.last_action_clicked_at = time.monotonic()
         page.mouse.click(point["x"], point["y"])
-        receipt = self.confirm_action_button(page, "pass", before)
+        reaction_frame = evaluation.get("reactionFrame")
+        receipt = self.confirm_action_button(page, "pass", before,
+                                            screen_before=Path(reaction_frame).read_bytes() if reaction_frame else None)
         return {"clicked": True, "policy": "force_auto" if self.args.mode == "force-auto" else "certified_auto", "action": "pass",
                 "clickPoint": point, **receipt}
 
