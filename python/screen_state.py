@@ -155,10 +155,22 @@ def _is_cherry_blossom_lobby(image: Image.Image) -> bool:
     return all(evidence)
 
 
+def _has_bottom_tile_faces(image: Image.Image) -> bool:
+    width, height = image.size
+    if width < 1200 or height < 700:
+        return False
+    # Even a four-tile compact hand occupies these bottom-left tile faces.
+    # A dark table plus rivers/HUD can otherwise satisfy all panel heuristics.
+    hand_pixels = list(image.crop((width * .115, height * .87, width * .30, height * .97)).getdata())
+    white_faces = sum(1 for pixel in hand_pixels if min(pixel) > 180 and max(pixel) - min(pixel) < 60) / max(1, len(hand_pixels))
+    dark_ink = sum(1 for pixel in hand_pixels if max(pixel) < 100) / max(1, len(hand_pixels))
+    return white_faces >= .35 and dark_ink >= .02
+
+
 def _is_cherry_blossom_ranked_menu(image: Image.Image) -> bool:
     """Recognize the stacked dark-blue ranked-room panels on the current skin."""
     width, height = image.size
-    if width < 1200 or height < 700:
+    if width < 1200 or height < 700 or _has_bottom_tile_faces(image):
         return False
     panels = (
         (0.59, 0.31, 0.86, 0.45),
@@ -209,6 +221,8 @@ def classify_screen(
         return "session_conflict", 1.0
     if _matches_blocking_dialog(image, _blocking_dialog_reference("connection-error.png")):
         return "connection_error", 1.0
+    if _has_bottom_tile_faces(image):
+        return "match", 1.0
     if _is_cherry_blossom_matchmaking(image):
         return "matchmaking", 1.0
     if _is_cherry_blossom_ranked_menu(image):

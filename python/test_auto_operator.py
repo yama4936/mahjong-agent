@@ -28,6 +28,16 @@ class RecordingMouse:
 
 
 class ActionDeadlineTest(unittest.TestCase):
+    def test_explicit_300_second_test_clock_does_not_expire_after_five_seconds(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(action_deadline_ms=300000)
+        operator.action_evidence_started_at = time.monotonic() - 10
+        self.assertGreater(operator.action_deadline_remaining_ms(), 280000)
+        operator.require_action_deadline()
+        timing = action_deadline_timing(100, 110, 111, 300000)
+        self.assertEqual(timing["deadlineMs"], 300000)
+        self.assertTrue(timing["deadlineMet"])
+
     def assert_fast_path(self, kind: str, decision_delay: float, click_delay: float) -> None:
         timing = action_deadline_timing(100.0, 100.0 + decision_delay, 100.0 + click_delay)
         self.assertTrue(timing["deadlineMet"], kind)
@@ -262,7 +272,7 @@ class AwayDialogDetectionTest(unittest.TestCase):
         ))
         self.assertEqual(operator.screencast_sequence, 8)
 
-    def test_run_loop_routes_existing_jpeg_prompt_immediately_after_startup(self) -> None:
+    def test_run_loop_routes_existing_prompt_and_survives_expired_pass_deadline(self) -> None:
         project = Path(__file__).resolve().parents[1]
         prompt_image = Image.open(project / "artifacts" / "debug-300-after-hash-fix.png").convert("RGB")
         prompt_buffer = io.BytesIO()
@@ -305,7 +315,10 @@ class AwayDialogDetectionTest(unittest.TestCase):
             operator.resume_if_away = Mock(return_value=False)
             operator.advance_ranked_loop = Mock(return_value=False)
             operator.recognize_resident = Mock(return_value={"tiles": ["1m"] * 13})
-            operator.execute_reaction_pass = Mock(return_value={"clicked": True, "action": "pass"})
+            operator.execute_reaction_pass = Mock(side_effect=[
+                RetryableSafetyAbort("five-second action deadline expired before safe click"),
+                {"clicked": True, "action": "pass"},
+            ])
             operator.log = Mock()
             page = Mock()
             page.url = "https://game.mahjongsoul.com/index.html"
@@ -315,6 +328,8 @@ class AwayDialogDetectionTest(unittest.TestCase):
                 operator.run(page)
 
             self.assertGreaterEqual(operator.execute_reaction_pass.call_count, 1)
+            self.assertTrue(any(call.args and call.args[0] == "reaction_pass_deferred"
+                                for call in operator.log.call_args_list))
             reaction = operator.execute_reaction_pass.call_args_list[0].args[1]
             self.assertEqual(reaction["status"], "reaction_prompt")
             self.assertEqual(reaction["actionButton"]["action"], "pass")
@@ -322,10 +337,8 @@ class AwayDialogDetectionTest(unittest.TestCase):
                 call.args and call.args[0] == "reaction_gate_candidate"
                 for call in operator.log.call_args_list
             ))
-            logged = next(call for call in operator.log.call_args_list
-                          if call.args and call.args[0] == "reaction_prompt")
-            self.assertTrue(logged.kwargs["execution"]["actionTiming"]["deadlineMet"],
-                            operator.log.call_args_list)
+            self.assertFalse(any(call.args and call.args[0] == "safety_stop"
+                                 for call in operator.log.call_args_list))
 
     def test_public_cache_only_grows_rivers_and_preserves_riichi(self) -> None:
         previous = {
@@ -2108,6 +2121,11 @@ class AwayDialogDetectionTest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "connection_error dialog blocks"):
             operator.handle_early_non_gameplay_screen(page, "connection_error", 1.0)
         page.mouse.click.assert_not_called()
+
+    def test_live_300_self_draw_is_not_a_ranked_navigation_screen(self) -> None:
+        frame = Path(__file__).resolve().parents[1] / "artifacts" / "live" / "closed-self-draw-20260928.png"
+        state, _ = classify_screen(frame, {})
+        self.assertNotIn(state, {"ranked_menu", "ranked_room", "lobby", "matchmaking"})
 
     def test_saved_screens_are_classified_and_unknown_fails_closed(self) -> None:
         expected_files = {

@@ -1,6 +1,7 @@
 import { existsSync, readdirSync } from "node:fs";
 import { spawn } from "node:child_process";
 import path from "node:path";
+import { windowsCaEnvironment } from "./windows-ca.mjs";
 
 const root = path.resolve(import.meta.dirname, "..");
 const mode = process.argv[2];
@@ -55,7 +56,9 @@ if (!dashboardDisabled) {
   dashboard.on("error", (error) => console.error(`Dashboard failed to start: ${error.message}`));
 }
 
-const operator = spawn(python, [...defaults, ...operatorArgs], { cwd: root, stdio: "inherit" });
+const operator = spawn(python, [...defaults, ...operatorArgs], {
+  cwd: root, stdio: "inherit", env: windowsCaEnvironment(root),
+});
 const stopChildren = (signal) => {
   if (!operator.killed) operator.kill(signal);
   if (dashboard && !dashboard.killed) dashboard.kill(signal);

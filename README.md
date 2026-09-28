@@ -245,6 +245,8 @@ npm run watch -- examples/state.json config/layout.json templates/bootstrap \
 
 自動操作の実画面回帰テストには、友人戦の「300+0」設定を使います。既存の再現用フレームとログは`artifacts/debug-300/`にあります。打牌、鳴き、和了、結果画面への遷移をこの条件で確認し、段位戦での勝率・順位評価は別に記録します。
 
+300+0秒での機能検証は`node scripts/run-operator.mjs force-auto --action-deadline-ms=300000 --advance-screens`で実行します。操作期限の既定値は5000msのままです。300秒指定で成功しても、短時間設定での性能を証明したことにはなりません。
+
 `--mode=auto`は、実画面テンプレート、Jevキー、認識・判断confidence、画面安定性の全ゲートが通った場合だけクリックします。
 
 ## Python常駐オペレーター
@@ -324,6 +326,8 @@ npm run operator:advisor -- --allow-local-discard
 ```
 
 終了は`Ctrl+C`です。記録は既定で`artifacts/python-auto/python-operator.jsonl`へ保存されます。`--mode auto`でも、認識confidence、公開局面confidence、Jev、テンプレート指紋、クリック位置のいずれかが不正ならクリックしません。
+
+Windowsでは起動スクリプトがOSの信頼済みルート証明書を`.runtime/windows-trusted-roots.pem`へ書き出し、Node評価プロセスの`NODE_EXTRA_CA_CERTS`に指定します。TLS検証は無効化しません。既に`NODE_EXTRA_CA_CERTS`を指定している場合はその設定を保持します。
 
 `--log`を付けた判断は`artifacts/replays/`にJSONLと個別JSONで保存できます。`replay`コマンドは保存局面を現在の決定ロジックで再評価し、選択差分を出力します。
 

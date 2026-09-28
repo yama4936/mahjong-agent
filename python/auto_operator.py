@@ -327,6 +327,7 @@ ACTION_DEADLINE_MS = 5_000
 
 def action_deadline_timing(
     evidence_started_at: float | None, decision_started_at: float | None, clicked_at: float,
+    deadline_ms: int = ACTION_DEADLINE_MS,
 ) -> dict[str, Any]:
     """Return one comparable detect/decide/click clock for every action path."""
     detected = evidence_started_at if evidence_started_at is not None else decision_started_at
@@ -337,12 +338,12 @@ def action_deadline_timing(
     decision_to_click_ms = round((clicked_at - decided) * 1000)
     total_ms = round((clicked_at - detected) * 1000)
     return {
-        "deadlineMs": ACTION_DEADLINE_MS,
+        "deadlineMs": deadline_ms,
         "detectionToDecisionMs": detection_to_decision_ms,
         "decisionToClickMs": decision_to_click_ms,
         "evidenceToClickMs": total_ms,
-        "remainingMsAtClick": ACTION_DEADLINE_MS - total_ms,
-        "deadlineMet": total_ms <= ACTION_DEADLINE_MS,
+        "remainingMsAtClick": deadline_ms - total_ms,
+        "deadlineMet": total_ms <= deadline_ms,
     }
 
 
@@ -836,12 +837,16 @@ class PythonAutoOperator:
         self.action_evidence_generation = gate_generation
         self.action_evidence_last_seen_at = seen_at
         self.last_action_clicked_at = None
-        self.log("action_deadline_started", actionKind=kind, deadlineMs=ACTION_DEADLINE_MS)
+        self.log("action_deadline_started", actionKind=kind, deadlineMs=self.configured_action_deadline_ms())
+
+    def configured_action_deadline_ms(self) -> int:
+        return getattr(getattr(self, "args", None), "action_deadline_ms", ACTION_DEADLINE_MS)
 
     def action_timing(self, decision_started_at: float | None = None, *, clear: bool = False) -> dict[str, Any]:
         clicked_at = getattr(self, "last_action_clicked_at", None) or time.monotonic()
         timing = action_deadline_timing(
             getattr(self, "action_evidence_started_at", None), decision_started_at, clicked_at,
+            self.configured_action_deadline_ms(),
         )
         timing["actionKind"] = getattr(self, "action_evidence_kind", None)
         if clear:
@@ -870,8 +875,8 @@ class PythonAutoOperator:
     def action_deadline_remaining_ms(self) -> int:
         started = getattr(self, "action_evidence_started_at", None)
         if started is None:
-            return ACTION_DEADLINE_MS
-        return max(0, ACTION_DEADLINE_MS - round((time.monotonic() - started) * 1000))
+            return self.configured_action_deadline_ms()
+        return max(0, self.configured_action_deadline_ms() - round((time.monotonic() - started) * 1000))
 
     def require_action_deadline(self) -> None:
         remaining = self.action_deadline_remaining_ms()
@@ -2401,7 +2406,12 @@ class PythonAutoOperator:
                             screenshot_path, contextual_prompt_verified=pass_prompt_present,
                         )
                         if reaction:
-                            receipt = self.execute_reaction_pass(page, reaction)
+                            try:
+                                receipt = self.execute_reaction_pass(page, reaction)
+                            except RetryableSafetyAbort as error:
+                                self.log("reaction_pass_deferred", screenshot=str(screenshot_path), error=str(error))
+                                page.wait_for_timeout(max(100, round(self.args.poll * 1000)))
+                                continue
                             receipt["actionTiming"] = self.action_timing(decision_started_at, clear=True)
                             self.log("reaction_prompt", screenshot=str(screenshot_path), evaluation=reaction, execution=receipt)
                             self.last_processed_hand = None
@@ -2815,6 +2825,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--mode", choices=("observer", "advisor", "auto", "force-auto"), default="advisor",
                         help="force-auto ignores confidence and calibration gates but keeps stability and post-click checks")
     parser.add_argument("--poll", type=float, default=0.1)
+    parser.add_argument("--action-deadline-ms", type=int, default=ACTION_DEADLINE_MS,
+                        help="verified action deadline; use 300000 only for 300+0 friend-match testing")
     parser.add_argument("--stability-ms", type=int, default=120)
     parser.add_argument("--stability-pixel-delta", type=float, default=1.5)
     parser.add_argument("--action-pixel-delta", type=float, default=3.0)
@@ -2851,7 +2863,10 @@ def parse_args() -> argparse.Namespace:
         default=False,
         help="explicitly allow confidence-gated deterministic discards in advisor mode; no defense/Jev",
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.action_deadline_ms <= 0:
+        parser.error("--action-deadline-ms must be positive")
+    return args
 
 
 def main() -> int:
