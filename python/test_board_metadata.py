@@ -58,3 +58,11 @@ class BoardMetadataTest(unittest.TestCase):
         self.assertFalse(parse_board_tokens(tokens[:-1])["verified"])
         tokens[2]["confidence"] = 0.8
         self.assertFalse(parse_board_tokens(tokens)["verified"])
+
+    def test_high_confidence_digit_error_is_rejected_by_point_conservation(self):
+        tokens = self.tokens()
+        tokens[2]["text"] = "29500"
+        result = parse_board_tokens(tokens)
+        self.assertFalse(result["verified"])
+        self.assertEqual(result["reason"], "scores_and_riichi_sticks_total_mismatch")
+        self.assertTrue(parse_board_tokens(tokens, expected_total_points=110000)["verified"])

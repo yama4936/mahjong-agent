@@ -30,7 +30,7 @@ def ocr_engine():
     return RapidOCR()
 
 
-def parse_board_tokens(tokens: list[dict]) -> dict:
+def parse_board_tokens(tokens: list[dict], expected_total_points: int = 100000) -> dict:
     def at(x: float, y: float, pattern: str):
         matches = [item for item in tokens if item["confidence"] >= 0.98
                    and abs(item["x"] - x) <= 24 and abs(item["y"] - y) <= 20
@@ -54,6 +54,8 @@ def parse_board_tokens(tokens: list[dict]) -> dict:
     honba = at(268, 155, r"\d{1,2}")
     if riichi_sticks is None or honba is None:
         return {"verified": False, "reason": "honba_or_riichi_sticks_not_verified"}
+    if sum(scores.values()) + int(riichi_sticks) * 1000 != expected_total_points:
+        return {"verified": False, "reason": "scores_and_riichi_sticks_total_mismatch"}
     return {"verified": True, "seat": seat,
             "round": f"{WINDS[round_text[0]]}_{round_text[1]}", "scores": scores,
             "honba": int(honba), "riichiSticks": int(riichi_sticks),
