@@ -19,3 +19,32 @@ test("suji is safer than an unrelated tile against riichi", () => {
   const state = parseGameState(base);
   assert.ok(evaluateTileDanger("2m", state).combinedProbability < evaluateTileDanger("3m", state).combinedProbability);
 });
+
+for (const suit of ["m", "p", "s"]) {
+  test(`red and ordinary fives share genbutsu and suji in ${suit}`, () => {
+    for (const discarded of [`0${suit}`, `5${suit}`]) {
+      const state = parseGameState({ ...base, opponents: [{ seat: "west", discards: [discarded], riichi: true, openMelds: 0 }] });
+      for (const candidate of [`0${suit}`, `5${suit}`]) {
+        assert.deepEqual(evaluateTileDanger(candidate, state).byOpponent[0], { seat: "west", probability: 0, reasons: ["genbutsu"] });
+      }
+      const ordinary = parseGameState({ ...base, opponents: [{ seat: "west", discards: [`5${suit}`], riichi: true, openMelds: 0 }] });
+      for (const rank of [2, 8]) {
+        assert.deepEqual(evaluateTileDanger(`${rank}${suit}`, state), evaluateTileDanger(`${rank}${suit}`, ordinary));
+        assert.ok(evaluateTileDanger(`${rank}${suit}`, state).byOpponent[0]!.reasons.includes("full_suji"));
+      }
+      assert.ok(!evaluateTileDanger(`4${suit}`, state).byOpponent[0]!.reasons.includes("genbutsu"));
+      assert.deepEqual(state.opponents[0]!.discards, [discarded]);
+    }
+  });
+}
+
+test("red-five genbutsu is safe only against the player who discarded it", () => {
+  const state = parseGameState({ ...base, opponents: [
+    { seat: "west", discards: ["0p"], riichi: true, openMelds: 0 },
+    { seat: "south", discards: ["1s"], riichi: true, openMelds: 0 },
+  ] });
+  const danger = evaluateTileDanger("5p", state);
+  assert.equal(danger.byOpponent[0]!.probability, 0);
+  assert.ok(danger.byOpponent[1]!.probability > 0);
+  assert.equal(danger.combinedProbability, 1 - (1 - danger.byOpponent[1]!.probability));
+});

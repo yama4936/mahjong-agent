@@ -20,8 +20,9 @@ export function evaluateTileDanger(tileInput: string, state: GameState): TileDan
   const isDora = state.doraIndicators.some((indicator) => doraFromIndicator(indicator) === tile);
 
   const byOpponent = state.opponents.map((opponent): OpponentDanger => {
+    const discardedTypes = new Set(opponent.discards.map(normalizeTile));
     const reasons: string[] = [];
-    if (opponent.discards.includes(tile)) return { seat: opponent.seat, probability: 0, reasons: ["genbutsu"] };
+    if (discardedTypes.has(tile)) return { seat: opponent.seat, probability: 0, reasons: ["genbutsu"] };
     let probability = opponent.riichi ? 0.12 : opponent.openMelds >= 2 ? 0.07 : opponent.openMelds === 1 ? 0.045 : 0.025;
     if (opponent.riichi) reasons.push("riichi_threat");
     if (opponent.openMelds > 0) reasons.push(`${opponent.openMelds}_open_melds`);
@@ -36,7 +37,7 @@ export function evaluateTileDanger(tileInput: string, state: GameState): TileDan
       const rank = suitRank(tileIdx) + 1;
       const suit = tile.slice(1);
       const anchors = [rank - 3, rank + 3].filter((value) => value >= 1 && value <= 9).map((value) => `${value}${suit}` as Tile);
-      const safeAnchors = anchors.filter((anchor) => opponent.discards.includes(anchor)).length;
+      const safeAnchors = anchors.filter((anchor) => discardedTypes.has(anchor)).length;
       if (safeAnchors > 0) {
         probability *= safeAnchors === anchors.length ? 0.5 : 0.68;
         reasons.push(safeAnchors === anchors.length ? "full_suji" : "partial_suji");
