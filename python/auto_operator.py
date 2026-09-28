@@ -1314,12 +1314,16 @@ class PythonAutoOperator:
         self.log("screen_advanced", state=state, confidence=confidence, clickPoint=point)
         return True
 
-    def handle_early_non_gameplay_screen(self, page: Page, state: str, confidence: float) -> bool:
+    def handle_early_non_gameplay_screen(self, page: Page, state: str, confidence: float,
+                                       screenshot: bytes | None = None) -> bool:
         """Handle verified non-gameplay screens before latency quick gates."""
         if state in {"session_conflict", "connection_error"}:
             self.log("blocking_dialog_stop", state=state, confidence=confidence, gameplayClicks=0)
             raise RuntimeError(f"Mahjong Soul {state} dialog blocks the table; operator stopped without confirming it")
         if state in {"round_result", "match_result", "rank_progress", "post_match_reward"}:
+            if screenshot is not None and state in {"round_result", "match_result"}:
+                self.attach_outcome("match" if state == "match_result" else "round",
+                                    screenshot, confidence)
             self.pending_post_call_discard = False
             self.pending_post_call_started_at = None
             self.round_terminal_latched = True
@@ -2150,7 +2154,7 @@ class PythonAutoOperator:
                     early_state, early_confidence = classify_screen(gate_frame, self.screen_references) \
                         if gate_frame else ("unknown", 0.0)
                     if self.handle_early_non_gameplay_screen(
-                        page, early_state, early_confidence,
+                        page, early_state, early_confidence, gate_frame,
                     ):
                         page.wait_for_timeout(max(20, round(self.args.poll * 1000)))
                         continue

@@ -1311,8 +1311,18 @@ class AwayDialogDetectionTest(unittest.TestCase):
             })
             self.assertEqual(load_json(replay)["executionEvidence"]["status"], "verified")
 
-            self.assertEqual(operator.attach_outcome("round", b"round", 0.99), 1)
-            self.assertEqual(operator.attach_outcome("match", b"match", 0.98), 1)
+            operator.args = argparse.Namespace(advance_screens=True, ranked_loop=False)
+            page = Mock()
+            def verify_saved_before_advance(_page, state, confidence):
+                kind = "match" if state == "match_result" else "round"
+                evidence = load_json(replay)["actualResult"][kind]
+                self.assertEqual(Path(evidence["screenshot"]).read_bytes(), kind.encode())
+            operator.advance_result_screen_once = Mock(side_effect=verify_saved_before_advance)
+            self.assertTrue(operator.handle_early_non_gameplay_screen(page, "round_result", 0.99, b"round"))
+            self.assertEqual(operator.pending_round_replays, [])
+            self.assertEqual(operator.pending_match_replays, [replay])
+            self.assertTrue(operator.handle_early_non_gameplay_screen(page, "match_result", 0.98, b"match"))
+            self.assertEqual(operator.pending_match_replays, [])
             result = load_json(replay)["actualResult"]
             self.assertEqual(result["round"]["screenState"], "round_result")
             self.assertEqual(result["match"]["screenState"], "match_result")
