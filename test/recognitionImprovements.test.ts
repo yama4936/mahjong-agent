@@ -3,9 +3,10 @@ import test from "node:test";
 import sharp from "sharp";
 import { HandConsensus, combineTileEvidence } from "../src/recognition/consensus.js";
 import { normalizeTileFace } from "../src/recognition/normalizeTileFace.js";
-import { classifyTile, loadTemplates } from "../src/recognition/templateMatcher.js";
+import { classifyTile, loadTemplates, matchTile } from "../src/recognition/templateMatcher.js";
 import type { GameTile } from "../src/game/tiles.js";
-import { mkdtemp, readdir, copyFile } from "node:fs/promises";
+import { mkdtemp, readdir, copyFile, readFile } from "node:fs/promises";
+import { layoutSchema } from "../src/recognition/layout.js";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { validateTemplateDirectory } from "../src/recognition/templateValidator.js";
@@ -57,4 +58,13 @@ test("34-class model agreement cannot certify a red or ordinary five", () => {
   assert.equal(combineTileEvidence(template, model).accepted, false);
   assert.equal(combineTileEvidence(template, model, true).accepted, true);
   assert.equal(combineTileEvidence({ ...template, tile: "5s" }, model).accepted, false);
+});
+
+test("template upper-red gate preserves red pin and sou without recoloring ordinary fives", async () => {
+  const layout = layoutSchema.parse(JSON.parse(await readFile("config/layout-300-regression.json", "utf8")));
+  const templates = await loadTemplates("templates/bootstrap", file => !/(?:holdout|capture|test)/i.test(file));
+  assert.equal((await matchTile("artifacts/live/left-melds-chi-pon-20260928.jpg", layout.handSlots[8]!, templates)).tile, "0s");
+  assert.equal((await matchTile("artifacts/live/template-red-five-pin-20260928.jpg", layout.handSlots[4]!, templates)).tile, "0p");
+  assert.equal((await matchTile("artifacts/live/riichi-shimmer-hand-before-20260928.jpg", layout.handSlots[6]!, templates)).tile, "5p");
+  assert.equal((await classifyTile("templates/bootstrap/5s__hf_base.png", templates)).tile, "5s");
 });

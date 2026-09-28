@@ -244,7 +244,8 @@ function scorePrepared(sample: PreparedImage, templates: Map<GameTile, PreparedI
   const winner = scores[0]!;
   const margin = winner.discriminativeScore - scores[1]!.discriminativeScore;
   return {
-    tile: winner.tile === "5m" && sample.redUpperGlyph ? "0m" : winner.tile,
+    tile: ["5m", "5p", "5s"].includes(winner.tile) && sample.redUpperGlyph
+      ? parseGameTile(`0${winner.tile.slice(1)}`) : winner.tile,
     confidence: winner.confidence,
     runnerUpConfidence: Math.max(0, winner.confidence - margin),
   };
