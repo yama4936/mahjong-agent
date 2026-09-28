@@ -214,3 +214,11 @@ board-metadataに固定HUDの白い立直棒＋中央赤丸のpositive-only検�
 初期public stateや入力observationを変更しない回帰テストを追加。
 右家見逃し画像はnorth、自分ロン直前画像はnorth、次局画像は検出0席。
 他のスキン・解像度・遮蔽への一般化と、実戦の守備選択への反映は未検証。
+
+6a9353fを05:03:32 UTCに300+0秒・board-metadata条件で反映。
+見逃し保存画像を実OCR→frame_metadata_state経路で確認し、自風west、north.riichi=trueと回転後河north.riichiDeclared=trueを取得。
+04:58:56局面をJevなしのローカル同一方策へ入力し、north立直の有無だけ変更して比較。
+立直なしはdiscard_6s（2向聴/受入24）、立直ありはdiscard_3m（2向聴/受入14）。
+立直脅威が押し引きへ影響することを確認したが、推定危険度やEVはheuristic-v1で実測放銃率ではない。
+選択変化が強さ改善を証明するわけではなく、実戦成績比較は引き続き必要。
+最新ライブはfour_scores_not_verifiedの再取得が続くため、次は05:04:42以降の失敗画像のOCRを検証する。
