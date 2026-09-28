@@ -47,6 +47,26 @@ test("calibrated opposite meld faces recover red chi, adjacent pon and third chi
   }
 });
 
+test("calibrated left melds recover chi and pon without picking up own hand edge", {
+  skip: !existsSync(".runtime/hybrid-vision/cvmaj-pretrained.tar") || !existsSync(".runtime/hybrid-vision/automajsoul-best-model.pt"),
+}, async () => {
+  const base = layoutSchema.parse(JSON.parse(await readFile("config/layout-300-regression.json", "utf8")));
+  const layout = { ...base, publicTileRegions: { leftMelds: base.publicTileRegions!.leftMelds! } };
+  const recognizer = new HybridTileRecognizer();
+  try {
+    const populated = await recognizeConfiguredPublicTilesWithVit("artifacts/live/left-melds-chi-pon-20260928.jpg", layout, recognizer);
+    assert.equal(populated.leftMelds?.candidateCount, 6);
+    const melds = recognizeExposedMelds(populated.leftMelds);
+    assert.deepEqual(melds.map(meld => `${meld.type}:${[...meld.tiles].sort().join(",")}`).sort(), ["chi:6m,7m,8m", "pon:N,N,N"]);
+    assert.equal(toPublicTileObservation(populated).opponentDiscards[2]?.meldsObserved, true);
+    const empty = await recognizeConfiguredPublicTilesWithVit("artifacts/live/adjacent-opposite-melds-20260928.jpg", layout, recognizer);
+    assert.equal(empty.leftMelds?.candidateCount, 0);
+    assert.deepEqual(recognizeExposedMelds(empty.leftMelds), []);
+  } finally {
+    await recognizer.close();
+  }
+});
+
 test("missing and undecodable meld regions are unknown, not confirmed closed hands", () => {
   const missing = toPublicTileObservation({});
   assert.equal(missing.opponentDiscards[0]?.meldsObserved, false);

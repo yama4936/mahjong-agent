@@ -12,6 +12,7 @@ const publicTileRegionSchema = rectSchema.extend({
   detectionMode: z.literal("discard_grid").optional(),
   sidewaysAspectRatio: z.number().positive().optional(),
   luminanceThreshold: z.number().min(0).max(255).optional(),
+  minimumWidth: z.number().int().positive().optional(),
 });
 
 const publicTileRegionsSchema = z.object({

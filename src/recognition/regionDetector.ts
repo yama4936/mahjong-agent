@@ -132,6 +132,7 @@ export async function detectConfiguredPublicRegions(
       ...(region.detectionMode === "discard_grid" && name.endsWith("Discards")
         ? { maximumColorSpread: 40 } : {}), ...options,
       ...(region.luminanceThreshold !== undefined ? { luminanceThreshold: region.luminanceThreshold } : {}),
+      ...(region.minimumWidth !== undefined ? { minimumWidth: region.minimumWidth } : {}),
     });
     if (name.endsWith("Melds") && region.sidewaysAspectRatio !== undefined) {
       const vertical = region.rotationToUpright === 90 || region.rotationToUpright === 270;
