@@ -90,8 +90,33 @@ def recognize_board(image_path: Path) -> dict:
         if counter.txts is not None and len(counter.txts) == 1:
             tokens.append({"text": counter.txts[0], "confidence": float(counter.scores[0]),
                            "x": x, "y": 155})
-    return {**parse_board_tokens(tokens), "tokens": tokens,
+    parsed = parse_board_tokens(tokens)
+    if parsed.get("verified"):
+        parsed["riichiSeats"] = recognize_riichi_sticks(image, parsed["seat"])
+    return {**parsed, "tokens": tokens,
             "source": str(image_path), "scope": "seat_round_scores_honba_riichi_remaining"}
+
+
+def recognize_riichi_sticks(image, own_seat: str) -> list[str]:
+    """Positive-only evidence from the calibrated white/red HUD sticks."""
+    if image.size != (1920, 1080):
+        return []
+    regions = [
+        ((880, 515, 1025, 528), (944, 513, 964, 530)),
+        ((1093, 378, 1108, 478), (1090, 415, 1111, 433)),
+        ((880, 316, 1025, 329), (944, 312, 964, 332)),
+        ((804, 378, 819, 478), (800, 415, 822, 433)),
+    ]
+    detected = []
+    rgb = image.convert("RGB")
+    for offset, (body, center) in enumerate(regions):
+        pixels = list(rgb.crop(body).getdata())
+        white = sum(min(pixel) > 185 and max(pixel) - min(pixel) < 45 for pixel in pixels) / len(pixels)
+        red = sum(r > 160 and g < 100 and b < 100 and r - g > 70
+                  for r, g, b in rgb.crop(center).getdata())
+        if white >= 0.45 and red >= 8:
+            detected.append(SEATS[(SEATS.index(own_seat) + offset) % 4])
+    return detected
 
 
 if __name__ == "__main__":

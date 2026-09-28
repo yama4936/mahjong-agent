@@ -1177,10 +1177,31 @@ class PythonAutoOperator:
         fields = {key: metadata[key] for key in
                   ("seat", "round", "scores", "honba", "riichiSticks", "remainingTiles")
                   if key in metadata}
-        state = {**self.public_state, **fields}
         source_seat = self.public_state.get("seat", "east")
+        state = {**remap_seats(self.public_state, source_seat, fields["seat"]), **fields}
         self.log("board_metadata_verified", screenshot=str(screenshot), **fields)
-        return (state, remap_seats(observation, source_seat, fields["seat"]),
+        mapped_observation = remap_seats(observation, source_seat, fields["seat"])
+        riichi_seats = metadata.get("riichiSeats", [])
+        for seat in riichi_seats:
+            if seat == fields["seat"]:
+                state["riichiDeclared"] = True
+                if mapped_observation is not None:
+                    mapped_observation["ownRiichiDeclared"] = True
+            else:
+                opponents = state.setdefault("opponents", [])
+                opponent = next((item for item in opponents if item["seat"] == seat), None)
+                if opponent is None:
+                    opponent = {"seat": seat, "discards": []}
+                    opponents.append(opponent)
+                opponent["riichi"] = True
+                if mapped_observation is not None:
+                    observed = next((item for item in mapped_observation.get("opponentDiscards", [])
+                                     if item["seat"] == seat), None)
+                    if observed is not None:
+                        observed["riichiDeclared"] = True
+        if riichi_seats:
+            self.log("riichi_stick_verified", screenshot=str(screenshot), seats=riichi_seats)
+        return (state, mapped_observation,
                 remap_seats(pending, source_seat, fields["seat"]))
 
     def ensure_viewport(self, page: Page, *, force: bool = False) -> None:

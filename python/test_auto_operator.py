@@ -1455,6 +1455,21 @@ class AwayDialogDetectionTest(unittest.TestCase):
             operator.attach_outcome("round", b"duplicate", 1.0)
             self.assertEqual(len(list(operator.frames.glob("*.round_result.png"))), 1)
 
+    def test_current_hud_riichi_reaches_state_and_rotated_public_cache(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.public_state = {"seat": "east", "opponents": []}
+        operator.log = Mock()
+        observation = {"opponentDiscards": [{"seat": "south", "discards": ["N"], "riichiDeclared": False}]}
+        metadata = {"verified": True, "seat": "west", "round": "east_2", "scores": {},
+                    "honba": 0, "riichiSticks": 1, "riichiSeats": ["north"]}
+        with patch("board_metadata.recognize_board", return_value=metadata):
+            state, observed, _ = operator.frame_metadata_state(Path("frame.png"), observation)
+        self.assertTrue(state["opponents"][0]["riichi"])
+        self.assertEqual(state["opponents"][0]["seat"], "north")
+        self.assertTrue(observed["opponentDiscards"][0]["riichiDeclared"])
+        self.assertEqual(operator.public_state["opponents"], [])
+        self.assertFalse(observation["opponentDiscards"][0]["riichiDeclared"])
+
     def test_force_auto_public_prompt_uses_same_hybrid_backend_as_cache(self) -> None:
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
         operator.root = Path.cwd()

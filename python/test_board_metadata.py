@@ -3,10 +3,19 @@ import tempfile
 import importlib.util
 from pathlib import Path
 from PIL import Image
-from board_metadata import parse_board_tokens, recognize_board, remap_seats
+from board_metadata import parse_board_tokens, recognize_board, recognize_riichi_sticks, remap_seats
 
 
 class BoardMetadataTest(unittest.TestCase):
+    def test_verified_hud_stick_rotates_with_actual_own_wind(self):
+        root = Path(__file__).resolve().parents[1]
+        with Image.open(root / "artifacts/live/opponent-riichi-missed-20260928.jpg") as image:
+            self.assertEqual(recognize_riichi_sticks(image, "west"), ["north"])
+        with Image.open(root / "artifacts/live/red-ron-prompt-20260928.png") as image:
+            self.assertEqual(recognize_riichi_sticks(image, "north"), ["north"])
+        with Image.open(root / "artifacts/live/ron-next-round-score-20260928.png") as image:
+            self.assertEqual(recognize_riichi_sticks(image, "west"), [])
+
     @unittest.skipUnless(importlib.util.find_spec("rapidocr"), "optional OCR dependencies not installed")
     def test_consecutive_real_ocr_calls_reset_detection_after_counter_reads(self):
         frame = Path(__file__).resolve().parents[1] / "artifacts/live/board-metadata-east4-south-20260928.png"
