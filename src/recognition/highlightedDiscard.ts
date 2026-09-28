@@ -19,7 +19,10 @@ export async function recognizeHighlightedDiscard(
     if (!region) continue;
     if (region.candidateCount !== region.recognized.length) return undefined;
     for (const [index, tile] of region.recognized.entries()) {
-      const pad = 6;
+      // The green outline can sit outside the segmented white tile face.
+      // Ten pixels covers the verified dragon prompt without lowering the
+      // minimum evidence or the dominance / last-tile / identity guards.
+      const pad = 10;
       const left = tile.x - pad, top = tile.y - pad;
       const cropWidth = tile.width + pad * 2, cropHeight = tile.height + pad * 2;
       if (left < 0 || top < 0 || left + cropWidth > width || top + cropHeight > height) return undefined;

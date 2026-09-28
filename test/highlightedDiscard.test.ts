@@ -54,3 +54,25 @@ test("target triangle disambiguates a border spilling onto the previous right di
   assert.equal(await recognizeHighlightedDiscard(frame,
     { rightDiscards: { ...region, recognized: region.recognized.slice(0, -1) } }, "west"), undefined);
 });
+
+test("recognizes the green dragon prompt whose outline lies beyond six pixels", async () => {
+  const frame = "artifacts/live/green-dragon-pon-missed-after-called-river-removal-20260928.png";
+  const detected = (await detectConfiguredPublicRegions(frame, layout, { luminanceThreshold: 200 })).leftDiscards!;
+  assert.equal(detected.gridValid, true);
+  const region: PublicTileRecognitionRegion = {
+    backend: "hybrid", candidateCount: detected.candidates.length,
+    rotationToUpright: 270, classificationSafe: true,
+    recognized: detected.candidates.map((c, i) => ({ ...c,
+      tile: i === detected.candidates.length - 1 ? "F" : "P",
+      safe: true, confidence: 1, runnerUpConfidence: 0, ambiguityMargin: 1 })),
+  };
+  assert.deepEqual(await recognizeHighlightedDiscard(frame, { leftDiscards: region }),
+    { tile: "F", fromSeat: "north" });
+  const unsafeLast = { ...region, recognized: region.recognized.map((tile, i) =>
+    i === region.recognized.length - 1 ? { ...tile, safe: false } : tile) };
+  assert.equal(await recognizeHighlightedDiscard(frame, { leftDiscards: unsafeLast }), undefined);
+  assert.equal(await recognizeHighlightedDiscard(frame,
+    { leftDiscards: { ...region, classificationSafe: false } }), undefined);
+  assert.equal(await recognizeHighlightedDiscard(frame,
+    { leftDiscards: { ...region, recognized: region.recognized.slice(0, -1) } }), undefined);
+});
