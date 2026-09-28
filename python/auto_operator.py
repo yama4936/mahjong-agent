@@ -527,6 +527,21 @@ def geometric_open_meld_count(screenshot: bytes, layout: dict[str, Any]) -> int 
     return None
 
 
+def geometric_reaction_open_meld_count(screenshot: bytes, layout: dict[str, Any]) -> int | None:
+    """Verify a compact opponent-turn row, never a self draw or closed row."""
+    slots = layout.get("handSlots", [])
+    if len(slots) < 13 or not own_meld_surface_visible(screenshot, layout):
+        return None
+    occupied = [is_draw_slot_occupied(screenshot, slot) for slot in slots]
+    for melds in range(1, 5):
+        count = 13 - 3 * melds
+        draw = open_hand_draw_slot(layout, melds)
+        if draw and all(occupied[:count]) and not occupied[count] \
+                and not is_draw_slot_occupied(screenshot, draw):
+            return melds
+    return None
+
+
 def discard_point_in_hand_geometry(
     point: dict[str, float], layout: dict[str, Any], open_melds: int,
 ) -> bool:
@@ -1465,7 +1480,7 @@ class PythonAutoOperator:
             self.log("reaction_call_policy_rejected", action=call_action,
                      reason="pending_discard_not_verified")
             return None
-        recognition = self.recognize_resident(screenshot, concealed_only=True)
+        recognition = self.recognize_reaction_hand(screenshot)
         expected = 13 - getattr(self, "cached_open_melds", 0) * 3
         if len(recognition.get("tiles", [])) != expected:
             self.log("reaction_call_policy_rejected", action=call_action,
@@ -1501,7 +1516,7 @@ class PythonAutoOperator:
         if not region or (not contextual_prompt_verified
                           and not is_force_auto_pass_prompt(screenshot.read_bytes(), region)):
             return None
-        recognition = self.recognize_resident(screenshot, concealed_only=True)
+        recognition = self.recognize_reaction_hand(screenshot)
         expected_concealed = 13 - getattr(self, "cached_open_melds", 0) * 3
         if len(recognition.get("tiles", [])) != expected_concealed:
             return None
@@ -1519,6 +1534,24 @@ class PythonAutoOperator:
                 "center": point, "source": "force_auto_fixed_geometry",
             },
         }
+
+    def recognize_reaction_hand(self, screenshot: Path) -> dict[str, Any]:
+        open_melds = getattr(self, "cached_open_melds", 0)
+        if not open_melds and getattr(self, "layout", {}).get("handSlots"):
+            frame = screenshot.read_bytes()
+            candidate = geometric_reaction_open_meld_count(frame, self.layout)
+            if candidate is not None:
+                recovered = self.stable_open_meld_count(candidate, frame)
+                if recovered is not None:
+                    open_melds = self.cached_open_melds = recovered
+                    self.dynamic_layout_required = True
+                    self.log("reaction_open_hand_recovered", openMelds=recovered,
+                             source="stable_compact_row_empty_draw_and_own_meld_surface")
+        if open_melds:
+            return self.recognize_resident(
+                screenshot, concealed_only=True, dynamic_layout=True, open_melds=open_melds,
+            )
+        return self.recognize_resident(screenshot, concealed_only=True)
 
     def observe_public_board(self, screenshot: Path) -> dict[str, Any] | None:
         command = [

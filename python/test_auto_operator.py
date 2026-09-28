@@ -14,6 +14,7 @@ from unittest.mock import Mock, patch
 
 from auto_operator import PythonAutoOperator, RetryableSafetyAbort, action_deadline_timing, away_resume_geometry, closed_concealed_row_visible, crop_screenshot, discard_point_in_hand_geometry, force_auto_call_buttons, force_auto_chi_choice_points, force_auto_reaction_win_button, force_auto_self_action_buttons, geometric_open_meld_count, is_away_resume_dialog, is_contextual_reaction_pass, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, mean_pixel_delta, merge_public_observations, open_hand_draw_slot, own_meld_surface_visible, post_call_transition, selected_tile_comparison_region, send_discard_click, should_guard_tenpai_reaction, should_process_reaction_prompt, stable_hand_comparison_region, stable_hand_delta
 from screen_state import classify_screen, load_references
+from auto_operator import geometric_reaction_open_meld_count
 
 
 class RecordingMouse:
@@ -1056,6 +1057,37 @@ class AwayDialogDetectionTest(unittest.TestCase):
 
             self.assertEqual(result["status"], "reaction_prompt")
             self.assertEqual(result["actionButton"]["action"], "pass")
+            operator.recognize_resident.assert_called_once_with(
+                screenshot, concealed_only=True, dynamic_layout=True, open_melds=1,
+            )
+
+    def test_restart_on_live_open_reaction_recovers_only_after_two_frames(self) -> None:
+        project = Path(__file__).resolve().parents[1]
+        frame = project / "artifacts" / "live" / "open-pon-prompt-20260928.png"
+        layout = load_json(project / "config" / "layout.json")
+        self.assertEqual(geometric_reaction_open_meld_count(frame.read_bytes(), layout), 1)
+        closed = project / "artifacts" / "live" / "closed-self-draw-20260928.png"
+        self.assertIsNone(geometric_reaction_open_meld_count(closed.read_bytes(), layout))
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.layout = layout
+        operator.cached_open_melds = 0
+        operator.open_meld_candidate = None
+        operator.open_meld_candidate_frames = set()
+        operator.recognize_resident = Mock(return_value={"tiles": ["1m"] * 10})
+        operator.log = Mock()
+        operator.recognize_reaction_hand(frame)
+        self.assertEqual(operator.cached_open_melds, 0)
+        operator.recognize_resident.assert_called_with(frame, concealed_only=True)
+        with tempfile.TemporaryDirectory() as directory:
+            second = Path(directory) / "second.png"
+            image = Image.open(frame).convert("RGB")
+            image.putpixel((1500, 800), (0, 0, 0))
+            image.save(second)
+            operator.recognize_reaction_hand(second)
+            self.assertEqual(operator.cached_open_melds, 1)
+            operator.recognize_resident.assert_called_with(
+                second, concealed_only=True, dynamic_layout=True, open_melds=1,
+            )
 
     def test_force_auto_post_discard_verifier_keeps_exact_multiset_check(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
