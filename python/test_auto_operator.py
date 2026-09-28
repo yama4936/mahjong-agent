@@ -107,6 +107,79 @@ class RecordingMouse:
 
 
 class ActionDeadlineTest(unittest.TestCase):
+    def test_execute_shimmer_fallback_clicks_only_after_identity_and_same_generation(self) -> None:
+        project = Path(__file__).resolve().parents[1]
+        before = (project / "artifacts/live/riichi-shimmer-hand-before-20260928.jpg").read_bytes()
+        after = (project / "artifacts/live/riichi-shimmer-hand-after-20260928.jpg").read_bytes()
+        tiles = ["3m", "3m", "0m", "7m", "3p", "4p", "5p", "6p", "8p", "8p", "2s", "3s", "4s", "6p"]
+        for same_generation, verified in [(True, True), (True, False), (False, True)]:
+            operator = PythonAutoOperator.__new__(PythonAutoOperator)
+            operator.args = argparse.Namespace(mode="force-auto", allow_local_discard=False, stability_pixel_delta=1.5)
+            operator.layout = load_json(project / "config/layout-300-regression.json")
+            operator.hand_clip = {"x": 223, "y": 926, "width": 1355, "height": 146}
+            operator.river_clip = {"x": 770, "y": 535, "width": 390, "height": 225}
+            operator.cached_open_melds = 0
+            operator.screencast_session = Mock()
+            operator.latest_screencast_frame = after
+            operator.screencast_draw_generation = 5 if same_generation else 6
+            operator.verify_closed_hand_identity = Mock(return_value=verified)
+            operator.require_action_deadline = Mock()
+            operator.log = Mock()
+            operator.confirm_discard = Mock(return_value={"confirmation": "test"})
+            page = Mock()
+            evaluation = {"decision": {"selectedAction": {"action": "discard", "tile": "6p"}},
+                          "recognition": {"tiles": tiles, "safe": False}, "clickIndex": 13}
+            with patch("auto_operator.stable_hand_delta", return_value=3.0):
+                if same_generation and verified:
+                    self.assertTrue(operator.execute(page, evaluation, crop_screenshot(before, operator.hand_clip),
+                                                    before, 5)["clicked"])
+                    page.mouse.click.assert_called_once()
+                else:
+                    with self.assertRaises(RetryableSafetyAbort):
+                        operator.execute(page, evaluation, crop_screenshot(before, operator.hand_clip), before, 5)
+                    page.mouse.click.assert_not_called()
+            if not same_generation:
+                operator.verify_closed_hand_identity.assert_not_called()
+
+    def test_closed_hand_identity_requires_safe_ordered_red_aware_consensus(self) -> None:
+        expected = ["3m", "3m", "0m", "7m", "3p", "4p", "5p", "6p", "8p", "8p", "2s", "3s", "4s", "6p"]
+        with tempfile.TemporaryDirectory() as directory:
+            operator = PythonAutoOperator.__new__(PythonAutoOperator)
+            operator.args = argparse.Namespace(evaluation_timeout=20)
+            operator.frames = Path(directory)
+            operator.root = Path.cwd()
+            operator.layout_path = Path("layout.json")
+            operator.templates = Path("templates")
+            operator.evaluator_env = {}
+            operator.screencast_draw_generation = 5
+            operator.screencast_draw_occupied = True
+            operator.cached_open_melds = 0
+            operator.action_deadline_remaining_ms = Mock(return_value=300000)
+            operator.log = Mock()
+            for tiles, safe, accepted in [(expected, True, True), (expected, False, False),
+                    (["5m" if t == "0m" else t for t in expected], True, False),
+                    ([expected[3], *expected[1:3], expected[0], *expected[4:]], True, False),
+                    (expected[:-1], True, False)]:
+                with patch("auto_operator.subprocess.run", return_value=argparse.Namespace(
+                        returncode=0, stdout=json.dumps({"safe": safe, "tiles": tiles}))) as run:
+                    self.assertEqual(operator.verify_closed_hand_identity(Mock(), expected, b"frame", 5), accepted)
+                    self.assertIn("--backend=hybrid", run.call_args.args[0])
+            page = Mock()
+            page.wait_for_timeout.side_effect = lambda _: setattr(operator, "screencast_draw_generation", 6)
+            with patch("auto_operator.subprocess.run", return_value=argparse.Namespace(
+                    returncode=0, stdout=json.dumps({"safe": True, "tiles": expected}))):
+                self.assertFalse(operator.verify_closed_hand_identity(page, expected, b"frame", 5))
+            with patch("auto_operator.subprocess.run") as run:
+                self.assertFalse(operator.verify_closed_hand_identity(Mock(), expected, b"frame", 5))
+                run.assert_not_called()
+            operator.screencast_draw_generation = 5
+            operator.latest_screencast_frame = b"frame"
+            operator.layout = {"viewport": {"width": 1920, "height": 1080}}
+            with patch("auto_operator.subprocess.run", return_value=argparse.Namespace(
+                    returncode=0, stdout=json.dumps({"safe": True, "tiles": expected}))), \
+                    patch("auto_operator.is_away_resume_dialog", return_value=True):
+                self.assertFalse(operator.verify_closed_hand_identity(Mock(), expected, b"frame", 5))
+
     def test_missing_public_context_requests_refresh_without_resetting_deadline(self) -> None:
         for reason in ("stale", "invalid_capture_time", None):
             operator = PythonAutoOperator.__new__(PythonAutoOperator)

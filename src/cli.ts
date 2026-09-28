@@ -61,6 +61,16 @@ async function main(): Promise<void> {
     const templates = process.argv[5];
     if (!screenshot || !layoutPath || !templates) throw new Error("Usage: npm run recognize -- screenshot.png layout.json templates/");
     const layout = layoutSchema.parse(JSON.parse(await readFile(layoutPath, "utf8")));
+    if (process.argv.includes("--backend=hybrid")) {
+      const recognizer = new HybridTileRecognizer();
+      try {
+        console.log(JSON.stringify(await recognizer.recognizeHand(screenshot,
+          process.argv.includes("--concealed-only") ? { ...layout, drawSlot: undefined } : layout)));
+      } finally {
+        await recognizer.close();
+      }
+      return;
+    }
     console.log(JSON.stringify(process.argv.includes("--concealed-only")
       ? await recognizeTileSlots(screenshot, layout.handSlots, layout, templates)
       : await recognizeHand(screenshot, layout, templates), null, 2));

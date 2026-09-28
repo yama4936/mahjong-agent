@@ -1922,6 +1922,40 @@ class PythonAutoOperator:
             raise RuntimeError(f"{action} template set does not match its calibration certificate")
         return observed
 
+    def verify_closed_hand_identity(self, page: Page, expected: list[str], frame: bytes, generation: int) -> bool:
+        if not getattr(self.args, "evaluation_timeout", None):
+            return False
+        if len(expected) != 14 or getattr(self, "cached_open_melds", 0) != 0:
+            return False
+        if self.screencast_draw_generation != generation:
+            return False
+        path = self.frames / f"{utc_stamp()}.identity.jpg"
+        path.write_bytes(frame)
+        remaining = self.action_deadline_remaining_ms()
+        timeout = min(self.args.evaluation_timeout, remaining / 1000) if remaining is not None else self.args.evaluation_timeout
+        if timeout <= 0:
+            return False
+        try:
+            result = subprocess.run(
+                ["node", "dist/src/cli.js", "recognize", str(path), str(self.layout_path),
+                 str(self.templates), "--backend=hybrid"],
+                cwd=self.root, env=self.evaluator_env, text=True, encoding="utf-8",
+                capture_output=True, timeout=timeout, check=False,
+            )
+            fresh = json.loads(result.stdout) if result.returncode == 0 else {}
+        except (subprocess.TimeoutExpired, ValueError):
+            return False
+        page.wait_for_timeout(1)
+        verified = fresh.get("safe") is True and fresh.get("tiles") == expected \
+            and self.screencast_draw_generation == generation \
+            and self.screencast_draw_occupied is True
+        latest = getattr(self, "latest_screencast_frame", None)
+        if latest is not None and is_away_resume_dialog(latest, self.layout["viewport"]):
+            verified = False
+        self.log("hand_identity_checked", screenshot=str(path), verified=verified,
+                 confidence=fresh.get("confidence"), ambiguityMargin=fresh.get("ambiguityMargin"))
+        return verified
+
     def execute(
         self, page: Page, evaluation: dict[str, Any], evaluated_hand: bytes | None = None,
         evaluated_full: bytes | None = None, evaluated_draw_generation: int | None = None,
@@ -2049,9 +2083,15 @@ class PythonAutoOperator:
                     focused_evaluated_hand, focused_hand_before, trusted_open_melds,
                 )
                 if evaluated_delta > self.args.stability_pixel_delta:
-                    raise RetryableSafetyAbort(
-                        f"hand changed since evaluation (pixel delta={evaluated_delta:.3f})"
-                    )
+                    identity_verified = same_draw_generation and trusted_open_melds == 0 \
+                        and selected_action in {"discard", "riichi"} \
+                        and self.verify_closed_hand_identity(
+                            page, recognition.get("tiles", []), pre_click_full, evaluated_draw_generation,
+                        )
+                    if not identity_verified:
+                        raise RetryableSafetyAbort(
+                            f"hand changed since evaluation (pixel delta={evaluated_delta:.3f})"
+                        )
         river_before = crop_screenshot(pre_click_full, self.river_clip)
         if not (force_auto and screencast_session is not None):
             page.wait_for_timeout(120)
