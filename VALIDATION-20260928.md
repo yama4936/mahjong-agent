@@ -1796,3 +1796,16 @@ process/session48041の存続と新しいログを確認し、再起動せず継
 矢印なしの場合は呼び出し元の枠判定へ戻す必要があり、0だけで
 鳴きを許可・禁止してはならない。補正候補は認識器本体には未接続。
 promptArrow.test.tsは3件成功、npm run build成功。
+
+## 南2局途中までの操作・鳴き見送り集計
+
+14:48頃の固定実行ログでdecision92件。
+execution.confirmationは全92件hand_and_own_river_changed、未確認0。
+記録された打牌のevidenceToClickMs最長21844ms、deadlineMet=falseは0。
+これは300000ms機能条件の結果で、短時間条件や牌認識正解を保証しない。
+reaction_call_policy_rejected33件中、対象牌確認失敗13、strategy_selected_pass20。
+reaction_discard_verified21件、chi/pon/minkanのaction_click_sentは0。
+13件全てが同じ矢印原因か、全て本来鳴くべきだったかは未確認。
+実行時間不足より対象牌認識の阻害が確認されており、
+矢印補正接続後には対象牌確認成功数と戦略見送り数を別々に比較する。
+現時点の南2局1本場HUDは自家西25000点、残39枚。
