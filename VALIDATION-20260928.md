@@ -1060,3 +1060,13 @@ fallbackのlayout.example.jsonも高さ82から100へ変更した。
 npm testは158件成功、skipなし（26.796秒）。追加の字牌画像を含むドラテストを
 再実行して成功（2.818秒）。npm run build成功。
 修正版300+0実対局の再検証と独立認識の七筒誤認は引き続き必要。
+
+## 修正版e5e90c0の300+0実対局開始
+
+08:15:49にsession48299を開始。部屋78868、CPU簡単3人、四人半荘300+0、
+開始25000・一位必要30000・飛び有効・赤3の画面を保存した。
+証拠画像はartifacts/live/300-fixed-e5e90c0-room-settings-20260928.png。
+layout-300-regression、deadline300000ms、判断予算8000ms、board-metadata、
+advance-screens、no-dashboardで、ログはartifacts/friend-300-fixed-e5e90c0-20260928。
+08:16:19と08:16:24に東1局、自家東、全員25000、本場0・供託0・残り69を検証。
+session48299の稼働をポーリングで確認。結果未確定。実行版・設定を途中変更しない。
