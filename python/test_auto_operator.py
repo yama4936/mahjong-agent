@@ -16,6 +16,20 @@ from unittest.mock import Mock, patch
 from auto_operator import PythonAutoOperator, RetryableSafetyAbort, action_deadline_timing, away_resume_geometry, closed_concealed_row_visible, crop_screenshot, discard_point_in_hand_geometry, force_auto_call_buttons, force_auto_chi_choice_points, force_auto_reaction_win_button, force_auto_self_action_buttons, geometric_open_meld_count, is_away_resume_dialog, is_contextual_reaction_pass, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, mean_pixel_delta, merge_public_observations, open_hand_draw_slot, own_meld_surface_visible, post_call_transition, selected_tile_comparison_region, send_discard_click, should_guard_tenpai_reaction, should_process_reaction_prompt, stable_hand_comparison_region, stable_hand_delta
 from screen_state import classify_screen, load_references
 from auto_operator import geometric_reaction_open_meld_count
+from auto_operator import configure_evaluator_click_budget
+
+
+class EvaluatorClickBudgetTest(unittest.TestCase):
+    def test_default_preserves_environment_and_explicit_test_budget_is_bounded(self):
+        environment = {"FORCE_AUTO_CLICK_BUDGET_MS": "2600", "OTHER": "unchanged"}
+        self.assertIs(configure_evaluator_click_budget(environment, None, 5000), environment)
+        updated = configure_evaluator_click_budget(environment, 8000, 300000)
+        self.assertEqual(updated["FORCE_AUTO_CLICK_BUDGET_MS"], "8000")
+        self.assertEqual(updated["OTHER"], "unchanged")
+        self.assertEqual(environment["FORCE_AUTO_CLICK_BUDGET_MS"], "2600")
+        for invalid in (0, -1, 5001):
+            with self.assertRaises(ValueError):
+                configure_evaluator_click_budget(environment, invalid, 5000)
 
 
 class RecordingMouse:

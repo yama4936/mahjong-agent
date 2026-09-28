@@ -247,6 +247,8 @@ npm run watch -- examples/state.json config/layout.json templates/bootstrap \
 
 300+0秒での機能検証は`node scripts/run-operator.mjs force-auto --action-deadline-ms=300000 --advance-screens`で実行します。操作期限の既定値は5000msのままです。300秒指定で成功しても、短時間設定での性能を証明したことにはなりません。
 
+局・自風・点数のOCRを使う検証では、`python/requirements-ocr.txt`を操作用Python環境へインストールし、`--board-metadata --force-auto-click-budget-ms=8000`を追加します。認識失敗時は固定の東へ戻さず再取得します。8秒は認識＋判断用の明示予算で、Jevの待ち時間上限2300msは変わりません。操作期限より大きい予算は指定できません。
+
 `--mode=auto`は、実画面テンプレート、Jevキー、認識・判断confidence、画面安定性の全ゲートが通った場合だけクリックします。
 
 ## Python常駐オペレーター

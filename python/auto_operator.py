@@ -78,6 +78,15 @@ def load_secret_environment(project: Path, env_file: str | None) -> dict[str, st
     return environment
 
 
+def configure_evaluator_click_budget(environment: dict[str, str], budget_ms: int | None,
+                                     action_deadline_ms: int) -> dict[str, str]:
+    if budget_ms is None:
+        return environment
+    if budget_ms <= 0 or budget_ms > action_deadline_ms:
+        raise ValueError("force-auto click budget must be positive and within the action deadline")
+    return {**environment, "FORCE_AUTO_CLICK_BUDGET_MS": str(budget_ms)}
+
+
 def clip_for_hand(layout: dict[str, Any]) -> dict[str, float]:
     slots = [*layout["handSlots"]]
     if layout.get("drawSlot"):
@@ -678,6 +687,9 @@ class PythonAutoOperator:
             base_layout = load_json(base_layout_path)
             self.layout["actionButtonRegions"] = base_layout.get("actionButtonRegions", {})
         self.evaluator_env = load_secret_environment(self.root, args.env_file)
+        self.evaluator_env = configure_evaluator_click_budget(
+            self.evaluator_env, getattr(args, "force_auto_click_budget_ms", None), args.action_deadline_ms,
+        )
         self.hand_clip = clip_for_hand(self.layout)
         action_regions = list(self.layout.get("actionButtonRegions", {}).values())
         self.action_clip = None
@@ -2895,6 +2907,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--state", required=True)
     parser.add_argument("--board-metadata", action="store_true",
                         help="require current-frame OCR metadata for evaluation; install requirements-ocr.txt")
+    parser.add_argument("--force-auto-click-budget-ms", type=int, default=None,
+                        help="explicit recognition+decision budget; 8000 for OCR in 300+0 tests, must fit action deadline")
     parser.add_argument("--env-file", default=".env.local", help="private Jev environment file; use an empty value to disable")
     parser.add_argument("--artifacts", default="artifacts/python-auto")
     parser.add_argument("--mode", choices=("observer", "advisor", "auto", "force-auto"), default="advisor",
