@@ -107,6 +107,34 @@ class RecordingMouse:
 
 
 class ActionDeadlineTest(unittest.TestCase):
+    def test_missing_public_context_requests_refresh_without_resetting_deadline(self) -> None:
+        for reason in ("stale", "invalid_capture_time", None):
+            operator = PythonAutoOperator.__new__(PythonAutoOperator)
+            operator.args = argparse.Namespace(mode="force-auto", public_cache=True)
+            operator.schedule_public_recognition = Mock()
+            operator.log = Mock()
+            operator.action_evidence_started_at = 123.0
+            cache = {"applied": False, **({"ignoredReason": reason} if reason else {})}
+            evaluation = {"status": "decision", "decision": {"selectedAction": {"action": "discard"}}, "publicCache": cache}
+            self.assertTrue(operator.defer_missing_public_context(evaluation, b"current-frame"))
+            operator.schedule_public_recognition.assert_called_once_with(b"current-frame", force=True)
+            self.assertEqual(operator.action_evidence_started_at, 123.0)
+
+    def test_public_context_gate_preserves_wins_and_explicit_cache_disabled_mode(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(mode="force-auto", public_cache=True)
+        operator.schedule_public_recognition = Mock()
+        operator.log = Mock()
+        for action in ("tsumo", "ron", "ankan"):
+            evaluation = {"status": "decision", "decision": {"selectedAction": {"action": action}}, "publicCache": {"applied": False}}
+            self.assertFalse(operator.defer_missing_public_context(evaluation, b"frame"))
+        evaluation = {"status": "decision", "decision": {"selectedAction": {"action": "riichi"}}, "publicCache": {"applied": True}}
+        self.assertFalse(operator.defer_missing_public_context(evaluation, b"frame"))
+        operator.args.public_cache = False
+        evaluation["publicCache"]["applied"] = False
+        self.assertFalse(operator.defer_missing_public_context(evaluation, b"frame"))
+        operator.schedule_public_recognition.assert_not_called()
+
     def test_explicit_300_second_test_clock_does_not_expire_after_five_seconds(self) -> None:
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
         operator.args = argparse.Namespace(action_deadline_ms=300000)

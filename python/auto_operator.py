@@ -922,14 +922,14 @@ class PythonAutoOperator:
                 except subprocess.TimeoutExpired:
                     self.public_recognition_server.kill()
 
-    def schedule_public_recognition(self, screenshot: bytes) -> None:
+    def schedule_public_recognition(self, screenshot: bytes, *, force: bool = False) -> None:
         server = self.public_recognition_server
         if not server or server.poll() is not None:
             return
         if self.public_recognition_thread and self.public_recognition_thread.is_alive():
             return
         frame_hash = perceptual_hash(screenshot)
-        if frame_hash == self.public_cache_last_frame_hash:
+        if not force and frame_hash == self.public_cache_last_frame_hash:
             return
         self.public_cache_last_frame_hash = frame_hash
         captured_at = datetime.now(timezone.utc).isoformat()
@@ -1168,6 +1168,18 @@ class PythonAutoOperator:
         if response.get("error"):
             raise RuntimeError(f"resident recognition failed: {response['error']}")
         return response["result"]
+
+    def defer_missing_public_context(self, evaluation: dict[str, Any], frame: bytes) -> bool:
+        if self.args.mode != "force-auto" or not getattr(self.args, "public_cache", False):
+            return False
+        action = evaluation.get("decision", {}).get("selectedAction", {}).get("action")
+        cache = evaluation.get("publicCache", {})
+        if evaluation.get("status") != "decision" or action not in {"discard", "riichi"} or cache.get("applied"):
+            return False
+        self.schedule_public_recognition(frame, force=True)
+        self.log("public_context_deferred", reason=cache.get("ignoredReason", "not_available"),
+                 ageMs=cache.get("ageMs"))
+        return True
 
     def frame_metadata_state(self, screenshot: Path, observation=None, pending=None, *, refresh_public_cache=False):
         from board_metadata import recognize_board, remap_seats
@@ -2829,6 +2841,11 @@ class PythonAutoOperator:
                             )
                             page.wait_for_timeout(max(20, round(self.args.poll * 1000)))
                             continue
+                    if self.defer_missing_public_context(evaluation, evaluation_frame):
+                        self.last_processed_hand = None
+                        self.armed = True
+                        page.wait_for_timeout(max(100, round(self.args.poll * 1000)))
+                        continue
                     inferred_open_melds = evaluation.get("openMelds", 0)
                     verified_visible_open_melds = self.verified_visible_open_meld_count(
                         inferred_open_melds, public_observation,
