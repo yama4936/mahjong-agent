@@ -1135,3 +1135,15 @@ prompt観測の対面河は7枚、直前cachedは8枚で、ハイライトされ
 opposite-eight-man-pon-pending-missed-20260928.pngへ画像を保存した。
 この画像から河認識・ハイライト対象の照合失敗を再現し、別対象誤認防止を維持して修正する。
 鳴けば有利だったとまでは断定しない。実行中固定版は変更しない。
+
+## 修正版固定対局の安全停止
+
+session48299は08:50:56にMore than four copies of 9mでsafety_stopし、終了コード1。
+南2局、自家北55600、東18700/南9700/西15000、供託1、残り1の鳴き評価で発生。
+実行プロセス一覧にoperator/publicRecognitionServerの残留はない。
+直前public-observationはown河に9m1枚、右河2枚、左河2枚で合計5枚。
+直前の打牌判断の左河index13は3mだったが、prompt観測では9mに変わっている。
+prompt観測complete=false、対面河も空。矛盾を検出した停止であり、完走とは扱わない。
+鳴き経路はevaluate-frameのpublic状態検証例外をretryableとして扱えていない。
+今後、認識矛盾を通さず再取得へ戻す処理と、巡目更新の両方を回帰付きで修正する。
+停止前の得点やドラ・対面立直確認を、残る認識不具合の解消証拠とはしない。
