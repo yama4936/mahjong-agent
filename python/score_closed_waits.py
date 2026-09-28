@@ -33,6 +33,34 @@ def convert(tiles):
     return result
 
 
+def score_scenarios(state, cost, tsumo):
+    """Immediate four-player score changes, never final-placement predictions."""
+    scores = state.get("scores", {})
+    if set(scores) != set(WINDS):
+        return []
+    if any(isinstance(value, bool) or not isinstance(value, int) for value in scores.values()):
+        raise ValueError("Integer four-player scores required")
+    winner = state["seat"]
+    payers = [seat for seat in WINDS if seat != winner]
+    cases = [None] if tsumo else payers
+    scenarios = []
+    for payer in cases:
+        after = dict(scores)
+        if tsumo:
+            for seat in payers:
+                payment = cost["main"] if winner == "east" or seat == "east" else cost["additional"]
+                after[seat] -= payment
+                after[winner] += payment
+        else:
+            after[payer] -= cost["main"]
+            after[winner] += cost["main"]
+        best_rank = 1 + sum(value > after[winner] for seat, value in after.items() if seat != winner)
+        worst_rank = best_rank + sum(value == after[winner] for seat, value in after.items() if seat != winner)
+        scenarios.append({"payer": payer, "scores": after, "rankRange": [best_rank, worst_rank],
+            "scope": "immediate_scores_not_final_match_rank", "dealer_win": winner == "east"})
+    return scenarios
+
+
 def score_waits(state, discard, waits):
     if state.get("openMelds", 0) or state.get("melds"):
         raise ValueError("This verifier supports closed hands without melds only")
@@ -59,11 +87,13 @@ def score_waits(state, discard, waits):
                     dora_indicators=convert(state.get("doraIndicators", [])), config=config)
                 rows.append({"wait": wait, "riichi": riichi, "tsumo": tsumo,
                     "error": result.error, "han": result.han, "fu": result.fu,
-                    "yaku": [str(yaku) for yaku in result.yaku or []], "cost": result.cost})
+                    "yaku": [str(yaku) for yaku in result.yaku or []], "cost": result.cost,
+                    "scoreScenarios": score_scenarios(state, result.cost, tsumo) if result.cost else []})
     return {"library": f"mahjong=={version('mahjong')}", "discard": discard,
         "scope": "closed_hand_scoring_not_policy_ev",
         "assumptions": {"ippatsu": False, "ura_dora": False, "last_tile_bonus": False,
-            "honba_and_deposits_excluded": True, "furiten_not_checked": True}, "rows": rows}
+            "honba_and_deposits_excluded": True, "furiten_not_checked": True,
+            "riichi_self_deposit_return_cancels_on_own_win": True}, "rows": rows}
 
 
 if __name__ == "__main__":
