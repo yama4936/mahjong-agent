@@ -34,3 +34,23 @@ test("prompt highlight must dominate on a safe final discard and rotates seats",
       { leftDiscards: region }), undefined);
   }
 });
+
+test("target triangle disambiguates a border spilling onto the previous right discard", async () => {
+  const rightLayout = { ...layout, publicTileRegions: {
+    rightDiscards: { x: 1115, y: 285, width: 305, height: 250, rotationToUpright: 90 as const,
+      detectionMode: "discard_grid" as const },
+  } };
+  const frame = "artifacts/live/right-pon-highlight-spill-20260928.png";
+  const detected = (await detectConfiguredPublicRegions(frame, rightLayout, { luminanceThreshold: 190 })).rightDiscards!;
+  const region: PublicTileRecognitionRegion = {
+    backend: "hybrid", candidateCount: detected.candidates.length, rotationToUpright: 90,
+    classificationSafe: detected.gridValid === true,
+    recognized: detected.candidates.map((c, i) => ({ ...c, tile: i === detected.candidates.length - 1 ? "2m" : "P",
+      safe: true, confidence: 1, runnerUpConfidence: 0, ambiguityMargin: 1 })),
+  };
+  assert.deepEqual(await recognizeHighlightedDiscard(frame, { rightDiscards: region }, "west"),
+    { tile: "2m", fromSeat: "north" });
+  assert.equal(await recognizeHighlightedDiscard(frame, { rightDiscards: { ...region, classificationSafe: false } }, "west"), undefined);
+  assert.equal(await recognizeHighlightedDiscard(frame,
+    { rightDiscards: { ...region, recognized: region.recognized.slice(0, -1) } }, "west"), undefined);
+});
