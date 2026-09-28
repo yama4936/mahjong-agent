@@ -36,15 +36,16 @@ test("full-height dora candidate preserves man, pin and sou indicators with real
   const recognizer = new HybridTileRecognizer();
   try {
     for (const [file, expected] of [
-      ["dora-two-man-clipped-20260928.jpg", "2m"],
-      ["left-melds-chi-pon-20260928.jpg", "1p"],
-      ["adjacent-opposite-melds-20260928.jpg", "1s"],
-      ["south4-riichi-before-loss-20260928.jpg", "3m"],
+      ["dora-two-man-clipped-20260928.jpg", ["2m"]],
+      ["left-melds-chi-pon-20260928.jpg", ["1p"]],
+      ["adjacent-opposite-melds-20260928.jpg", ["1s"]],
+      ["south4-riichi-before-loss-20260928.jpg", ["3m"]],
+      ["dora-two-indicators-shimmer-20260928.jpg", ["2m", "9s"]],
     ] as const) {
       const result = await recognizeConfiguredPublicTilesWithVit(`artifacts/live/${file}`, layout, recognizer);
-      assert.equal(result.doraIndicators?.candidateCount, 1, file);
+      assert.equal(result.doraIndicators?.candidateCount, expected.length, file);
       assert.equal(result.doraIndicators?.classificationSafe, true, file);
-      assert.deepEqual(toPublicTileObservation(result).doraIndicators, [expected], file);
+      assert.deepEqual(toPublicTileObservation(result).doraIndicators, [...expected], file);
     }
   } finally {
     await recognizer.close();
