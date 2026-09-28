@@ -24,3 +24,22 @@ test("arrow evidence outside screenshot bounds is absent", async () => {
     "artifacts/live/right-green-dragon-pon-rejected-fixed-e66ef28-20260928.png",
     { x: 0, y: 0, width: 10, height: 10 }, []), 0);
 });
+
+test("face masking preserves the older right-spill triangle and does not invent an absent left arrow", async () => {
+  const layout = layoutSchema.parse(JSON.parse(await readFile("config/layout-300-regression.json", "utf8")));
+  for (const [file, threshold, name, expectedLast] of [
+    ["right-pon-highlight-spill-20260928.png", 190, "rightDiscards", 302],
+    ["green-dragon-pon-missed-after-called-river-removal-20260928.png", 200, "leftDiscards", 0],
+  ] as const) {
+    const frame = `artifacts/live/${file}`;
+    const regions = await detectConfiguredPublicRegions(frame, layout, { luminanceThreshold: threshold });
+    const faces = Object.entries(regions).filter(([key]) => key.endsWith("Discards"))
+      .flatMap(([, region]) => region!.candidates);
+    const counts = await Promise.all(regions[name]!.candidates.map(tile =>
+      countPromptArrowOutsideFaces(frame, tile, faces)));
+    assert.equal(counts.at(-1), expectedLast);
+    assert.ok(counts.slice(0, -1).every(count => count === 0));
+    // Zero arrow evidence must leave border fallback to the caller; it does
+    // not imply a highlighted-discard decision is forbidden or authorized.
+  }
+});
