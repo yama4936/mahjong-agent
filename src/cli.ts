@@ -101,7 +101,11 @@ async function main(): Promise<void> {
     const suppliedPublicState = parsePublicGameState({ ...rawPublicState, ...observedPatch });
     const pendingParts = pendingDiscardArgument?.split(",");
     const publicState = pendingParts?.length === 2
-      ? parsePublicGameState({ ...suppliedPublicState, phase: "reaction", pendingDiscard: { tile: pendingParts[0], fromSeat: pendingParts[1] } })
+      ? parsePublicGameState({ ...suppliedPublicState, phase: "reaction", pendingDiscard: {
+          tile: pendingParts[0], fromSeat: pendingParts[1],
+          inRiver: Boolean(observedBoard?.opponentDiscards?.some((opponent: any) =>
+            opponent.seat === pendingParts[1] && opponent.discards?.at(-1) === pendingParts[0])),
+        } })
       : suppliedPublicState;
     const actionMatches = actionTemplatesArgument
       ? await recognizeActionButtons(screenshot, layout, actionTemplatesArgument, modeArgument === "force-auto" ? 0 : 0.98)

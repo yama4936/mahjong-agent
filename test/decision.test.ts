@@ -26,6 +26,21 @@ test("live south-three highlighted chi is passed without shanten gain or viable 
   assert.deepEqual(assessment?.reasons, ["no_strict_shanten_improvement", "no_viable_yaku_path"]);
 });
 
+test("live sequence-heavy seven-sou pon cannot claim an unsupported toitoi path", async () => {
+  const reaction = parseGameState({
+    phase: "reaction", round: "south_4", seat: "east",
+    hand: ["5m", "6m", "7m", "8m", "9m", "2p", "3p", "4p", "7s", "7s", "8s", "8s", "9s"],
+    opponents: [{ seat: "south", discards: ["7s", "4s", "7s"] }],
+    pendingDiscard: { tile: "7s", fromSeat: "south", inRiver: true },
+    availableUiActions: ["pon", "pass"], recognitionConfidence: 1,
+  });
+  const decision = await decide(reaction, { mode: "advisor" });
+  assert.equal(decision.selectedAction.action, "pass");
+  assert.equal(decision.callAssessments?.[0]?.shantenImprovement, 1);
+  assert.deepEqual(decision.callAssessments?.[0]?.candidateYaku, []);
+  assert.ok(decision.callAssessments?.[0]?.reasons.includes("no_viable_yaku_path"));
+});
+
 test("advisor produces a recommendation but is never executable", async () => {
   const result = await decide(state, { mode: "advisor" });
   assert.equal(result.tile, "E");

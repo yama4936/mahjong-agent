@@ -365,7 +365,9 @@ function yakuForCall(state: GameState, action: CallAction): { confirmed: string[
   const counts = new Map<string, number>();
   for (const tile of state.hand.map(normalizeTile)) counts.set(tile, (counts.get(tile) ?? 0) + 1);
   if ([...honors].some((tile) => (counts.get(tile) ?? 0) >= 2)) candidates.push("yakuhai");
-  if (state.melds.every((meld) => meld.type !== "chi") && action.action !== "chi") candidates.push("toitoi");
+  const pairOrTripletTypes = [...counts.values()].filter((count) => count >= 2).length;
+  if (state.melds.every((meld) => meld.type !== "chi") && action.action !== "chi"
+    && pairOrTripletTypes + state.openMelds >= 4) candidates.push("toitoi");
   return { confirmed: [...new Set(confirmed)], candidates: [...new Set(candidates)] };
 }
 

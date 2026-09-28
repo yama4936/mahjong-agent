@@ -26,7 +26,7 @@ const gameStateObjectSchema = z.object({
   turn: z.number().int().nonnegative().default(0),
   remainingTiles: z.number().int().min(0).max(70).optional(),
   phase: z.enum(["self_turn", "reaction"]).default("self_turn"),
-  pendingDiscard: z.object({ tile: tileSchema, fromSeat: seatSchema }).optional(),
+  pendingDiscard: z.object({ tile: tileSchema, fromSeat: seatSchema, inRiver: z.boolean().optional() }).optional(),
   recognitionConfidence: z.number().min(0).max(1).default(1),
   publicStateConfidence: z.number().min(0).max(1).default(0),
   riichiDeclared: z.boolean().default(false),
@@ -87,6 +87,16 @@ function assertHighConfidencePublicState(state: PublicGameState): void {
  * for known tiles that are not already represented by another state field
  * (for example, called meld tiles once meld recognition is added).
  */
+function pendingTileOutsideRiver(state: Pick<GameState, "pendingDiscard" | "opponents">): GameTile[] {
+  const pending = state.pendingDiscard;
+  if (!pending) return [];
+  if (!pending.inRiver) return [pending.tile];
+  const rivers = state.opponents.filter((opponent) => opponent.seat === pending.fromSeat);
+  if (rivers.length !== 1 || rivers[0]!.discards.at(-1) !== pending.tile)
+    throw new Error("Pending discard marked inRiver must match its opponent river tail");
+  return [];
+}
+
 export function knownTiles(state: GameState): GameTile[] {
   return [
     ...state.hand,
@@ -96,7 +106,7 @@ export function knownTiles(state: GameState): GameTile[] {
     ...state.melds.flatMap((meld) => meld.tiles),
     ...state.visibleTiles,
     ...state.opponents.flatMap((opponent) => opponent.discards),
-    ...(state.pendingDiscard ? [state.pendingDiscard.tile] : []),
+    ...pendingTileOutsideRiver(state),
   ];
 }
 
@@ -107,7 +117,7 @@ export function knownTilesOutsideHand(state: GameState): GameTile[] {
     ...state.melds.flatMap((meld) => meld.tiles),
     ...state.visibleTiles,
     ...state.opponents.flatMap((opponent) => opponent.discards),
-    ...(state.pendingDiscard ? [state.pendingDiscard.tile] : []),
+    ...pendingTileOutsideRiver(state),
   ];
 }
 
@@ -141,7 +151,7 @@ export function parsePublicGameState(input: unknown): PublicGameState {
     ...state.melds.flatMap((meld) => meld.tiles),
     ...state.visibleTiles,
     ...state.opponents.flatMap((opponent) => opponent.discards),
-    ...(state.pendingDiscard ? [state.pendingDiscard.tile] : []),
+    ...pendingTileOutsideRiver(state),
   ]);
   return state;
 }
