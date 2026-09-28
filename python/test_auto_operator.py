@@ -1986,6 +1986,14 @@ class AwayDialogDetectionTest(unittest.TestCase):
         ]}
         self.assertEqual(PythonAutoOperator.infer_pending_discard(previous, current),
                          {"tile": "5s", "fromSeat": "east"})
+        current["opponentDiscards"][1]["discards"] = ["2p", "3p", "4p"]
+        self.assertIsNone(PythonAutoOperator.infer_pending_discard(previous, current))
+        current["opponentDiscards"][1]["discards"] = ["9p"]
+        self.assertIsNone(PythonAutoOperator.infer_pending_discard(previous, current))
+        current["opponentDiscards"][1]["discards"] = ["2p"]
+        current["ownDiscards"] = ["1s"]
+        self.assertIsNone(PythonAutoOperator.infer_pending_discard(previous, current))
+        del current["ownDiscards"]
         current["opponentDiscards"][1]["discards"].append("3p")
         self.assertIsNone(PythonAutoOperator.infer_pending_discard(previous, current))
         current["opponentDiscards"][0]["discards"] = ["9m", "5s"]

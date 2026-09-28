@@ -1591,14 +1591,24 @@ class PythonAutoOperator:
     def infer_pending_discard(previous: dict[str, Any] | None, current: dict[str, Any] | None) -> dict[str, str] | None:
         if not previous or not current:
             return None
+        if previous.get("ownDiscards", []) != current.get("ownDiscards", []):
+            return None
+        previous_seats = [item.get("seat") for item in previous.get("opponentDiscards", [])]
+        current_seats = [item.get("seat") for item in current.get("opponentDiscards", [])]
+        if set(previous_seats) != set(current_seats) or len(set(current_seats)) != len(current_seats):
+            return None
         additions = []
         for opponent in current.get("opponentDiscards", []):
             prior = next((item for item in previous.get("opponentDiscards", [])
                           if item.get("seat") == opponent.get("seat")), None)
             before = prior.get("discards", []) if prior else []
             after = opponent.get("discards", [])
+            if after == before:
+                continue
             if len(after) == len(before) + 1 and after[:-1] == before:
                 additions.append({"tile": after[-1], "fromSeat": opponent["seat"]})
+            else:
+                return None
         return additions[0] if len(additions) == 1 else None
 
     def verify_post_discard(self, screenshot: bytes, before: list[str], click_index: int) -> dict[str, Any]:
