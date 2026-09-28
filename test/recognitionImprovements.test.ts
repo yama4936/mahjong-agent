@@ -67,6 +67,11 @@ test("template upper-red gate preserves red pin and sou without recoloring ordin
   assert.equal((await matchTile("artifacts/live/template-red-five-pin-20260928.jpg", layout.handSlots[4]!, templates)).tile, "0p");
   assert.equal((await matchTile("artifacts/live/riichi-shimmer-hand-before-20260928.jpg", layout.handSlots[6]!, templates)).tile, "5p");
   assert.equal((await classifyTile("templates/bootstrap/5s__hf_base.png", templates)).tile, "5s");
+  // The center-only red bamboo is an ordinary-five rendering, not an aka five.
+  // The historical fixture name reflects a withdrawn diagnosis; do not use
+  // that filename as the ground-truth red identity.
+  assert.equal((await matchTile("artifacts/live/red-five-sou-read-normal-in-fixed-regression-20260928.jpg",
+    layout.handSlots[11]!, templates)).tile, "5s");
 });
 
 test("live hand templates distinguish five through eight pin including diagonal seven", async () => {
