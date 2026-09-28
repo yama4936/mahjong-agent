@@ -124,7 +124,7 @@ for await (const line of lines) {
         ? Math.max(0, Date.now() - capturedAtMs)
         : undefined;
       const cachedPatch = request.publicObservation && cacheAgeMs !== undefined && cacheAgeMs <= maximumPublicCacheAgeMs
-        ? cachedPublicStatePatch(request.publicObservation, concealed, framePublicState.opponents)
+        ? cachedPublicStatePatch(request.publicObservation, concealed, framePublicState.opponents, inferredOpenMelds)
         : undefined;
       const cacheFreshnessIgnoredReason = request.publicObservation
         ? cacheAgeMs === undefined
@@ -141,7 +141,7 @@ for await (const line of lines) {
             availableUiActions: ["riichi", "tsumo", "kan", "kyuushu"],
           } : {}),
           openMelds: inferredOpenMelds,
-          melds: [],
+          melds: cachedPatch?.patch.melds ?? [],
           hand: recognition.tiles.slice(0, -1),
           draw: recognition.tiles.at(-1),
           recognitionConfidence: recognition.confidence,

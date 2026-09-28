@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { cachedPublicStatePatch, type CachedPublicObservation } from "../src/agent/publicCache.js";
+import { knownTiles, parseGameState } from "../src/game/state.js";
 
 test("cached public observations add dora, rivers, riichi and meld counts", () => {
   const observation: CachedPublicObservation = {
@@ -60,4 +61,25 @@ test("cached public observations discard impossible fifth visible copies", () =>
   assert.deepEqual(result.patch.doraIndicators, ["1m"]);
   assert.deepEqual(result.patch.ownDiscards, ["1m", "1m", "1m"]);
   assert.equal(result.rejectedTiles, 1);
+});
+
+test("complete own pon reaches typed game state without duplicate visible tiles", () => {
+  const observation = { doraIndicators: ["1p"], ownDiscards: [], opponentDiscards: [],
+    ownMelds: [{ type: "pon", tiles: ["F", "F", "F"], confidence: 0.98675 }],
+    ownMeldTiles: ["F", "F", "F"] } as unknown as CachedPublicObservation;
+  const concealed = ["1m", "2m", "3m", "3s", "4s", "6s", "6s", "6s", "S", "S", "2p"];
+  const result = cachedPublicStatePatch(observation, concealed, [], 1);
+  const state = parseGameState({ ...result.patch, openMelds: 1, hand: concealed.slice(0, -1), draw: concealed.at(-1) });
+  assert.deepEqual(state.melds, [{ type: "pon", tiles: ["F", "F", "F"] }]);
+  assert.deepEqual(state.visibleTiles, []);
+  assert.equal(knownTiles(state).filter(tile => tile === "F").length, 3);
+  assert.equal(result.rejectedTiles, 0);
+  for (const count of [0, 2]) {
+    assert.deepEqual(cachedPublicStatePatch(observation, concealed, [], count).patch.melds, []);
+  }
+  const partial = { ...observation, ownMeldTiles: ["F", "F"] } as CachedPublicObservation;
+  assert.deepEqual(cachedPublicStatePatch(partial, concealed, [], 1).patch.melds, []);
+  const conflict = cachedPublicStatePatch(observation, [...concealed, "F", "F"], [], 1);
+  assert.deepEqual(conflict.patch.melds, []);
+  assert.equal(conflict.rejectedTiles, 1);
 });

@@ -15,6 +15,7 @@ export function cachedPublicStatePatch(
   observation: CachedPublicObservation,
   concealedTiles: readonly string[],
   previousOpponents: PublicGameState["opponents"] = [],
+  expectedOwnMelds = 0,
 ): { patch: Record<string, unknown>; rejectedTiles: number } {
   const counts = new Map<GameTile, number>();
   let rejectedTiles = 0;
@@ -56,14 +57,32 @@ export function cachedPublicStatePatch(
     }
     opponent.melds = acceptedMelds;
   }
-  // Opponent melds are typed on each opponent, not duplicated in visibleTiles.
-  const visibleTiles = accept(observation.ownMeldTiles);
+  // Publish own groups only when all physical tiles and the independently
+  // inferred group count agree. Never publish a partial pon after copy filtering.
+  const recognizedOwnMelds = observation.ownMelds ?? [];
+  const typedTiles = recognizedOwnMelds.flatMap((meld) => meld.tiles);
+  const sameTiles = [...typedTiles].sort().join(",") === [...observation.ownMeldTiles].sort().join(",");
+  const nextCounts = new Map(counts);
+  let completeOwnMelds = expectedOwnMelds > 0 && recognizedOwnMelds.length === expectedOwnMelds && sameTiles;
+  for (const meld of recognizedOwnMelds) {
+    if (meld.tiles.length !== (meld.type === "minkan" ? 4 : 3)) completeOwnMelds = false;
+    for (const value of meld.tiles) {
+      const tile = normalizeTile(value);
+      const count = nextCounts.get(tile) ?? 0;
+      if (count >= 4) completeOwnMelds = false;
+      nextCounts.set(tile, count + 1);
+    }
+  }
+  const melds = completeOwnMelds ? recognizedOwnMelds.map(({ type, tiles }) => ({ type, tiles: [...tiles] })) : [];
+  // Typed meld tiles must not also appear in visibleTiles.
+  const visibleTiles = completeOwnMelds ? [] : accept(observation.ownMeldTiles);
   return {
     patch: {
       doraIndicators,
       ownDiscards,
       opponents,
       visibleTiles,
+      melds,
       riichiDeclared: Boolean(observation.ownRiichiDeclared),
       turn: ownDiscards.length,
       publicStateConfidence: 0,
