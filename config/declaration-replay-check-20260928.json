@@ -1,0 +1,19 @@
+{
+  "scope": "fixed_replay_model_check_not_live_match_or_win_rate",
+  "replay": "artifacts/live/south4-riichi-replay-20260928.json",
+  "stateCorrections": {
+    "south": { "openMelds": 1, "openMeldsObserved": true, "melds": [{ "type": "pon", "tiles": ["S", "S", "S"] }] },
+    "west": { "openMelds": 1, "openMeldsObserved": true, "melds": [{ "type": "chi", "tiles": ["6s", "7s", "8s"] }] },
+    "north": { "openMeldsObserved": false }
+  },
+  "tls": "same_windows_trusted_roots_as_operator",
+  "deadlineMs": 2300,
+  "minimumConfidence": 0.55,
+  "model": "jev-1.13.0",
+  "promptVersion": "mahjong-declaration-v1",
+  "trials": [
+    { "elapsedMs": 1711, "declarationLatencyMs": 197, "choice": "discard_5m", "confidence": 0.16, "probabilities": { "discard_5m": 0.58, "riichi_discard_5m": 0.42 }, "finalAction": "riichi_discard_5m", "status": "fallback" },
+    { "elapsedMs": 1239, "declarationLatencyMs": 211, "choice": "discard_5m", "confidence": 0.11, "probabilities": { "discard_5m": 0.55, "riichi_discard_5m": 0.45 }, "finalAction": "riichi_discard_5m", "status": "fallback" },
+    { "elapsedMs": 1326, "declarationLatencyMs": 287, "choice": "discard_5m", "confidence": 0.08, "probabilities": { "discard_5m": 0.54, "riichi_discard_5m": 0.46 }, "finalAction": "riichi_discard_5m", "status": "fallback" }
+  ]
+}

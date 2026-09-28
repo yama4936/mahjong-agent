@@ -35,6 +35,12 @@ test("declaration comparison can choose dama and invalid/scorer failures retain 
   const rejected = await decide(live, { mode: "advisor", jev: invalid, riichiScorer: async () => report });
   assert.equal(rejected.selectedAction.action, "riichi");
   assert.equal(rejected.declarationComparison?.status, "fallback");
+  assert.equal(rejected.declarationComparison?.report, report);
+  assert.equal(rejected.declarationComparison?.decision?.actionId, "discard_1m");
+  const uncertain = { ...jev, chooseDeclaration: async () => ({ ...choice("discard_5m"), confidence: 0.5 }) } as unknown as JevClient;
+  const low = await decide(live, { mode: "advisor", jev: uncertain, riichiScorer: async () => report });
+  assert.equal(low.selectedAction.action, "riichi");
+  assert.equal(low.declarationComparison?.decision?.confidence, 0.5);
 });
 
 test("live south-three highlighted chi is passed without shanten gain or viable yaku", async () => {

@@ -223,12 +223,16 @@ export async function decide(state: GameState, options: DecisionOptions): Promis
   concealedAfterDiscard.splice(concealedAfterDiscard.indexOf(selected.tile), 1);
   let declarationComparison: DecisionResult["declarationComparison"];
   if (selectedAction.action === "riichi" && source === "jev" && options.jev && typeof options.jev.chooseDeclaration === "function") {
+    let comparisonReport: ClosedWaitReport | undefined;
+    let comparisonDecision: JevDecision | undefined;
     try {
       const report = await (options.riichiScorer ?? scoreClosedWaits)(state, selected.tile,
         selected.effectiveTiles.map((wait) => wait.tile), options.signal ? { signal: options.signal } : {});
+      comparisonReport = report;
       const discard = legalActions.find((action) => action.action === "discard" && action.tile === selected.tile)!;
       const choices = [discard, selectedAction];
       const declaration = await options.jev.chooseDeclaration(state, choices, report, options.signal);
+      comparisonDecision = declaration;
       const chosen = choices.find((action) => action.id === declaration.actionId);
       if (!chosen || !Number.isFinite(declaration.confidence) || declaration.confidence > 1
         || declaration.confidence < minJevConfidence) throw new Error("Invalid or low-confidence declaration choice");
@@ -236,7 +240,9 @@ export async function decide(state: GameState, options: DecisionOptions): Promis
       confidence = Math.min(confidence, declaration.confidence);
       declarationComparison = { status: "selected", report, decision: declaration };
     } catch (error) {
-      declarationComparison = { status: "fallback", reason: error instanceof Error ? error.message : "Declaration comparison failed" };
+      declarationComparison = { status: "fallback", reason: error instanceof Error ? error.message : "Declaration comparison failed",
+        ...(comparisonReport ? { report: comparisonReport } : {}),
+        ...(comparisonDecision ? { decision: comparisonDecision } : {}) };
     }
   }
   const safety = { allowed: safetyReasons.length === 0, reasons: safetyReasons };
