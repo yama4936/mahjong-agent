@@ -336,3 +336,20 @@ confirmedYaku/candidateYakuとも空、no_strict_shanten_improvement/no_viable_y
 これで対象確認→合法鳴き生成→戦略評価の実戦経路は確認できたが、実際の鳴き成立は未検証。
 自分の勝率改善、放銃原因の全体分析、同条件での成績比較は引き続き未完了。
 ビルド成功、TypeScript全129件成功（28.894秒）。
+
+## 成績集計の欠損結果と分母
+
+calledRoundWinRateが結果未確認の鳴いた局も分母に含める不具合を修正。
+和了結果ラベルが一致して確認できた局だけを分母にし、矛盾・未確認局を除外。
+winSamples/dealInSamples/calledRoundWinSamplesを明示して不足を可視化。
+同じ局の重複判断、未確認、矛盾した結果を含む回帰テストを追加。
+
+ライブreplays読取時点の125判断を集計：結果画像紐付け56判断、
+won/dealInの確定ラベル0、winSamples=dealInSamples=0、両率null。
+decisionベース立直3、鳴き0、期限検証109件中違反0。
+この率は操作期限300秒のものであり短時間設定を保証しない。
+recognitionRetries=0はreplayに再試行回数が未付与なためで、operatorの再試行が0という意味ではない。
+Jevとローカルの選択差28/123は強さの比較ではない。
+結果画像だけでは勝敗指標が完成しないため、次は画像確認に基づく局結果ラベル付けと
+その分母・成績の検証が必要。最新05:35:51画像も荒牌流局（自己非聴牌）。
+ビルド成功、TypeScript全130件成功（29.637秒）。

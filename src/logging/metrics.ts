@@ -5,8 +5,10 @@ export interface DecisionMetrics {
   decisions: number;
   completedRounds: number;
   wins: number;
+  winSamples: number;
   winRate: number | null;
   dealIns: number;
+  dealInSamples: number;
   dealInRate: number | null;
   riichi: number;
   riichiRate: number | null;
@@ -14,6 +16,7 @@ export interface DecisionMetrics {
   callRate: number | null;
   calledRounds: number;
   calledRoundWins: number;
+  calledRoundWinSamples: number;
   calledRoundWinRate: number | null;
   averageWinTurn: number | null;
   tenpaiReached: number;
@@ -54,6 +57,8 @@ export function summarizeDecisionMetrics(records: readonly DecisionRecord[]): De
   const calledRoundKeys = new Set(records.filter((record) => callActions.has(record.decision.selectedAction?.action))
     .map(roundKey));
   const wonRoundKeys = new Set(rounds.filter((group) => roundBoolean(group, "won") === true).map((group) => roundKey(group[0]!)));
+  const winLabeledRoundKeys = new Set(winLabels.map((group) => roundKey(group[0]!)));
+  const calledRoundWinSamples = [...calledRoundKeys].filter((key) => winLabeledRoundKeys.has(key)).length;
   const selectedCandidates = records.flatMap((record) => {
     const selected = record.decision.candidates?.find((candidate) => candidate.actionId === record.decision.selectedActionId);
     return selected ? [selected] : [];
@@ -75,11 +80,13 @@ export function summarizeDecisionMetrics(records: readonly DecisionRecord[]): De
   const differences = comparable.filter(({ local, jev }) => local !== jev).length;
   return {
     decisions: records.length, completedRounds: completed.length,
-    wins, winRate: rate(wins, winLabels.length), dealIns, dealInRate: rate(dealIns, dealInLabels.length),
+    wins, winSamples: winLabels.length, winRate: rate(wins, winLabels.length),
+    dealIns, dealInSamples: dealInLabels.length, dealInRate: rate(dealIns, dealInLabels.length),
     riichi, riichiRate: rate(riichi, records.length), calls, callRate: rate(calls, records.length),
     calledRounds: calledRoundKeys.size,
     calledRoundWins: [...calledRoundKeys].filter((key) => wonRoundKeys.has(key)).length,
-    calledRoundWinRate: rate([...calledRoundKeys].filter((key) => wonRoundKeys.has(key)).length, calledRoundKeys.size),
+    calledRoundWinSamples,
+    calledRoundWinRate: rate([...calledRoundKeys].filter((key) => wonRoundKeys.has(key)).length, calledRoundWinSamples),
     averageWinTurn: average(winTurns),
     tenpaiReached: tenpaiObserved.filter((record) => record.actualResult?.tenpaiAtDraw === true).length,
     tenpaiRate: rate(tenpaiObserved.filter((record) => record.actualResult?.tenpaiAtDraw === true).length, tenpaiObserved.length),

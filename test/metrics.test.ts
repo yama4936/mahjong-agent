@@ -33,6 +33,34 @@ test("decision metrics do not count missing outcomes as losses", () => {
   assert.equal(summarizeDecisionMetrics([]).deadlineMissRate, null);
 });
 
+test("called-round win rate excludes missing and conflicting outcomes with explicit samples", async () => {
+  const state = parseGameState({
+    hand: ["1m", "2m", "3m", "4m", "5m", "6m", "3p", "4p", "5p", "7s", "8s", "9s", "E"], draw: "6p",
+  });
+  const decision = await decide(state, { mode: "advisor" });
+  const called = { ...decision, selectedAction: { action: "chi" } } as any;
+  const base: DecisionRecord = { schemaVersion: 1, id: "a", timestamp: new Date(0).toISOString(), state, decision: called };
+  const records: DecisionRecord[] = [
+    { ...base, id: "a", actualResult: { roundId: "known-win", won: true } },
+    { ...base, id: "b", actualResult: { roundId: "known-win", won: true } },
+    { ...base, id: "c", actualResult: { roundId: "known-loss", won: false, dealIn: true } },
+    { ...base, id: "d", actualResult: { roundId: "unknown" } },
+    { ...base, id: "e", actualResult: { roundId: "conflict", won: true } },
+    { ...base, id: "f", actualResult: { roundId: "conflict", won: false } },
+  ];
+  const result = summarizeDecisionMetrics(records);
+  assert.equal(result.calledRounds, 4);
+  assert.equal(result.calledRoundWins, 1);
+  assert.equal(result.calledRoundWinSamples, 2);
+  assert.equal(result.calledRoundWinRate, .5);
+  assert.equal(result.winSamples, 2);
+  assert.equal(result.dealInSamples, 1);
+  const unknown = summarizeDecisionMetrics([records[3]!]);
+  assert.equal(unknown.calledRounds, 1);
+  assert.equal(unknown.calledRoundWinSamples, 0);
+  assert.equal(unknown.calledRoundWinRate, null);
+});
+
 test("win rate counts rounds rather than repeated decisions in one round", async () => {
   const state = parseGameState({
     hand: ["1m", "2m", "3m", "4m", "5m", "6m", "3p", "4p", "5p", "7s", "8s", "9s", "E"], draw: "6p",
