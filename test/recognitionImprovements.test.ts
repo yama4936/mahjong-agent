@@ -68,3 +68,14 @@ test("template upper-red gate preserves red pin and sou without recoloring ordin
   assert.equal((await matchTile("artifacts/live/riichi-shimmer-hand-before-20260928.jpg", layout.handSlots[6]!, templates)).tile, "5p");
   assert.equal((await classifyTile("templates/bootstrap/5s__hf_base.png", templates)).tile, "5s");
 });
+
+test("live hand templates distinguish five through eight pin including diagonal seven", async () => {
+  const layout = layoutSchema.parse(JSON.parse(await readFile("config/layout-300-regression.json", "utf8")));
+  const templates = await loadTemplates("templates/bootstrap", file => !/(?:holdout|capture|test)/i.test(file));
+  const matches = await Promise.all([6, 7, 8, 9].map(index => matchTile(
+    "artifacts/live/hand-pin-six-seven-distinction-20260928.jpg", layout.handSlots[index]!, templates,
+  )));
+  // Human-labelled image: seven has three diagonal black pips above four red pips.
+  // Do not use the auxiliary classifier's confidence as the ground-truth label.
+  assert.deepEqual(matches.map(match => match.tile), ["5p", "6p", "7p", "8p"]);
+});
