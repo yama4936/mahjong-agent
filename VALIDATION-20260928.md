@@ -1224,3 +1224,16 @@ npm test161件成功（36.163秒、skipなし）、build成功。
 モック回帰で復帰・既存safe牌との矛盾拒否・再度unsafe・候補減少拒否を検証。
 CLI全体回帰に対面河18枚の保持を追加。実対局・勝率は未検証。
 npm test全164件成功（37.989秒、skipなし）、build/diffチェック成功。
+
+## 修正版125bd6dの300+0実対局開始
+
+09:11:41 UTC開始、room78868、四人半荘、CPU簡単3人、300+0秒、
+開始25000/一位必要30000/赤3/喰い断・飛び有効。
+設定画像300-fixed-125bd6d-room-settings-20260928.pngを保存。
+操作コマンドはforce-auto、layout-300-regression、期限300000ms、
+判断予算8000ms、board-metadata/advance-screens/no-dashboard。
+ログartifacts/friend-300-fixed-125bd6d-20260928/python-operator.jsonl。
+東1局・自家東・全員25000・本場0・供託0・残69を実OCRで確認。
+対局中に判断・認識ソースを変更しない。結果と認識改善はまだ未確定。
+前回e5e90c0は停止後のブラウザで最終1位54000を確認したが、
+南2局以降は操作プログラム停止後のため完走証拠・勝率改善へは算入しない。
