@@ -3,7 +3,6 @@ import type { Rect } from "./layout.js";
 
 /** Count green prompt-arrow pixels without treating neighboring tile glyphs
  * as arrows. All rectangles must be in screenshot coordinates.
- * This helper is not yet connected to the live highlighted-discard matcher.
  */
 export async function countPromptArrowOutsideFaces(
   screenshot: string | Buffer, tile: Rect, faces: readonly Rect[],

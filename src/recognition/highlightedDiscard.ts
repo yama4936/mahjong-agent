@@ -1,4 +1,5 @@
 import sharp from "sharp";
+import { countPromptArrowOutsideFaces } from "./promptArrow.js";
 import type { GameTile } from "../game/tiles.js";
 import type { PublicTileRegionName } from "./layout.js";
 import type { PublicTileRecognitionRegion } from "./publicTileRecognizer.js";
@@ -13,6 +14,9 @@ export async function recognizeHighlightedDiscard(
   const names = ["rightDiscards", "oppositeDiscards", "leftDiscards"] as const;
   const { width = 0, height = 0 } = await sharp(screenshot).metadata();
   if (width !== 1920 || height !== 1080) return undefined;
+  const faces = Object.entries(recognition)
+    .filter(([name]) => name.endsWith("Discards"))
+    .flatMap(([, region]) => region?.recognized ?? []);
   const evidence: Array<{ count: number; arrow: number; tile: GameTile; fromSeat: typeof seats[number]; last: boolean; safe: boolean }> = [];
   for (const [offset, name] of names.entries()) {
     const region = recognition[name];
@@ -37,16 +41,7 @@ export async function recognizeHighlightedDiscard(
       }
       // The target triangle above the face distinguishes a real highlighted
       // final tile when its border spills onto the preceding tile below it.
-      let arrow = 0;
-      const arrowLeft = Math.round(tile.x + tile.width / 2) - 20;
-      if (tile.y >= 40 && arrowLeft >= 0 && arrowLeft + 40 <= width) {
-        const arrowPixels = await sharp(screenshot).extract({ left: arrowLeft, top: tile.y - 40, width: 40, height: 30 })
-          .toColourspace("srgb").removeAlpha().raw().toBuffer();
-        for (let i = 0; i < arrowPixels.length; i += 3) {
-          const r = arrowPixels[i]!, g = arrowPixels[i + 1]!, b = arrowPixels[i + 2]!;
-          if (g > 150 && g - r > 40 && g - b > 20) arrow++;
-        }
-      }
+      const arrow = await countPromptArrowOutsideFaces(screenshot, tile, faces);
       evidence.push({ count, arrow, tile: tile.tile,
         fromSeat: seats[(seats.indexOf(ownSeat) + offset + 1) % 4]!,
         last: index === region.recognized.length - 1,
