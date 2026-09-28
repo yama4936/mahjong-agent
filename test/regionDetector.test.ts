@@ -4,6 +4,31 @@ import sharp from "sharp";
 import { detectBrightTileCandidates, detectConfiguredPublicRegions, orderDiscardGridCandidates, type RegionCandidate } from "../src/recognition/regionDetector.js";
 import { layoutSchema } from "../src/recognition/layout.js";
 
+test("separates highlighted left river faces without bypassing grid validation", async () => {
+  const layout = layoutSchema.parse({
+    viewport: { width: 1920, height: 1080 },
+    handSlots: Array.from({ length: 13 }, (_, i) => ({ x: i * 10, y: 900, width: 8, height: 30 })),
+    clickPoints: Array.from({ length: 13 }, (_, i) => ({ x: i * 10 + 4, y: 915 })),
+    publicTileRegions: {
+      leftDiscards: { x: 500, y: 285, width: 305, height: 250,
+        rotationToUpright: 270, detectionMode: "discard_grid" },
+    },
+  });
+  const frame = "artifacts/live/highlight-merged-left-river-20260928.png";
+  const before = await detectConfiguredPublicRegions(frame, layout,
+    { luminanceThreshold: 190, maximumColorSpread: 255 });
+  assert.equal(before.leftDiscards?.gridValid, false);
+  assert.equal(before.leftDiscards?.candidates.length, 8);
+  const after = await detectConfiguredPublicRegions(frame, layout, { luminanceThreshold: 190 });
+  assert.equal(after.leftDiscards?.gridValid, true);
+  assert.deepEqual(after.leftDiscards?.gridRows, [6, 4]);
+  assert.equal(after.leftDiscards?.candidates.length, 10);
+  const fifthDiscard = after.leftDiscards!.candidates[4]!;
+  const calledFourthPin = after.leftDiscards!.candidates[9]!;
+  assert.ok(fifthDiscard.y >= 440 && fifthDiscard.y <= 445);
+  assert.ok(calledFourthPin.x >= 608 && calledFourthPin.x <= 614);
+});
+
 test("detects bright connected components only inside the calibrated region", async () => {
   const screenshot = await sharp({
     create: { width: 300, height: 180, channels: 3, background: "#111820" },

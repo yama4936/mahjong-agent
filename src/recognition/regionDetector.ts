@@ -16,6 +16,7 @@ export interface RegionDetection {
 }
 
 export interface RegionDetectionOptions {
+  maximumColorSpread?: number;
   luminanceThreshold?: number;
   minimumArea?: number;
   minimumWidth?: number;
@@ -50,7 +51,15 @@ export async function detectBrightTileCandidates(
   const size = info.width * info.height;
   const foreground = new Uint8Array(size);
   const visited = new Uint8Array(size);
-  for (let index = 0; index < size; index += 1) foreground[index] = data[index]! >= luminanceThreshold ? 1 : 0;
+  const colors = options.maximumColorSpread === undefined ? undefined : await sharp(screenshot)
+    .extract({ left: region.x, top: region.y, width: region.width, height: region.height })
+    .toColourspace("srgb").removeAlpha().raw().toBuffer();
+  for (let index = 0; index < size; index += 1) {
+    const offset = index * 3;
+    const neutral = !colors || Math.max(colors[offset]!, colors[offset + 1]!, colors[offset + 2]!)
+      - Math.min(colors[offset]!, colors[offset + 1]!, colors[offset + 2]!) <= options.maximumColorSpread!;
+    foreground[index] = data[index]! >= luminanceThreshold && neutral ? 1 : 0;
+  }
 
   const candidates: RegionCandidate[] = [];
   const queue = new Int32Array(size);
@@ -117,7 +126,12 @@ export async function detectConfiguredPublicRegions(
 ): Promise<Partial<Record<PublicTileRegionName, RegionDetection>>> {
   const entries = Object.entries(layout.publicTileRegions ?? {}) as Array<[PublicTileRegionName, PublicTileRegion]>;
   const detections = await Promise.all(entries.map(async ([name, region]) => {
-    const detection = await detectBrightTileCandidates(screenshot, region, options);
+    // Colored call/riichi glow can bridge adjacent white faces. Exclude only
+    // saturated pixels for discard grids; classification still uses originals.
+    const detection = await detectBrightTileCandidates(screenshot, region, {
+      ...(region.detectionMode === "discard_grid" && name.endsWith("Discards")
+        ? { maximumColorSpread: 40 } : {}), ...options,
+    });
     if (region.detectionMode !== "discard_grid" || !name.endsWith("Discards")) return [name, detection] as const;
     const widths = detection.candidates.map((candidate) => candidate.width);
     const heights = detection.candidates.map((candidate) => candidate.height);
