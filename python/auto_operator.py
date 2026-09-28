@@ -1535,23 +1535,24 @@ class PythonAutoOperator:
                     "opponentDiscards": [{"seat": item.get("seat"),
                                           "discards": item.get("discards", [])}
                                          for item in observation.get("opponentDiscards", [])]}
-        pending = self.infer_pending_discard(self.previous_public_observation, public_observation)
+        # Always recognize this prompt before rejecting stale cache history.
+        # Prefer the newest baseline; the older one is useful only if the
+        # async cache already contains this prompt's exact single append.
+        fresh_public = self.observe_public_board(screenshot)
+        pending = self.infer_pending_discard(public_observation, fresh_public)
+        baseline = "cached"
+        if not pending:
+            pending = self.infer_pending_discard(self.previous_public_observation, fresh_public)
+            baseline = "previous"
         if not pending:
             self.log("reaction_call_policy_rejected", action=call_action,
-                     reason="pending_discard_not_verified",
-                     riverEvidence={"previous": river_evidence(self.previous_public_observation),
-                                    "cached": river_evidence(public_observation)})
-            return None
-        # A delayed asynchronous append cannot identify the current prompt by
-        # itself. Recheck the exact river append on this prompt's own frame.
-        fresh_public = self.observe_public_board(screenshot)
-        if self.infer_pending_discard(self.previous_public_observation, fresh_public) != pending:
-            self.log("reaction_call_policy_rejected", action=call_action,
-                     reason="pending_discard_not_verified_on_prompt_frame", pendingDiscard=pending,
+                     reason="pending_discard_not_verified_on_prompt_frame",
                      riverEvidence={"previous": river_evidence(self.previous_public_observation),
                                     "cached": river_evidence(public_observation),
                                     "prompt": river_evidence(fresh_public)})
             return None
+        self.log("reaction_discard_verified", action=call_action, pendingDiscard=pending,
+                 baseline=baseline, screenshot=str(screenshot))
         public_observation = fresh_public
         recognition = self.recognize_reaction_hand(screenshot)
         expected = 13 - getattr(self, "cached_open_melds", 0) * 3

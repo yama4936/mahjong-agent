@@ -978,6 +978,17 @@ class AwayDialogDetectionTest(unittest.TestCase):
         operator.evaluate.assert_called_once()
         self.assertEqual(operator.evaluate.call_args.args[-1], ["pon", "pass"])
 
+        before = operator.previous_public_observation
+        after = operator.cached_public_observation
+        operator.previous_public_observation = {**before, "ownDiscards": ["9m"]}
+        operator.cached_public_observation = before
+        operator.observe_public_board.return_value = after
+        operator.evaluate.reset_mock()
+        self.assertEqual(operator.evaluate_force_auto_call_policy(screenshot, "pon"), approved)
+        operator.evaluate.assert_called_once()
+        self.assertEqual(operator.evaluate.call_args.args[1], {"tile": "P", "fromSeat": "east"})
+        operator.previous_public_observation = before
+        operator.cached_public_observation = after
         operator.evaluate.reset_mock()
         operator.observe_public_board.return_value = operator.previous_public_observation
         self.assertIsNone(operator.evaluate_force_auto_call_policy(screenshot, "pon"))
