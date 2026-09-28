@@ -142,3 +142,11 @@ force-autoの同期public-observationにも `--backend=hybrid` を指定する�
 early結果処理にも手牌・河・鳴き状態の初期化とpublic_cache_generation更新を追加。
 遅れて返った前局generationの認識結果を破棄する回帰テストも確認する。
 実画面で次局河が正しく再取得されることは修正後のライブ検証が必要。
+
+修正090916eで新ルーム78868、四人半荘・300+0秒・簡単CPU3人を開始。
+ログはartifacts/friend-300-round-reset-20260928へ分離。
+初打stateにownDiscards=[]かつriichiDeclared=trueを発見。
+河のclassificationSafeがfalseでも横向き候補単体を立直へ昇格する経路を修正し、
+無効な河から自分・相手どちらの立直も確定しない回帰テストを追加。
+この対局の開始時に混入した立直フラグは単調マージで保持されるため、
+修正版の新プロセスまたは局終了後の再取得が必要。勝率評価には未使用。

@@ -110,6 +110,15 @@ test("does not promote individually confident tiles from an invalid river grid",
   assert.equal(observation.acceptedTiles, 0);
 });
 
+test("invalid river geometry cannot promote riichi from a sideways candidate", () => {
+  const invalid = publicRegion([{ tile: "5m", x: 0, width: 48, height: 30 }]);
+  invalid.classificationSafe = false;
+  assert.equal(hasSidewaysRiichiTile(invalid), false);
+  const observation = toPublicTileObservation({ ownDiscards: invalid, rightDiscards: invalid });
+  assert.equal(observation.ownRiichiDeclared, false);
+  assert.equal(observation.opponentDiscards[0]?.riichiDeclared, false);
+});
+
 test("keeps calibrated dora indicators separate from other visible tiles", () => {
   const observation = toPublicTileObservation({
     doraIndicators: publicRegion([{ tile: "4s", x: 0 }]),

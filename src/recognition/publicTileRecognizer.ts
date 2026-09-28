@@ -59,7 +59,7 @@ function normalizedDimensions(tile: RecognizedPublicTile, rotation: 0 | 90 | 180
 
 /** A sideways river tile is the visible evidence of a riichi declaration. */
 export function hasSidewaysRiichiTile(region?: PublicTileRecognitionRegion): boolean {
-  if (!region) return false;
+  if (!region?.classificationSafe) return false;
   return region.recognized.some((tile) => {
     if (!tile.safe) return false;
     if (tile.sideways !== undefined) return tile.sideways;
