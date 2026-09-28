@@ -1120,6 +1120,11 @@ class PythonAutoOperator:
             raise RuntimeError("resident recognition server pipes are unavailable")
         self.recognition_request_id += 1
         request_id = self.recognition_request_id
+        frame_public_state = None
+        if evaluate_force_auto and getattr(self.args, "board_metadata", False):
+            frame_public_state, public_observation, _ = self.frame_metadata_state(
+                screenshot, public_observation,
+            )
         self.recognition_server.stdin.write(json.dumps({
             "id": request_id,
             "screenshot": str(screenshot),
@@ -1130,6 +1135,7 @@ class PythonAutoOperator:
             "dynamicLayout": dynamic_layout,
             "openMelds": open_melds,
             "publicObservation": public_observation,
+            **({"publicState": frame_public_state} if frame_public_state is not None else {}),
             "forceAutoActionButtons": force_auto_action_buttons,
             "actionDeadlineRemainingMs": self.action_deadline_remaining_ms(),
         }) + "\n")
@@ -1143,6 +1149,20 @@ class PythonAutoOperator:
         if response.get("error"):
             raise RuntimeError(f"resident recognition failed: {response['error']}")
         return response["result"]
+
+    def frame_metadata_state(self, screenshot: Path, observation=None, pending=None):
+        from board_metadata import recognize_board, remap_seats
+        metadata = recognize_board(screenshot)
+        if not metadata.get("verified"):
+            raise RetryableSafetyAbort(f"board metadata not verified: {metadata.get('reason')}")
+        fields = {key: metadata[key] for key in
+                  ("seat", "round", "scores", "honba", "riichiSticks", "remainingTiles")
+                  if key in metadata}
+        state = {**self.public_state, **fields}
+        source_seat = self.public_state.get("seat", "east")
+        self.log("board_metadata_verified", screenshot=str(screenshot), **fields)
+        return (state, remap_seats(observation, source_seat, fields["seat"]),
+                remap_seats(pending, source_seat, fields["seat"]))
 
     def ensure_viewport(self, page: Page, *, force: bool = False) -> None:
         """Keep CDP clients from leaving the game canvas at a stale viewport."""
@@ -1444,9 +1464,16 @@ class PythonAutoOperator:
                  recognition: dict[str, Any] | None = None,
                  available_ui_actions: list[str] | None = None) -> dict[str, Any]:
         evaluator_mode = "advisor" if self.args.mode == "observer" else self.args.mode
+        state_path = self.state_path
+        if getattr(self.args, "board_metadata", False):
+            state, public_observation, pending_discard = self.frame_metadata_state(
+                screenshot, public_observation, pending_discard,
+            )
+            state_path = self.frames / f"{utc_stamp()}.board-state.json"
+            state_path.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
         command = [
             "node", "dist/src/cli.js", "evaluate-frame", str(screenshot),
-            str(self.layout_path), str(self.templates), f"--state={self.state_path}",
+            str(self.layout_path), str(self.templates), f"--state={state_path}",
             f"--mode={evaluator_mode}",
         ]
         if self.args.action_templates:
@@ -2863,6 +2890,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--templates", required=True)
     parser.add_argument("--action-templates", default="", help="calibrated riichi/call/win/pass button templates")
     parser.add_argument("--state", required=True)
+    parser.add_argument("--board-metadata", action="store_true",
+                        help="require current-frame OCR metadata for evaluation; install requirements-ocr.txt")
     parser.add_argument("--env-file", default=".env.local", help="private Jev environment file; use an empty value to disable")
     parser.add_argument("--artifacts", default="artifacts/python-auto")
     parser.add_argument("--mode", choices=("observer", "advisor", "auto", "force-auto"), default="advisor",

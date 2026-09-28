@@ -60,6 +60,7 @@ for await (const line of lines) {
       dynamicLayout?: boolean;
       openMelds?: number;
       publicObservation?: CachedPublicObservation;
+      publicState?: unknown;
       forceAutoActionButtons?: Array<{ x: number; y: number; width: number; height: number; center: { x: number; y: number } }>;
       actionDeadlineRemainingMs?: number;
     };
@@ -105,6 +106,8 @@ for await (const line of lines) {
     let result: unknown = recognition;
     if (request.evaluateForceAuto) {
       if (!publicState) throw new Error("force-auto evaluation requires a state file");
+      const framePublicState = request.publicState === undefined
+        ? publicState : parsePublicGameState(request.publicState);
       const inferredOpenMelds = request.openMelds ?? (14 - recognition.tiles.length) / 3;
       if (!Number.isInteger(inferredOpenMelds) || inferredOpenMelds < 0 || inferredOpenMelds > 4) {
         throw new Error(`force-auto evaluation requires 14/11/8/5/2 concealed tiles; got ${recognition.tiles.length}`);
@@ -129,7 +132,7 @@ for await (const line of lines) {
       let state;
       try {
         state = parseGameState({
-          ...publicState,
+          ...framePublicState,
           ...(cachedPatch?.patch ?? {}),
           ...(request.forceAutoActionButtons?.length === 1 ? {
             availableUiActions: ["riichi", "tsumo", "kan", "kyuushu"],
@@ -143,7 +146,7 @@ for await (const line of lines) {
       } catch (error) {
         publicCacheIgnoredReason = error instanceof Error ? error.message : String(error);
         state = parseGameState({
-          ...publicState,
+          ...framePublicState,
           ...(request.forceAutoActionButtons?.length === 1 ? {
             availableUiActions: ["riichi", "tsumo", "kan", "kyuushu"],
           } : {}),

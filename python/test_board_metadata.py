@@ -2,10 +2,18 @@ import unittest
 import tempfile
 from pathlib import Path
 from PIL import Image
-from board_metadata import parse_board_tokens, recognize_board
+from board_metadata import parse_board_tokens, recognize_board, remap_seats
 
 
 class BoardMetadataTest(unittest.TestCase):
+    def test_seat_rotation_preserves_relative_rivers_and_meld_sources(self):
+        source = {"opponentDiscards": [{"seat": "south", "discards": ["P"],
+                  "melds": [{"fromSeat": "west"}]}]}
+        target = remap_seats(source, "east", "west")
+        self.assertEqual(target["opponentDiscards"][0]["seat"], "north")
+        self.assertEqual(target["opponentDiscards"][0]["melds"][0]["fromSeat"], "east")
+        self.assertEqual(source["opponentDiscards"][0]["seat"], "south")
+        self.assertIsNone(remap_seats(None, "east", "south"))
     def test_non_gameplay_and_wrong_viewport_fail_before_loading_ocr(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "screen.png"

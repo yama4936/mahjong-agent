@@ -2,10 +2,32 @@
 import argparse
 import json
 import re
+import copy
+from functools import lru_cache
 from pathlib import Path
 
 WINDS = {"東": "east", "南": "south", "西": "west", "北": "north"}
 SEATS = ["east", "south", "west", "north"]
+
+
+def remap_seats(value, source_seat: str, target_seat: str):
+    """Rotate absolute labels while preserving screen-relative player identity."""
+    shift = SEATS.index(target_seat) - SEATS.index(source_seat)
+    def visit(item):
+        if isinstance(item, list):
+            return [visit(child) for child in item]
+        if isinstance(item, dict):
+            return {key: SEATS[(SEATS.index(child) + shift) % 4]
+                    if key in {"seat", "fromSeat"} and child in SEATS else visit(child)
+                    for key, child in item.items()}
+        return item
+    return visit(copy.deepcopy(value))
+
+
+@lru_cache(maxsize=1)
+def ocr_engine():
+    from rapidocr import RapidOCR
+    return RapidOCR()
 
 
 def parse_board_tokens(tokens: list[dict]) -> dict:
@@ -49,8 +71,7 @@ def recognize_board(image_path: Path) -> dict:
     if state != "match":
         return {"verified": False, "reason": "not_gameplay_screen", "screenState": state}
     import numpy as np
-    from rapidocr import RapidOCR
-    engine = RapidOCR()
+    engine = ocr_engine()
     result = engine(np.array(image.crop((780, 310, 1160, 545)).resize((1140, 705))))
     tokens = []
     if result.txts is not None:
