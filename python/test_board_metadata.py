@@ -7,6 +7,13 @@ from board_metadata import parse_board_tokens, recognize_board, recognize_riichi
 
 
 class BoardMetadataTest(unittest.TestCase):
+    def test_friend_room_that_contaminated_public_cache_is_not_a_verified_board(self):
+        frame = Path(__file__).resolve().parents[1] / "artifacts/live/friend-room-public-cache-contamination-20260929.png"
+        result = recognize_board(frame)
+        self.assertFalse(result["verified"])
+        self.assertEqual(result["reason"], "not_gameplay_screen")
+        self.assertEqual(result["screenState"], "unknown")
+
     @unittest.skipUnless(importlib.util.find_spec("rapidocr"), "optional OCR dependencies not installed")
     def test_upside_down_opposite_score_recovers_without_lowering_threshold(self):
         frame = Path(__file__).resolve().parents[1] / "artifacts/live/board-score-opposite-low-confidence-20260928.png"
