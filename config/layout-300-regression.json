@@ -1,0 +1,40 @@
+{
+  "viewport": { "width": 1920, "height": 1080 },
+  "handSlots": [
+    { "x": 223, "y": 926, "width": 92, "height": 146 },
+    { "x": 317, "y": 926, "width": 93, "height": 146 },
+    { "x": 412, "y": 926, "width": 93, "height": 146 },
+    { "x": 507, "y": 926, "width": 93, "height": 146 },
+    { "x": 602, "y": 926, "width": 92, "height": 146 },
+    { "x": 697, "y": 926, "width": 92, "height": 146 },
+    { "x": 792, "y": 926, "width": 92, "height": 146 },
+    { "x": 887, "y": 926, "width": 92, "height": 146 },
+    { "x": 981, "y": 926, "width": 93, "height": 146 },
+    { "x": 1076, "y": 926, "width": 93, "height": 146 },
+    { "x": 1171, "y": 926, "width": 93, "height": 146 },
+    { "x": 1266, "y": 926, "width": 93, "height": 146 },
+    { "x": 1361, "y": 926, "width": 93, "height": 146 }
+  ],
+  "drawSlot": { "x": 1486, "y": 926, "width": 92, "height": 146 },
+  "clickPoints": [
+    { "x": 269, "y": 999 }, { "x": 363.5, "y": 999 }, { "x": 458.5, "y": 999 },
+    { "x": 553.5, "y": 999 }, { "x": 648, "y": 999 }, { "x": 743, "y": 999 },
+    { "x": 838, "y": 999 }, { "x": 933, "y": 999 }, { "x": 1027.5, "y": 999 },
+    { "x": 1122.5, "y": 999 }, { "x": 1217.5, "y": 999 }, { "x": 1312.5, "y": 999 },
+    { "x": 1407.5, "y": 999 }, { "x": 1532, "y": 999 }
+  ],
+  "minimumTileConfidence": 0.98,
+  "minimumTilePresence": 0.12,
+  "tileMatcher": "raw",
+  "minimumVitConfidence": 0.5,
+  "minimumVitMargin": 0.05,
+  "publicTileRegions": {
+    "ownDiscards": { "x": 770, "y": 535, "width": 390, "height": 225, "rotationToUpright": 0, "detectionMode": "discard_grid" },
+    "rightDiscards": { "x": 1115, "y": 285, "width": 305, "height": 250, "rotationToUpright": 90, "detectionMode": "discard_grid" },
+    "oppositeDiscards": { "x": 770, "y": 150, "width": 390, "height": 190, "rotationToUpright": 180, "detectionMode": "discard_grid" },
+    "leftDiscards": { "x": 500, "y": 285, "width": 305, "height": 250, "rotationToUpright": 270, "detectionMode": "discard_grid" },
+    "ownMelds": { "x": 732, "y": 759, "width": 200, "height": 84, "rotationToUpright": 0 },
+    "rightMelds": { "x": 1500, "y": 25, "width": 140, "height": 280, "rotationToUpright": 90, "sidewaysAspectRatio": 0.55, "luminanceThreshold": 190 },
+    "oppositeMelds": { "x": 380, "y": 20, "width": 460, "height": 90, "rotationToUpright": 180, "sidewaysAspectRatio": 2, "luminanceThreshold": 190 }
+  }
+}
