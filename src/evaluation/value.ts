@@ -47,14 +47,17 @@ export function evaluateRoundValue(candidate: DiscardEvaluation, state: GameStat
   const baseHan = sevenPairs ? 2 + (tiles.every(tile => !isTerminalOrHonor(tileIndex(tile))) ? 1 : 0) : 1;
   const estimatedValue = estimateHeuristicRonPoints(baseHan + likelyRiichiHan + retainedDora, state.seat === "east", sevenPairs);
 
+  const wallExhausted = state.remainingTiles === 0;
   const turnsLeftFactor = state.remainingTiles === undefined
     ? clamp((18 - state.turn) / 14, 0.15, 1.15)
-    : clamp(state.remainingTiles / 55, 0.15, 1.15);
+    : wallExhausted ? 0 : clamp(state.remainingTiles / 55, 0.15, 1.15);
   const ukeireFactor = clamp(candidate.ukeire / 20, 0.12, 1.6);
   const winBase = candidate.shanten <= 0 ? 0.34 : candidate.shanten === 1 ? 0.18 : candidate.shanten === 2 ? 0.075 : 0.025;
-  const winProbability = clamp(winBase * ukeireFactor * turnsLeftFactor, 0.005, 0.72);
+  const winProbability = wallExhausted ? 0 : clamp(winBase * ukeireFactor * turnsLeftFactor, 0.005, 0.72);
   const tenpaiBase = candidate.shanten <= 0 ? 1 : candidate.shanten === 1 ? 0.48 : candidate.shanten === 2 ? 0.22 : 0.08;
-  const tenpaiProbability = clamp(tenpaiBase * Math.sqrt(ukeireFactor) * Math.sqrt(turnsLeftFactor), 0.01, 1);
+  const tenpaiProbability = wallExhausted
+    ? (candidate.shanten <= 0 ? 1 : 0)
+    : clamp(tenpaiBase * Math.sqrt(ukeireFactor) * Math.sqrt(turnsLeftFactor), 0.01, 1);
   const dealInProbability = clamp(candidate.danger ?? 0, 0, 0.6);
 
   const rank = currentRank(state);

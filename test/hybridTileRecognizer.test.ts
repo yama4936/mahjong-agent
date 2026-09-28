@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import sharp from "sharp";
 import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { HybridTileRecognizer, mapHybridLabel } from "../src/recognition/hybridTileRecognizer.js";
+import { layoutSchema } from "../src/recognition/layout.js";
 
 test("uncertain red override cannot replace nine-man while real red fives survive", {
   skip: !existsSync(".runtime/hybrid-vision/cvmaj-pretrained.tar") || !existsSync(".runtime/hybrid-vision/automajsoul-best-model.pt"),
@@ -46,4 +48,29 @@ test("hybrid classifier preserves normal and red-gate decisions", async () => {
   assert.deepEqual(result.map((prediction: any) => prediction.selectedBy), ["normal", "red-gate"]);
   assert.equal(result[1]?.normalPrediction.tile, "5m");
   assert.equal(result[1]?.redPrediction.label, "5m-");
+});
+
+test("live seven-pin confusion is unsafe while the verified shimmer hand remains safe", {
+  skip: !existsSync(".runtime/hybrid-vision/cvmaj-pretrained.tar")
+    || !existsSync(".runtime/hybrid-vision/automajsoul-best-model.pt"),
+}, async () => {
+  const layout = layoutSchema.parse(JSON.parse(await readFile("config/layout-300-regression.json", "utf8")));
+  assert.equal(layout.minimumVitConfidence, 0.5);
+  const recognizer = new HybridTileRecognizer();
+  try {
+    const confused = await recognizer.recognizeHand(
+      "artifacts/live/two-seven-pin-independent-six-pin-20260928.jpg", layout,
+    );
+    assert.deepEqual(confused.tiles.slice(8, 10), ["6p", "6p"]);
+    assert.ok(confused.confidence >= layout.minimumVitConfidence);
+    assert.equal(confused.safe, false);
+
+    const verified = await recognizer.recognizeHand(
+      "artifacts/live/riichi-shimmer-hand-before-20260928.jpg", layout,
+    );
+    assert.ok(verified.confidence >= layout.minimumVitConfidence);
+    assert.equal(verified.safe, true);
+  } finally {
+    await recognizer.close();
+  }
 });

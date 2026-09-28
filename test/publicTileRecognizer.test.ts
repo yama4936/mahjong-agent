@@ -240,6 +240,50 @@ test("missing and undecodable meld regions are unknown, not confirmed closed han
   assert.equal(malformed.opponentDiscards[0]?.meldsObserved, false);
 });
 
+test("a completely observed empty meld region clears a phantom opponent kan", () => {
+  const empty = toPublicTileObservation({ rightMelds: {
+    ...publicRegion([]), classificationSafe: false,
+  } });
+  assert.equal(empty.opponentDiscards[0]?.meldsObserved, true);
+  const previous = [{
+    seat: "south" as const, discards: [], riichi: false, openMelds: 1,
+    openMeldsObserved: false,
+    melds: [{ type: "minkan" as const, tiles: ["P", "P", "P", "P"] }],
+  }] as Parameters<typeof opponentStatesFromObservation>[1];
+  const current = opponentStatesFromObservation(empty, previous);
+  assert.equal(current[0]?.openMelds, 0);
+  assert.equal(current[0]?.openMeldsObserved, true);
+  assert.deepEqual(current[0]?.melds, []);
+});
+
+test("the saved ghost-white-kan frame confirms east has no exposed meld", {
+  skip: !existsSync(".runtime/hybrid-vision/cvmaj-pretrained.tar")
+    || !existsSync(".runtime/hybrid-vision/automajsoul-best-model.pt"),
+}, async () => {
+  const layout = layoutSchema.parse(JSON.parse(await readFile("config/layout-300-regression.json", "utf8")));
+  const recognizer = new HybridTileRecognizer();
+  try {
+    const recognition = await recognizeConfiguredPublicTilesWithVit(
+      "artifacts/live/ghost-white-kan-cache-698264b-20260929.jpg", layout, recognizer,
+    );
+    const observation = toPublicTileObservation(recognition, "west");
+    const east = observation.opponentDiscards.find((opponent) => opponent.seat === "east")!;
+    assert.equal(east.meldsObserved, true);
+    assert.deepEqual(east.melds, []);
+    const previous = [{
+      seat: "east" as const, discards: [], riichi: true, openMelds: 1,
+      openMeldsObserved: false,
+      melds: [{ type: "minkan" as const, tiles: ["P", "P", "P", "P"] }],
+    }] as Parameters<typeof opponentStatesFromObservation>[1];
+    const cleared = opponentStatesFromObservation(observation, previous)
+      .find((opponent) => opponent.seat === "east")!;
+    assert.equal(cleared.openMelds, 0);
+    assert.deepEqual(cleared.melds, []);
+  } finally {
+    await recognizer.close();
+  }
+});
+
 test("real Hybrid preserves the ordered hand from a successful live shimmer recheck", {
   skip: !existsSync(".runtime/hybrid-vision/cvmaj-pretrained.tar") || !existsSync(".runtime/hybrid-vision/automajsoul-best-model.pt"),
 }, async () => {
@@ -456,6 +500,18 @@ test("promotes only complete unambiguous exposed meld groups", () => {
   assert.deepEqual(recognizeExposedMelds(publicRegion([
     { tile: "1m", x: 0 }, { tile: "3m", x: 30 }, { tile: "5m", x: 60 },
   ])), []);
+
+  const invalidOwnMeld = toPublicTileObservation({ ownMelds: publicRegion([
+    { tile: "P", x: 0 }, { tile: "P", x: 30 }, { tile: "P", x: 60 }, { tile: "F", x: 90 },
+  ]) });
+  assert.deepEqual(invalidOwnMeld.ownMelds, []);
+  assert.deepEqual(invalidOwnMeld.ownMeldTiles, []);
+  assert.equal(invalidOwnMeld.ownMeldsObserved, false);
+
+  const noOwnMeld = toPublicTileObservation({ ownMelds: {
+    ...publicRegion([]), classificationSafe: false,
+  } });
+  assert.equal(noOwnMeld.ownMeldsObserved, true);
 });
 
 test("adjacent exposed melds split by unique legal composition without a large gap", () => {

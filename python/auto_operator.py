@@ -630,8 +630,14 @@ def send_discard_click(mouse: Any, point: dict[str, float], viewport: dict[str, 
     mouse.move(viewport["width"] / 2, viewport["height"] * 0.72)
 
 
+def retreat_pointer_from_hand(mouse: Any, viewport: dict[str, int]) -> None:
+    """Move startup/result-screen pointer positions off the concealed hand."""
+    mouse.move(viewport["width"] / 2, viewport["height"] * 0.72)
+
+
 def merge_public_observations(
     previous: dict[str, Any] | None, current: dict[str, Any],
+    confirmed_open_melds: int | None = None,
 ) -> dict[str, Any]:
     """Keep only monotonic river/dora growth across asynchronous snapshots."""
     if previous is None:
@@ -646,16 +652,31 @@ def merge_public_observations(
     for latest in current.get("opponentDiscards", []):
         prior = next((item for item in previous.get("opponentDiscards", [])
                       if item.get("seat") == latest.get("seat")), {})
+        latest_melds = latest.get("melds", [])
+        prior_melds = prior.get("melds", [])
+        if latest.get("meldsObserved") is True and len(latest_melds) == 0:
+            merged_melds = []
+        else:
+            merged_melds = latest_melds if len(latest_melds) >= len(prior_melds) else prior_melds
         opponents.append({
             **latest,
             "discards": growing(prior.get("discards", []), latest.get("discards", [])),
             "riichiDeclared": bool(prior.get("riichiDeclared") or latest.get("riichiDeclared")),
-            "melds": latest.get("melds", []) if len(latest.get("melds", [])) >= len(prior.get("melds", []))
-            else prior.get("melds", []),
+            "melds": merged_melds,
         })
-    own_meld_tiles = growing(previous.get("ownMeldTiles", []), current.get("ownMeldTiles", []))
-    own_melds = current.get("ownMelds", []) if len(current.get("ownMelds", [])) >= len(previous.get("ownMelds", [])) \
-        else previous.get("ownMelds", [])
+    current_own_melds = current.get("ownMelds", [])
+    current_own_meld_tiles = current.get("ownMeldTiles", [])
+    if confirmed_open_melds == 0 and current.get("ownMeldsObserved") is True \
+            and len(current_own_melds) == 0:
+        # A closed hand plus a complete empty meld-region observation is
+        # stronger evidence than an earlier false positive.  Real confirmed
+        # calls remain monotonic below.
+        own_melds = []
+        own_meld_tiles = []
+    else:
+        own_meld_tiles = growing(previous.get("ownMeldTiles", []), current_own_meld_tiles)
+        own_melds = current_own_melds if len(current_own_melds) >= len(previous.get("ownMelds", [])) \
+            else previous.get("ownMelds", [])
     all_meld_tiles = [*own_meld_tiles, *[
         tile for opponent in opponents for meld in opponent.get("melds", []) for tile in meld.get("tiles", [])
     ]]
@@ -670,6 +691,7 @@ def merge_public_observations(
         "ownDiscards": own_discards,
         "ownRiichiDeclared": bool(previous.get("ownRiichiDeclared") or current.get("ownRiichiDeclared")),
         "ownMelds": own_melds,
+        "ownMeldsObserved": current.get("ownMeldsObserved", previous.get("ownMeldsObserved")),
         "opponentDiscards": opponents,
         "ownMeldTiles": own_meld_tiles,
         "allMeldTiles": all_meld_tiles,
@@ -1009,7 +1031,7 @@ class PythonAutoOperator:
             return
         current = envelope["result"]
         prior = self.cached_public_observation
-        merged = merge_public_observations(prior, current)
+        merged = merge_public_observations(prior, current, getattr(self, "cached_open_melds", 0))
         def river_signature(observation: dict[str, Any]) -> tuple[Any, ...]:
             return (tuple(observation.get("ownDiscards", [])), tuple(sorted(
                 (item["seat"], tuple(item.get("discards", [])))
@@ -2387,8 +2409,7 @@ class PythonAutoOperator:
             # Room-start clicks can leave the pointer over the initial hand.
             # Clear hover before starting the stream, so its first frame cannot
             # inherit a raised tile from the room screen.
-            page.mouse.move(self.layout["viewport"]["width"] / 2,
-                            self.layout["viewport"]["height"] * 0.72)
+            retreat_pointer_from_hand(page.mouse, self.layout["viewport"])
             page.wait_for_timeout(100)
         self.start_screencast_gate(page)
         if self.args.mode == "force-auto":

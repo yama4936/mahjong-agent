@@ -13,7 +13,7 @@ import threading
 from datetime import datetime, timezone
 from unittest.mock import Mock, patch
 
-from auto_operator import PythonAutoOperator, RetryableSafetyAbort, action_deadline_timing, away_resume_geometry, closed_concealed_row_visible, crop_screenshot, discard_point_in_hand_geometry, force_auto_call_buttons, force_auto_chi_choice_points, force_auto_reaction_win_button, force_auto_self_action_buttons, geometric_open_meld_count, is_away_resume_dialog, is_contextual_reaction_pass, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, mean_pixel_delta, merge_public_observations, open_hand_draw_slot, own_meld_surface_visible, post_call_transition, selected_tile_comparison_region, send_discard_click, should_guard_tenpai_reaction, should_process_reaction_prompt, stable_hand_comparison_region, stable_hand_delta
+from auto_operator import PythonAutoOperator, RetryableSafetyAbort, action_deadline_timing, away_resume_geometry, closed_concealed_row_visible, crop_screenshot, discard_point_in_hand_geometry, force_auto_call_buttons, force_auto_chi_choice_points, force_auto_reaction_win_button, force_auto_self_action_buttons, geometric_open_meld_count, is_away_resume_dialog, is_contextual_reaction_pass, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, mean_pixel_delta, merge_public_observations, open_hand_draw_slot, own_meld_surface_visible, post_call_transition, retreat_pointer_from_hand, selected_tile_comparison_region, send_discard_click, should_guard_tenpai_reaction, should_process_reaction_prompt, stable_hand_comparison_region, stable_hand_delta
 from screen_state import classify_screen, load_references
 from auto_operator import geometric_reaction_open_meld_count
 from auto_operator import configure_evaluator_click_budget
@@ -162,6 +162,11 @@ class RecordingMouse:
 
 
 class ActionDeadlineTest(unittest.TestCase):
+    def test_startup_pointer_retreats_to_table_felt(self) -> None:
+        mouse = RecordingMouse()
+        retreat_pointer_from_hand(mouse, {"width": 1920, "height": 1080})
+        self.assertEqual(mouse.calls, [("move", 960, 777.6)])
+
     def test_execute_shimmer_fallback_clicks_only_after_identity_and_same_generation(self) -> None:
         project = Path(__file__).resolve().parents[1]
         before = (project / "artifacts/live/riichi-shimmer-hand-before-20260928.jpg").read_bytes()
@@ -725,6 +730,44 @@ class AwayDialogDetectionTest(unittest.TestCase):
         self.assertTrue(merged["opponentDiscards"][0]["riichiDeclared"])
         self.assertTrue(merged["ownRiichiDeclared"])
         self.assertEqual(merged["handPlan"]["planId"], "tanyao")
+
+    def test_closed_hand_clears_phantom_own_kan_from_public_cache(self) -> None:
+        previous = {
+            "ownMelds": [{"type": "minkan", "tiles": ["P"] * 4, "confidence": 0.7}],
+            "ownMeldTiles": ["P"] * 4,
+            "opponentDiscards": [],
+        }
+        current = {
+            "ownMelds": [], "ownMeldTiles": [], "ownMeldsObserved": True,
+            "opponentDiscards": [],
+        }
+        merged = merge_public_observations(previous, current, confirmed_open_melds=0)
+        self.assertEqual(merged["ownMelds"], [])
+        self.assertEqual(merged["ownMeldTiles"], [])
+        self.assertEqual(merged["allMeldTiles"], [])
+
+        confirmed = merge_public_observations(previous, current, confirmed_open_melds=1)
+        self.assertEqual(confirmed["ownMeldTiles"], ["P"] * 4)
+
+    def test_confirmed_empty_opponent_meld_region_clears_phantom_kan(self) -> None:
+        previous = {
+            "ownMelds": [], "ownMeldTiles": [],
+            "opponentDiscards": [{
+                "seat": "east", "discards": ["9s"],
+                "melds": [{"type": "minkan", "tiles": ["P"] * 4}],
+                "meldsObserved": False,
+            }],
+        }
+        current = {
+            "ownMelds": [], "ownMeldTiles": [],
+            "opponentDiscards": [{
+                "seat": "east", "discards": ["9s"],
+                "melds": [], "meldsObserved": True,
+            }],
+        }
+        merged = merge_public_observations(previous, current)
+        self.assertEqual(merged["opponentDiscards"][0]["melds"], [])
+        self.assertEqual(merged["allMeldTiles"], [])
 
     def test_public_board_scan_runs_periodically_on_any_turn(self) -> None:
         operator = PythonAutoOperator.__new__(PythonAutoOperator)

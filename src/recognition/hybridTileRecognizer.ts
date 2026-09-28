@@ -140,6 +140,7 @@ export class HybridTileRecognizer {
     const matches = predictions.map((prediction) => ({
       tile: prediction.tile,
       confidence: prediction.confidence,
+      runnerUpTile: prediction.runnerUpTile,
       runnerUpConfidence: prediction.runnerUpConfidence,
       selectedBy: prediction.selectedBy,
       normalPrediction: prediction.normalPrediction,
@@ -148,6 +149,11 @@ export class HybridTileRecognizer {
     const confidence = Math.min(...matches.map((match) => match.confidence));
     const ambiguityMargin = Math.min(...matches.map((match) => match.confidence - match.runnerUpConfidence));
     const turnReady = matches.length === slots.length;
+    // Two reviewed live frames contain actual 7p tiles that this model calls
+    // 6p at about 0.70 confidence with 7p second.  A verified correct 6p/7p
+    // competition is 0.788, so fail closed only inside the measured gap.
+    const knownSixSevenPinConfusion = matches.some((match) =>
+      match.tile === "6p" && match.runnerUpTile === "7p" && match.confidence < 0.75);
     return {
       backend: "hybrid" as const,
       tiles: matches.map((match) => match.tile),
@@ -156,7 +162,8 @@ export class HybridTileRecognizer {
       ambiguityMargin,
       presenceFractions,
       turnReady,
-      safe: turnReady && confidence >= layout.minimumVitConfidence && ambiguityMargin >= layout.minimumVitMargin,
+      safe: turnReady && !knownSixSevenPinConfusion
+        && confidence >= layout.minimumVitConfidence && ambiguityMargin >= layout.minimumVitMargin,
       redFiveClassification: "supported" as const,
     };
   }

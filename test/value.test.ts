@@ -36,6 +36,20 @@ test("advisor attaches bounded heuristic outcome estimates", () => {
   }
 });
 
+test("exhausted wall has no future win chance", () => {
+  const candidate: DiscardEvaluation = {
+    actionId: "discard_E", action: "discard", tile: "E", shanten: 1,
+    form: "standard", effectiveTiles: [{ tile: "6p", remaining: 3 }], ukeire: 3,
+  };
+  const exhausted = evaluateRoundValue(candidate, { ...state, remainingTiles: 0 });
+  assert.equal(exhausted.winProbability, 0);
+  assert.equal(exhausted.tenpaiProbability, 0);
+
+  const alreadyTenpai = evaluateRoundValue({ ...candidate, shanten: 0 }, { ...state, remainingTiles: 0 });
+  assert.equal(alreadyTenpai.winProbability, 0);
+  assert.equal(alreadyTenpai.tenpaiProbability, 1);
+});
+
 test("heuristic value counts repeated indicators, meld dora and declared riichi", () => {
   const candidate: DiscardEvaluation = {
     actionId: "discard_E", action: "discard", tile: "E", shanten: 1,

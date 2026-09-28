@@ -33,6 +33,7 @@ export interface PublicTileObservation {
   ownDiscards: GameTile[];
   ownRiichiDeclared?: boolean;
   ownMelds?: RecognizedMeld[];
+  ownMeldsObserved?: boolean;
   opponentDiscards: Array<{
     seat: "east" | "south" | "west" | "north";
     discards: GameTile[];
@@ -161,17 +162,30 @@ export function toPublicTileObservation(
   const meldEvidence = (name: PublicTileRegionName) => {
     const region = recognition[name];
     const melds = recognizeExposedMelds(region);
-    return { melds, meldsObserved: Boolean(region?.classificationSafe
-      && region.candidateCount === region.recognized.length
-      && melds.reduce((count, meld) => count + meld.tiles.length, 0) === region.recognized.length) };
+    return { melds, meldsObserved: Boolean(region && (
+      region.candidateCount === 0
+      || (region.classificationSafe
+        && region.candidateCount === region.recognized.length
+        && melds.reduce((count, meld) => count + meld.tiles.length, 0) === region.recognized.length)
+    )) };
   };
   const opponentDiscards = [
     { seat: seats[(ownIndex + 1) % 4]!, discards: safeTiles("rightDiscards"), riichiDeclared: hasSidewaysRiichiTile(recognition.rightDiscards), ...meldEvidence("rightMelds") },
     { seat: seats[(ownIndex + 2) % 4]!, discards: safeTiles("oppositeDiscards"), riichiDeclared: hasSidewaysRiichiTile(recognition.oppositeDiscards), ...meldEvidence("oppositeMelds") },
     { seat: seats[(ownIndex + 3) % 4]!, discards: safeTiles("leftDiscards"), riichiDeclared: hasSidewaysRiichiTile(recognition.leftDiscards), ...meldEvidence("leftMelds") },
   ];
-  const ownMeldTiles = safeTiles("ownMelds");
   const ownMelds = recognizeExposedMelds(recognition.ownMelds);
+  // Do not publish individually plausible crops as known tiles unless every
+  // crop belongs to a complete legal meld.  In particular, text/buttons in a
+  // miscalibrated region must not become a phantom honor kan in the cache.
+  const ownMeldTiles = ownMelds.flatMap((meld) => meld.tiles);
+  const ownMeldRegion = recognition.ownMelds;
+  const ownMeldsObserved = Boolean(ownMeldRegion && (
+    ownMeldRegion.candidateCount === 0
+    || (ownMeldRegion.classificationSafe
+      && ownMeldRegion.candidateCount === ownMeldRegion.recognized.length
+      && ownMeldTiles.length === ownMeldRegion.recognized.length)
+  ));
   const opponentMeldTiles = opponentDiscards.flatMap((opponent) => opponent.melds.flatMap((meld) => meld.tiles));
   const otherVisibleTiles = [...opponentDiscards.flatMap((opponent) => opponent.discards), ...ownMeldTiles, ...opponentMeldTiles];
   return {
@@ -179,6 +193,7 @@ export function toPublicTileObservation(
     ownDiscards,
     ownRiichiDeclared: hasSidewaysRiichiTile(recognition.ownDiscards),
     ownMelds,
+    ownMeldsObserved,
     opponentDiscards,
     ownMeldTiles,
     allMeldTiles: [...ownMeldTiles, ...opponentMeldTiles],
@@ -198,12 +213,15 @@ export function opponentStatesFromObservation(
     const previous = prior.find((item) => item.seat === opponent.seat);
     const observedCount = opponent.melds?.length ?? 0;
     const previousCount = previous?.openMelds ?? 0;
+    const confirmedEmpty = opponent.meldsObserved === true && observedCount === 0;
+    const nonRegressingObservation = opponent.meldsObserved === true && observedCount >= previousCount;
     return {
       seat: opponent.seat, discards: opponent.discards,
       riichi: Boolean(opponent.riichiDeclared || previous?.riichi),
-      openMelds: Math.max(observedCount, previousCount),
-      openMeldsObserved: opponent.meldsObserved === true && observedCount >= previousCount,
-      melds: observedCount >= (previous?.melds?.length ?? 0) ? opponent.melds : previous?.melds,
+      openMelds: confirmedEmpty ? 0 : Math.max(observedCount, previousCount),
+      openMeldsObserved: confirmedEmpty || nonRegressingObservation,
+      melds: confirmedEmpty ? []
+        : observedCount >= (previous?.melds?.length ?? 0) ? opponent.melds : previous?.melds,
     };
   });
 }
