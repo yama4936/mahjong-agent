@@ -127,6 +127,29 @@ class EvaluatorClickBudgetTest(unittest.TestCase):
                 configure_evaluator_click_budget(environment, invalid, 5000)
 
 
+_ORIGINAL_PATH_READ_BYTES = Path.read_bytes
+_ORIGINAL_IMAGE_OPEN = Image.open
+
+
+def _is_missing_local_artifact(path) -> bool:
+    if not isinstance(path, (str, Path)):
+        return False
+    candidate = Path(path)
+    return "artifacts" in candidate.parts and not candidate.is_file()
+
+
+def _read_bytes_or_skip_missing_artifact(path: Path) -> bytes:
+    if _is_missing_local_artifact(path):
+        raise unittest.SkipTest(f"local live fixture is unavailable: {path}")
+    return _ORIGINAL_PATH_READ_BYTES(path)
+
+
+def _open_or_skip_missing_artifact(path, *args, **kwargs):
+    if _is_missing_local_artifact(path):
+        raise unittest.SkipTest(f"local live fixture is unavailable: {path}")
+    return _ORIGINAL_IMAGE_OPEN(path, *args, **kwargs)
+
+
 class RecordingMouse:
     def __init__(self) -> None:
         self.calls = []
@@ -286,6 +309,17 @@ class ActionDeadlineTest(unittest.TestCase):
 
 
 class AwayDialogDetectionTest(unittest.TestCase):
+    def setUp(self) -> None:
+        # Captured live-match frames are intentionally gitignored. Keep these
+        # regressions active on workstations that retain them, while allowing a
+        # clean checkout to run the hermetic portion of the suite.
+        read_patcher = patch.object(Path, "read_bytes", _read_bytes_or_skip_missing_artifact)
+        open_patcher = patch.object(Image, "open", _open_or_skip_missing_artifact)
+        read_patcher.start()
+        open_patcher.start()
+        self.addCleanup(open_patcher.stop)
+        self.addCleanup(read_patcher.stop)
+
     def run_reaction_frame(self, frame: bytes, *, accept_call: bool, policy_error=None, iterations=2) -> PythonAutoOperator:
         project = Path(__file__).resolve().parents[1]
         directory = tempfile.TemporaryDirectory()

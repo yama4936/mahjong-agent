@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import sharp from "sharp";
 import { calibratedOpenHandProposal, knownOpenHandProposalFitsCalibratedRow, layoutFromHandProposal, proposeHandLayout, proposeLiveHandLayout } from "../src/recognition/handLayoutProposal.js";
@@ -7,6 +8,16 @@ import { layoutSchema } from "../src/recognition/layout.js";
 
 async function calibratedLayout() {
   return layoutSchema.parse(JSON.parse(await readFile("config/layout.json", "utf8")));
+}
+
+function requireLiveFixtures(
+  context: { skip: (message?: string) => void },
+  paths: string[],
+): boolean {
+  const missing = paths.filter((path) => !existsSync(path));
+  if (missing.length === 0) return true;
+  context.skip(`local live fixtures are unavailable: ${missing.join(", ")}`);
+  return false;
 }
 
 async function syntheticHand(drawGap: number, tileCount = 14): Promise<Buffer> {
@@ -98,15 +109,16 @@ test("uses a stricter threshold when an annotation overlay connects the hand", a
   assert.ok(proposal.evidence.luminanceThreshold >= 190);
 });
 
-test("rejects the exposed-meld row selected from the live 5+20 opponent turn", async () => {
+test("rejects the exposed-meld row selected from the live 5+20 opponent turn", async (context) => {
   const layout = await calibratedLayout();
   const frame = "artifacts/friend-5-20/frames/2026-09-21T05-14-56.898415+00-00.jpg";
+  if (!requireLiveFixtures(context, [frame])) return;
   const falseTwoTileHand = await proposeHandLayout(frame, [2]);
   assert.equal(falseTwoTileHand.clickPoints.at(-1)?.x, 1446.5);
   assert.equal(knownOpenHandProposalFitsCalibratedRow(falseTwoTileHand, layout, 4), false);
 });
 
-test("rejects every transient off-row five-tile proposal from the live three-meld hand", async () => {
+test("rejects every transient off-row five-tile proposal from the live three-meld hand", async (context) => {
   const layout = await calibratedLayout();
   const frames = [
     "2026-09-21T05-24-26.726820+00-00.jpg",
@@ -114,10 +126,12 @@ test("rejects every transient off-row five-tile proposal from the live three-mel
     "2026-09-21T05-24-44.138042+00-00.jpg",
     "2026-09-21T05-24-46.615576+00-00.jpg",
   ];
+  const paths = frames.map((name) => `artifacts/friend-5-20/frames/${name}`);
+  if (!requireLiveFixtures(context, paths)) return;
   let rejectedOffRowProposals = 0;
-  for (const name of frames) {
+  for (const [index, name] of frames.entries()) {
     try {
-      const proposal = await proposeHandLayout(`artifacts/friend-5-20/frames/${name}`, [5]);
+      const proposal = await proposeHandLayout(paths[index]!, [5]);
       assert.equal(
         knownOpenHandProposalFitsCalibratedRow(proposal, layout, 3),
         false,
@@ -131,16 +145,18 @@ test("rejects every transient off-row five-tile proposal from the live three-mel
   assert.ok(rejectedOffRowProposals >= 2);
 });
 
-test("rejects transient off-row proposals for a known one-meld hand too", async () => {
+test("rejects transient off-row proposals for a known one-meld hand too", async (context) => {
   const layout = await calibratedLayout();
   const frames = [
     "2026-09-21T05-27-17.276781+00-00.jpg",
     "2026-09-21T05-27-23.727737+00-00.jpg",
     "2026-09-21T05-27-26.166034+00-00.jpg",
   ];
-  for (const name of frames) {
+  const paths = frames.map((name) => `artifacts/friend-5-20/frames/${name}`);
+  if (!requireLiveFixtures(context, paths)) return;
+  for (const [index, name] of frames.entries()) {
     try {
-      const proposal = await proposeHandLayout(`artifacts/friend-5-20/frames/${name}`, [11]);
+      const proposal = await proposeHandLayout(paths[index]!, [11]);
       assert.equal(knownOpenHandProposalFitsCalibratedRow(proposal, layout, 1), false);
     } catch (error) {
       assert.match(String(error), /Could not isolate a 11-tile hand row/);
@@ -163,9 +179,10 @@ test("accepts only a complete compact row inside the shifted draw boundary", asy
   }, layout, 2), false);
 });
 
-test("rebuilds the first-pon compact row from calibration when call lighting hides components", async () => {
+test("rebuilds the first-pon compact row from calibration when call lighting hides components", async (context) => {
   const layout = await calibratedLayout();
   const frame = "artifacts/friend-5-20/frames/2026-09-21T06-50-21.307113+00-00.jpg";
+  if (!requireLiveFixtures(context, [frame])) return;
   await assert.rejects(proposeHandLayout(frame, [11]), /Could not isolate a 11-tile hand row/);
   const started = performance.now();
   const proposal = calibratedOpenHandProposal(layout, 1);
