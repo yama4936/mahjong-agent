@@ -805,6 +805,15 @@ class AwayDialogDetectionTest(unittest.TestCase):
 
         self.assertEqual(force_auto_call_buttons(output.getvalue(), viewport), [])
 
+    def test_live_300_pon_kan_prompt_retains_independent_pon_and_skip_evidence(self) -> None:
+        project = Path(__file__).resolve().parents[1]
+        frame = (project / "artifacts" / "live" / "pon-kan-prompt-20260928.png").read_bytes()
+        layout = load_json(project / "config" / "layout.json")
+        buttons = force_auto_call_buttons(frame, layout["viewport"])
+        self.assertEqual([button["action"] for button in buttons], ["pon"])
+        self.assertTrue(is_contextual_reaction_pass(frame, layout["actionButtonRegions"]["pass"], len(buttons)))
+        self.assertIsNone(force_auto_reaction_win_button(frame, layout["viewport"], layout["actionButtonRegions"]["pass"]))
+
     def test_tenpai_guard_allows_pass_when_a_green_call_is_visible(self) -> None:
         self.assertTrue(should_guard_tenpai_reaction(0, []))
         self.assertFalse(should_guard_tenpai_reaction(0, [{"center": {"x": 100, "y": 100}}]))
@@ -835,40 +844,16 @@ class AwayDialogDetectionTest(unittest.TestCase):
         self.assertIsNotNone(button)
         self.assertEqual(button["center"], {"x": 950.0, "y": 696.5})
 
-    def test_live_magenta_ron_is_not_promoted_to_a_fourth_pon(self) -> None:
+    def test_live_magenta_kan_is_not_promoted_to_ron_or_a_fourth_pon(self) -> None:
         project = Path(__file__).resolve().parents[1]
         layout = load_json(project / "config" / "layout.json")
         prompt = (project / "artifacts" / "friend-5-20" / "frames" /
                   "2026-09-21T08-38-54.094464+00-00.png").read_bytes()
-        result = (project / "artifacts" / "friend-5-20-four-meld-stall.png").read_bytes()
         pass_region = layout["actionButtonRegions"]["pass"]
 
         self.assertEqual(force_auto_call_buttons(prompt, layout["viewport"]), [])
         button = force_auto_reaction_win_button(prompt, layout["viewport"], pass_region)
-        self.assertIsNotNone(button)
-
-        operator = PythonAutoOperator.__new__(PythonAutoOperator)
-        operator.args = argparse.Namespace(mode="force-auto", confirmation_timeout=1)
-        operator.layout = layout
-        operator.last_processed_hand = "old"
-        operator.armed = False
-        operator.pending_post_call_discard = True
-        operator.pending_post_call_started_at = time.monotonic()
-        operator.round_terminal_latched = False
-        operator.round_terminal_result_observed = False
-        operator.log = Mock()
-        page = Mock()
-        page.screenshot.return_value = result
-
-        started = time.monotonic()
-        receipt = operator.execute_force_auto_reaction_win(page, prompt, button)
-
-        self.assertEqual(receipt["action"], "ron")
-        self.assertLess(time.monotonic() - started, 5.0)
-        self.assertTrue(operator.round_terminal_latched)
-        self.assertFalse(operator.pending_post_call_discard)
-        operator.log.assert_called_once()
-        self.assertEqual(operator.log.call_args.kwargs["action"], "ron")
+        self.assertIsNone(button)
 
     def test_single_call_arms_compact_hand_discard_after_button_disappears(self) -> None:
         viewport = {"width": 1600, "height": 900}

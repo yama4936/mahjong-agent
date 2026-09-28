@@ -207,7 +207,7 @@ def is_contextual_reaction_pass(
 
 def force_auto_call_buttons(screenshot: bytes, viewport: dict[str, int]) -> list[dict[str, Any]]:
     """Locate green/cyan chi/pon/kan buttons without confusing the hand row."""
-    left = round(viewport["width"] * 0.35)
+    left = round(viewport["width"] * 0.30)
     top = round(viewport["height"] * 0.68)
     right = round(viewport["width"] * 0.75)
     # Reaction buttons end above the concealed hand. Keeping this ROI out of
@@ -228,7 +228,7 @@ def force_auto_call_buttons(screenshot: bytes, viewport: dict[str, int]) -> list
                     red, green, blue = pixels.getpixel((x, y))
                     matches = (green > 80 and green - red > 15 and green - blue > 10) \
                         if palette == "green" \
-                        else (blue > 80 and green > 80 and min(green, blue) - red > 15 and blue - green > 25)
+                        else (blue > 140 and green > 120 and min(green, blue) - red > 35 and blue > green)
                     if matches:
                         matching_y.append(y)
                 if len(matching_y) >= 5:
@@ -411,33 +411,8 @@ def force_auto_reaction_win_button(
     ):
         return None
     buttons = force_auto_self_action_buttons(screenshot, viewport)
-    if not buttons:
-        left, right = round(viewport["width"] * 0.35), round(viewport["width"] * 0.75)
-        top, bottom = round(viewport["height"] * 0.68), round(viewport["height"] * 0.875)
-        with Image.open(io.BytesIO(screenshot)) as image:
-            pixels = image.convert("RGB")
-            columns = []
-            for x in range(left, right):
-                ys = []
-                for y in range(top, bottom):
-                    red, green, blue = pixels.getpixel((x, y))
-                    if red > 100 and blue > 70 and red - green > 25 and blue - green > 10:
-                        ys.append(y)
-                if len(ys) >= 5:
-                    columns.append((x, min(ys), max(ys)))
-        groups: list[list[tuple[int, int, int]]] = []
-        for column in columns:
-            if not groups or column[0] - groups[-1][-1][0] > 10:
-                groups.append([column])
-            else:
-                groups[-1].append(column)
-        buttons = [{
-            "x": group[0][0], "y": min(column[1] for column in group),
-            "width": group[-1][0] - group[0][0],
-            "height": max(column[2] for column in group) - min(column[1] for column in group),
-            "center": {"x": (group[0][0] + group[-1][0]) / 2,
-                       "y": (min(column[1] for column in group) + max(column[2] for column in group)) / 2},
-        } for group in groups if group[-1][0] - group[0][0] >= viewport["width"] * 0.07]
+    # Magenta is the kan palette, not independent evidence of ron. Never
+    # promote it to a terminal action merely because a skip button is nearby.
     return buttons[0] if len(buttons) == 1 else None
 
 
