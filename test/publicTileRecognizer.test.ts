@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import path from "node:path";
 import { readFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { HybridTileRecognizer } from "../src/recognition/hybridTileRecognizer.js";
 import sharp from "sharp";
 import { layoutSchema } from "../src/recognition/layout.js";
 import { opponentStatesFromObservation } from "../src/recognition/publicTileRecognizer.js";
@@ -22,6 +24,28 @@ function publicRegion(tiles: Array<{ tile: any; x: number; y?: number; width?: n
     })),
   };
 }
+
+test("calibrated opposite meld faces recover red chi, adjacent pon and third chi with real Hybrid", {
+  skip: !existsSync(".runtime/hybrid-vision/cvmaj-pretrained.tar") || !existsSync(".runtime/hybrid-vision/automajsoul-best-model.pt"),
+}, async () => {
+  const base = layoutSchema.parse(JSON.parse(await readFile("config/layout-300-regression.json", "utf8")));
+  const layout = { ...base, publicTileRegions: { oppositeMelds: base.publicTileRegions!.oppositeMelds! } };
+  const recognizer = new HybridTileRecognizer();
+  try {
+    for (const [file, expected] of [
+      ["adjacent-opposite-melds-20260928.jpg", ["chi:0s,4s,6s", "pon:E,E,E"]],
+      ["board-score-opposite-low-confidence-20260928.png", ["chi:0p,3p,4p", "chi:0s,4s,6s", "pon:E,E,E"]],
+      ["south4-riichi-before-loss-20260928.jpg", ["chi:6s,7s,8s"]],
+    ] as const) {
+      const recognition = await recognizeConfiguredPublicTilesWithVit(`artifacts/live/${file}`, layout, recognizer);
+      const melds = recognizeExposedMelds(recognition.oppositeMelds);
+      assert.deepEqual(melds.map(meld => `${meld.type}:${[...meld.tiles].sort().join(",")}`).sort(), [...expected].sort(), file);
+      assert.equal(toPublicTileObservation(recognition).opponentDiscards[1]?.meldsObserved, true, file);
+    }
+  } finally {
+    await recognizer.close();
+  }
+});
 
 test("missing and undecodable meld regions are unknown, not confirmed closed hands", () => {
   const missing = toPublicTileObservation({});
