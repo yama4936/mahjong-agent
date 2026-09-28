@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import sharp from "sharp";
 import { redFiveSouEvidence } from "../src/recognition/redFiveSou.js";
+import { parseGameState } from "../src/game/state.js";
+import { deterministicAdvice } from "../src/evaluation/advisor.js";
 
 async function evidence(image: string, left: number, top: number, width: number, height: number) {
   const rgb = await sharp(image).extract({ left, top, width, height })
@@ -24,4 +26,29 @@ test("central bamboo distinguishes visually labelled ordinary and red five sou r
 test("blank evidence and malformed pixel buffers cannot support red five sou", () => {
   assert.equal(redFiveSouEvidence(new Uint8Array(44 * 64 * 3).fill(240)).supportsRed, false);
   assert.throws(() => redFiveSouEvidence(new Uint8Array(44 * 64 * 4)), /44x64 RGB/);
+});
+
+test("live first-turn red identity changes local discard from red five sou to west", () => {
+  const input = {
+    round: "east_1", honba: 0, riichiSticks: 0, seat: "north",
+    scores: { north: 25000, east: 25000, south: 25000, west: 25000 },
+    hand: ["4m", "5m", "8m", "8m", "9m", "1p", "2p", "5p", "6p", "6p", "3s", "5s", "W"],
+    draw: "2s", doraIndicators: ["8s"], ownDiscards: [], melds: [], visibleTiles: [],
+    openMelds: 0, turn: 0, remainingTiles: 66, phase: "self_turn",
+    recognitionConfidence: 0.8549699532658859, publicStateConfidence: 0,
+    riichiDeclared: false, availableUiActions: [],
+    opponents: [
+      { seat: "east", discards: ["P"], riichi: false, openMelds: 0, openMeldsObserved: false, melds: [] },
+      { seat: "south", discards: ["7p"], riichi: false, openMelds: 0, openMeldsObserved: false, melds: [] },
+      { seat: "west", discards: ["N"], riichi: false, openMelds: 0, openMeldsObserved: false, melds: [] },
+    ],
+  };
+  const old = deterministicAdvice(parseGameState(input));
+  const corrected = deterministicAdvice(parseGameState({ ...input,
+    hand: input.hand.map((tile, index) => index === 11 ? "0s" : tile) }));
+  assert.equal(old.tile, "5s");
+  assert.equal(corrected.tile, "W");
+  assert.equal(old.candidates.find(c => c.tile === "W")!.estimatedValue, 2000);
+  assert.equal(corrected.candidates.find(c => c.tile === "W")!.estimatedValue, 3900);
+  // This proves policy sensitivity, not a counterfactual match win.
 });
