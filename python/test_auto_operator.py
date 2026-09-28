@@ -2304,6 +2304,40 @@ class AwayDialogDetectionTest(unittest.TestCase):
             ("move", 960, 777.6),
         ])
 
+    def test_startup_clears_tile_hover_before_starting_first_frame_stream(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(mode="force-auto", max_iterations=-1)
+        operator.layout = {"viewport": {"width": 1920, "height": 1080}}
+        operator.latest_screencast_frame = b"fresh-frame"
+        operator.screencast_session = None
+        operator.log = Mock()
+        page = Mock()
+        sequence = Mock()
+        operator.ensure_viewport = Mock()
+        operator.start_screencast_gate = Mock()
+        sequence.attach_mock(operator.ensure_viewport, "viewport")
+        sequence.attach_mock(page.mouse.move, "move")
+        sequence.attach_mock(page.wait_for_timeout, "wait")
+        sequence.attach_mock(operator.start_screencast_gate, "stream")
+        operator.run(page)
+        self.assertEqual([call[0] for call in sequence.mock_calls],
+                         ["viewport", "move", "wait", "stream"])
+        page.mouse.move.assert_called_once_with(960, 777.6)
+        page.wait_for_timeout.assert_called_once_with(100)
+        page.mouse.click.assert_not_called()
+
+    def test_advisor_startup_does_not_move_users_pointer(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(mode="advisor", max_iterations=-1)
+        operator.screencast_session = None
+        operator.ensure_viewport = Mock()
+        operator.start_screencast_gate = Mock()
+        operator.log = Mock()
+        page = Mock()
+        operator.run(page)
+        page.mouse.move.assert_not_called()
+        page.wait_for_timeout.assert_not_called()
+
     def test_all_reaction_prompt_variants_use_the_certified_pass(self) -> None:
         for offered in (["chi", "pass"], ["pon", "pass"], ["kan", "pass"],
                         ["ron", "pass"], ["chi", "pon", "kan", "pass"]):

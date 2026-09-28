@@ -2335,6 +2335,13 @@ class PythonAutoOperator:
 
     def run(self, page: Page) -> None:
         self.ensure_viewport(page, force=True)
+        if self.args.mode == "force-auto":
+            # Room-start clicks can leave the pointer over the initial hand.
+            # Clear hover before starting the stream, so its first frame cannot
+            # inherit a raised tile from the room screen.
+            page.mouse.move(self.layout["viewport"]["width"] / 2,
+                            self.layout["viewport"]["height"] * 0.72)
+            page.wait_for_timeout(100)
         self.start_screencast_gate(page)
         if self.args.mode == "force-auto":
             deadline = time.monotonic() + 2
