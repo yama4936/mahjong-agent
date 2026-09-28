@@ -17,7 +17,7 @@ export interface TileMatch {
   runnerUpConfidence: number;
 }
 
-interface PreparedImage { data: Int16Array; width: number; height: number; foregroundFraction: number }
+interface PreparedImage { data: Int16Array; width: number; height: number; foregroundFraction: number; redUpperGlyph: boolean }
 
 const templateCache = new Map<string, Promise<Map<GameTile, PreparedImage[]>>>();
 
@@ -43,10 +43,19 @@ async function prepare(input: string | Buffer, rect?: Rect, options: MatcherOpti
   const background = [median(0), median(1), median(2)];
   const data = new Int16Array(info.width * info.height * 3);
   let foreground = 0;
+  let upperRed = 0;
+  let upperOtherInk = 0;
   for (let y = 0; y < info.height; y += 1) {
     for (let x = 0; x < info.width; x += 1) {
       const index = y * info.width + x;
       const rgbIndex = index * 3;
+      // Exclude the red 萬 suit glyph at the bottom: only the upper numeral
+      // distinguishes an ordinary five man from a red five man.
+      if (x >= 5 && x < 39 && y >= 7 && y < 36) {
+        const r = rgb[rgbIndex]!, g = rgb[rgbIndex + 1]!, b = rgb[rgbIndex + 2]!;
+        if (r > 90 && r - g > 35 && r - b > 35) upperRed += 1;
+        else if (Math.max(r, g, b) < 150 || g - r > 30 || g - b > 30) upperOtherInk += 1;
+      }
       const red = rgb[rgbIndex]! - background[0]!;
       const green = rgb[rgbIndex + 1]! - background[1]!;
       const blue = rgb[rgbIndex + 2]! - background[2]!;
@@ -61,7 +70,9 @@ async function prepare(input: string | Buffer, rect?: Rect, options: MatcherOpti
       foreground += 1;
     }
   }
-  return { data, width: info.width, height: info.height, foregroundFraction: foreground / (info.width * info.height) };
+  return { data, width: info.width, height: info.height,
+    foregroundFraction: foreground / (info.width * info.height),
+    redUpperGlyph: upperRed >= 30 && upperRed / (upperRed + upperOtherInk) >= 0.8 };
 }
 
 function similarity(a: PreparedImage, b: PreparedImage): number {
@@ -233,7 +244,7 @@ function scorePrepared(sample: PreparedImage, templates: Map<GameTile, PreparedI
   const winner = scores[0]!;
   const margin = winner.discriminativeScore - scores[1]!.discriminativeScore;
   return {
-    tile: winner.tile,
+    tile: winner.tile === "5m" && sample.redUpperGlyph ? "0m" : winner.tile,
     confidence: winner.confidence,
     runnerUpConfidence: Math.max(0, winner.confidence - margin),
   };

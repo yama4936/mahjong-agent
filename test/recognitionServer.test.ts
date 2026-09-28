@@ -18,7 +18,7 @@ test("resident server rejects cached decision hands and recognizes the physical 
     child.stdin.write(JSON.stringify({ id: 2, screenshot: "artifacts/live/cached-hand-drift-20260928.jpg" }) + "\n");
     const response = await read();
     assert.equal(response.id, 2);
-    assert.deepEqual(response.result.tiles, ["4m", "5m", "6m", "6m", "7m", "9m",
+    assert.deepEqual(response.result.tiles, ["4m", "0m", "6m", "6m", "7m", "9m",
       "4p", "6p", "7p", "8p", "9p", "7s", "C", "6p"]);
   } finally {
     child.stdin.end();
