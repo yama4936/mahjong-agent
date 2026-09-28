@@ -124,7 +124,7 @@ for await (const line of lines) {
         ? Math.max(0, Date.now() - capturedAtMs)
         : undefined;
       const cachedPatch = request.publicObservation && cacheAgeMs !== undefined && cacheAgeMs <= maximumPublicCacheAgeMs
-        ? cachedPublicStatePatch(request.publicObservation, concealed)
+        ? cachedPublicStatePatch(request.publicObservation, concealed, framePublicState.opponents)
         : undefined;
       const cacheFreshnessIgnoredReason = request.publicObservation
         ? cacheAgeMs === undefined

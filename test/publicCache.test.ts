@@ -22,8 +22,29 @@ test("cached public observations add dora, rivers, riichi and meld counts", () =
   assert.deepEqual(result.patch.ownDiscards, ["1p"]);
   assert.equal((result.patch.opponents as any[])[0].riichi, true);
   assert.equal((result.patch.opponents as any[])[1].openMelds, 1);
-  assert.deepEqual(result.patch.visibleTiles, ["P", "P", "P"]);
+  assert.deepEqual(result.patch.visibleTiles, []);
+  assert.deepEqual((result.patch.opponents as any[])[1].melds[0].tiles, ["P", "P", "P"]);
+  assert.equal((result.patch.opponents as any[])[1].openMeldsObserved, false);
   assert.equal(result.rejectedTiles, 0);
+});
+
+test("cached melds reject impossible groups atomically and keep unknown evidence explicit", () => {
+  const observation = {
+    doraIndicators: [], ownDiscards: [], opponentDiscards: [
+      { seat: "south", discards: [], meldsObserved: true, melds: [{ type: "pon", tiles: ["P", "P", "P"] }] },
+      { seat: "west", discards: [], meldsObserved: false, melds: [] },
+    ], ownMeldTiles: [],
+  } as unknown as CachedPublicObservation;
+  const rejected = cachedPublicStatePatch(observation, ["P", "P"]);
+  const opponent = (rejected.patch.opponents as any[])[0];
+  assert.deepEqual(opponent.melds, []);
+  assert.equal(opponent.openMelds, 1);
+  assert.equal(opponent.openMeldsObserved, false);
+  assert.equal(rejected.rejectedTiles, 3);
+  const accepted = cachedPublicStatePatch(observation, []);
+  assert.equal((accepted.patch.opponents as any[])[0].openMeldsObserved, true);
+  assert.equal((accepted.patch.opponents as any[])[0].melds.length, 1);
+  assert.equal((accepted.patch.opponents as any[])[1].openMeldsObserved, false);
 });
 
 test("cached public observations discard impossible fifth visible copies", () => {

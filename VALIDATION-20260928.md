@@ -635,3 +635,23 @@ fa97cabでconfig/layout-300-regression.jsonを保存・push後、新operatorを�
 public_cache_updatedのconfiguredRegionsにrightMelds/oppositeMeldsを確認。
 対局は継続中で、立直/ダマの実戦比較発生・最終順位はまだ未確認。
 固定設定の機能検証であり、これだけで段位戦勝率の改善を主張しない。
+
+## 常駐認識サーバーのキャッシュ昇格経路
+
+新半荘の通常打牌ログではopenMeldsObservedが欠落していた。
+通常打牌はevaluate-frame CLIではなくrecognitionServerのcachedPublicStatePatchを
+使用し、既存キャッシュ処理は副露数とallMeldTilesのvisibleTiles計上のみだった。
+CLI経路の未観測フラグ/型付き副露の修正は、この別経路には適用されていなかった。
+
+キャッシュでもopponentStatesFromObservationを使用し、同席の既知情報を保持。
+型付き他家副露とopenMeldsObservedを渡し、他家副露をvisibleTilesにも入れる
+二重計上を防止。枚数上限に反する副露は組全体を拒否し、部分的な2枚のポンなどを
+昇格しない。拒否時は副露数を下限として保持するが、確認済み印はfalse。
+既存の河の5枚目を除くヒューリスティックはこの修正では変更していない。
+全体的な認識矛盾の安全方針は別途検証が必要。
+キャッシュ経路の型付き副露/未観測、組単位の拒否、正常な組の保持を回帰テスト化。
+
+実半荘は旧常駐サーバーのまま継続し、途中で新サーバーへ切り替えていない。
+06:32:37 UTC、東1局・南家・25000点、残り29枚のメタデータ確認まで進行。
+今回のキャッシュ修正は次の起動でライブ適用し、現半荘の判断に遡って適用しない。
+ビルド成功、TypeScript全149件成功・skipなし（30.332秒）。
