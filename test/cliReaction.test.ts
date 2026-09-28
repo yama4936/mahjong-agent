@@ -8,7 +8,7 @@ import { existsSync } from "node:fs";
 import { parseGameState } from "../src/game/state.js";
 import { decide } from "../src/agent/decision.js";
 
-test("real dragon prompt public recognition feeds certified pon with annotated compact hand", {
+test("real dragon prompt and own meld recognition feed certified pon with annotated compact hand", {
   skip: !existsSync(".runtime/hybrid-vision/cvmaj-pretrained.tar") || !existsSync(".runtime/hybrid-vision/automajsoul-best-model.pt"),
 }, async () => {
   const observation = spawnSync(process.execPath, ["--import", "tsx", "src/cli.ts", "public-observation",
@@ -20,15 +20,16 @@ test("real dragon prompt public recognition feeds certified pon with annotated c
   assert.deepEqual(board.highlightedDiscard, { tile: "F", fromSeat: "north" });
   assert.deepEqual(board.opponentDiscards.find((item: any) => item.seat === "north").discards,
     ["P", "1p", "2s", "7p", "F"]);
-  // Current own-meld geometry still misses the visible 9m pon. Supply this
-  // explicitly annotated context; this test is not full hand recognition or
-  // authorization to click. Keep the missing recognition visible in assertions.
-  assert.deepEqual(board.ownMelds, []);
+  // Only the compact hand is annotated; melds now come from real recognition.
+  // This is not full hand recognition or authorization to click.
+  assert.equal(board.ownMelds.length, 1);
+  assert.equal(board.ownMelds[0].type, "pon");
+  assert.deepEqual(board.ownMelds[0].tiles, ["9m", "9m", "9m"]);
   const state = parseGameState({
     phase: "reaction", seat: "east", round: "east_1", honba: 1, riichiSticks: 1,
     scores: { east: 25500, south: 23500, west: 23500, north: 26500 },
     hand: ["1p", "3p", "0p", "7p", "0s", "5s", "8s", "9s", "F", "F"],
-    melds: [{ type: "pon", tiles: ["9m", "9m", "9m"], fromSeat: "north" }], openMelds: 1,
+    melds: board.ownMelds, openMelds: board.ownMelds.length,
     pendingDiscard: { ...board.highlightedDiscard, inRiver: true },
     ownDiscards: board.ownDiscards, doraIndicators: board.doraIndicators,
     opponents: board.opponentDiscards.map((item: any) => ({ seat: item.seat,

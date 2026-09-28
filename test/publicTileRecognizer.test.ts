@@ -51,6 +51,27 @@ test("production left river excludes face-border contamination with real Hybrid"
   } finally { await recognizer.close(); }
 });
 
+test("production own pon region excludes the closed hand edge", {
+  skip: !existsSync(".runtime/hybrid-vision/cvmaj-pretrained.tar") || !existsSync(".runtime/hybrid-vision/automajsoul-best-model.pt"),
+}, async () => {
+  const base = layoutSchema.parse(JSON.parse(await readFile("config/layout-300-regression.json", "utf8")));
+  const layout = { ...base, publicTileRegions: { ownMelds: base.publicTileRegions!.ownMelds! } };
+  const recognizer = new HybridTileRecognizer();
+  try {
+    for (const file of ["pass-to-self-riichi-20260928.png", "south4-riichi-before-loss-20260928.jpg"]) {
+      const result = await recognizeConfiguredPublicTilesWithVit(`artifacts/live/${file}`, layout, recognizer);
+      assert.equal(result.ownMelds?.candidateCount, 0, file);
+      assert.deepEqual(toPublicTileObservation(result, "east").ownMelds, [], file);
+    }
+    const result = await recognizeConfiguredPublicTilesWithVit(
+      "artifacts/live/green-dragon-pon-missed-after-called-river-removal-20260928.png", layout, recognizer);
+    assert.equal(result.ownMelds?.classificationSafe, true);
+    assert.equal(result.ownMelds?.candidateCount, 3);
+    assert.deepEqual(result.ownMelds?.recognized.map(tile => tile.tile), ["9m", "9m", "9m"]);
+    assert.equal(recognizeExposedMelds(result.ownMelds)[0]?.type, "pon");
+  } finally { await recognizer.close(); }
+});
+
 test("production opposite river preserves seven-pin face and full river with real Hybrid", {
   skip: !existsSync(".runtime/hybrid-vision/cvmaj-pretrained.tar") || !existsSync(".runtime/hybrid-vision/automajsoul-best-model.pt"),
 }, async () => {

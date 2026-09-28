@@ -1464,3 +1464,18 @@ workerの赤牌overrideにconfidence>=0.5かつrunner-upとの差>=0.1を要求�
 この閾値の全牌・全環境への校正は未完了。自家副露領域はまだ旧設定で、
 九萬ポンの全認識復旧・実操作・勝率改善は未証明。
 npm testは167件、28.100秒で全件成功（skipなし）、npm run build成功。
+
+## 自家九萬ポンの実認識復旧（1副露の保存画像）
+
+300-regressionのownMelds領域をx1560/y930/w290/h135へ校正。
+sidewaysAspectRatio1.4で横牌だけを回転、minimumWidth40で門前手牌の
+右端の小さな交差候補を除外。luminanceThreshold190とsafe条件は維持。
+前節worker修正後の実Hybridで九萬3枚、classificationSafe=true、
+typed ownMeldsのpon1組、最低confidence0.814855を確認。
+cliReactionテストは九萬ポンの注釈を除き、実認識の副露を評価へ入力。
+手牌10枚は注釈のままだが発ポンapproved/yakuhai:Fまで成功。
+pass-to-self-riichiとsouth4-riichi-before-lossの門前画像では副露候補0、
+typed ownMelds=[]を確認。旧レイアウトやfallbackは変更していない。
+今回の範囲は右端1副露の配置。2～4副露で左に伸びる配置を覆う
+動的領域・完全手牌認識・実300+0操作の検証は引き続き必要。
+npm testは168件、30.084秒で全件成功（skipなし）、npm run build成功。
