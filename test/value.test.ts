@@ -3,6 +3,8 @@ import test from "node:test";
 import { decide } from "../src/agent/decision.js";
 import { deterministicAdvice } from "../src/evaluation/advisor.js";
 import { parseGameState } from "../src/game/state.js";
+import { evaluateRoundValue } from "../src/evaluation/value.js";
+import type { DiscardEvaluation } from "../src/game/ukeire.js";
 
 const state = parseGameState({
   seat: "south",
@@ -16,12 +18,33 @@ const state = parseGameState({
 test("advisor attaches bounded heuristic outcome estimates", () => {
   const result = deterministicAdvice(state);
   for (const candidate of result.candidates) {
-    assert.equal(candidate.evaluationModel, "heuristic-v1");
+    assert.equal(candidate.evaluationModel, "heuristic-v2");
     assert.ok(candidate.estimatedValue! >= 1000);
     assert.ok(candidate.winProbability! > 0 && candidate.winProbability! <= 1);
     assert.ok(candidate.tenpaiProbability! > 0 && candidate.tenpaiProbability! <= 1);
     assert.ok(Number.isFinite(candidate.expectedRoundValue));
   }
+});
+
+test("heuristic value counts repeated indicators, meld dora and declared riichi", () => {
+  const candidate: DiscardEvaluation = {
+    actionId: "discard_E", action: "discard", tile: "E", shanten: 1,
+    form: "standard", effectiveTiles: [], ukeire: 20,
+  };
+  const base = state;
+  const value = (input: typeof base) => evaluateRoundValue(candidate, input).estimatedValue;
+  assert.equal(value(base), 3900);
+  assert.equal(value({ ...base, doraIndicators: ["4m", "4m"] }), 7700);
+  assert.equal(value({ ...base, riichiDeclared: true }), value(base));
+  const open = { ...base, hand: base.hand.filter(tile => !["4m", "5m", "6m"].includes(tile)), openMelds: 1,
+    melds: [{ type: "chi" as const, tiles: ["4m", "0m", "6m"] as const }] };
+  const openState = parseGameState(open);
+  assert.equal(value(openState), 3900); // assumed base han + indicator dora + red dora
+  const ankan = parseGameState({ ...base, hand: base.hand.slice(3), doraIndicators: [], openMelds: 1,
+    melds: [{ type: "ankan", tiles: ["2p", "2p", "2p", "2p"] }] });
+  assert.equal(value(ankan), 2000); // concealed kan does not remove the riichi assumption
+  assert.equal(value({ ...ankan, melds: [] }), 1000); // unknown group is not certified closed
+  assert.throws(() => evaluateRoundValue({ ...candidate, tile: "N" }, base), /discard present/);
 });
 
 test("auto requires independently trusted public state", async () => {

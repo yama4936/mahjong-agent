@@ -2,7 +2,7 @@ import type { GameState } from "../game/state.js";
 import { doraFromIndicator, isRedTile, normalizeTile, parseGameTile } from "../game/tiles.js";
 import type { DiscardEvaluation } from "../game/ukeire.js";
 
-export const HEURISTIC_EVALUATION_MODEL = "heuristic-v1";
+export const HEURISTIC_EVALUATION_MODEL = "heuristic-v2";
 
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.max(minimum, Math.min(maximum, value));
@@ -27,10 +27,16 @@ function pointValue(han: number, dealer: boolean): number {
  */
 export function evaluateRoundValue(candidate: DiscardEvaluation, state: GameState): DiscardEvaluation {
   const tiles = [...state.hand, ...(state.draw ? [state.draw] : [])].map(parseGameTile);
-  tiles.splice(tiles.indexOf(candidate.tile), 1);
+  const discardedIndex = tiles.indexOf(candidate.tile);
+  if (discardedIndex < 0) throw new Error("Value evaluation requires a discard present in the concealed hand");
+  tiles.splice(discardedIndex, 1);
+  tiles.push(...state.melds.flatMap(meld => meld.tiles));
   const dora = state.doraIndicators.map(doraFromIndicator);
-  const retainedDora = tiles.reduce((sum, tile) => sum + (dora.includes(normalizeTile(tile)) ? 1 : 0) + (isRedTile(tile) ? 1 : 0), 0);
-  const likelyRiichiHan = state.openMelds === 0 && !state.riichiDeclared ? 1 : 0;
+  const retainedDora = tiles.reduce((sum, tile) => sum
+    + dora.filter(bonus => bonus === normalizeTile(tile)).length + (isRedTile(tile) ? 1 : 0), 0);
+  const closed = state.openMelds === 0 || (state.melds.length === state.openMelds
+    && state.melds.every(meld => meld.type === "ankan"));
+  const likelyRiichiHan = state.riichiDeclared || closed ? 1 : 0;
   const estimatedValue = pointValue(1 + likelyRiichiHan + retainedDora, state.seat === "east");
 
   const turnsLeftFactor = state.remainingTiles === undefined
