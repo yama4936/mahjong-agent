@@ -1104,3 +1104,15 @@ session48299の稼働をポーリングで確認。結果未確定。実行版�
 六萬チーの08:28:39判断はシャンテン改善0で見送り、handPlan表示はearly_efficiency。
 直後08:28:52の打牌判断はturn11・middle_balance。鳴き経路に古い方針が残る可能性を
 別途調べる必要がある。現行対局中に実装は変更しない。
+
+## 東3局流局と鳴き経路の巡目欠落
+
+08:31:21結果画像は自家だけノーテン、他3人聴牌の荒牌流局。
+08:31:49に東3局1本場、自家西36300/北27000/東11700/南24000、供託1を検証。
+自家3000点減はノーテン罰符であり放銃ではない。親聴牌で同じ東3局を継続。
+src/cli.ts evaluate-frameのobservedPatchはownDiscardsを上書きするがturnを更新しない。
+対照的にsrc/agent/publicCache.ts cachedPublicStatePatchはturn=ownDiscards.lengthを渡す。
+pythonの鳴き評価はevaluate-frameを使用するため、古いstateのturnが残る経路を特定。
+これはログのearly_efficiency/middle_balance差を説明する実装上の原因候補。
+今後、現在の観測河に基づく巡目更新と、鳴き評価の中盤・終盤回帰を実装する。
+実対局中の固定版は変更しない。
