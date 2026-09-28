@@ -67,6 +67,23 @@ test("calibrated left melds recover chi and pon without picking up own hand edge
   }
 });
 
+test("real Hybrid agrees on ordered red-aware hand across riichi shimmer phases", {
+  skip: !existsSync(".runtime/hybrid-vision/cvmaj-pretrained.tar") || !existsSync(".runtime/hybrid-vision/automajsoul-best-model.pt"),
+}, async () => {
+  const layout = layoutSchema.parse(JSON.parse(await readFile("config/layout-300-regression.json", "utf8")));
+  const expected = ["3m", "3m", "0m", "7m", "3p", "4p", "5p", "6p", "8p", "8p", "2s", "3s", "4s", "6p"];
+  const recognizer = new HybridTileRecognizer();
+  try {
+    for (const phase of ["before", "after"]) {
+      const result = await recognizer.recognizeHand(`artifacts/live/riichi-shimmer-hand-${phase}-20260928.jpg`, layout);
+      assert.equal(result.safe, true, phase);
+      assert.deepEqual(result.tiles, expected, phase);
+    }
+  } finally {
+    await recognizer.close();
+  }
+});
+
 test("missing and undecodable meld regions are unknown, not confirmed closed hands", () => {
   const missing = toPublicTileObservation({});
   assert.equal(missing.opponentDiscards[0]?.meldsObserved, false);
