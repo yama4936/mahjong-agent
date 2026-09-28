@@ -1736,3 +1736,22 @@ index8(x1224/y406/w75/h38)の矢印探索y366..395は直前index9の
 ローカルcalculateShantenと58件全て一致、不一致0。
 これは認識済みの門前手牌に対する最小シャンテン値の比較であり、
 画像認識正解・打牌最適性・鳴き後のシャンテン・確率校正の証明ではない。
+
+### 牌面除外矢印集計を独立関数へ実装
+
+promptArrow.tsにcountPromptArrowOutsideFacesを追加。
+既存40x30矢印領域と緑画素条件を保ち、スクリーン座標で検出牌面内を除外。
+範囲外の矢印領域は0。元のhighlightedDiscardにはまだ接続していない。
+実画像で牌面除外なしの誤矢印164、除外後0、本物208維持をテスト。
+node --import tsx --test test/promptArrow.test.tsは2件成功、build成功。
+判定器全体の安全条件・本物対象牌分類・実機鳴き改善は今後の接続検証が必要。
+
+### 牌効率と脅威を分けた60打牌の調査
+
+固定ログ60decision時点で選択候補のshantenが最小候補より大きい選択9件。
+そのうち8件は立直または2副露以上の脅威下、1件は東2局12巡目發切り。
+この1件を同じstateでdeterministicAdviceへ渡すとlocalもFを選択。
+F切りshanten2/ukeire24/expectedRoundValue145に対し、
+4p切りchiitoitsu1/ukeire5/expectedRoundValue-77。
+未校正の確率・危険度と終盤比較重みが寄与するが、選択最適性は未証明。
+Jev固有の選択ミスと断定せず、無脅威終盤の評価校正の検証対象とする。
