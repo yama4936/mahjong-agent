@@ -869,12 +869,13 @@ class AwayDialogDetectionTest(unittest.TestCase):
     def test_force_auto_self_action_button_finds_visible_riichi_colored_button(self) -> None:
         viewport = {"width": 1600, "height": 900}
         image = Image.new("RGB", (1600, 900), (25, 55, 85))
-        ImageDraw.Draw(image).rectangle((893, 700, 1131, 780), fill=(190, 110, 35))
+        # Keep the synthetic button above the concealed row (85% height).
+        ImageDraw.Draw(image).rectangle((893, 680, 1131, 750), fill=(190, 110, 35))
         output = io.BytesIO()
         image.save(output, format="PNG")
         buttons = force_auto_self_action_buttons(output.getvalue(), viewport)
         self.assertEqual(len(buttons), 1)
-        self.assertEqual(buttons[0]["center"], {"x": 1012.0, "y": 740.0})
+        self.assertEqual(buttons[0]["center"], {"x": 1012.0, "y": 715.0})
 
     def test_force_auto_reaction_win_requires_pass_and_one_orange_button(self) -> None:
         viewport = {"width": 1600, "height": 900}
@@ -1417,6 +1418,13 @@ class AwayDialogDetectionTest(unittest.TestCase):
         operator.public_recognition_result = {"generation": 7, "result": {"ownDiscards": ["9p"]}}
         operator.poll_public_recognition()
         self.assertIsNone(operator.cached_public_observation)
+
+    def test_riichi_button_is_not_merged_with_concealed_tile_borders(self) -> None:
+        screenshot = (Path(__file__).resolve().parents[1] / "artifacts/live/riichi-button-hand-border-20260928.jpg").read_bytes()
+        buttons = force_auto_self_action_buttons(screenshot, {"width": 1920, "height": 1080})
+        self.assertEqual(len(buttons), 1)
+        self.assertLess(abs(buttons[0]["center"]["x"] - 1008.5), 2)
+        self.assertLess(abs(buttons[0]["center"]["y"] - 824), 2)
 
     def test_force_auto_public_prompt_uses_same_hybrid_backend_as_cache(self) -> None:
         operator = PythonAutoOperator.__new__(PythonAutoOperator)

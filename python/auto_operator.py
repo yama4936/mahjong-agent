@@ -376,7 +376,7 @@ def force_auto_self_action_buttons(screenshot: bytes, viewport: dict[str, int]) 
     right = round(viewport["width"] * 0.75)
     # The concealed hand starts at roughly 85% of the viewport height. Its
     # orange tile borders otherwise look like a huge riichi/ron button.
-    bottom = round(viewport["height"] * 0.875)
+    bottom = round(viewport["height"] * 0.85)
     with Image.open(io.BytesIO(screenshot)) as image:
         pixels = image.convert("RGB")
         active_columns: list[tuple[int, int, int]] = []
