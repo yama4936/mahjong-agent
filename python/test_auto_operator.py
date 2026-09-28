@@ -139,14 +139,15 @@ class ActionDeadlineTest(unittest.TestCase):
 
 
 class AwayDialogDetectionTest(unittest.TestCase):
-    def run_reaction_frame(self, frame: bytes, *, accept_call: bool) -> PythonAutoOperator:
+    def run_reaction_frame(self, frame: bytes, *, accept_call: bool, policy_error=None, iterations=2) -> PythonAutoOperator:
         project = Path(__file__).resolve().parents[1]
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
         operator.args = argparse.Namespace(
-            mode="force-auto", max_iterations=2, poll=0.001,
+            mode="force-auto", max_iterations=iterations, poll=0.001,
             accept_single_call=accept_call, action_templates="", stability_pixel_delta=1.5,
+            stop_on_error=True,
         )
         operator.layout = load_json(project / "config" / "layout.json")
         operator.hand_clip = {"x": 223, "y": 926, "width": 1355, "height": 146}
@@ -190,6 +191,8 @@ class AwayDialogDetectionTest(unittest.TestCase):
                          "callAssessments": [{"actionId": "pon_P", "approved": True}]},
         })
         operator.execute_force_auto_reaction_win = Mock(return_value={"clicked": True, "action": "ron"})
+        if policy_error is not None:
+            operator.evaluate_force_auto_call_policy.side_effect = policy_error
         operator.execute_reaction_pass = Mock(return_value={"clicked": True, "action": "pass"})
         operator.log = Mock()
         page = Mock()
@@ -198,6 +201,37 @@ class AwayDialogDetectionTest(unittest.TestCase):
         with patch("auto_operator.classify_screen", return_value=("match", 1.0)):
             operator.run(page)
         return operator
+
+    def test_retryable_call_policy_failure_defers_without_clicking(self) -> None:
+        project = Path(__file__).resolve().parents[1]
+        frame = (project / "artifacts" / "debug-300-after-hash-fix.png").read_bytes()
+        operator = self.run_reaction_frame(
+            frame, accept_call=True,
+            policy_error=RetryableSafetyAbort("board metadata not verified: four_scores_not_verified"),
+        )
+        operator.evaluate_force_auto_call_policy.assert_called_once()
+        operator.execute_force_auto_call.assert_not_called()
+        operator.execute_reaction_pass.assert_not_called()
+        self.assertTrue(any(c.args[0] == "reaction_call_policy_deferred" for c in operator.log.call_args_list))
+        self.assertIsNotNone(operator.action_evidence_started_at)
+
+    def test_call_policy_can_recover_on_next_frame(self) -> None:
+        project = Path(__file__).resolve().parents[1]
+        frame = (project / "artifacts" / "debug-300-after-hash-fix.png").read_bytes()
+        operator = self.run_reaction_frame(
+            frame, accept_call=True, iterations=3,
+            policy_error=[RetryableSafetyAbort("four_scores_not_verified"), {"status": "decision"}],
+        )
+        self.assertEqual(operator.evaluate_force_auto_call_policy.call_count, 2)
+        operator.execute_force_auto_call.assert_called_once()
+        operator.execute_reaction_pass.assert_not_called()
+        self.assertTrue(any(c.args[0] == "reaction_call_policy_deferred" for c in operator.log.call_args_list))
+
+    def test_call_policy_unexpected_error_is_not_swallowed(self) -> None:
+        project = Path(__file__).resolve().parents[1]
+        frame = (project / "artifacts" / "debug-300-after-hash-fix.png").read_bytes()
+        with self.assertRaisesRegex(RuntimeError, "unexpected evaluator failure"):
+            self.run_reaction_frame(frame, accept_call=True, policy_error=RuntimeError("unexpected evaluator failure"))
 
     def test_run_loop_call_path_meets_end_to_end_deadline(self) -> None:
         project = Path(__file__).resolve().parents[1]

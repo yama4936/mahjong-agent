@@ -2572,7 +2572,12 @@ class PythonAutoOperator:
                             continue
                         if getattr(self.args, "accept_single_call", False) and len(call_buttons) == 1:
                             call_action = call_buttons[0].get("action")
-                            policy = self.evaluate_force_auto_call_policy(screenshot_path, call_action)
+                            try:
+                                policy = self.evaluate_force_auto_call_policy(screenshot_path, call_action)
+                            except RetryableSafetyAbort as error:
+                                self.log("reaction_call_policy_deferred", screenshot=str(screenshot_path), error=str(error))
+                                page.wait_for_timeout(max(100, round(self.args.poll * 1000)))
+                                continue
                             if policy:
                                 try:
                                     receipt = self.execute_force_auto_call(page, full_screen, call_buttons[0])
