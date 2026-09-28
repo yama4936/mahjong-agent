@@ -9,6 +9,23 @@ const state = parseGameState({
   recognitionConfidence: 1,
 });
 
+test("live south-three highlighted chi is passed without shanten gain or viable yaku", async () => {
+  const reaction = parseGameState({
+    phase: "reaction", round: "south_3", seat: "south", honba: 4, riichiSticks: 3,
+    scores: { south: 28000, west: 38500, north: 13000, east: 17500 },
+    hand: ["5m", "7m", "9m", "1p", "3p", "5p", "7p", "9p", "3s", "5s", "6s", "7s", "8s"],
+    pendingDiscard: { tile: "8s", fromSeat: "east" }, availableUiActions: ["chi", "pass"],
+    recognitionConfidence: 1,
+  });
+  const decision = await decide(reaction, { mode: "advisor" });
+  assert.equal(decision.selectedAction.action, "pass");
+  const assessment = decision.callAssessments?.find((item) => item.actionId === "chi_8s_6s_7s");
+  assert.equal(assessment?.currentShanten, 3);
+  assert.equal(assessment?.resultingShanten, 3);
+  assert.equal(assessment?.approved, false);
+  assert.deepEqual(assessment?.reasons, ["no_strict_shanten_improvement", "no_viable_yaku_path"]);
+});
+
 test("advisor produces a recommendation but is never executable", async () => {
   const result = await decide(state, { mode: "advisor" });
   assert.equal(result.tile, "E");
