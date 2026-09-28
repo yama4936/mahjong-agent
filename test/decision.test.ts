@@ -41,6 +41,30 @@ test("live sequence-heavy seven-sou pon cannot claim an unsupported toitoi path"
   assert.ok(decision.callAssessments?.[0]?.reasons.includes("no_viable_yaku_path"));
 });
 
+test("tanyao calls retain exposed terminals but may discard a concealed terminal", async () => {
+  const terminalMeld = parseGameState({
+    phase: "reaction", seat: "south", round: "east_1",
+    hand: ["1m", "2m", "2p", "3p", "4p", "4p", "5p", "6p", "4s", "5s", "6s", "7s", "7s"],
+    pendingDiscard: { tile: "3m", fromSeat: "east" }, availableUiActions: ["chi", "pass"],
+  });
+  const invalid = await decide(terminalMeld, { mode: "advisor" });
+  assert.equal(invalid.callAssessments?.[0]?.candidateYaku.includes("tanyao"), false);
+  const discardable = parseGameState({
+    phase: "reaction", seat: "south", round: "east_1",
+    hand: ["1m", "2p", "3p", "4p", "4p", "5p", "6p", "4s", "5s", "6s", "7s", "7s", "8s"],
+    pendingDiscard: { tile: "7s", fromSeat: "east" }, availableUiActions: ["chi", "pass"],
+  });
+  const valid = await decide(discardable, { mode: "advisor" });
+  assert.ok(valid.callAssessments?.find((item) => item.actionId === "chi_7s_5s_6s")?.candidateYaku.includes("tanyao"));
+  const unknownMeld = parseGameState({
+    phase: "reaction", seat: "south", round: "east_1", openMelds: 1,
+    hand: ["2m", "3m", "4m", "4p", "5p", "6p", "3s", "4s", "6s", "6s"],
+    pendingDiscard: { tile: "5s", fromSeat: "east" }, availableUiActions: ["chi", "pass"],
+  });
+  const incomplete = await decide(unknownMeld, { mode: "advisor" });
+  assert.ok(incomplete.callAssessments?.every((item) => !item.candidateYaku.includes("tanyao")));
+});
+
 test("advisor produces a recommendation but is never executable", async () => {
   const result = await decide(state, { mode: "advisor" });
   assert.equal(result.tile, "E");

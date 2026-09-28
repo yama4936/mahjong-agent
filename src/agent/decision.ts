@@ -4,7 +4,7 @@ import { JevClient, type JevDecision, type JevHandPlan } from "../jev/client.js"
 import { generateLegalActions, type LegalAction } from "../game/actions.js";
 import { calculateShanten } from "../game/shanten.js";
 import { evaluateDiscards } from "../game/ukeire.js";
-import { isTerminalOrHonor, normalizeTile, tileIndex } from "../game/tiles.js";
+import { isTerminalOrHonor, normalizeTile, tileIndex, type GameTile } from "../game/tiles.js";
 
 export type AgentMode = "observer" | "advisor" | "auto" | "force-auto";
 
@@ -357,8 +357,18 @@ function yakuForCall(state: GameState, action: CallAction): { confirmed: string[
     const tile = normalizeTile(meld.tiles[0]!);
     if (meld.type !== "chi" && honors.has(tile)) confirmed.push(`yakuhai:${tile}`);
   }
-  const after = [...state.hand.filter((tile) => !action.consumedTiles.some((used) => normalizeTile(used) === normalizeTile(tile))), action.tile];
-  if (after.every((tile) => !isTerminalOrHonor(tileIndex(normalizeTile(tile))))
+  const concealedAfter = [...state.hand];
+  for (const used of action.consumedTiles) {
+    const index = concealedAfter.findIndex((tile) => normalizeTile(tile) === normalizeTile(used));
+    if (index < 0) return { confirmed, candidates };
+    concealedAfter.splice(index, 1);
+  }
+  const isSimple = (tile: GameTile) => !isTerminalOrHonor(tileIndex(normalizeTile(tile)));
+  const calledMeld = [...action.consumedTiles, action.tile];
+  const existingMeldsKnown = state.melds.length === state.openMelds;
+  // The next discard may remove one terminal from the concealed row, but no
+  // terminal in the newly exposed meld can ever be removed for tanyao.
+  if (existingMeldsKnown && calledMeld.every(isSimple) && concealedAfter.filter((tile) => !isSimple(tile)).length <= 1
     && state.melds.every((meld) => meld.tiles.every((tile) => !isTerminalOrHonor(tileIndex(normalizeTile(tile)))))) {
     candidates.push("tanyao");
   }
@@ -366,7 +376,7 @@ function yakuForCall(state: GameState, action: CallAction): { confirmed: string[
   for (const tile of state.hand.map(normalizeTile)) counts.set(tile, (counts.get(tile) ?? 0) + 1);
   if ([...honors].some((tile) => (counts.get(tile) ?? 0) >= 2)) candidates.push("yakuhai");
   const pairOrTripletTypes = [...counts.values()].filter((count) => count >= 2).length;
-  if (state.melds.every((meld) => meld.type !== "chi") && action.action !== "chi"
+  if (existingMeldsKnown && state.melds.every((meld) => meld.type !== "chi") && action.action !== "chi"
     && pairOrTripletTypes + state.openMelds >= 4) candidates.push("toitoi");
   return { confirmed: [...new Set(confirmed)], candidates: [...new Set(candidates)] };
 }
