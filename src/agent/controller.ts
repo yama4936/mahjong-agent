@@ -196,7 +196,11 @@ async function completeTurn(context: TurnContext, image: Buffer, recognition: Ha
           }),
         }
       : {}),
-    ...(context.publicState.visibleTiles.length === 0 ? { visibleTiles: observation.allMeldTiles ?? observation.ownMeldTiles } : {}),
+    // Opponent melds are represented on each opponent; never count them again
+    // in visibleTiles. Likewise, typed own melds already contribute their tiles.
+    ...(context.publicState.visibleTiles.length === 0 ? {
+      visibleTiles: context.publicState.melds.length === 0 ? observation.ownMeldTiles : [],
+    } : {}),
   } : {};
   let state;
   const concealedCount = 14 - context.publicState.openMelds * 3;

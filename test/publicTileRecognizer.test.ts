@@ -6,6 +6,7 @@ import sharp from "sharp";
 import { layoutSchema } from "../src/recognition/layout.js";
 import { opponentStatesFromObservation } from "../src/recognition/publicTileRecognizer.js";
 import { detectConfiguredPublicRegions } from "../src/recognition/regionDetector.js";
+import { knownTiles, knownTilesOutsideHand, parseGameState, parsePublicGameState } from "../src/game/state.js";
 import { assertTemporalPublicObservation, hasSidewaysRiichiTile, recognizeConfiguredPublicTiles, recognizeConfiguredPublicTilesWithVit, recognizeExposedMelds, toPublicTileObservation, type PublicTileObservation, type PublicTileRecognitionRegion } from "../src/recognition/publicTileRecognizer.js";
 
 function publicRegion(tiles: Array<{ tile: any; x: number; y?: number; width?: number; height?: number }>, rotationToUpright: 0 | 90 | 180 | 270 = 0): PublicTileRecognitionRegion {
@@ -79,6 +80,23 @@ test("live perspective melds detect and normalize the called sideways tile", asy
   assert.equal(observation.opponentDiscards[0]?.melds?.[0]?.type, "pon");
   assert.equal(observation.opponentDiscards[1]?.melds?.[0]?.type, "chi");
   assert.equal(observation.allMeldTiles?.length, 6);
+});
+
+test("live opponent meld tiles reach remaining-copy counts without duplicating rivers", async () => {
+  const replay = JSON.parse(await readFile("artifacts/live/south4-riichi-replay-20260928.json", "utf8"));
+  const observation = toPublicTileObservation({
+    rightMelds: publicRegion([{ tile: "S", x: 0 }, { tile: "S", x: 30 }, { tile: "S", x: 60 }]),
+    oppositeMelds: publicRegion([{ tile: "6s", x: 0 }, { tile: "7s", x: 30 }, { tile: "8s", x: 60 }]),
+  });
+  const opponents = opponentStatesFromObservation(observation, replay.state.opponents)
+    .map((opponent) => ({ ...opponent, discards: replay.state.opponents.find((item: any) => item.seat === opponent.seat).discards }));
+  const updated = parseGameState({ ...replay.state, opponents });
+  assert.equal(knownTiles(updated).filter((tile) => tile === "7s").length, 4);
+  assert.equal(knownTilesOutsideHand(updated).filter((tile) => tile === "7s").length, 2);
+  assert.equal(knownTiles(updated).filter((tile) => tile === "S").length, 4);
+  assert.equal(updated.visibleTiles.length, 0);
+  assert.throws(() => parseGameState({ ...updated, visibleTiles: ["7s"] }), /More than four/);
+  assert.throws(() => parsePublicGameState({ ...updated, visibleTiles: ["S"] }), /More than four/);
 });
 
 test("classifies upright and rotated public tile candidates after orientation normalization", { timeout: 30_000 }, async () => {

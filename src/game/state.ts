@@ -37,6 +37,7 @@ const gameStateObjectSchema = z.object({
     riichi: z.boolean().default(false),
     openMelds: z.number().int().min(0).max(4).default(0),
     openMeldsObserved: z.boolean().optional(),
+    melds: z.array(meldSchema).max(4).optional(),
   })).default([]),
 });
 
@@ -107,6 +108,7 @@ export function knownTiles(state: GameState): GameTile[] {
     ...state.melds.flatMap((meld) => meld.tiles),
     ...state.visibleTiles,
     ...state.opponents.flatMap((opponent) => opponent.discards),
+    ...state.opponents.flatMap((opponent) => opponent.melds?.flatMap((meld) => meld.tiles) ?? []),
     ...pendingTileOutsideRiver(state),
   ];
 }
@@ -118,6 +120,7 @@ export function knownTilesOutsideHand(state: GameState): GameTile[] {
     ...state.melds.flatMap((meld) => meld.tiles),
     ...state.visibleTiles,
     ...state.opponents.flatMap((opponent) => opponent.discards),
+    ...state.opponents.flatMap((opponent) => opponent.melds?.flatMap((meld) => meld.tiles) ?? []),
     ...pendingTileOutsideRiver(state),
   ];
 }
@@ -152,6 +155,7 @@ export function parsePublicGameState(input: unknown): PublicGameState {
     ...state.melds.flatMap((meld) => meld.tiles),
     ...state.visibleTiles,
     ...state.opponents.flatMap((opponent) => opponent.discards),
+    ...state.opponents.flatMap((opponent) => opponent.melds?.flatMap((meld) => meld.tiles) ?? []),
     ...pendingTileOutsideRiver(state),
   ]);
   return state;

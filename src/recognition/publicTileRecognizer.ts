@@ -185,6 +185,7 @@ export function opponentStatesFromObservation(
       riichi: Boolean(opponent.riichiDeclared || previous?.riichi),
       openMelds: Math.max(observedCount, previousCount),
       openMeldsObserved: opponent.meldsObserved === true && observedCount >= previousCount,
+      melds: observedCount >= (previous?.melds?.length ?? 0) ? opponent.melds : previous?.melds,
     };
   });
 }
