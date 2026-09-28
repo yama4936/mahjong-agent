@@ -9,6 +9,7 @@ import argparse
 import tempfile
 import json
 import time
+import threading
 from datetime import datetime, timezone
 from unittest.mock import Mock, patch
 
@@ -340,6 +341,30 @@ class AwayDialogDetectionTest(unittest.TestCase):
             ))
             self.assertFalse(any(call.args and call.args[0] == "safety_stop"
                                  for call in operator.log.call_args_list))
+
+    def test_async_public_cache_retains_previous_snapshot_for_call_policy(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.public_recognition_lock = threading.Lock()
+        operator.public_cache_generation = 2
+        before = {"opponentDiscards": [{"seat": "south", "discards": ["E"]}]}
+        after = {"opponentDiscards": [{"seat": "south", "discards": ["E", "P"]}]}
+        operator.cached_public_observation = before
+        operator.previous_public_observation = None
+        operator.log = Mock()
+        operator.public_recognition_result = {"generation": 1, "result": after}
+        operator.poll_public_recognition()
+        self.assertIsNone(operator.previous_public_observation)
+        operator.public_recognition_result = {"generation": 2, "result": after}
+        operator.poll_public_recognition()
+        self.assertIs(operator.previous_public_observation, before)
+        self.assertEqual(operator.infer_pending_discard(
+            operator.previous_public_observation, operator.cached_public_observation,
+        ), {"tile": "P", "fromSeat": "south"})
+        operator.public_recognition_result = {"generation": 2, "result": after}
+        operator.poll_public_recognition()
+        self.assertIsNone(operator.infer_pending_discard(
+            operator.previous_public_observation, operator.cached_public_observation,
+        ))
 
     def test_public_cache_only_grows_rivers_and_preserves_riichi(self) -> None:
         previous = {
@@ -920,6 +945,7 @@ class AwayDialogDetectionTest(unittest.TestCase):
         ]}
         operator.cached_open_melds = 0
         operator.log = Mock()
+        operator.observe_public_board = Mock(return_value=operator.cached_public_observation)
         operator.recognize_resident = Mock(return_value={"tiles": ["1m"] * 13, "safe": True})
         approved = {"status": "decision", "decision": {
             "selectedAction": {"id": "pon_P", "action": "pon"},
@@ -932,6 +958,9 @@ class AwayDialogDetectionTest(unittest.TestCase):
         self.assertEqual(operator.evaluate.call_args.args[-1], ["pon", "pass"])
 
         operator.evaluate.reset_mock()
+        operator.observe_public_board.return_value = operator.previous_public_observation
+        self.assertIsNone(operator.evaluate_force_auto_call_policy(screenshot, "pon"))
+        operator.evaluate.assert_not_called()
         operator.previous_public_observation = operator.cached_public_observation
         self.assertIsNone(operator.evaluate_force_auto_call_policy(screenshot, "pon"))
         operator.evaluate.assert_not_called()

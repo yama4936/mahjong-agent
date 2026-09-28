@@ -976,6 +976,7 @@ class PythonAutoOperator:
             self.log("public_cache_failed", error=envelope["error"])
             return
         current = envelope["result"]
+        self.previous_public_observation = self.cached_public_observation
         self.cached_public_observation = merge_public_observations(self.cached_public_observation, current)
         self.log(
             "public_cache_updated",
@@ -1484,6 +1485,14 @@ class PythonAutoOperator:
             self.log("reaction_call_policy_rejected", action=call_action,
                      reason="pending_discard_not_verified")
             return None
+        # A delayed asynchronous append cannot identify the current prompt by
+        # itself. Recheck the exact river append on this prompt's own frame.
+        fresh_public = self.observe_public_board(screenshot)
+        if self.infer_pending_discard(self.previous_public_observation, fresh_public) != pending:
+            self.log("reaction_call_policy_rejected", action=call_action,
+                     reason="pending_discard_not_verified_on_prompt_frame")
+            return None
+        public_observation = fresh_public
         recognition = self.recognize_reaction_hand(screenshot)
         expected = 13 - getattr(self, "cached_open_melds", 0) * 3
         if len(recognition.get("tiles", [])) != expected:
@@ -2175,6 +2184,7 @@ class PythonAutoOperator:
                         self.open_meld_candidate = None
                         self.open_meld_candidate_frames = set()
                         self.cached_public_observation = None
+                        self.previous_public_observation = None
                         self.public_cache_generation += 1
                         self.public_cache_last_frame_hash = None
                         restart_open_melds = None
@@ -2317,6 +2327,7 @@ class PythonAutoOperator:
                     self.public_cache_generation += 1
                     self.public_cache_last_frame_hash = None
                     self.cached_public_observation = None
+                    self.previous_public_observation = None
                     self.last_shanten = None
                     self.last_processed_hand = None
                     self.armed = True
