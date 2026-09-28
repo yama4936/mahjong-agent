@@ -1673,7 +1673,43 @@ class PythonAutoOperator:
             self.log("reaction_call_policy_rejected", action=call_action,
                      reason="call_not_certified", assessment=assessment)
             return None
+        evaluation["verifiedCallDiscard"] = dict(pending)
         return evaluation
+
+    def reconcile_confirmed_call_discard(self, pending: dict[str, Any]) -> None:
+        """Remove only the verified called tail after hand/meld confirmation.
+
+        Old asynchronous snapshots must not restore the pre-call river. Do not
+        interpret arbitrary OCR shrinkage as a call or remove an interior tile.
+        """
+        self.public_cache_generation = getattr(self, "public_cache_generation", 0) + 1
+        self.public_cache_last_frame_hash = None
+        self.last_public_scan_at = 0.0
+        removed = 0
+        for attribute in ("cached_public_observation", "previous_public_observation"):
+            observation = getattr(self, attribute, None)
+            if not observation:
+                continue
+            opponents = []
+            changed = False
+            for item in observation.get("opponentDiscards", []):
+                river = item.get("discards", [])
+                if item.get("seat") == pending.get("fromSeat") and river and river[-1] == pending.get("tile"):
+                    item = {**item, "discards": river[:-1]}
+                    removed += 1
+                    changed = True
+                opponents.append(item)
+            if changed:
+                all_meld_tiles = [*observation.get("ownMeldTiles", []), *[
+                    tile for item in opponents for meld in item.get("melds", []) for tile in meld.get("tiles", [])
+                ]]
+                other_visible = [*[tile for item in opponents for tile in item.get("discards", [])], *all_meld_tiles]
+                setattr(self, attribute, {**observation, "opponentDiscards": opponents,
+                    "allMeldTiles": all_meld_tiles, "otherVisibleTiles": other_visible,
+                    "acceptedTiles": len(observation.get("doraIndicators", []))
+                    + len(observation.get("ownDiscards", [])) + len(other_visible)})
+        self.log("called_river_reconciled", pendingDiscard=pending, removedSnapshots=removed,
+                 publicCacheGeneration=self.public_cache_generation)
 
     def force_auto_reaction_fallback(
         self, screenshot: Path, *, contextual_prompt_verified: bool = False,
@@ -2680,6 +2716,9 @@ class PythonAutoOperator:
                                     self.log("reaction_call_unconfirmed", screenshot=str(screenshot_path), error=str(error))
                                     page.wait_for_timeout(max(100, round(self.args.poll * 1000)))
                                     continue
+                                if receipt.get("confirmation") == "hand_and_own_meld_changed" \
+                                        and policy.get("verifiedCallDiscard"):
+                                    self.reconcile_confirmed_call_discard(policy["verifiedCallDiscard"])
                                 receipt["actionTiming"] = self.action_timing(decision_started_at, clear=True)
                                 self.log("reaction_call", screenshot=str(screenshot_path), evaluation=policy,
                                          execution=receipt)

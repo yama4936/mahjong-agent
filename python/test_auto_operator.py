@@ -634,6 +634,40 @@ class AwayDialogDetectionTest(unittest.TestCase):
             self.assertFalse(any(call.args and call.args[0] == "safety_stop"
                                  for call in operator.log.call_args_list))
 
+    def test_confirmed_call_removes_only_source_tail_and_invalidates_old_worker(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        before = {"doraIndicators": ["1p"], "ownDiscards": ["N"], "ownMeldTiles": [],
+                  "opponentDiscards": [{"seat": "north", "discards": ["E", "F"], "riichiDeclared": True},
+                                       {"seat": "west", "discards": ["F"]}]}
+        operator.cached_public_observation = before
+        operator.previous_public_observation = before
+        operator.public_cache_generation = 2
+        operator.public_recognition_lock = threading.Lock()
+        operator.log = Mock()
+        operator.reconcile_confirmed_call_discard({"tile": "F", "fromSeat": "north"})
+        after = operator.cached_public_observation
+        self.assertEqual(after["opponentDiscards"][0]["discards"], ["E"])
+        self.assertTrue(after["opponentDiscards"][0]["riichiDeclared"])
+        self.assertEqual(after["opponentDiscards"][1]["discards"], ["F"])
+        self.assertEqual(after["otherVisibleTiles"], ["E", "F"])
+        self.assertEqual(after["acceptedTiles"], 4)
+        self.assertEqual(before["opponentDiscards"][0]["discards"], ["E", "F"])
+        self.assertEqual(operator.previous_public_observation, after)
+        operator.public_recognition_result = {"generation": 2, "result": before}
+        operator.poll_public_recognition()
+        self.assertEqual(operator.cached_public_observation, after)
+        for pending in [{"tile": "F", "fromSeat": "north"}, {"tile": "F", "fromSeat": "south"}]:
+            operator.reconcile_confirmed_call_discard(pending)
+            self.assertEqual(operator.cached_public_observation, after)
+        fresh = {**after, "ownMeldTiles": ["F", "F", "F"],
+                 "ownMelds": [{"type": "pon", "tiles": ["F", "F", "F"]}]}
+        merged = merge_public_observations(after, fresh)
+        self.assertEqual(merged["otherVisibleTiles"].count("F"), 4)
+        interior = {"opponentDiscards": [{"seat": "north", "discards": ["F", "E"]}]}
+        operator.cached_public_observation = interior
+        operator.reconcile_confirmed_call_discard({"tile": "F", "fromSeat": "north"})
+        self.assertIs(operator.cached_public_observation, interior)
+
     def test_async_public_cache_retains_previous_snapshot_for_call_policy(self) -> None:
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
         operator.public_recognition_lock = threading.Lock()
