@@ -362,6 +362,13 @@ class AwayDialogDetectionTest(unittest.TestCase):
         ), {"tile": "P", "fromSeat": "south"})
         operator.public_recognition_result = {"generation": 2, "result": after}
         operator.poll_public_recognition()
+        self.assertEqual(operator.infer_pending_discard(
+            operator.previous_public_observation, operator.cached_public_observation,
+        ), {"tile": "P", "fromSeat": "south"})
+        operator.public_recognition_result = {"generation": 2, "result": {
+            **after, "ownDiscards": ["1m"],
+        }}
+        operator.poll_public_recognition()
         self.assertIsNone(operator.infer_pending_discard(
             operator.previous_public_observation, operator.cached_public_observation,
         ))

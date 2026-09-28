@@ -976,8 +976,16 @@ class PythonAutoOperator:
             self.log("public_cache_failed", error=envelope["error"])
             return
         current = envelope["result"]
-        self.previous_public_observation = self.cached_public_observation
-        self.cached_public_observation = merge_public_observations(self.cached_public_observation, current)
+        prior = self.cached_public_observation
+        merged = merge_public_observations(prior, current)
+        def river_signature(observation: dict[str, Any]) -> tuple[Any, ...]:
+            return (tuple(observation.get("ownDiscards", [])), tuple(sorted(
+                (item["seat"], tuple(item.get("discards", [])))
+                for item in observation.get("opponentDiscards", [])
+            )))
+        if prior is None or river_signature(prior) != river_signature(merged):
+            self.previous_public_observation = prior
+        self.cached_public_observation = merged
         self.log(
             "public_cache_updated",
             capturedAt=self.cached_public_observation.get("capturedAt"),
