@@ -982,6 +982,9 @@ class AwayDialogDetectionTest(unittest.TestCase):
         operator.observe_public_board.return_value = operator.previous_public_observation
         self.assertIsNone(operator.evaluate_force_auto_call_policy(screenshot, "pon"))
         operator.evaluate.assert_not_called()
+        evidence = operator.log.call_args.kwargs["riverEvidence"]
+        self.assertEqual(evidence["cached"]["opponentDiscards"][0]["discards"], ["P"])
+        self.assertEqual(evidence["prompt"]["opponentDiscards"][0]["discards"], [])
         operator.previous_public_observation = operator.cached_public_observation
         self.assertIsNone(operator.evaluate_force_auto_call_policy(screenshot, "pon"))
         operator.evaluate.assert_not_called()

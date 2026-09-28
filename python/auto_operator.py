@@ -1527,17 +1527,30 @@ class PythonAutoOperator:
         triggered it.  Without one exact river append we fail closed to pass.
         """
         public_observation = self.cached_public_observation
+        def river_evidence(observation):
+            if not observation:
+                return None
+            return {"capturedAt": observation.get("capturedAt"),
+                    "ownDiscards": observation.get("ownDiscards", []),
+                    "opponentDiscards": [{"seat": item.get("seat"),
+                                          "discards": item.get("discards", [])}
+                                         for item in observation.get("opponentDiscards", [])]}
         pending = self.infer_pending_discard(self.previous_public_observation, public_observation)
         if not pending:
             self.log("reaction_call_policy_rejected", action=call_action,
-                     reason="pending_discard_not_verified")
+                     reason="pending_discard_not_verified",
+                     riverEvidence={"previous": river_evidence(self.previous_public_observation),
+                                    "cached": river_evidence(public_observation)})
             return None
         # A delayed asynchronous append cannot identify the current prompt by
         # itself. Recheck the exact river append on this prompt's own frame.
         fresh_public = self.observe_public_board(screenshot)
         if self.infer_pending_discard(self.previous_public_observation, fresh_public) != pending:
             self.log("reaction_call_policy_rejected", action=call_action,
-                     reason="pending_discard_not_verified_on_prompt_frame")
+                     reason="pending_discard_not_verified_on_prompt_frame", pendingDiscard=pending,
+                     riverEvidence={"previous": river_evidence(self.previous_public_observation),
+                                    "cached": river_evidence(public_observation),
+                                    "prompt": river_evidence(fresh_public)})
             return None
         public_observation = fresh_public
         recognition = self.recognize_reaction_hand(screenshot)
