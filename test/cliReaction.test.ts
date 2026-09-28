@@ -5,6 +5,42 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
+import { parseGameState } from "../src/game/state.js";
+import { decide } from "../src/agent/decision.js";
+
+test("real dragon prompt public recognition feeds certified pon with annotated compact hand", {
+  skip: !existsSync(".runtime/hybrid-vision/cvmaj-pretrained.tar") || !existsSync(".runtime/hybrid-vision/automajsoul-best-model.pt"),
+}, async () => {
+  const observation = spawnSync(process.execPath, ["--import", "tsx", "src/cli.ts", "public-observation",
+    "artifacts/live/green-dragon-pon-missed-after-called-river-removal-20260928.png",
+    "config/layout-300-regression.json", "templates/bootstrap", "--seat=east",
+    "--backend=hybrid", "--reaction-highlight"], { encoding: "utf8", timeout: 20000 });
+  assert.equal(observation.status, 0, observation.stderr);
+  const board = JSON.parse(observation.stdout);
+  assert.deepEqual(board.highlightedDiscard, { tile: "F", fromSeat: "north" });
+  assert.deepEqual(board.opponentDiscards.find((item: any) => item.seat === "north").discards,
+    ["P", "1p", "2s", "7p", "F"]);
+  // Current own-meld geometry still misses the visible 9m pon. Supply this
+  // explicitly annotated context; this test is not full hand recognition or
+  // authorization to click. Keep the missing recognition visible in assertions.
+  assert.deepEqual(board.ownMelds, []);
+  const state = parseGameState({
+    phase: "reaction", seat: "east", round: "east_1", honba: 1, riichiSticks: 1,
+    scores: { east: 25500, south: 23500, west: 23500, north: 26500 },
+    hand: ["1p", "3p", "0p", "7p", "0s", "5s", "8s", "9s", "F", "F"],
+    melds: [{ type: "pon", tiles: ["9m", "9m", "9m"], fromSeat: "north" }], openMelds: 1,
+    pendingDiscard: { ...board.highlightedDiscard, inRiver: true },
+    ownDiscards: board.ownDiscards, doraIndicators: board.doraIndicators,
+    opponents: board.opponentDiscards.map((item: any) => ({ seat: item.seat,
+      discards: item.discards, riichi: item.riichiDeclared, openMelds: item.melds.length })),
+    turn: board.ownDiscards.length, remainingTiles: 47, availableUiActions: ["pon", "pass"],
+  });
+  const decision = await decide(state, { mode: "advisor" });
+  assert.equal(decision.selectedAction.action, "pon");
+  const assessment = decision.callAssessments?.find((item) => item.actionId === decision.selectedAction.id);
+  assert.equal(assessment?.approved, true);
+  assert.ok(assessment?.confirmedYaku.includes("yakuhai:F"));
+});
 
 test("stopped chi frame reacquires public rivers and reaches reaction evaluation", {
   skip: !existsSync(".runtime/hybrid-vision/cvmaj-pretrained.tar") || !existsSync(".runtime/hybrid-vision/automajsoul-best-model.pt"),

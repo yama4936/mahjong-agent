@@ -1424,3 +1424,17 @@ green-dragon-pon-missed-after-called-river-removal-20260928.pngの
 ブラウザーCDP9222への接続拒否、agent-browser不在を確認し、
 今回の実画面再検証は未実施。ポンの実行復旧・勝率改善は未証明。
 npm testは165件・21.944秒で成功（skipなし）、npm run build成功。
+
+## 発ポンの実public認識から評価への接続
+
+同じ発画像をpublic-observation CLIのbackend=hybridで再認識。
+左家河はP/1p/2s/7p/F、highlightedDiscardはF,north（自家east）、
+ドラ表示4pを取得。従来の緑枠不検出はこの保存画像で解消した。
+ただしownMelds=[]のままで、画像右下の九萬ポンを認識できていない。
+手牌1p/3p/0p/7p/0s/5s/8s/9s/F/Fと九萬ポンは目視注釈として補い、
+その上で実public認識の河・ドラ・提示牌をparseGameState→decideへ投入。
+選択pon、approved=true、confirmedYakuにyakuhai:Fを確認。
+テストcliReactionに追加し、未認識の自家副露を明示的に可視化した。
+これはpublic認識＋注釈済み手牌の評価接続であり、完全な画面認識・
+操作クリック・和了・勝率改善の証拠ではない。自家副露の座標修正が必要。
+npm testは166件、27.128秒で全件成功（skipなし）、npm run build成功。
