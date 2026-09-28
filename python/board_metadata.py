@@ -82,18 +82,21 @@ def recognize_board(image_path: Path) -> dict:
             center = box.mean(axis=0) / 3 + [780, 310]
             tokens.append({"text": text, "confidence": float(confidence),
                            "x": float(center[0]), "y": float(center[1])})
-    # The left score is vertical. Retry its calibrated crop upright only when
+    # Side scores are vertical. Retry their calibrated crops upright only when
     # no high-confidence numeric token exists; retain ambiguity rejection.
-    left_scores = [token for token in tokens
-                   if abs(token["x"] - 876) <= 24 and abs(token["y"] - 423) <= 20
-                   and re.fullmatch(r"-?\d{3,6}", token["text"])]
-    if not any(token["confidence"] >= 0.98 for token in left_scores):
-        score = engine(np.array(image.crop((859, 371, 891, 474))
-                                .rotate(90, expand=True).resize((412, 128))),
-                       use_det=False, use_cls=False, use_rec=True)
-        if score.txts is not None and len(score.txts) == 1:
-            tokens.append({"text": score.txts[0], "confidence": float(score.scores[0]),
-                           "x": 876, "y": 423, "source": "upright_left_score_crop"})
+    for side, x, y, box, angle in [
+        ("left", 876, 423, (859, 371, 891, 474), 90),
+        ("right", 1047, 419, (1031, 368, 1063, 471), 270),
+    ]:
+        side_scores = [token for token in tokens
+                       if abs(token["x"] - x) <= 24 and abs(token["y"] - y) <= 20
+                       and re.fullmatch(r"-?\d{3,6}", token["text"])]
+        if not any(token["confidence"] >= 0.98 for token in side_scores):
+            score = engine(np.array(image.crop(box).rotate(angle, expand=True).resize((412, 128))),
+                           use_det=False, use_cls=False, use_rec=True)
+            if score.txts is not None and len(score.txts) == 1:
+                tokens.append({"text": score.txts[0], "confidence": float(score.scores[0]),
+                               "x": x, "y": y, "source": f"upright_{side}_score_crop"})
     # Fixed isolated digits avoid confusing the stick icon and multiplication
     # sign with the count; never substitute zero when recognition fails.
     for box, x in [((110, 132, 155, 178), 132), ((250, 132, 285, 178), 268)]:

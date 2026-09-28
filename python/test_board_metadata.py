@@ -8,6 +8,24 @@ from board_metadata import parse_board_tokens, recognize_board, recognize_riichi
 
 class BoardMetadataTest(unittest.TestCase):
     @unittest.skipUnless(importlib.util.find_spec("rapidocr"), "optional OCR dependencies not installed")
+    def test_vertical_right_score_recovers_with_point_conservation(self):
+        frame = Path(__file__).resolve().parents[1] / "artifacts/live/board-score-right-low-confidence-20260928.jpg"
+        for _ in range(2):
+            result = recognize_board(frame)
+            self.assertTrue(result["verified"], result)
+            self.assertEqual(result["seat"], "north")
+            self.assertEqual(result["round"], "south_1")
+            self.assertEqual(result["scores"], {"north": 27500, "east": 40000,
+                                                "south": 12500, "west": 19000})
+            self.assertEqual(result["riichiSticks"], 1)
+            self.assertEqual(result["honba"], 2)
+            self.assertEqual(result["remainingTiles"], 54)
+            fallback = [token for token in result["tokens"]
+                        if token.get("source") == "upright_right_score_crop"]
+            self.assertEqual(len(fallback), 1)
+            self.assertGreaterEqual(fallback[0]["confidence"], 0.98)
+
+    @unittest.skipUnless(importlib.util.find_spec("rapidocr"), "optional OCR dependencies not installed")
     def test_vertical_left_score_low_confidence_recovers_without_lowering_threshold(self):
         frame = Path(__file__).resolve().parents[1] / "artifacts/live/board-score-left-low-confidence-20260928.jpg"
         for _ in range(2):
