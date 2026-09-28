@@ -85,6 +85,14 @@ class BoardMetadataTest(unittest.TestCase):
         with Image.open(root / "artifacts/live/ron-next-round-score-20260928.png") as image:
             self.assertEqual(recognize_riichi_sticks(image, "west"), [])
 
+    def test_left_hud_stick_real_frame_and_all_seat_rotations(self):
+        root = Path(__file__).resolve().parents[1] / "artifacts/live"
+        with Image.open(root / "left-river-three-man-border-20260928.png") as image:
+            for own, left in [("east", "north"), ("south", "east"),
+                              ("west", "south"), ("north", "west")]:
+                with self.subTest(own=own):
+                    self.assertEqual(recognize_riichi_sticks(image, own), [left])
+
     def test_opposite_hud_stick_real_frames_and_all_seat_rotations(self):
         root = Path(__file__).resolve().parents[1] / "artifacts/live"
         for filename in ["opposite-riichi-stick-missed-20260928.jpg",

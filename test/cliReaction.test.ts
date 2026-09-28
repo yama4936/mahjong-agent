@@ -4,6 +4,47 @@ import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
+
+test("stopped chi frame reacquires public rivers and reaches reaction evaluation", {
+  skip: !existsSync(".runtime/hybrid-vision/cvmaj-pretrained.tar") || !existsSync(".runtime/hybrid-vision/automajsoul-best-model.pt"),
+}, async () => {
+  const directory = await mkdtemp(join(tmpdir(), "reaction-reacquire-"));
+  const frame = "artifacts/live/left-river-three-man-border-20260928.png";
+  try {
+    const observation = spawnSync(process.execPath, ["--import", "tsx", "src/cli.ts", "public-observation",
+      frame, "config/layout-300-regression.json", "templates/bootstrap", "--seat=north",
+      "--backend=hybrid", "--reaction-highlight"], { encoding: "utf8", timeout: 20000 });
+    assert.equal(observation.status, 0, observation.stderr);
+    const board = JSON.parse(observation.stdout);
+    assert.deepEqual(board.highlightedDiscard, { tile: "8s", fromSeat: "west" });
+    assert.equal(board.opponentDiscards.find((opponent: any) => opponent.seat === "west").discards[13], "3m");
+    const statePath = join(directory, "state.json");
+    const observationPath = join(directory, "public.json");
+    const recognitionPath = join(directory, "recognition.json");
+    await writeFile(statePath, JSON.stringify({ seat: "north", round: "south_2", turn: 0,
+      honba: 0, riichiSticks: 1, remainingTiles: 1,
+      opponents: [{ seat: "west", discards: [], riichi: true, openMelds: 0 }],
+      scores: { north: 55600, east: 18700, south: 9700, west: 15000 } }));
+    await writeFile(observationPath, observation.stdout);
+    // Preserve the original unsafe hand recognition: this test is not click authorization.
+    await writeFile(recognitionPath, JSON.stringify({ tiles: ["2p", "6p", "7p", "8p", "1s",
+      "2s", "3s", "3s", "3s", "4s", "6s", "7s", "N"],
+      safe: false, confidence: 0.8735332695481259, ambiguityMargin: 0.1948253512445206 }));
+    const result = spawnSync(process.execPath, ["--import", "tsx", "src/cli.ts", "evaluate-frame",
+      frame, "config/layout-300-regression.json", "templates/bootstrap", `--state=${statePath}`,
+      `--public-observation=${observationPath}`, `--recognition-file=${recognitionPath}`,
+      "--pending-discard=8s,west", "--available-ui-actions=chi,pass", "--mode=force-auto"],
+      { encoding: "utf8", timeout: 15000, env: { ...process.env, TYPESAFE_API_KEY: "" } });
+    assert.equal(result.status, 0, result.stderr);
+    const output = JSON.parse(result.stdout);
+    assert.equal(output.state.phase, "reaction");
+    assert.equal(output.state.turn, 16);
+    assert.equal(output.state.opponents.find((opponent: any) => opponent.seat === "west").riichi, true);
+    assert.ok(output.decision);
+    assert.equal(output.decision.handPlan.phase, "late_tenpai_defense");
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
 
 test("reaction CLI refreshes strategy phase from observed river rather than stale turn", async () => {
   const directory = await mkdtemp(join(tmpdir(), "reaction-turn-"));
