@@ -1451,7 +1451,7 @@ class PythonAutoOperator:
         if kind not in {"round", "match"}:
             raise ValueError(f"unsupported outcome kind: {kind}")
         pending = self.pending_round_replays if kind == "round" else self.pending_match_replays
-        if not pending:
+        if not pending and getattr(self, "last_observed_outcome_kind", None) == kind:
             return 0
         screen_state = f"{kind}_result"
         screenshot_path = self.frames / f"{utc_stamp()}.{screen_state}.png"
@@ -1462,6 +1462,10 @@ class PythonAutoOperator:
             "screenState": screen_state,
             "screenConfidence": confidence,
         }
+        self.last_observed_outcome_kind = kind
+        self.log("outcome_observed", kind=kind, replayCount=len(pending), evidence=evidence)
+        if not pending:
+            return 0
         for replay_path in pending:
             record = load_json(replay_path)
             record.setdefault("actualResult", {})[kind] = evidence
@@ -2441,6 +2445,7 @@ class PythonAutoOperator:
                             and closed_concealed_row_visible(full_screen, self.layout):
                         self.round_terminal_latched = False
                         self.round_terminal_result_observed = False
+                        self.last_observed_outcome_kind = None
                         self.log("round_terminal_latch_cleared", source="verified_new_round_closed_row")
                     else:
                         self.log(

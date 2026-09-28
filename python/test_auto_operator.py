@@ -1440,6 +1440,21 @@ class AwayDialogDetectionTest(unittest.TestCase):
         self.assertLess(abs(button["center"]["x"] - 1002.5), 3)
         self.assertLess(abs(button["center"]["y"] - 828.5), 3)
 
+    def test_result_after_restart_is_saved_without_pending_replays(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            operator = PythonAutoOperator.__new__(PythonAutoOperator)
+            operator.frames = Path(directory)
+            operator.pending_round_replays = []
+            operator.pending_match_replays = []
+            operator.log = Mock()
+            self.assertEqual(operator.attach_outcome("round", b"result", 1.0), 0)
+            paths = list(operator.frames.glob("*.round_result.png"))
+            self.assertEqual(len(paths), 1)
+            self.assertEqual(paths[0].read_bytes(), b"result")
+            self.assertEqual(operator.log.call_args.args[0], "outcome_observed")
+            operator.attach_outcome("round", b"duplicate", 1.0)
+            self.assertEqual(len(list(operator.frames.glob("*.round_result.png"))), 1)
+
     def test_force_auto_public_prompt_uses_same_hybrid_backend_as_cache(self) -> None:
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
         operator.root = Path.cwd()
