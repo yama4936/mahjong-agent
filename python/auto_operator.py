@@ -1952,8 +1952,17 @@ class PythonAutoOperator:
         latest = getattr(self, "latest_screencast_frame", None)
         if latest is not None and is_away_resume_dialog(latest, self.layout["viewport"]):
             verified = False
+        observed = fresh.get("tiles")
+        mismatches = [
+            {"index": index, "expected": tile, "observed": observed[index] if index < len(observed) else None}
+            for index, tile in enumerate(expected)
+            if index >= len(observed) or observed[index] != tile
+        ] if isinstance(observed, list) else []
         self.log("hand_identity_checked", screenshot=str(path), verified=verified,
-                 confidence=fresh.get("confidence"), ambiguityMargin=fresh.get("ambiguityMargin"))
+                 confidence=fresh.get("confidence"), ambiguityMargin=fresh.get("ambiguityMargin"),
+                 recognitionSafe=fresh.get("safe") is True, expectedCount=len(expected),
+                 observedCount=len(observed) if isinstance(observed, list) else None,
+                 mismatches=mismatches)
         return verified
 
     def execute(

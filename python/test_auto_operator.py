@@ -164,6 +164,20 @@ class ActionDeadlineTest(unittest.TestCase):
                         returncode=0, stdout=json.dumps({"safe": safe, "tiles": tiles}))) as run:
                     self.assertEqual(operator.verify_closed_hand_identity(Mock(), expected, b"frame", 5), accepted)
                     self.assertIn("--backend=hybrid", run.call_args.args[0])
+                    detail = operator.log.call_args.kwargs
+                    self.assertEqual(detail["observedCount"], len(tiles))
+                    self.assertEqual(detail["recognitionSafe"], safe)
+                    if tiles == expected:
+                        self.assertEqual(detail["mismatches"], [])
+                    else:
+                        self.assertTrue(detail["mismatches"])
+            seven_pin_hand = [*expected[:8], "7p", *expected[9:]]
+            misread_hand = [*seven_pin_hand[:8], "6p", *seven_pin_hand[9:]]
+            with patch("auto_operator.subprocess.run", return_value=argparse.Namespace(
+                    returncode=0, stdout=json.dumps({"safe": True, "tiles": misread_hand, "confidence": 0.699727}))):
+                self.assertFalse(operator.verify_closed_hand_identity(Mock(), seven_pin_hand, b"frame", 5))
+                self.assertEqual(operator.log.call_args.kwargs["mismatches"],
+                                 [{"index": 8, "expected": "7p", "observed": "6p"}])
             page = Mock()
             page.wait_for_timeout.side_effect = lambda _: setattr(operator, "screencast_draw_generation", 6)
             with patch("auto_operator.subprocess.run", return_value=argparse.Namespace(
