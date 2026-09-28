@@ -1568,6 +1568,37 @@ class AwayDialogDetectionTest(unittest.TestCase):
         self.assertEqual(operator.public_state["opponents"], [])
         self.assertFalse(observation["opponentDiscards"][0]["riichiDeclared"])
 
+    def test_public_result_completed_during_ocr_is_promoted_before_seat_remap(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.public_state = {"seat": "east", "opponents": []}
+        operator.log = Mock()
+        operator.cached_public_observation = None
+        fresh = {"opponentDiscards": [{"seat": "south", "discards": ["N"], "riichiDeclared": False}]}
+        operator.poll_public_recognition = Mock(side_effect=lambda: setattr(operator, "cached_public_observation", fresh))
+        metadata = {"verified": True, "seat": "west", "round": "east_2", "scores": {},
+                    "honba": 0, "riichiSticks": 1, "riichiSeats": ["north"]}
+        with patch("board_metadata.recognize_board", return_value=metadata):
+            _, observed, _ = operator.frame_metadata_state(Path("frame.png"), refresh_public_cache=True)
+        operator.poll_public_recognition.assert_called_once()
+        self.assertEqual(observed["opponentDiscards"][0]["seat"], "north")
+        self.assertEqual(observed["opponentDiscards"][0]["discards"], ["N"])
+        self.assertTrue(observed["opponentDiscards"][0]["riichiDeclared"])
+        self.assertFalse(fresh["opponentDiscards"][0]["riichiDeclared"])
+
+    def test_reaction_observation_is_not_replaced_by_background_cache(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.public_state = {"seat": "east", "opponents": []}
+        operator.log = Mock()
+        operator.poll_public_recognition = Mock()
+        operator.cached_public_observation = {"ownDiscards": ["1m"]}
+        observation = {"ownDiscards": ["1m", "2m"]}
+        metadata = {"verified": True, "seat": "east", "round": "east_2", "scores": {},
+                    "honba": 0, "riichiSticks": 0}
+        with patch("board_metadata.recognize_board", return_value=metadata):
+            _, observed, _ = operator.frame_metadata_state(Path("frame.png"), observation)
+        operator.poll_public_recognition.assert_not_called()
+        self.assertEqual(observed["ownDiscards"], ["1m", "2m"])
+
     def test_force_auto_public_prompt_uses_same_hybrid_backend_as_cache(self) -> None:
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
         operator.root = Path.cwd()

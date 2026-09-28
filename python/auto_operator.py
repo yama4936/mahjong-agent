@@ -1142,7 +1142,7 @@ class PythonAutoOperator:
         frame_public_state = None
         if evaluate_force_auto and getattr(self.args, "board_metadata", False):
             frame_public_state, public_observation, _ = self.frame_metadata_state(
-                screenshot, public_observation,
+                screenshot, public_observation, refresh_public_cache=True,
             )
         self.recognition_server.stdin.write(json.dumps({
             "id": request_id,
@@ -1169,11 +1169,17 @@ class PythonAutoOperator:
             raise RuntimeError(f"resident recognition failed: {response['error']}")
         return response["result"]
 
-    def frame_metadata_state(self, screenshot: Path, observation=None, pending=None):
+    def frame_metadata_state(self, screenshot: Path, observation=None, pending=None, *, refresh_public_cache=False):
         from board_metadata import recognize_board, remap_seats
         metadata = recognize_board(screenshot)
         if not metadata.get("verified"):
             raise RetryableSafetyAbort(f"board metadata not verified: {metadata.get('reason')}")
+        if refresh_public_cache:
+            # OCR can take seconds while the independent public worker finishes.
+            # Promote its completed result before freezing the decision request.
+            self.poll_public_recognition()
+            if self.cached_public_observation is not None:
+                observation = self.cached_public_observation
         fields = {key: metadata[key] for key in
                   ("seat", "round", "scores", "honba", "riichiSticks", "remainingTiles")
                   if key in metadata}
