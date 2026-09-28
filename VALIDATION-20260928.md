@@ -1683,3 +1683,20 @@ redFiveSou.test.tsは4件全件成功、npm run build成功。
 固定対局では14:28:57Zと14:29:27Zに評価後手牌変化を検知し、
 クリック前にretryable action_aborted、その後も東2局残12枚まで進行確認。
 これらは手牌変化を検知したクリック抑止で、対局プロセスの停止ではない。
+
+## 東2局の不聴失点と發ポン対象牌確認の失敗
+
+東2局結果14:32:32Zは荒牌流局、上家のみ聴牌、自家は不聴。
+次局東3局2本場のHUDで自家22500点（前23500点から1000減）、
+供託2本を確認。不聴罰符の失点で、放銃ではない。
+14:30:42.893879Zの画面は右家の發に緑枠と矢印、自家に發対子、ポンUIあり。
+14:30:47.733380Zにpending_discard_not_verified_on_prompt_frameでポン拒否、
+14:30:49Zにはpassクリック。画像をright-green-dragon-pon-rejected-fixed-e66ef28-20260928.pngへ保存。
+直前decision.stateの13枚手牌を使い、phase=reaction、drawなし、
+UI=pon/pass、右家（自家西なので北）の河末尾にFを追加し、
+pendingDiscard=F/北/inRiver=trueと目視注釈した合法状態を比較。
+decide(mode=advisor)はpon_Fを選択。currentShanten2→resultingShanten1、
+ukeire19、confirmedYaku=yakuhai:F、estimatedPoints2000、approved=true。
+これは正しい対象牌なら鳴き戦略が承認することを示すが、
+元の画像認識が改善したこと・鳴けば和了したことは示さない。
+対象牌確認の失敗原因の詳細と実行経路の修正はまだ未解決。
