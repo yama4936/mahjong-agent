@@ -18,6 +18,7 @@ export interface DecisionResult extends AdvisorResult {
   arbitration?: ForceAutoArbitration;
   handPlan: StrategyHandPlan;
   callAssessments?: CallAssessment[];
+  riichiAssessment?: { actionId: string; approved: boolean; remainingWinningTiles: number; reasons: string[] };
 }
 
 export interface StrategyHandPlan {
@@ -210,7 +211,7 @@ export async function decide(state: GameState, options: DecisionOptions): Promis
     removeSafetyReason(safetyReasons, "jev_confidence_below_threshold");
   } else {
     const riichi = legalActions.find((action) => action.action === "riichi" && action.tile === selected.tile);
-    if (riichi && (state.remainingTiles === undefined || state.remainingTiles >= 4)) selectedAction = riichi;
+    if (riichi && selected.ukeire > 0 && (state.remainingTiles === undefined || state.remainingTiles >= 4)) selectedAction = riichi;
   }
 
   const safety = { allowed: safetyReasons.length === 0, reasons: safetyReasons };
@@ -224,6 +225,17 @@ export async function decide(state: GameState, options: DecisionOptions): Promis
     selectedActionId: selectedAction.id,
     selectedAction,
     legalActions,
+    ...(legalActions.find((action) => action.action === "riichi" && action.tile === selected.tile) ? {
+      riichiAssessment: {
+        actionId: `riichi_discard_${selected.tile}`,
+        approved: selectedAction.action === "riichi",
+        remainingWinningTiles: selected.ukeire,
+        reasons: [
+          ...(selected.ukeire === 0 ? ["no_remaining_winning_tiles"] : []),
+          ...(state.remainingTiles !== undefined && state.remainingTiles < 4 ? ["insufficient_wall_for_riichi"] : []),
+        ],
+      },
+    } : {}),
     ...(jev ? { jev } : {}),
     executable: options.mode === "force-auto" || (options.mode === "auto" && safety.allowed),
     handPlan: buildStrategyHandPlan(state),

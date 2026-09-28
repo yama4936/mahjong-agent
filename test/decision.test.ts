@@ -88,6 +88,23 @@ test("auto refuses explicitly unobserved opponent melds", async () => {
   assert.ok(result.safety.reasons.includes("opponent_melds_not_fully_observed"));
 });
 
+test("dead tenpai does not spend a riichi stick but keeps the legal action visible", async () => {
+  const dead = parseGameState({
+    hand: ["1m", "2m", "3m", "4m", "5m", "6m", "1p", "2p", "3p", "4s", "5s", "6s", "E"],
+    draw: "9p", scores: { east: 25000 }, availableUiActions: ["riichi"], remainingTiles: 37,
+    visibleTiles: ["E", "E", "E", "9p", "9p", "9p"],
+  });
+  const result = await decide(dead, { mode: "advisor" });
+  assert.equal(result.selectedAction.action, "discard");
+  assert.equal(result.riichiAssessment?.remainingWinningTiles, 0);
+  assert.equal(result.riichiAssessment?.approved, false);
+  assert.ok(result.riichiAssessment?.reasons.includes("no_remaining_winning_tiles"));
+  assert.ok(result.legalActions.some((action) => action.action === "riichi"));
+  const live = await decide(parseGameState({ ...dead, visibleTiles: [] }), { mode: "advisor" });
+  assert.equal(live.selectedAction.action, "riichi");
+  assert.equal(live.riichiAssessment?.approved, true);
+});
+
 test("low recognition confidence blocks action", async () => {
   const unsafe = parseGameState({ ...state, recognitionConfidence: 0.5 });
   const result = await decide(unsafe, { mode: "advisor" });
