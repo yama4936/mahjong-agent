@@ -246,7 +246,9 @@ def force_auto_call_buttons(screenshot: bytes, viewport: dict[str, int]) -> list
         x1, x2 = group[0][0], group[-1][0]
         y1 = min(column[1] for column in group)
         y2 = max(column[2] for column in group)
-        if x2 - x1 < viewport["width"] * 0.07 or y2 - y1 < viewport["height"] * 0.04:
+        width = x2 - x1
+        if not viewport["width"] * 0.07 <= width <= viewport["width"] * 0.18 \
+                or y2 - y1 < viewport["height"] * 0.04:
             continue
         buttons.append({
             "action": "chi" if palette == "green" else "pon",
