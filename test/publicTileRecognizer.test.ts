@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import path from "node:path";
+import { readFile } from "node:fs/promises";
 import sharp from "sharp";
 import { layoutSchema } from "../src/recognition/layout.js";
 import { opponentStatesFromObservation } from "../src/recognition/publicTileRecognizer.js";
+import { detectConfiguredPublicRegions } from "../src/recognition/regionDetector.js";
 import { assertTemporalPublicObservation, hasSidewaysRiichiTile, recognizeConfiguredPublicTiles, recognizeConfiguredPublicTilesWithVit, recognizeExposedMelds, toPublicTileObservation, type PublicTileObservation, type PublicTileRecognitionRegion } from "../src/recognition/publicTileRecognizer.js";
 
 function publicRegion(tiles: Array<{ tile: any; x: number; y?: number; width?: number; height?: number }>, rotationToUpright: 0 | 90 | 180 | 270 = 0): PublicTileRecognitionRegion {
@@ -49,6 +51,34 @@ test("complete meld evidence updates counts but regressing evidence cannot erase
   assert.equal(opponentStatesFromObservation(observation, previous)[0]?.openMeldsObserved, false);
   region.candidateCount = 4;
   assert.equal(toPublicTileObservation({ rightMelds: region }).opponentDiscards[0]?.meldsObserved, false);
+});
+
+test("live perspective melds detect and normalize the called sideways tile", async () => {
+  const screenshot = "artifacts/live/south4-riichi-before-loss-20260928.jpg";
+  const raw = JSON.parse(await readFile("config/layout.json", "utf8"));
+  raw.publicTileRegions = { rightMelds: raw.publicTileRegions.rightMelds, oppositeMelds: raw.publicTileRegions.oppositeMelds };
+  const layout = layoutSchema.parse(raw);
+  const detection = await detectConfiguredPublicRegions(screenshot, layout);
+  assert.deepEqual(detection.rightMelds?.candidates.map((tile) => tile.sideways), [true, false, false]);
+  assert.deepEqual(detection.oppositeMelds?.candidates.map((tile) => tile.sideways), [false, true, false]);
+  const result = await recognizeConfiguredPublicTilesWithVit(screenshot, layout, {
+    classifyTileImages: async (images) => {
+      let index = 0;
+      for (const name of ["rightMelds", "oppositeMelds"] as const) {
+        for (const tile of detection[name]!.candidates) {
+          const rotation = (layout.publicTileRegions![name]!.rotationToUpright + (tile.sideways ? 90 : 0)) % 360;
+          const expected = await sharp(screenshot).extract({ left: tile.x, top: tile.y, width: tile.width, height: tile.height })
+            .rotate(rotation).png().toBuffer();
+          assert.deepEqual(images[index++], expected);
+        }
+      }
+      return ["S", "S", "S", "6s", "7s", "8s"].map((tile) => ({ tile: tile as any, confidence: 0.999, runnerUpTile: "1m" as const, runnerUpConfidence: 0.001 }));
+    },
+  });
+  const observation = toPublicTileObservation(result);
+  assert.equal(observation.opponentDiscards[0]?.melds?.[0]?.type, "pon");
+  assert.equal(observation.opponentDiscards[1]?.melds?.[0]?.type, "chi");
+  assert.equal(observation.allMeldTiles?.length, 6);
 });
 
 test("classifies upright and rotated public tile candidates after orientation normalization", { timeout: 30_000 }, async () => {

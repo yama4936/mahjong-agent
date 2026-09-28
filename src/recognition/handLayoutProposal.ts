@@ -56,6 +56,8 @@ export function layoutFromHandProposal(
       oppositeDiscards: scaledRegion(770, 150, 390, 190, 180, "discard_grid"),
       leftDiscards: scaledRegion(500, 285, 305, 250, 270, "discard_grid"),
       ownMelds: scaledRegion(732, 759, 200, 84, 0),
+      rightMelds: { ...scaledRegion(1500, 25, 140, 280, 90), sidewaysAspectRatio: 0.55, luminanceThreshold: 190 },
+      oppositeMelds: { ...scaledRegion(380, 20, 460, 90, 180), sidewaysAspectRatio: 2, luminanceThreshold: 190 },
     },
   });
 }

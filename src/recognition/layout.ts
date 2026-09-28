@@ -10,6 +10,8 @@ const rectSchema = z.object({
 const publicTileRegionSchema = rectSchema.extend({
   rotationToUpright: z.union([z.literal(0), z.literal(90), z.literal(180), z.literal(270)]).default(0),
   detectionMode: z.literal("discard_grid").optional(),
+  sidewaysAspectRatio: z.number().positive().optional(),
+  luminanceThreshold: z.number().min(0).max(255).optional(),
 });
 
 const publicTileRegionsSchema = z.object({

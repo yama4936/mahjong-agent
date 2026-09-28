@@ -131,7 +131,16 @@ export async function detectConfiguredPublicRegions(
     const detection = await detectBrightTileCandidates(screenshot, region, {
       ...(region.detectionMode === "discard_grid" && name.endsWith("Discards")
         ? { maximumColorSpread: 40 } : {}), ...options,
+      ...(region.luminanceThreshold !== undefined ? { luminanceThreshold: region.luminanceThreshold } : {}),
     });
+    if (name.endsWith("Melds") && region.sidewaysAspectRatio !== undefined) {
+      const vertical = region.rotationToUpright === 90 || region.rotationToUpright === 270;
+      detection.candidates = detection.candidates.map((candidate) => ({
+        ...candidate,
+        sideways: (vertical ? candidate.height / candidate.width : candidate.width / candidate.height)
+          >= region.sidewaysAspectRatio!,
+      }));
+    }
     if (region.detectionMode !== "discard_grid" || !name.endsWith("Discards")) return [name, detection] as const;
     const widths = detection.candidates.map((candidate) => candidate.width);
     const heights = detection.candidates.map((candidate) => candidate.height);

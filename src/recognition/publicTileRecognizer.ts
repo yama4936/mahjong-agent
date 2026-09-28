@@ -219,7 +219,7 @@ async function normalizedCandidateImage(
 ): Promise<Buffer> {
   return sharp(screenshot)
     .extract({ left: candidate.x, top: candidate.y, width: candidate.width, height: candidate.height })
-    .rotate(region.rotationToUpright)
+    .rotate((region.rotationToUpright + (region.sidewaysAspectRatio !== undefined && candidate.sideways ? 90 : 0)) % 360)
     .png()
     .toBuffer();
 }
