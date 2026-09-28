@@ -929,6 +929,18 @@ class PythonAutoOperator:
             return
         if self.public_recognition_thread and self.public_recognition_thread.is_alive():
             return
+        # Use the same gameplay admission rule as board_metadata, rather than
+        # force-auto's permissive unknown-screen fallback. UI labels in a friend
+        # room can otherwise become persistent dora/river cache entries.
+        try:
+            with Image.open(io.BytesIO(screenshot)) as image:
+                if image.size != (1920, 1080):
+                    return
+            screen_state, _ = classify_screen(screenshot, {})
+        except Exception:
+            return
+        if screen_state != "match":
+            return
         frame_hash = perceptual_hash(screenshot)
         if not force and frame_hash == self.public_cache_last_frame_hash:
             return

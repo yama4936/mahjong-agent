@@ -706,6 +706,50 @@ class AwayDialogDetectionTest(unittest.TestCase):
         self.assertEqual(operator.schedule_public_recognition.call_args_list[0].args, (b"first",))
         self.assertEqual(operator.schedule_public_recognition.call_args_list[1].args, (b"second",))
 
+    def test_public_cache_scheduler_rejects_friend_room_even_when_forced(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        screenshot = (root / "artifacts/live/friend-room-public-cache-contamination-20260929.png").read_bytes()
+        self.assertEqual(classify_screen(screenshot, {})[0], "unknown")
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.public_recognition_server = Mock()
+        operator.public_recognition_server.poll.return_value = None
+        operator.public_recognition_thread = None
+        with patch("auto_operator.threading.Thread") as worker:
+            for force in (False, True):
+                operator.schedule_public_recognition(screenshot, force=force)
+            for filename in ["300-fixed-e66ef28-room-settings-20260928.png", "draw-tenpai-result-20260928.png"]:
+                frame = (root / "artifacts/live" / filename).read_bytes()
+                self.assertNotEqual(classify_screen(frame, {})[0], "match")
+                operator.schedule_public_recognition(frame, force=True)
+            operator.schedule_public_recognition(b"invalid image", force=True)
+            resized = io.BytesIO()
+            Image.open(io.BytesIO(screenshot)).resize((960, 540)).save(resized, format="PNG")
+            operator.schedule_public_recognition(resized.getvalue(), force=True)
+            worker.assert_not_called()
+        operator.public_recognition_server.stdin.write.assert_not_called()
+        self.assertFalse(hasattr(operator, "public_cache_last_frame_hash"))
+        self.assertFalse(hasattr(operator, "public_recognition_request_id"))
+
+    def test_public_cache_scheduler_still_dispatches_verified_table(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        screenshot = (root / "artifacts/live/board-score-opposite-low-confidence-20260928.png").read_bytes()
+        self.assertEqual(classify_screen(screenshot, {})[0], "match")
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.public_recognition_server = Mock()
+        operator.public_recognition_server.poll.return_value = None
+        operator.public_recognition_thread = None
+        operator.public_cache_last_frame_hash = None
+        operator.public_recognition_request_id = 0
+        operator.public_cache_generation = 3
+        with tempfile.TemporaryDirectory() as directory:
+            operator.frames = Path(directory)
+            with patch("auto_operator.threading.Thread") as worker:
+                operator.schedule_public_recognition(screenshot)
+                worker.assert_called_once()
+                worker.return_value.start.assert_called_once()
+            self.assertEqual(operator.public_recognition_request_id, 1)
+            self.assertEqual(len(list(operator.frames.glob("*.public-cache.jpg"))), 1)
+
     def test_draw_slot_presence_distinguishes_own_and_opponent_turns(self) -> None:
         region = {"x": 100, "y": 50, "width": 100, "height": 100}
         own_turn = io.BytesIO()
