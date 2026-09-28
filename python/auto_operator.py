@@ -1570,7 +1570,8 @@ class PythonAutoOperator:
 
         A lone green button proves only the UI action variant.  It does not
         prove that opening the hand is strategically sound, nor which discard
-        triggered it.  Without one exact river append we fail closed to pass.
+        triggered it. Require one exact river append or an independently
+        verified unique highlight on the prompt's final river tile.
         """
         public_observation = self.cached_public_observation
         def river_evidence(observation):
@@ -1584,12 +1585,21 @@ class PythonAutoOperator:
         # Always recognize this prompt before rejecting stale cache history.
         # Prefer the newest baseline; the older one is useful only if the
         # async cache already contains this prompt's exact single append.
-        fresh_public = self.observe_public_board(screenshot)
+        fresh_public = self.observe_public_board(screenshot, reaction_highlight=True)
         pending = self.infer_pending_discard(public_observation, fresh_public)
         baseline = "cached"
         if not pending:
             pending = self.infer_pending_discard(self.previous_public_observation, fresh_public)
             baseline = "previous"
+        highlighted = self.pending_highlighted_discard(fresh_public, call_action,
+                                                       self.public_state.get("seat", "east"))
+        if pending and highlighted and pending != highlighted:
+            self.log("reaction_call_policy_rejected", action=call_action,
+                     reason="river_history_and_highlight_conflict")
+            return None
+        if not pending and highlighted:
+            pending = highlighted
+            baseline = "verified_prompt_highlight"
         if not pending:
             self.log("reaction_call_policy_rejected", action=call_action,
                      reason="pending_discard_not_verified_on_prompt_frame",
@@ -1674,13 +1684,15 @@ class PythonAutoOperator:
             )
         return self.recognize_resident(screenshot, concealed_only=True)
 
-    def observe_public_board(self, screenshot: Path) -> dict[str, Any] | None:
+    def observe_public_board(self, screenshot: Path, *, reaction_highlight: bool = False) -> dict[str, Any] | None:
         command = [
             "node", "dist/src/cli.js", "public-observation", str(screenshot),
             str(self.layout_path), str(self.templates), f"--seat={self.public_state.get('seat', 'east')}",
         ]
         if self.args.mode == "force-auto":
             command.append("--backend=hybrid")
+        if reaction_highlight:
+            command.append("--reaction-highlight")
         result = subprocess.run(command, cwd=self.root, env=self.evaluator_env, text=True,
                                 encoding="utf-8", errors="strict",
                                 capture_output=True, timeout=self.args.evaluation_timeout, check=False)
@@ -1688,6 +1700,24 @@ class PythonAutoOperator:
             self.log("public_observation_failed", error=(result.stderr or result.stdout).strip())
             return None
         return json.loads(result.stdout)
+
+    @staticmethod
+    def pending_highlighted_discard(observation, action, own_seat):
+        if not observation or action not in {"chi", "pon", "kan"}:
+            return None
+        highlighted = observation.get("highlightedDiscard")
+        if not isinstance(highlighted, dict):
+            return None
+        seats = ["east", "south", "west", "north"]
+        seat, tile = highlighted.get("fromSeat"), highlighted.get("tile")
+        if own_seat not in seats or seat not in seats or seat == own_seat:
+            return None
+        if action == "chi" and seat != seats[(seats.index(own_seat) + 3) % 4]:
+            return None
+        opponents = [item for item in observation.get("opponentDiscards", []) if item.get("seat") == seat]
+        if len(opponents) != 1 or not opponents[0].get("discards") or opponents[0]["discards"][-1] != tile:
+            return None
+        return {"tile": tile, "fromSeat": seat}
 
     @staticmethod
     def infer_pending_discard(previous: dict[str, Any] | None, current: dict[str, Any] | None) -> dict[str, str] | None:

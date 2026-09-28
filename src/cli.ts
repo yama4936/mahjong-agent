@@ -22,6 +22,7 @@ import { connectJantama } from "./jantama/browser.js";
 import { assertTemplateSetMatchesCalibration, processTurn, runAgentLoop } from "./agent/controller.js";
 import { availableUiActions, recognizeActionButtons } from "./recognition/actionButtonRecognizer.js";
 import { recognizeCenterBoard } from "./recognition/centerBoardRecognizer.js";
+import { recognizeHighlightedDiscard } from "./recognition/highlightedDiscard.js";
 
 type ModelRecognizer = VitTileRecognizer | HybridTileRecognizer;
 
@@ -272,7 +273,10 @@ async function main(): Promise<void> {
     } finally {
       await recognizer?.close();
     }
-    console.log(JSON.stringify(toPublicTileObservation(recognition, seat as "east" | "south" | "west" | "north")));
+    const observation = toPublicTileObservation(recognition, seat as "east" | "south" | "west" | "north");
+    const highlightedDiscard = process.argv.includes("--reaction-highlight")
+      ? await recognizeHighlightedDiscard(screenshot, recognition, seat as "east" | "south" | "west" | "north") : undefined;
+    console.log(JSON.stringify({ ...observation, ...(highlightedDiscard ? { highlightedDiscard } : {}) }));
     return;
   }
   if (command === "recognize-center") {

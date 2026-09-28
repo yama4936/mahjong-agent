@@ -20,6 +20,43 @@ from auto_operator import configure_evaluator_click_budget
 
 
 class EvaluatorClickBudgetTest(unittest.TestCase):
+    def test_verified_highlight_still_requires_strategy_approval(self):
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.public_state = {"seat": "north"}
+        operator.cached_public_observation = operator.previous_public_observation = None
+        operator.cached_open_melds = 0
+        operator.log = Mock()
+        operator.observe_public_board = Mock(return_value={
+            "highlightedDiscard": {"tile": "2s", "fromSeat": "west"},
+            "opponentDiscards": [{"seat": "west", "discards": ["P", "2s"]}]})
+        operator.recognize_reaction_hand = Mock(return_value={"tiles": ["1m"] * 13})
+        approved = {"status": "decision", "decision": {
+            "selectedAction": {"id": "chi_2s", "action": "chi"},
+            "callAssessments": [{"actionId": "chi_2s", "approved": True}]}}
+        operator.evaluate = Mock(return_value=approved)
+        self.assertEqual(operator.evaluate_force_auto_call_policy(Path("prompt.png"), "chi"), approved)
+        self.assertEqual(operator.evaluate.call_args.args[1], {"tile": "2s", "fromSeat": "west"})
+        approved["decision"]["callAssessments"][0]["approved"] = False
+        self.assertIsNone(operator.evaluate_force_auto_call_policy(Path("prompt.png"), "chi"))
+        current = operator.observe_public_board.return_value
+        current["opponentDiscards"].append({"seat": "east", "discards": ["W", "1m"]})
+        operator.cached_public_observation = {"opponentDiscards": [
+            {"seat": "west", "discards": ["P", "2s"]}, {"seat": "east", "discards": ["W"]}]}
+        operator.evaluate.reset_mock()
+        self.assertIsNone(operator.evaluate_force_auto_call_policy(Path("prompt.png"), "chi"))
+        operator.evaluate.assert_not_called()
+        self.assertEqual(operator.log.call_args.kwargs["reason"], "river_history_and_highlight_conflict")
+
+    def test_prompt_highlight_requires_last_tile_correct_chi_seat_and_supported_action(self):
+        observation = {"highlightedDiscard": {"tile": "2s", "fromSeat": "west"},
+                       "opponentDiscards": [{"seat": "west", "discards": ["P", "2s"]}]}
+        self.assertEqual(PythonAutoOperator.pending_highlighted_discard(observation, "chi", "north"),
+                         {"tile": "2s", "fromSeat": "west"})
+        self.assertIsNone(PythonAutoOperator.pending_highlighted_discard(observation, "chi", "east"))
+        self.assertIsNone(PythonAutoOperator.pending_highlighted_discard(observation, "ron", "north"))
+        observation["opponentDiscards"][0]["discards"].append("N")
+        self.assertIsNone(PythonAutoOperator.pending_highlighted_discard(observation, "pon", "north"))
+
     def test_pass_confirmation_requires_new_self_draw_when_button_pixels_stay_same(self):
         root = Path(__file__).resolve().parents[1]
         reaction = (root / "artifacts/live/pass-before-self-riichi-20260928.png").read_bytes()
@@ -983,6 +1020,7 @@ class AwayDialogDetectionTest(unittest.TestCase):
 
     def test_single_call_policy_requires_verified_discard_and_approved_assessment(self) -> None:
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.public_state = {"seat": "south"}
         operator.cached_public_observation = {"opponentDiscards": [
             {"seat": "east", "discards": ["P"]}, {"seat": "west", "discards": []},
             {"seat": "north", "discards": []},
