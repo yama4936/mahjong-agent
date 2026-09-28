@@ -23,6 +23,7 @@ export interface PublicTileRecognitionRegion {
 }
 
 export interface PublicTileRecognitionOptions extends RegionDetectionOptions {
+  retryDiscardBoundaries?: boolean;
   minimumConfidence?: number;
   minimumMargin?: number;
 }
@@ -331,7 +332,7 @@ export async function recognizeConfiguredPublicTilesWithVit(
     grouped.set(job.name, [...(grouped.get(job.name) ?? []), recognized]);
   });
 
-  return Object.fromEntries(entries.map(([name, detection]) => {
+  const result: Partial<Record<PublicTileRegionName, PublicTileRecognitionRegion>> = Object.fromEntries(entries.map(([name, detection]) => {
     const region = layout.publicTileRegions?.[name];
     if (!region) throw new Error(`Missing public tile region: ${name}`);
     const recognized = grouped.get(name) ?? [];
@@ -343,4 +344,24 @@ export async function recognizeConfiguredPublicTilesWithVit(
       rotationToUpright: region.rotationToUpright,
     }] as const;
   }));
+  if (options.retryDiscardBoundaries !== false) {
+    for (const [name, detection] of entries) {
+      const region = layout.publicTileRegions?.[name];
+      const original = result[name];
+      if (!region || !original || region.detectionMode !== "discard_grid" || !name.endsWith("Discards")
+        || original.classificationSafe || detection.gridValid !== true || original.recognized.length === 0) continue;
+      const threshold = region.luminanceThreshold ?? options.luminanceThreshold ?? 190;
+      if (threshold > 210) continue;
+      const retry = await recognizeConfiguredPublicTilesWithVit(screenshot,
+        { ...layout, publicTileRegions: { [name]: { ...region, luminanceThreshold: threshold + 10 } } },
+        classifier, { ...options, retryDiscardBoundaries: false });
+      const refined = retry[name];
+      // Never remove candidates or contradict an already accepted tile.
+      if (refined?.classificationSafe && refined.candidateCount === original.candidateCount
+        && original.recognized.every((tile, index) => !tile.safe || tile.tile === refined.recognized[index]?.tile)) {
+        result[name] = refined;
+      }
+    }
+  }
+  return result;
 }

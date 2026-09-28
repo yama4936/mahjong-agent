@@ -51,6 +51,71 @@ test("production left river excludes face-border contamination with real Hybrid"
   } finally { await recognizer.close(); }
 });
 
+test("production opposite river preserves seven-pin face and full river with real Hybrid", {
+  skip: !existsSync(".runtime/hybrid-vision/cvmaj-pretrained.tar") || !existsSync(".runtime/hybrid-vision/automajsoul-best-model.pt"),
+}, async () => {
+  const base = layoutSchema.parse(JSON.parse(await readFile("config/layout-300-regression.json", "utf8")));
+  const fallback = layoutSchema.parse(JSON.parse(await readFile("config/layout.example.json", "utf8")));
+  assert.deepEqual(base.publicTileRegions!.oppositeDiscards, fallback.publicTileRegions!.oppositeDiscards);
+  const layout = { ...base, publicTileRegions: { oppositeDiscards: base.publicTileRegions!.oppositeDiscards! } };
+  const recognizer = new HybridTileRecognizer();
+  try {
+    const result = await recognizeConfiguredPublicTilesWithVit("artifacts/live/left-river-three-man-border-20260928.png", layout, recognizer);
+    assert.equal(result.oppositeDiscards?.candidateCount, 18);
+    assert.equal(result.oppositeDiscards?.classificationSafe, true);
+    assert.deepEqual(result.oppositeDiscards?.recognized.map(tile => tile.tile),
+      ["9s", "E", "W", "S", "P", "8p", "S", "3m", "7p", "2s", "1p", "6p", "7s", "8p", "5p", "5m", "1m", "1s"]);
+    for (const file of ["adjacent-opposite-melds-20260928.jpg", "south4-riichi-before-loss-20260928.jpg"]) {
+      const before = await recognizeConfiguredPublicTilesWithVit(`artifacts/live/${file}`,
+        { ...layout, publicTileRegions: { oppositeDiscards: { ...layout.publicTileRegions.oppositeDiscards, luminanceThreshold: 190 } } }, recognizer);
+      const after = await recognizeConfiguredPublicTilesWithVit(`artifacts/live/${file}`, layout, recognizer);
+      assert.equal(after.oppositeDiscards?.candidateCount, before.oppositeDiscards?.candidateCount, file);
+      assert.deepEqual(after.oppositeDiscards?.recognized.map(tile => tile.tile), before.oppositeDiscards?.recognized.map(tile => tile.tile), file);
+      assert.equal(after.oppositeDiscards?.classificationSafe, before.oppositeDiscards?.classificationSafe, file);
+    }
+  } finally { await recognizer.close(); }
+});
+
+test("discard boundary retry is bounded and cannot contradict accepted tiles", async () => {
+  const screenshot = await sharp({ create: { width: 150, height: 90, channels: 3, background: "#111111" } })
+    .composite([20, 60].map(left => ({ input: { create: { width: 30, height: 46, channels: 3, background: "#ffffff" } }, left, top: 20 })))
+    .png().toBuffer();
+  const layout = layoutSchema.parse({ ...JSON.parse(await readFile("config/layout-300-regression.json", "utf8")),
+    publicTileRegions: { oppositeDiscards: { x: 0, y: 0, width: 150, height: 90, rotationToUpright: 0, detectionMode: "discard_grid" } } });
+  for (const scenario of ["recover", "conflict", "still-unsafe"] as const) {
+    let calls = 0;
+    const classifier = { classifyTileImages: async (images: Buffer[]) => {
+      calls++;
+      assert.equal(images.length, 2);
+      return [{ tile: calls === 2 && scenario === "conflict" ? "S" : "E", confidence: 0.99, runnerUpTile: "W", runnerUpConfidence: 0.01 },
+        { tile: calls === 2 ? "7p" : "6p", confidence: calls === 1 || scenario === "still-unsafe" ? 0.51 : 0.99,
+          runnerUpTile: "8p", runnerUpConfidence: calls === 1 || scenario === "still-unsafe" ? 0.49 : 0.01 }] as any;
+    } };
+    const result = await recognizeConfiguredPublicTilesWithVit(screenshot, layout, classifier);
+    assert.equal(calls, 2, scenario);
+    assert.equal(result.oppositeDiscards?.classificationSafe, scenario === "recover", scenario);
+    assert.deepEqual(result.oppositeDiscards?.recognized.map(tile => tile.tile), scenario === "recover" ? ["E", "7p"] : ["E", "6p"], scenario);
+  }
+});
+
+test("discard boundary retry cannot promote a shorter river", async () => {
+  const screenshot = await sharp({ create: { width: 150, height: 90, channels: 3, background: "#111111" } })
+    .composite(["#ffffff", "#c3c3c3"].map((background, index) => ({ input: { create: { width: 30, height: 46, channels: 3, background } }, left: 20 + index * 40, top: 20 })))
+    .png().toBuffer();
+  const layout = layoutSchema.parse({ ...JSON.parse(await readFile("config/layout-300-regression.json", "utf8")),
+    publicTileRegions: { oppositeDiscards: { x: 0, y: 0, width: 150, height: 90, rotationToUpright: 0, detectionMode: "discard_grid" } } });
+  const sizes: number[] = [];
+  const classifier = { classifyTileImages: async (images: Buffer[]) => {
+    sizes.push(images.length);
+    return images.map((_, index) => ({ tile: "E", confidence: index === 0 ? 0.99 : 0.51,
+      runnerUpTile: "W", runnerUpConfidence: index === 0 ? 0.01 : 0.49 })) as any;
+  } };
+  const result = await recognizeConfiguredPublicTilesWithVit(screenshot, layout, classifier);
+  assert.deepEqual(sizes, [2, 1]);
+  assert.equal(result.oppositeDiscards?.candidateCount, 2);
+  assert.equal(result.oppositeDiscards?.classificationSafe, false);
+});
+
 test("production dora region preserves man, pin and sou indicators with real Hybrid", {
   skip: !existsSync(".runtime/hybrid-vision/cvmaj-pretrained.tar") || !existsSync(".runtime/hybrid-vision/automajsoul-best-model.pt"),
 }, async () => {

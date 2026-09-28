@@ -18,6 +18,7 @@ test("stopped chi frame reacquires public rivers and reaches reaction evaluation
     assert.equal(observation.status, 0, observation.stderr);
     const board = JSON.parse(observation.stdout);
     assert.deepEqual(board.highlightedDiscard, { tile: "8s", fromSeat: "west" });
+    assert.equal(board.opponentDiscards.find((opponent: any) => opponent.seat === "south").discards.length, 18);
     assert.equal(board.opponentDiscards.find((opponent: any) => opponent.seat === "west").discards[13], "3m");
     const statePath = join(directory, "state.json");
     const observationPath = join(directory, "public.json");
