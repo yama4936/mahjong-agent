@@ -3,7 +3,7 @@ import base64
 import tempfile
 import unittest
 from pathlib import Path
-from dashboard import HTML, capture_cdp_screenshot, read_operator_status
+from dashboard import HTML, capture_cdp_screenshot, read_decision_history, read_operator_status
 
 
 class DashboardTest(unittest.TestCase):
@@ -92,3 +92,24 @@ class DashboardTest(unittest.TestCase):
             self.assertEqual(metrics["deadlineMisses"], 1)
             self.assertEqual(metrics["recognitionRetries"], 2)
             self.assertEqual(metrics["jevLocalDifferences"], 1)
+
+
+class DecisionHistoryTest(unittest.TestCase):
+    def test_history_preserves_sources_across_runs_and_pages(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "operator.jsonl"
+            decisions = [{"timestamp": str(i), "evaluation": {
+                "decision": {"selectedActionId": "discard_1m"},
+                "state": {"hand": ["1m"], "visibleTiles": ["2p"], "doraIndicators": ["3s"]}},
+                "execution": {"clicked": i == 2}} for i in range(3)]
+            records = [decisions[0], {"event": "started"}, {"evaluation": {"status": "not_ready"}}, *decisions[1:]]
+            path.write_text("".join(json.dumps(r) + "\n" for r in records) + '{"partial":', encoding="utf-8")
+            first = read_decision_history(path, limit=2)
+            self.assertEqual(first["records"], decisions[:0:-1])
+            self.assertTrue(first["hasMore"])
+            second = read_decision_history(path, offset=2, limit=2)
+            self.assertEqual(second["records"], [decisions[0]])
+            self.assertFalse(second["hasMore"])
+
+    def test_missing_history(self):
+        self.assertEqual(read_decision_history(None), {"records": [], "hasMore": False})

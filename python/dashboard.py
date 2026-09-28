@@ -12,14 +12,15 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
+from collections import deque
 
 from playwright.sync_api import Browser, Page, sync_playwright
 
 from screen_state import classify_screen, load_references
 
 
-HTML = """<!doctype html>
+HTML = r"""<!doctype html>
 <html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
 <title>Jantama Agent Monitor</title><style>
 :root{color-scheme:dark;font-family:system-ui,sans-serif;background:#090d13;color:#f4edd9}
@@ -36,6 +37,7 @@ small{color:#aca692}.ok{color:#82d9a0}.stop{color:#ff9c91}
 <div id="tiles" class="tiles" aria-label="認識手牌"></div><h3>選択肢 <small id="probabilityNote"></small></h3><div id="choices" class="choices" aria-label="選択肢と選択確率"></div><p id="reason" role="status"></p><p id="operator" class="muted"></p>
 <h3>戦略・セッション指標</h3><div class="metrics"><span id="targetYaku">狙い役：—</span><span id="pushFold">押し引き：—</span><span id="shape">選択時：—</span><span id="sessionMetrics">期限超過/再認識：—</span></div>
 <details><summary>判定データ</summary><pre id="judgmentJson"></pre></details></section>
+<section class="panel"><h2>選択履歴・情報源の牌</h2><p class="muted">保存ログから表示します。再起動前の記録も参照できます。</p><button id="loadHistory">履歴を更新</button> <button id="olderHistory">さらに古い50件</button><span id="historyStatus"></span><div id="history"></div></section>
 <strong>現在の画面（ライブ）</strong><img id="screen" alt="現在の雀魂画面"><small id="detail"></small><script>
 const el=id=>document.getElementById(id);
 const number=v=>typeof v==='number'?v.toFixed(3):'—';
@@ -81,6 +83,24 @@ function renderJudgment(j){
  el('reason').textContent=reasons.join(' ／ ')||'停止理由の記録なし';
  el('judgmentJson').textContent=JSON.stringify(j||{},null,2);
 }
+let historyOffset=0;
+async function loadHistory(older=false){
+ const offset=older?historyOffset:0;
+ try{
+  const response=await fetch('/api/history?offset='+offset,{cache:'no-store'});if(!response.ok)throw new Error(response.status);
+  const data=await response.json();if(!older)el('history').replaceChildren();
+  for(const j of data.records){
+   const e=j.evaluation||{},d=e.decision||{},s=e.state||{},r=e.recognition||{},a=d.selectedAction||{};
+   const row=document.createElement('details');const title=document.createElement('summary');
+   title.textContent=(j.timestamp?new Date(j.timestamp).toLocaleString():'時刻不明')+' ／ '+actionName(a.action||d.recommendedAction||(e.status==='reaction_prompt'?'pass':undefined))+' '+(a.tile||d.tile||'')+' ／ '+(j.execution?.clicked?'クリック送信済み':'未実行・実行記録なし');row.append(title);
+   const info=document.createElement('pre');
+   info.textContent='認識手牌：'+(r.tiles||[]).join(' ')+'\n判断に使用した手牌：'+(s.hand||[]).join(' ')+' ／ ツモ：'+(s.draw||'—')+'\n自分の捨て牌：'+(s.ownDiscards||[]).join(' ')+'\nその他の見えている牌：'+(s.visibleTiles||[]).join(' ')+'\nドラ表示牌：'+(s.doraIndicators||[]).join(' ')+'\n鳴き：'+JSON.stringify(s.melds||[])+'\n相手の捨て牌：'+JSON.stringify(s.opponents||[])+'\n対象の捨て牌：'+JSON.stringify(s.pendingDiscard||null)+'\n判断元：'+(d.source||'不明')+'\n選択肢：'+JSON.stringify(d.legalActions||d.candidates||[])+'\n選択確率：'+JSON.stringify(d.jev?.probabilities||{})+'\n情報源スクリーンショット：'+(j.screenshot||'記録なし');
+   row.append(info);const raw=document.createElement('details');const label=document.createElement('summary');label.textContent='保存データ全文';const pre=document.createElement('pre');pre.textContent=JSON.stringify(j,null,2);raw.append(label,pre);row.append(raw);el('history').append(row);
+  }
+  historyOffset=offset+data.records.length;el('olderHistory').disabled=!data.hasMore;el('historyStatus').textContent=' '+historyOffset+'件表示';
+ }catch(error){el('historyStatus').textContent='履歴取得失敗：'+error}
+}
+el('loadHistory').onclick=()=>loadHistory();el('olderHistory').onclick=()=>loadHistory(true);loadHistory();
 const image=document.querySelector('#screen'); async function refresh(){
  const now=Date.now(); image.src='/screen.png?t='+now;
  try{const s=await fetch('/api/status?t='+now,{cache:'no-store'}).then(r=>r.json());
@@ -160,12 +180,43 @@ def read_operator_status(path: Path | None) -> dict[str, Any]:
         return empty
 
 
-def handler_for(shared: SharedFrame) -> type[BaseHTTPRequestHandler]:
+def read_decision_history(path: Path | None, offset: int = 0, limit: int = 50) -> dict[str, Any]:
+    """Read durable decisions across runs, newest first, ignoring partial writes."""
+    if not path or not path.exists():
+        return {"records": [], "hasMore": False}
+    recent: deque[dict[str, Any]] = deque(maxlen=offset + limit + 1)
+    try:
+        with path.open(encoding="utf-8", errors="replace") as handle:
+            for line in handle:
+                try:
+                    record = json.loads(line)
+                except ValueError:
+                    continue
+                if not isinstance(record, dict):
+                    continue
+                evaluation = record.get("evaluation")
+                if isinstance(evaluation, dict) and (evaluation.get("decision") or evaluation.get("status") == "reaction_prompt"):
+                    recent.append(record)
+    except OSError:
+        return {"records": [], "hasMore": False}
+    records = list(reversed(recent))
+    return {"records": records[offset:offset + limit], "hasMore": len(records) > offset + limit}
+
+
+def handler_for(shared: SharedFrame, operator_log: Path | None = None) -> type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:  # noqa: N802
             route = urlparse(self.path).path
             if route == "/":
                 self.send_payload(HTML.encode(), "text/html; charset=utf-8")
+                return
+            if route == "/api/history":
+                try:
+                    offset = max(0, int(parse_qs(urlparse(self.path).query).get("offset", ["0"])[0]))
+                except ValueError:
+                    self.send_error(HTTPStatus.BAD_REQUEST)
+                    return
+                self.send_payload(json.dumps(read_decision_history(operator_log, offset)).encode(), "application/json")
                 return
             with shared.lock:
                 if route == "/screen.png" and shared.image:
@@ -229,7 +280,8 @@ def main() -> int:
     root = Path(__file__).resolve().parents[1]
     references = load_references(root / "artifacts" / "live")
     shared = SharedFrame()
-    server = ThreadingHTTPServer((args.host, args.port), handler_for(shared))
+    operator_log = Path(args.operator_log).resolve() if args.operator_log else None
+    server = ThreadingHTTPServer((args.host, args.port), handler_for(shared, operator_log))
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     print(f"Dashboard: http://{args.host}:{args.port}", flush=True)
