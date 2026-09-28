@@ -1262,3 +1262,17 @@ screencast開始し、初回認識前のmouse.moveなし。
 send_discard_click()は打牌後に中立位置へ移動するが初回撮影には間に合わない。
 起動時退避と退避後の新規フレーム待ちの回帰が次の修正候補。
 実行中のソースは変更していない。東1局1本場の同じ実行を継続。
+
+## 發ポン機会の認識による見送り
+
+東1局1本場09:15:57に九萬ポンを確認、評価はshanten3→2、
+candidateYaku=yakuhai、handPlan.primaryTarget=yakuhai:F。
+09:16:59画像で左家の發が発光し、手牌に發2枚とポンボタン。
+09:17:02はpending_discard_not_verified_on_prompt_frameで拒否、
+09:17:07パスボタン領域変化確認。戦略選択による見送りではない。
+左河のprevious/cachedはP,9m、promptはP,1p,2s,7p,F。
+鳴かれた九萬の河からの消失と複数家の河増加により履歴比較が成立せず。
+安全確認は必要だが、鳴かれた牌の正当な河消失を扱う履歴管理と、
+現在フレームの発光捨て牌を独立に証明する経路の改善が必要。
+再現画像green-dragon-pon-missed-after-called-river-removal-20260928.png。
+ポンすれば必ず和了したとまでは断定しないが、役を確定する機会が認識段階で失われた。
