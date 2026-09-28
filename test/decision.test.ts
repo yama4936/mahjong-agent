@@ -78,6 +78,16 @@ test("auto mode refuses to act without Jev", async () => {
   assert.ok(result.safety.reasons.includes("jev_required_for_auto_mode"));
 });
 
+test("auto refuses explicitly unobserved opponent melds", async () => {
+  const incomplete = parseGameState({
+    ...state,
+    opponents: [{ seat: "south", openMelds: 0, openMeldsObserved: false }],
+  });
+  const result = await decide(incomplete, { mode: "auto" });
+  assert.equal(result.executable, false);
+  assert.ok(result.safety.reasons.includes("opponent_melds_not_fully_observed"));
+});
+
 test("low recognition confidence blocks action", async () => {
   const unsafe = parseGameState({ ...state, recognitionConfidence: 0.5 });
   const result = await decide(unsafe, { mode: "advisor" });

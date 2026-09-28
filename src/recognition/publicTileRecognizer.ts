@@ -1,4 +1,5 @@
 import sharp from "sharp";
+import type { PublicGameState } from "../game/state.js";
 import { normalizeTile, suitRank, tileIndex, type GameTile } from "../game/tiles.js";
 import type { PublicTileRegion, PublicTileRegionName, ScreenLayout } from "./layout.js";
 import { classifyTile, loadTemplates } from "./templateMatcher.js";
@@ -36,6 +37,7 @@ export interface PublicTileObservation {
     discards: GameTile[];
     riichiDeclared?: boolean;
     melds?: RecognizedMeld[];
+    meldsObserved?: boolean;
   }>;
   ownMeldTiles: GameTile[];
   allMeldTiles?: GameTile[];
@@ -138,10 +140,17 @@ export function toPublicTileObservation(
   const doraIndicators = safeTiles("doraIndicators");
   const seats = ["east", "south", "west", "north"] as const;
   const ownIndex = seats.indexOf(ownSeat);
+  const meldEvidence = (name: PublicTileRegionName) => {
+    const region = recognition[name];
+    const melds = recognizeExposedMelds(region);
+    return { melds, meldsObserved: Boolean(region?.classificationSafe
+      && region.candidateCount === region.recognized.length
+      && melds.reduce((count, meld) => count + meld.tiles.length, 0) === region.recognized.length) };
+  };
   const opponentDiscards = [
-    { seat: seats[(ownIndex + 1) % 4]!, discards: safeTiles("rightDiscards"), riichiDeclared: hasSidewaysRiichiTile(recognition.rightDiscards), melds: recognizeExposedMelds(recognition.rightMelds) },
-    { seat: seats[(ownIndex + 2) % 4]!, discards: safeTiles("oppositeDiscards"), riichiDeclared: hasSidewaysRiichiTile(recognition.oppositeDiscards), melds: recognizeExposedMelds(recognition.oppositeMelds) },
-    { seat: seats[(ownIndex + 3) % 4]!, discards: safeTiles("leftDiscards"), riichiDeclared: hasSidewaysRiichiTile(recognition.leftDiscards), melds: recognizeExposedMelds(recognition.leftMelds) },
+    { seat: seats[(ownIndex + 1) % 4]!, discards: safeTiles("rightDiscards"), riichiDeclared: hasSidewaysRiichiTile(recognition.rightDiscards), ...meldEvidence("rightMelds") },
+    { seat: seats[(ownIndex + 2) % 4]!, discards: safeTiles("oppositeDiscards"), riichiDeclared: hasSidewaysRiichiTile(recognition.oppositeDiscards), ...meldEvidence("oppositeMelds") },
+    { seat: seats[(ownIndex + 3) % 4]!, discards: safeTiles("leftDiscards"), riichiDeclared: hasSidewaysRiichiTile(recognition.leftDiscards), ...meldEvidence("leftMelds") },
   ];
   const ownMeldTiles = safeTiles("ownMelds");
   const ownMelds = recognizeExposedMelds(recognition.ownMelds);
@@ -160,6 +169,24 @@ export function toPublicTileObservation(
     detectedCandidates: Object.values(recognition).reduce((sum, region) => sum + (region?.candidateCount ?? 0), 0),
     complete: false,
   };
+}
+
+/** Counts remain lower bounds when meld regions are missing or only partially decoded. */
+export function opponentStatesFromObservation(
+  observation: PublicTileObservation,
+  prior: PublicGameState["opponents"] = [],
+): PublicGameState["opponents"] {
+  return observation.opponentDiscards.map((opponent) => {
+    const previous = prior.find((item) => item.seat === opponent.seat);
+    const observedCount = opponent.melds?.length ?? 0;
+    const previousCount = previous?.openMelds ?? 0;
+    return {
+      seat: opponent.seat, discards: opponent.discards,
+      riichi: Boolean(opponent.riichiDeclared || previous?.riichi),
+      openMelds: Math.max(observedCount, previousCount),
+      openMeldsObserved: opponent.meldsObserved === true && observedCount >= previousCount,
+    };
+  });
 }
 
 function hasPrefix<T>(current: readonly T[], previous: readonly T[]): boolean {

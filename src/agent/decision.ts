@@ -140,6 +140,9 @@ function publicStateSafetyReasons(state: GameState): string[] {
   const seats = ["east", "south", "west", "north"] as const;
   if (seats.some((seat) => state.scores[seat] === undefined)) reasons.push("scores_incomplete");
   const opponentSeats = state.opponents.map((opponent) => opponent.seat);
+  if (state.opponents.some((opponent) => opponent.openMeldsObserved === false)) {
+    reasons.push("opponent_melds_not_fully_observed");
+  }
   if (opponentSeats.length !== 3 || new Set(opponentSeats).size !== 3 || opponentSeats.includes(state.seat)) {
     reasons.push("opponents_incomplete_or_inconsistent");
   }

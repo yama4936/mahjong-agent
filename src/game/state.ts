@@ -36,6 +36,7 @@ const gameStateObjectSchema = z.object({
     discards: z.array(tileSchema).default([]),
     riichi: z.boolean().default(false),
     openMelds: z.number().int().min(0).max(4).default(0),
+    openMeldsObserved: z.boolean().optional(),
   })).default([]),
 });
 

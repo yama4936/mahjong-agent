@@ -3,6 +3,7 @@ import test from "node:test";
 import path from "node:path";
 import sharp from "sharp";
 import { layoutSchema } from "../src/recognition/layout.js";
+import { opponentStatesFromObservation } from "../src/recognition/publicTileRecognizer.js";
 import { assertTemporalPublicObservation, hasSidewaysRiichiTile, recognizeConfiguredPublicTiles, recognizeConfiguredPublicTilesWithVit, recognizeExposedMelds, toPublicTileObservation, type PublicTileObservation, type PublicTileRecognitionRegion } from "../src/recognition/publicTileRecognizer.js";
 
 function publicRegion(tiles: Array<{ tile: any; x: number; y?: number; width?: number; height?: number }>, rotationToUpright: 0 | 90 | 180 | 270 = 0): PublicTileRecognitionRegion {
@@ -18,6 +19,37 @@ function publicRegion(tiles: Array<{ tile: any; x: number; y?: number; width?: n
     })),
   };
 }
+
+test("missing and undecodable meld regions are unknown, not confirmed closed hands", () => {
+  const missing = toPublicTileObservation({});
+  assert.equal(missing.opponentDiscards[0]?.meldsObserved, false);
+  const prior = [{ seat: "south" as const, discards: [], riichi: true, openMelds: 2 }];
+  const states = opponentStatesFromObservation(missing, prior);
+  assert.equal(states[0]?.openMelds, 2);
+  assert.equal(states[0]?.openMeldsObserved, false);
+  assert.equal(states[0]?.riichi, true);
+  assert.equal(states[1]?.openMeldsObserved, false);
+  const malformed = toPublicTileObservation({ rightMelds: publicRegion([
+    { tile: "1m", x: 0 }, { tile: "3m", x: 30 }, { tile: "5m", x: 60 },
+  ]) });
+  assert.equal(malformed.opponentDiscards[0]?.meldsObserved, false);
+});
+
+test("complete meld evidence updates counts but regressing evidence cannot erase them", () => {
+  const region = publicRegion([
+    { tile: "E", x: 0 }, { tile: "E", x: 30 }, { tile: "E", x: 60 },
+  ]);
+  const observation = toPublicTileObservation({ rightMelds: region });
+  assert.equal(observation.opponentDiscards[0]?.meldsObserved, true);
+  const current = opponentStatesFromObservation(observation);
+  assert.equal(current[0]?.openMelds, 1);
+  assert.equal(current[0]?.openMeldsObserved, true);
+  const previous = [{ seat: "south" as const, discards: [], riichi: false, openMelds: 2 }];
+  assert.equal(opponentStatesFromObservation(observation, previous)[0]?.openMelds, 2);
+  assert.equal(opponentStatesFromObservation(observation, previous)[0]?.openMeldsObserved, false);
+  region.candidateCount = 4;
+  assert.equal(toPublicTileObservation({ rightMelds: region }).opponentDiscards[0]?.meldsObserved, false);
+});
 
 test("classifies upright and rotated public tile candidates after orientation normalization", { timeout: 30_000 }, async () => {
   const workspace = path.resolve(import.meta.dirname, "..");

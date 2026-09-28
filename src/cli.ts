@@ -7,7 +7,7 @@ import { evaluateJevProfile } from "./jev/tuning.js";
 import { layoutSchema } from "./recognition/layout.js";
 import { measureSlotPresence, recognizeHand, recognizeTileSlots } from "./recognition/templateMatcher.js";
 import { detectConfiguredPublicRegions } from "./recognition/regionDetector.js";
-import { recognizeConfiguredPublicTiles, recognizeConfiguredPublicTilesWithVit, toPublicTileObservation } from "./recognition/publicTileRecognizer.js";
+import { recognizeConfiguredPublicTiles, recognizeConfiguredPublicTilesWithVit, toPublicTileObservation, opponentStatesFromObservation } from "./recognition/publicTileRecognizer.js";
 import { layoutFromHandProposal, proposeHandLayout, proposeLiveHandLayout } from "./recognition/handLayoutProposal.js";
 import { VitTileRecognizer } from "./recognition/vitRecognizer.js";
 import { HybridTileRecognizer } from "./recognition/hybridTileRecognizer.js";
@@ -93,10 +93,7 @@ async function main(): Promise<void> {
       ownDiscards: observedBoard.ownDiscards,
       melds: observedBoard.ownMelds,
       openMelds: observedBoard.ownMelds?.length ?? rawPublicState.openMelds,
-      opponents: observedBoard.opponentDiscards?.map((opponent: any) => ({
-        seat: opponent.seat, discards: opponent.discards, riichi: Boolean(opponent.riichiDeclared),
-        openMelds: opponent.melds?.length ?? 0,
-      })),
+      opponents: opponentStatesFromObservation(observedBoard, rawPublicState.opponents),
     } : {};
     const suppliedPublicState = parsePublicGameState({ ...rawPublicState, ...observedPatch });
     const pendingParts = pendingDiscardArgument?.split(",");
