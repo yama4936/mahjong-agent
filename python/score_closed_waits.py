@@ -1,6 +1,7 @@
 """Offline closed-hand scoring, not a prediction of win probability or policy EV."""
 import argparse
 import json
+import sys
 from collections import Counter
 from importlib.metadata import version
 from mahjong.constants import EAST, SOUTH, WEST, NORTH
@@ -102,6 +103,9 @@ if __name__ == "__main__":
     parser.add_argument("--discard", required=True)
     parser.add_argument("--wait", action="append", required=True)
     args = parser.parse_args()
-    with open(args.replay, encoding="utf-8") as source:
-        replay = json.load(source)
+    if args.replay == "-":
+        replay = json.load(sys.stdin)
+    else:
+        with open(args.replay, encoding="utf-8") as source:
+            replay = json.load(source)
     print(json.dumps(score_waits(replay["state"], args.discard, args.wait), ensure_ascii=False, indent=2))
