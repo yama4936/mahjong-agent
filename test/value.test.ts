@@ -108,3 +108,24 @@ test("an active threat orders viable choices by defensive round EV", () => {
   const viable = result.candidates.filter((candidate) => candidate.shanten <= minimumShanten + 1);
   assert.equal(result.candidates[0]!.expectedRoundValue, Math.max(...viable.map((candidate) => candidate.expectedRoundValue!)));
 });
+
+test("higher seven-pairs value does not force a dangerous cut when genbutsu preserves tenpai", () => {
+  for (const turn of [7, 12, 16]) for (const remainingTiles of [4, 16, 40]) {
+    const boundary = parseGameState({
+      seat: "south", round: "south_3", turn, remainingTiles,
+      scores: { east: 30000, south: 24000, west: 23000, north: 23000 },
+      hand: ["2m", "2m", "3m", "3m", "4p", "4p", "5p", "5p", "6s", "6s", "7s", "7s", "8s"],
+      draw: "E", doraIndicators: ["4p"],
+      opponents: [{ seat: "east", discards: ["8s"], riichi: true }],
+    });
+    const advice = deterministicAdvice(boundary);
+    const highValue = advice.candidates.find(candidate => candidate.tile === "E")!;
+    const safe = advice.candidates.find(candidate => candidate.tile === "8s")!;
+    assert.equal(highValue.estimatedValue, 12000);
+    assert.equal(safe.estimatedValue, 8000);
+    assert.equal(safe.shanten, 0);
+    assert.equal(safe.danger, 0);
+    assert.ok((highValue.danger ?? 0) > 0);
+    assert.equal(advice.tile, "8s");
+  }
+});
