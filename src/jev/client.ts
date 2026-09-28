@@ -2,6 +2,7 @@ import type { GameState } from "../game/state.js";
 import type { DiscardEvaluation } from "../game/ukeire.js";
 import type { LegalAction } from "../game/actions.js";
 import { normalizeTile, parseGameTile } from "../game/tiles.js";
+import type { ClosedWaitReport } from "../evaluation/closedWaitScorer.js";
 
 export interface JevDecision {
   actionId: string;
@@ -144,7 +145,12 @@ export class JevClient {
     return this.choose(request, "mahjong-reaction-v1", signal);
   }
 
+  async chooseDeclaration(state: GameState, actions: readonly LegalAction[], report: ClosedWaitReport, signal?: AbortSignal): Promise<JevDecision> {
+    return this.choose(buildJevDeclarationRequest(state, actions, report, this.model), "mahjong-declaration-v1", signal);
+  }
+
   private async choose(request: JevRequest, version: string, signal?: AbortSignal): Promise<JevDecision> {
+    if (signal?.aborted) throw new Error("Jev request aborted");
     const ids = Object.keys(request.questions.action.criteria);
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 20_000);
@@ -169,6 +175,29 @@ export class JevClient {
       signal?.removeEventListener("abort", abort);
     }
   }
+}
+
+export function buildJevDeclarationRequest(state: GameState, actions: readonly LegalAction[], report: ClosedWaitReport, model: string): JevRequest {
+  if (actions.length !== 2 || !actions.some((action) => action.action === "discard")
+    || !actions.some((action) => action.action === "riichi")
+    || actions.some((action) => !("tile" in action) || action.tile !== report.discard)) {
+    throw new Error("Declaration comparison requires matching discard and riichi actions");
+  }
+  return { model, state: {
+    promptVersion: "mahjong-declaration-v1", task: "Compare riichi and dama for the same tenpai discard",
+    round: state.round, seat: state.seat, scores: state.scores, honba: state.honba,
+    riichiSticks: state.riichiSticks, remainingTiles: state.remainingTiles, turn: state.turn,
+    hand: [...state.hand, ...(state.draw ? [state.draw] : [])], opponents: state.opponents,
+    ownDiscards: state.ownDiscards, doraIndicators: state.doraIndicators, scoring: report,
+  }, questions: { action: { type: "choice", instructions: {
+    question: "Which listed action best balances match placement, winning opportunities and defensive flexibility?",
+    evidence_limits: ["Scoring is conditional on winning, not a calibrated win probability or expected value.",
+      "A no_yaku dama ron cannot win an ordinary discard; do not invent a yaku.",
+      "Riichi spends 1000 points and locks subsequent discards; dama retains defensive flexibility.",
+      "Immediate rank is not final rank: account for dealer continuation and excluded bonuses.",
+      "Missing opponent meld evidence is unknown, not proof of a closed or safe opponent."],
+    output_constraint: "Select exactly one listed action id.",
+  }, criteria: Object.fromEntries(actions.map((action) => [action.id, { action: action.action, tile: report.discard }])) } } };
 }
 
 export function buildJevReactionRequest(state: GameState, actions: readonly LegalAction[], model: string): JevRequest {

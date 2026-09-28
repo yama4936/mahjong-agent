@@ -5,6 +5,7 @@ import { once } from "node:events";
 import {
   buildJevHandPlanRequest, buildJevReactionRequest, buildJevRequest,
   isHandPlanCompatible, JevClient, type JevHandPlan,
+  buildJevDeclarationRequest,
 } from "../src/jev/client.js";
 import { deterministicAdvice } from "../src/evaluation/advisor.js";
 import { parseGameState } from "../src/game/state.js";
@@ -12,6 +13,19 @@ import { parseGameState } from "../src/game/state.js";
 const state = parseGameState({
   hand: ["1m", "2m", "3m", "4m", "5m", "6m", "3p", "4p", "5p", "7s", "8s", "9s", "E"],
   draw: "6p",
+});
+
+test("declaration prompt limits choices to the same discard and keeps score evidence caveats", () => {
+  const report = { library: "mahjong==2.0.0" as const, discard: "E", scope: "closed_hand_scoring_not_policy_ev" as const,
+    assumptions: { furiten_not_checked: true }, rows: [] };
+  const request = buildJevDeclarationRequest(state, [
+    { id: "discard_E", action: "discard", tile: "E" }, { id: "riichi_discard_E", action: "riichi", tile: "E" },
+  ], report, "test");
+  assert.deepEqual(Object.keys(request.questions.action.criteria), ["discard_E", "riichi_discard_E"]);
+  assert.equal(request.state.scoring, report);
+  assert.throws(() => buildJevDeclarationRequest(state, [
+    { id: "discard_E", action: "discard", tile: "E" }, { id: "riichi_discard_1m", action: "riichi", tile: "1m" },
+  ], report, "test"), /matching/);
 });
 
 test("Jev adapter sends bounded choices and validates a response", async () => {

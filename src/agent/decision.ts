@@ -6,6 +6,7 @@ import { calculateShanten } from "../game/shanten.js";
 import { evaluateDiscards } from "../game/ukeire.js";
 import { isTerminalOrHonor, normalizeTile, tileIndex, type GameTile } from "../game/tiles.js";
 import { standardWaitShapes, type WaitShape } from "../game/winningShapes.js";
+import { scoreClosedWaits, type ClosedWaitReport } from "../evaluation/closedWaitScorer.js";
 
 export type AgentMode = "observer" | "advisor" | "auto" | "force-auto";
 
@@ -19,6 +20,7 @@ export interface DecisionResult extends AdvisorResult {
   arbitration?: ForceAutoArbitration;
   handPlan: StrategyHandPlan;
   callAssessments?: CallAssessment[];
+  declarationComparison?: { status: "selected" | "fallback"; report?: ClosedWaitReport; decision?: JevDecision; reason?: string };
   riichiAssessment?: { actionId: string; approved: boolean; remainingWinningTiles: number; reasons: string[];
     standardWaits: Array<{ tile: string; shapes: WaitShape[] }> };
 }
@@ -55,6 +57,7 @@ export interface DecisionOptions {
   minJevConfidence?: number;
   signal?: AbortSignal;
   handPlan?: JevHandPlan;
+  riichiScorer?: typeof scoreClosedWaits;
 }
 
 export interface ForceAutoArbitration {
@@ -218,6 +221,24 @@ export async function decide(state: GameState, options: DecisionOptions): Promis
 
   const concealedAfterDiscard = [...state.hand, ...(state.draw ? [state.draw] : [])];
   concealedAfterDiscard.splice(concealedAfterDiscard.indexOf(selected.tile), 1);
+  let declarationComparison: DecisionResult["declarationComparison"];
+  if (selectedAction.action === "riichi" && source === "jev" && options.jev && typeof options.jev.chooseDeclaration === "function") {
+    try {
+      const report = await (options.riichiScorer ?? scoreClosedWaits)(state, selected.tile,
+        selected.effectiveTiles.map((wait) => wait.tile), options.signal ? { signal: options.signal } : {});
+      const discard = legalActions.find((action) => action.action === "discard" && action.tile === selected.tile)!;
+      const choices = [discard, selectedAction];
+      const declaration = await options.jev.chooseDeclaration(state, choices, report, options.signal);
+      const chosen = choices.find((action) => action.id === declaration.actionId);
+      if (!chosen || !Number.isFinite(declaration.confidence) || declaration.confidence > 1
+        || declaration.confidence < minJevConfidence) throw new Error("Invalid or low-confidence declaration choice");
+      selectedAction = chosen;
+      confidence = Math.min(confidence, declaration.confidence);
+      declarationComparison = { status: "selected", report, decision: declaration };
+    } catch (error) {
+      declarationComparison = { status: "fallback", reason: error instanceof Error ? error.message : "Declaration comparison failed" };
+    }
+  }
   const safety = { allowed: safetyReasons.length === 0, reasons: safetyReasons };
   return {
     ...base,
@@ -229,6 +250,7 @@ export async function decide(state: GameState, options: DecisionOptions): Promis
     selectedActionId: selectedAction.id,
     selectedAction,
     legalActions,
+    ...(declarationComparison ? { declarationComparison } : {}),
     ...(legalActions.find((action) => action.action === "riichi" && action.tile === selected.tile) ? {
       riichiAssessment: {
         actionId: `riichi_discard_${selected.tile}`,
@@ -238,6 +260,7 @@ export async function decide(state: GameState, options: DecisionOptions): Promis
           tile: wait.tile, shapes: standardWaitShapes(concealedAfterDiscard, wait.tile, state.openMelds),
         })),
         reasons: [
+          ...(declarationComparison?.status === "selected" && selectedAction.action === "discard" ? ["declaration_comparison_selected_dama"] : []),
           ...(selected.ukeire === 0 ? ["no_remaining_winning_tiles"] : []),
           ...(state.remainingTiles !== undefined && state.remainingTiles < 4 ? ["insufficient_wall_for_riichi"] : []),
         ],

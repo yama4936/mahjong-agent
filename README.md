@@ -251,6 +251,7 @@ npm run watch -- examples/state.json config/layout.json templates/bootstrap \
 
 この比較は門前・副露なし限定で、通常のロン/ツモについて立直有無を評価します。一発・裏ドラ・海底/河底・本場/供託を除外し、フリテンや和了確率、順位期待値は判定しません。対局用の`heuristic-v1`を置き換えるものではありません。計算APIとルール設定は[ライブラリ公式資料](https://mahjongrepository.github.io/mahjong/modules/hand_calculating/hand.html)を参照。
 4人分の点数があれば、ロンの支払者別・ツモの支払額別に`scoreScenarios`を出力します。これは和了直後の点数と順位範囲であり、親の連荘・終局判定や最終順位は予測しません。同点の順位決定ルールは未適用です。立直前の点数を入力し、自家の供託は自家和了で戻るため相殺します（他家の既存供託は除外）。
+Jevによる打牌選択が成功して立直候補となる場合は、この計算器の結果を使って同じ打牌の立直/ダマを別途比較します。計算器未導入・失敗・不正/低確信度の応答なら従来の立直判断へ戻り、`declarationComparison`へ理由を記録します。force-autoのJev全体期限は変更しません。追加のAPI呼び出しの遅延と実戦成績への影響は検証中です。
 
 局・自風・点数のOCRを使う検証では、`python/requirements-ocr.txt`を操作用Python環境へインストールし、`--board-metadata --force-auto-click-budget-ms=8000`を追加します。認識失敗時は固定の東へ戻さず再取得します。8秒は認識＋判断用の明示予算で、Jevの待ち時間上限2300msは変わりません。操作期限より大きい予算は指定できません。
 

@@ -2,11 +2,39 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { decide, decideForceAutoWithJevDeadline } from "../src/agent/decision.js";
 import { parseGameState } from "../src/game/state.js";
+import { readFile } from "node:fs/promises";
+import type { ClosedWaitReport } from "../src/evaluation/closedWaitScorer.js";
+import type { JevClient } from "../src/jev/client.js";
 
 const state = parseGameState({
   hand: ["1m", "2m", "3m", "4m", "5m", "6m", "3p", "4p", "5p", "7s", "8s", "9s", "E"],
   draw: "6p",
   recognitionConfidence: 1,
+});
+
+test("declaration comparison can choose dama and invalid/scorer failures retain riichi", async () => {
+  const live = parseGameState(JSON.parse(await readFile("artifacts/live/south4-riichi-replay-20260928.json", "utf8")).state);
+  const report: ClosedWaitReport = { library: "mahjong==2.0.0", discard: "5m",
+    scope: "closed_hand_scoring_not_policy_ev", assumptions: { furiten_not_checked: true }, rows: [] };
+  const choice = (actionId: string) => ({ actionId, confidence: 0.99, probabilities: { [actionId]: 1 },
+    model: "test", promptVersion: "test", latencyMs: 0 });
+  const jev = { chooseDiscard: async () => choice("discard_5m"),
+    chooseDeclaration: async (_state: unknown, actions: any[], received: ClosedWaitReport) => {
+      assert.deepEqual(actions.map((action) => action.id), ["discard_5m", "riichi_discard_5m"]);
+      assert.equal(received, report);
+      return choice("discard_5m");
+    } } as unknown as JevClient;
+  const dama = await decide(live, { mode: "advisor", jev, riichiScorer: async () => report });
+  assert.equal(dama.selectedAction.action, "discard");
+  assert.equal(dama.declarationComparison?.status, "selected");
+  assert.ok(dama.riichiAssessment?.reasons.includes("declaration_comparison_selected_dama"));
+  const failed = await decide(live, { mode: "advisor", jev, riichiScorer: async () => { throw new Error("scorer unavailable"); } });
+  assert.equal(failed.selectedAction.action, "riichi");
+  assert.equal(failed.declarationComparison?.reason, "scorer unavailable");
+  const invalid = { ...jev, chooseDeclaration: async () => choice("discard_1m") } as unknown as JevClient;
+  const rejected = await decide(live, { mode: "advisor", jev: invalid, riichiScorer: async () => report });
+  assert.equal(rejected.selectedAction.action, "riichi");
+  assert.equal(rejected.declarationComparison?.status, "fallback");
 });
 
 test("live south-three highlighted chi is passed without shanten gain or viable yaku", async () => {
