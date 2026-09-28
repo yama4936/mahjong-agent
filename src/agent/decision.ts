@@ -5,6 +5,7 @@ import { generateLegalActions, type LegalAction } from "../game/actions.js";
 import { calculateShanten } from "../game/shanten.js";
 import { evaluateDiscards } from "../game/ukeire.js";
 import { isTerminalOrHonor, normalizeTile, tileIndex, type GameTile } from "../game/tiles.js";
+import { standardWaitShapes, type WaitShape } from "../game/winningShapes.js";
 
 export type AgentMode = "observer" | "advisor" | "auto" | "force-auto";
 
@@ -18,7 +19,8 @@ export interface DecisionResult extends AdvisorResult {
   arbitration?: ForceAutoArbitration;
   handPlan: StrategyHandPlan;
   callAssessments?: CallAssessment[];
-  riichiAssessment?: { actionId: string; approved: boolean; remainingWinningTiles: number; reasons: string[] };
+  riichiAssessment?: { actionId: string; approved: boolean; remainingWinningTiles: number; reasons: string[];
+    standardWaits: Array<{ tile: string; shapes: WaitShape[] }> };
 }
 
 export interface StrategyHandPlan {
@@ -214,6 +216,8 @@ export async function decide(state: GameState, options: DecisionOptions): Promis
     if (riichi && selected.ukeire > 0 && (state.remainingTiles === undefined || state.remainingTiles >= 4)) selectedAction = riichi;
   }
 
+  const concealedAfterDiscard = [...state.hand, ...(state.draw ? [state.draw] : [])];
+  concealedAfterDiscard.splice(concealedAfterDiscard.indexOf(selected.tile), 1);
   const safety = { allowed: safetyReasons.length === 0, reasons: safetyReasons };
   return {
     ...base,
@@ -230,6 +234,9 @@ export async function decide(state: GameState, options: DecisionOptions): Promis
         actionId: `riichi_discard_${selected.tile}`,
         approved: selectedAction.action === "riichi",
         remainingWinningTiles: selected.ukeire,
+        standardWaits: selected.effectiveTiles.map((wait) => ({
+          tile: wait.tile, shapes: standardWaitShapes(concealedAfterDiscard, wait.tile, state.openMelds),
+        })),
         reasons: [
           ...(selected.ukeire === 0 ? ["no_remaining_winning_tiles"] : []),
           ...(state.remainingTiles !== undefined && state.remainingTiles < 4 ? ["insufficient_wall_for_riichi"] : []),
