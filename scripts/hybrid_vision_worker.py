@@ -2,7 +2,7 @@
 """Persistent cvmaj + AutoMajsoul tile-classification worker.
 
 cvmaj supplies the normal 34-class result.  AutoMajsoul overrides it only
-when its top class is an explicit red five (5m-, 5p-, or 5s-).
+when its top class is a confident, separated explicit red five.
 """
 
 from __future__ import annotations
@@ -115,6 +115,9 @@ def main() -> None:
             predictions = []
             for normal_prediction, red_prediction in zip(normal, red):
                 red_label = RED_LABELS.get(str(red_prediction["label"]))
+                if (float(red_prediction["confidence"]) < 0.5
+                        or float(red_prediction["confidence"]) - float(red_prediction["runnerUpConfidence"]) < 0.1):
+                    red_label = None
                 selected = dict(red_prediction if red_label else normal_prediction)
                 if red_label:
                     selected["label"] = red_label
