@@ -162,7 +162,9 @@ def _has_bottom_tile_faces(image: Image.Image) -> bool:
     # Even a four-tile compact hand occupies these bottom-left tile faces.
     # A dark table plus rivers/HUD can otherwise satisfy all panel heuristics.
     hand_pixels = list(image.crop((width * .115, height * .87, width * .30, height * .97)).getdata())
-    white_faces = sum(1 for pixel in hand_pixels if min(pixel) > 180 and max(pixel) - min(pixel) < 60) / max(1, len(hand_pixels))
+    # Riichi selection dims unselectable faces to neutral gray. They remain
+    # tile faces, not evidence that the table has become the lobby.
+    white_faces = sum(1 for pixel in hand_pixels if min(pixel) > 130 and max(pixel) - min(pixel) < 60) / max(1, len(hand_pixels))
     dark_ink = sum(1 for pixel in hand_pixels if max(pixel) < 100) / max(1, len(hand_pixels))
     return white_faces >= .35 and dark_ink >= .02
 
