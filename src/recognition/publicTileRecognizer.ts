@@ -92,6 +92,23 @@ function inferMeld(tiles: RecognizedPublicTile[]): RecognizedMeld | undefined {
   };
 }
 
+function inferAdjacentMelds(tiles: RecognizedPublicTile[]): RecognizedMeld[] {
+  const partitions: RecognizedMeld[][] = [];
+  function search(offset: number, groups: RecognizedMeld[]): void {
+    if (partitions.length > 1) return;
+    if (offset === tiles.length) { partitions.push(groups); return; }
+    if (groups.length === 4) return;
+    for (const size of [3, 4]) {
+      const slice = tiles.slice(offset, offset + size);
+      if (slice.length !== size) continue;
+      const meld = inferMeld(slice);
+      if (meld) search(offset + size, [...groups, meld]);
+    }
+  }
+  search(0, []);
+  return partitions.length === 1 ? partitions[0]! : [];
+}
+
 /**
  * Converts a calibrated meld region into typed, complete exposed melds. A
  * region with ambiguous leftovers yields no promoted meld for those tiles.
@@ -124,7 +141,7 @@ export function recognizeExposedMelds(region?: PublicTileRecognitionRegion): Rec
     if (gap > span * 1.6) groups.push([tile]);
     else groups.at(-1)!.push(tile);
   }
-  return groups.map(inferMeld).filter((meld): meld is RecognizedMeld => Boolean(meld));
+  return groups.flatMap(inferAdjacentMelds);
 }
 
 export function toPublicTileObservation(

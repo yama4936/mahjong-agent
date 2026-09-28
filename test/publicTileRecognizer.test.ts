@@ -241,3 +241,20 @@ test("promotes only complete unambiguous exposed meld groups", () => {
     { tile: "1m", x: 0 }, { tile: "3m", x: 30 }, { tile: "5m", x: 60 },
   ])), []);
 });
+
+test("adjacent exposed melds split by unique legal composition without a large gap", () => {
+  const region = publicRegion([
+    { tile: "6s", x: 0 }, { tile: "7s", x: 30 }, { tile: "8s", x: 60 },
+    { tile: "E", x: 90 }, { tile: "E", x: 120 }, { tile: "E", x: 150 },
+  ]);
+  const melds = recognizeExposedMelds(region);
+  assert.deepEqual(melds.map((meld) => meld.type), ["chi", "pon"]);
+  assert.equal(toPublicTileObservation({ oppositeMelds: region }).opponentDiscards[1]?.meldsObserved, true);
+  const kan = publicRegion([
+    { tile: "3p", x: 0 }, { tile: "3p", x: 30 }, { tile: "3p", x: 60 }, { tile: "3p", x: 90 },
+    { tile: "4s", x: 120 }, { tile: "5s", x: 150 }, { tile: "6s", x: 180 },
+  ]);
+  assert.deepEqual(recognizeExposedMelds(kan).map((meld) => meld.type), ["minkan", "chi"]);
+  region.recognized[4]!.tile = "W";
+  assert.equal(toPublicTileObservation({ oppositeMelds: region }).opponentDiscards[1]?.meldsObserved, false);
+});
