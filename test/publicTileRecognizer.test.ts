@@ -126,6 +126,20 @@ test("missing and undecodable meld regions are unknown, not confirmed closed han
   assert.equal(malformed.opponentDiscards[0]?.meldsObserved, false);
 });
 
+test("real Hybrid preserves the ordered hand from a successful live shimmer recheck", {
+  skip: !existsSync(".runtime/hybrid-vision/cvmaj-pretrained.tar") || !existsSync(".runtime/hybrid-vision/automajsoul-best-model.pt"),
+}, async () => {
+  const layout = layoutSchema.parse(JSON.parse(await readFile("config/layout-300-regression.json", "utf8")));
+  const recognizer = new HybridTileRecognizer();
+  try {
+    const result = await recognizer.recognizeHand("artifacts/live/fixed-shimmer-identity-success-20260928.jpg", layout);
+    assert.equal(result.safe, true);
+    assert.deepEqual(result.tiles, ["1m", "1m", "6m", "7m", "8m", "8m", "5s", "6s", "7s", "8s", "N", "N", "F", "6m"]);
+  } finally {
+    await recognizer.close();
+  }
+});
+
 test("complete meld evidence updates counts but regressing evidence cannot erase them", () => {
   const region = publicRegion([
     { tile: "E", x: 0 }, { tile: "E", x: 30 }, { tile: "E", x: 60 },
