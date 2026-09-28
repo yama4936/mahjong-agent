@@ -1,3 +1,5 @@
+import type { GameTile } from "../game/tiles.js";
+
 /** Red-five-sou evidence for an upright 44x64 RGB tile face.
  * The central bamboo is red on the red five and green on the ordinary five.
  * This is color evidence only: callers must independently identify the tile
@@ -16,4 +18,11 @@ export function redFiveSouEvidence(rgb: Uint8Array) {
     }
   }
   return { red, green, supportsRed: red >= 30 && red / (red + green) >= 0.8 };
+}
+
+/** Apply color evidence only to an independently classified ordinary five sou.
+ * Never infer a suit or turn a pin/man tile into sou from red pixels alone.
+ */
+export function correctRedFiveSou(tile: GameTile, rgb: Uint8Array): GameTile {
+  return tile === "5s" && redFiveSouEvidence(rgb).supportsRed ? "0s" : tile;
 }

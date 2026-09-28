@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import sharp from "sharp";
-import { redFiveSouEvidence } from "../src/recognition/redFiveSou.js";
+import { correctRedFiveSou, redFiveSouEvidence } from "../src/recognition/redFiveSou.js";
 import { parseGameState } from "../src/game/state.js";
 import { deterministicAdvice } from "../src/evaluation/advisor.js";
 
@@ -26,6 +26,23 @@ test("central bamboo distinguishes visually labelled ordinary and red five sou r
 test("blank evidence and malformed pixel buffers cannot support red five sou", () => {
   assert.equal(redFiveSouEvidence(new Uint8Array(44 * 64 * 3).fill(240)).supportsRed, false);
   assert.throws(() => redFiveSouEvidence(new Uint8Array(44 * 64 * 4)), /44x64 RGB/);
+});
+
+test("sou color correction is suit-gated and ignores red at the outer bamboo", () => {
+  const rgb = new Uint8Array(44 * 64 * 3).fill(240);
+  const paint = (left: number, top: number, width: number, height: number, color: number[]) => {
+    for (let y = top; y < top + height; y++) for (let x = left; x < left + width; x++) {
+      rgb.set(color, (y * 44 + x) * 3);
+    }
+  };
+  paint(5, 7, 8, 20, [190, 35, 35]); // Ordinary five sou can have a red outer glyph.
+  paint(18, 20, 6, 25, [30, 155, 45]);
+  assert.equal(correctRedFiveSou("5s", rgb), "5s");
+  paint(18, 20, 6, 25, [190, 35, 35]);
+  assert.equal(correctRedFiveSou("5s", rgb), "0s");
+  for (const tile of ["5p", "5m", "4m", "3s", "0s", "0p", "0m"] as const) {
+    assert.equal(correctRedFiveSou(tile, rgb), tile);
+  }
 });
 
 test("live first-turn red identity changes local discard from red five sou to west", () => {
