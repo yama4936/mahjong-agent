@@ -1327,3 +1327,15 @@ evidenceToClick9140ms。次OCRで自家24000→23000の供託を確認。
 結果画像だけで翻・符・役構成を断定しない。
 09:29:57/09:30:09の実OCRで東3局、自家西30100、北32300/東15700/南21900。
 現順位2位。これは今回の実行中の和了証拠であり、半荘完走・勝率改善ではない。
+
+## 七筒2枚の独立認識不一致と再取得復帰
+
+東3局09:33:25.identity画像を目視しslot8/9は七筒2枚。
+09:33:29 hand_identity_checkedは14枚、recognitionSafe=trueだが
+expected7p/7p→observed6p/6pの2箇所不一致、verified=false。
+confidence0.699709/margin0.400534。高いモデル信頼値だけで一致とはしない。
+続くaction_abortedはpixel delta2.134。09:33:33再取得OCR、
+09:33:34click_sent、09:33:36以降のdecisionで変化確認へ復帰。
+保存画像two-seven-pin-independent-six-pin-20260928.jpg。
+七筒誤認識は既存の独立再確認モデルに残っており未修正。
+現行ソースを変えず、同じ実対局は継続している。
