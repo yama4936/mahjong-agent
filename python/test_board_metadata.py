@@ -66,6 +66,24 @@ class BoardMetadataTest(unittest.TestCase):
         with Image.open(root / "artifacts/live/ron-next-round-score-20260928.png") as image:
             self.assertEqual(recognize_riichi_sticks(image, "west"), [])
 
+    def test_opposite_hud_stick_real_frames_and_all_seat_rotations(self):
+        root = Path(__file__).resolve().parents[1] / "artifacts/live"
+        for filename in ["opposite-riichi-stick-missed-20260928.jpg",
+                         "left-melds-chi-pon-20260928.jpg"]:
+            with self.subTest(frame=filename), Image.open(root / filename) as image:
+                for own, opposite in [("east", "west"), ("south", "north"),
+                                      ("west", "east"), ("north", "south")]:
+                    self.assertEqual(recognize_riichi_sticks(image, own), [opposite])
+
+    def test_opposite_hud_stick_absent_real_frames(self):
+        root = Path(__file__).resolve().parents[1] / "artifacts/live"
+        for filename in ["ron-next-round-score-20260928.png",
+                         "dora-two-man-clipped-20260928.jpg",
+                         "adjacent-opposite-melds-20260928.jpg",
+                         "south4-riichi-before-loss-20260928.jpg"]:
+            with self.subTest(frame=filename), Image.open(root / filename) as image:
+                self.assertEqual(recognize_riichi_sticks(image, "east"), [])
+
     @unittest.skipUnless(importlib.util.find_spec("rapidocr"), "optional OCR dependencies not installed")
     def test_consecutive_real_ocr_calls_reset_detection_after_counter_reads(self):
         frame = Path(__file__).resolve().parents[1] / "artifacts/live/board-metadata-east4-south-20260928.png"
