@@ -101,6 +101,7 @@ async function main(): Promise<void> {
     const observedPatch = observedBoard ? {
       doraIndicators: observedBoard.doraIndicators,
       ownDiscards: observedBoard.ownDiscards,
+      turn: observedBoard.ownDiscards?.length ?? rawPublicState.turn,
       melds: observedBoard.ownMelds,
       openMelds: observedBoard.ownMelds?.length ?? rawPublicState.openMelds,
       opponents: opponentStatesFromObservation(observedBoard, rawPublicState.opponents),

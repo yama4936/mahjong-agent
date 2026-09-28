@@ -1147,3 +1147,14 @@ prompt観測complete=false、対面河も空。矛盾を検出した停止であ
 鳴き経路はevaluate-frameのpublic状態検証例外をretryableとして扱えていない。
 今後、認識矛盾を通さず再取得へ戻す処理と、巡目更新の両方を回帰付きで修正する。
 停止前の得点やドラ・対面立直確認を、残る認識不具合の解消証拠とはしない。
+
+## 鳴き評価の巡目更新修正
+
+src/cli.ts evaluate-frameのpublic観測適用時にturn=ownDiscards.lengthを更新する。
+巡目を観測できない場合は元の巡目を保持し、観測した空河では0へ戻す。
+CLIを子プロセスで実行する統合回帰を追加。固定stateのturn0に対し、観測河0/8/12枚で
+reaction状態の巡目とhandPlanがearly_efficiency/middle_balance/late_tenpai_defenseへ
+切り替わることを検証。ネットワークJEV呼出しなしで実際の評価経路を通す。
+npm test159件成功・skipなし（29.291秒）、npm run build成功。
+安全停止につながった矛盾時の再取得・河認識・手牌認識・打点評価は引き続き未修正。
+修正版の300+0実対局も必要で、改善完了とはしない。
