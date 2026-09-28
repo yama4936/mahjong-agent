@@ -14,6 +14,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -1635,10 +1636,18 @@ class PythonAutoOperator:
                      reason="concealed_hand_not_verified", recognized=len(recognition.get("tiles", [])),
                      expected=expected)
             return None
-        evaluation = self.evaluate(
-            screenshot, pending, public_observation, recognition,
-            [call_action, "pass"],
-        )
+        try:
+            evaluation = self.evaluate(
+                screenshot, pending, public_observation, recognition,
+                [call_action, "pass"],
+            )
+        except RuntimeError as error:
+            # Invalid recognized tile counts must never reach mouse execution.
+            # Reacquire within the existing deadline; unrelated failures remain fatal.
+            if re.search(r"^More than four copies of (?:[1-9][mps]|[ESWNPFC])\r?$",
+                         str(error), re.MULTILINE):
+                raise RetryableSafetyAbort("reaction_tile_count_conflict") from error
+            raise
         decision = evaluation.get("decision", {})
         selected = decision.get("selectedAction", {})
         if evaluation.get("status") != "decision" or selected.get("action") != call_action:

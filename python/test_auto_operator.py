@@ -20,6 +20,38 @@ from auto_operator import configure_evaluator_click_budget
 
 
 class EvaluatorClickBudgetTest(unittest.TestCase):
+    def test_call_tile_count_conflict_retries_and_unexpected_errors_propagate(self):
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.public_state = {"seat": "north"}
+        operator.cached_public_observation = operator.previous_public_observation = None
+        operator.cached_open_melds = 0
+        operator.log = Mock()
+        operator.observe_public_board = Mock(return_value={
+            "highlightedDiscard": {"tile": "2s", "fromSeat": "west"},
+            "opponentDiscards": [{"seat": "west", "discards": ["P", "2s"]}]})
+        operator.recognize_reaction_hand = Mock(return_value={"tiles": ["1m"] * 13})
+        operator.evaluate = Mock()
+        for message in ["More than four copies of 9m",
+                        "(node:33648) ExperimentalWarning: Importing JSON modules\nMore than four copies of 9m\n",
+                        "More than four copies of F"]:
+            with self.subTest(message=message):
+                operator.evaluate.side_effect = RuntimeError(message)
+                with self.assertRaisesRegex(RetryableSafetyAbort, "reaction_tile_count_conflict"):
+                    operator.evaluate_force_auto_call_policy(Path("prompt.png"), "chi")
+        for message in ["unexpected evaluator failure", "More than four copies of 0m",
+                        "prefix More than four copies of 9m suffix"]:
+            with self.subTest(message=message):
+                operator.evaluate.side_effect = RuntimeError(message)
+                with self.assertRaises(RuntimeError) as caught:
+                    operator.evaluate_force_auto_call_policy(Path("prompt.png"), "chi")
+                self.assertNotIsInstance(caught.exception, RetryableSafetyAbort)
+        approved = {"status": "decision", "decision": {
+            "selectedAction": {"id": "chi_2s", "action": "chi"},
+            "callAssessments": [{"actionId": "chi_2s", "approved": True}]}}
+        operator.evaluate.side_effect = None
+        operator.evaluate.return_value = approved
+        self.assertEqual(operator.evaluate_force_auto_call_policy(Path("next.png"), "chi"), approved)
+
     def test_verified_highlight_still_requires_strategy_approval(self):
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
         operator.public_state = {"seat": "north"}

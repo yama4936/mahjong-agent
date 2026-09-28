@@ -1158,3 +1158,13 @@ reaction状態の巡目とhandPlanがearly_efficiency/middle_balance/late_tenpai
 npm test159件成功・skipなし（29.291秒）、npm run build成功。
 安全停止につながった矛盾時の再取得・河認識・手牌認識・打点評価は引き続き未修正。
 修正版の300+0実対局も必要で、改善完了とはしない。
+
+## 鳴き評価の牌枚数矛盾を再取得へ戻す
+
+evaluate_force_auto_call_policyで評価器が出す正規牌の
+`More than four copies of ...` の独立した行だけをRetryableSafetyAbortへ変換。
+既存の反応ループでクリックせず再取得し、操作期限をリセットしない。
+Node警告付きstderr、数牌・字牌、次フレームでの評価復帰を追加回帰で確認。
+想定外のエラー、不正牌表記、文中の類似文字列は変換せず停止する。
+河の9m誤認識の根本原因は未修正。実対局での復帰と勝率改善は未検証。
+Python全149件成功（66.492秒、skipなし）。対象ファイルのdiffチェック成功。
