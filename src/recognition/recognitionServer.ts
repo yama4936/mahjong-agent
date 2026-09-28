@@ -65,6 +65,9 @@ for await (const line of lines) {
       actionDeadlineRemainingMs?: number;
     };
     id = request.id;
+    if (request.evaluateForceAuto && (request.drawOnly || request.concealedTiles)) {
+      throw new Error("force-auto evaluation requires fresh recognition of the entire physical hand row");
+    }
     const processingStartedAt = performance.now();
     const frameCapturedAtMs = (await stat(request.screenshot)).mtimeMs;
     let proposal;

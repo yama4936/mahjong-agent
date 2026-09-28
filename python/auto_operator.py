@@ -2638,8 +2638,11 @@ class PythonAutoOperator:
                     try:
                         evaluation = self.recognize_resident(
                             screenshot_path,
-                            draw_only=self.cached_concealed_tiles is not None,
-                            concealed_tiles=self.cached_concealed_tiles,
+                            # Cached tiles are not guaranteed to match the
+                            # newly sorted physical row after the last discard.
+                            # Recognize every tile before choosing a click index.
+                            draw_only=False,
+                            concealed_tiles=None,
                             evaluate_force_auto=True,
                             dynamic_layout=self.dynamic_layout_required,
                             open_melds=self.cached_open_melds if self.cached_open_melds > 0 else None,
