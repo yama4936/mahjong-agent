@@ -1,7 +1,26 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import sharp from "sharp";
+import { existsSync } from "node:fs";
+import { HybridTileRecognizer } from "../src/recognition/hybridTileRecognizer.js";
 import { rectifyTileFace } from "../src/recognition/rectifyTileFace.js";
+
+test("annotated perspective face preserves the real three-man identity in both models", {
+  skip: !existsSync(".runtime/hybrid-vision/cvmaj-pretrained.tar") || !existsSync(".runtime/hybrid-vision/automajsoul-best-model.pt"),
+}, async () => {
+  const frame = "artifacts/live/own-three-melds-two-man-read-eight-man-20260928.jpg";
+  // Manually measured corners: this does not test automatic face localization.
+  const face = await rectifyTileFace(frame, [{ x: 1739, y: 948 }, { x: 1801, y: 948 },
+    { x: 1821, y: 1019 }, { x: 1753, y: 1019 }]);
+  const recognizer = new HybridTileRecognizer();
+  try {
+    const [prediction] = await recognizer.classifyTileImages([face]);
+    assert.equal(prediction?.tile, "3m");
+    assert.equal(prediction?.normalPrediction.tile, "3m");
+    assert.equal(prediction?.redPrediction.label, "3m");
+    assert.ok((prediction?.confidence ?? 0) > 0.9);
+  } finally { await recognizer.close(); }
+});
 
 test("rectangular face rectification preserves pixel identity", async () => {
   const pixels = Buffer.from(Array.from({ length: 8 * 10 * 3 }, (_, i) => i % 256));
