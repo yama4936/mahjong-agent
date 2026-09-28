@@ -1,0 +1,3 @@
+# Optional read-only scoreboard probe; not yet enabled in the live operator.
+rapidocr==3.9.2
+onnxruntime==1.23.2
