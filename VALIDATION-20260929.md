@@ -33,3 +33,20 @@
   改善を証明しない。他の認識誤りまで訂正した比較でもない。
 - 東2局の最初の2判断は表示牌[1p]となり、局終了時のキャッシュ破棄後は
   東1局の9p/8p列が持ち越されていないことをログで確認。
+
+## 発ポンの実機成功と副露情報の欠落
+
+- 東2局1本場15:08:59.950204Zに左家（north）の発を
+  verified_prompt_highlightで確認、15:09:03.634452Zにponクリック。
+- reaction_callのconfirmation=hand_and_own_meld_changed、openMelds=1、
+  evidenceToClickMs=8719、deadlineMet=true。ポン後の北切りも
+  hand_and_own_river_changedで確認。今回の発は左家であり、
+  修正対象だった右家の隣接索子による競合の完全な実機再現ではない。
+- ポン後15:09:10.198668Zの画像から直接Hybrid公開情報認識を行うと、
+  ownMelds=[pon FFF]（confidence 0.98675）を返す。
+- しかし15:09:10以降の少なくとも5判断のstateはopenMelds=1、melds=[]。
+  cachedPublicStatePatchはownMeldTilesをvisibleTilesとして渡すだけで、
+  observation.ownMeldsを型付きmeldsへ渡していないことをコードで確認。
+  また単調増加河は鳴かれたFを保持し、少なくとも1牌がrejectedTilesに計上される。
+- 副露数の認識・操作成功と、役を評価できる完全な状態入力は別の検証項目。
+  終局後は型付き副露と鳴かれた河の整合性も修正・テスト対象とする。
