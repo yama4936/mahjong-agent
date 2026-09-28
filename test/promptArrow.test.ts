@@ -29,6 +29,7 @@ test("face masking preserves the older right-spill triangle and does not invent 
   const layout = layoutSchema.parse(JSON.parse(await readFile("config/layout-300-regression.json", "utf8")));
   for (const [file, threshold, name, expectedLast] of [
     ["right-pon-highlight-spill-20260928.png", 190, "rightDiscards", 302],
+    ["right-two-man-pon-target-rejected-south1-20260928.png", 190, "rightDiscards", 244],
     ["green-dragon-pon-missed-after-called-river-removal-20260928.png", 200, "leftDiscards", 0],
   ] as const) {
     const frame = `artifacts/live/${file}`;
