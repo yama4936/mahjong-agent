@@ -1276,3 +1276,14 @@ candidateYaku=yakuhai、handPlan.primaryTarget=yakuhai:F。
 現在フレームの発光捨て牌を独立に証明する経路の改善が必要。
 再現画像green-dragon-pon-missed-after-called-river-removal-20260928.png。
 ポンすれば必ず和了したとまでは断定しないが、役を確定する機会が認識段階で失われた。
+
+## 發ポン発光検出の追加切り分け
+
+現行CLIの実Hybrid全領域再実行でも左河P,1p,2s,7p,Fは安全に取得するが
+highlightedDiscardは返らない。河履歴問題だけが原因ではない。
+recognizeHighlightedDiscardの周囲pad6で發の緑境界は67画素、基準80未満。
+同じ画像・RGB条件でpad10は發215/次点28、pad12は306/次点33。
+pad16は發517だが直前七筒にも108画素入り、隣接への漏れが増える。
+安全閾値を下げずに検出範囲を調整できる可能性はあるが、
+複数発光・非末尾・隣接牌・発光なしの回帰を通すまでは未修正とする。
+ライブ認識コードは変更せず、現行125bd6dの実対局を継続している。
