@@ -29,7 +29,7 @@
   "minimumVitConfidence": 0.5,
   "minimumVitMargin": 0.05,
   "publicTileRegions": {
-    "doraIndicators": { "x": 18, "y": 32, "width": 292, "height": 82, "rotationToUpright": 0 },
+    "doraIndicators": { "x": 18, "y": 32, "width": 292, "height": 100, "rotationToUpright": 0 },
     "ownDiscards": { "x": 770, "y": 535, "width": 390, "height": 225, "rotationToUpright": 0, "detectionMode": "discard_grid" },
     "rightDiscards": { "x": 1115, "y": 285, "width": 305, "height": 250, "rotationToUpright": 90, "detectionMode": "discard_grid" },
     "oppositeDiscards": { "x": 770, "y": 150, "width": 390, "height": 190, "rotationToUpright": 180, "detectionMode": "discard_grid" },

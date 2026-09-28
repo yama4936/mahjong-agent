@@ -25,14 +25,15 @@ function publicRegion(tiles: Array<{ tile: any; x: number; y?: number; width?: n
   };
 }
 
-test("full-height dora candidate preserves man, pin and sou indicators with real Hybrid", {
+test("production dora region preserves man, pin and sou indicators with real Hybrid", {
   skip: !existsSync(".runtime/hybrid-vision/cvmaj-pretrained.tar") || !existsSync(".runtime/hybrid-vision/automajsoul-best-model.pt"),
 }, async () => {
   const base = layoutSchema.parse(JSON.parse(await readFile("config/layout-300-regression.json", "utf8")));
-  // Candidate for the next live version; do not mutate the ongoing fixed-version layout.
-  const layout = { ...base, publicTileRegions: { doraIndicators: {
-    x: 18, y: 32, width: 292, height: 100, rotationToUpright: 0 as const,
-  } } };
+  const fallback = layoutSchema.parse(JSON.parse(await readFile("config/layout.example.json", "utf8")));
+  assert.deepEqual(base.publicTileRegions!.doraIndicators, fallback.publicTileRegions!.doraIndicators);
+  const layout = { ...base, publicTileRegions: {
+    doraIndicators: base.publicTileRegions!.doraIndicators!,
+  } };
   const recognizer = new HybridTileRecognizer();
   try {
     for (const [file, expected] of [
@@ -41,6 +42,7 @@ test("full-height dora candidate preserves man, pin and sou indicators with real
       ["adjacent-opposite-melds-20260928.jpg", ["1s"]],
       ["south4-riichi-before-loss-20260928.jpg", ["3m"]],
       ["dora-two-indicators-shimmer-20260928.jpg", ["2m", "9s"]],
+      ["dora-sou-honor-two-indicators-20260928.png", ["5s", "F"]],
     ] as const) {
       const result = await recognizeConfiguredPublicTilesWithVit(`artifacts/live/${file}`, layout, recognizer);
       assert.equal(result.doraIndicators?.candidateCount, expected.length, file);
