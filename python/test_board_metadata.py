@@ -83,6 +83,21 @@ class BoardMetadataTest(unittest.TestCase):
         self.assertEqual(fallback[1]["text"], "3400")
         self.assertGreaterEqual(fallback[1]["confidence"], 0.98)
 
+    @unittest.skipUnless(importlib.util.find_spec("rapidocr"), "optional OCR dependencies not installed")
+    def test_low_confidence_seat_wind_recovers_with_isolated_crop(self):
+        frame = (Path(__file__).resolve().parents[1]
+                 / "artifacts/live/board-seat-wind-low-confidence-20260929.jpg")
+        result = recognize_board(frame)
+        self.assertTrue(result["verified"], result)
+        self.assertEqual(result["seat"], "east")
+        self.assertEqual(result["round"], "east_2")
+        self.assertEqual(result["remainingTiles"], 41)
+        fallback = [token for token in result["tokens"]
+                    if token.get("source") == "isolated_seat_wind_crop"]
+        self.assertEqual(len(fallback), 1)
+        self.assertEqual(fallback[0]["text"], "東")
+        self.assertGreaterEqual(fallback[0]["confidence"], 0.98)
+
     def test_verified_hud_stick_rotates_with_actual_own_wind(self):
         root = Path(__file__).resolve().parents[1]
         with Image.open(root / "artifacts/live/opponent-riichi-missed-20260928.jpg") as image:

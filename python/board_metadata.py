@@ -106,6 +106,19 @@ def recognize_board(image_path: Path) -> dict:
                                    "cropWidth": width})
                     if confidence >= 0.98 and re.fullmatch(r"-?\d{3,6}", text):
                         break
+    # The own-seat wind is small and its full-scoreboard detection can be
+    # stable but just below the strict 0.98 gate. Retry only the calibrated
+    # glyph crop instead of weakening the shared token threshold.
+    seat_winds = [token for token in tokens
+                  if abs(token["x"] - 824) <= 24 and abs(token["y"] - 514) <= 20
+                  and re.fullmatch(r"[東南西北]", token["text"])]
+    if not any(token["confidence"] >= 0.98 for token in seat_winds):
+        seat_wind = engine(np.array(image.crop((804, 492, 846, 532)).resize((256, 192))),
+                           use_det=False, use_cls=False, use_rec=True)
+        if seat_wind.txts is not None and len(seat_wind.txts) == 1:
+            text, confidence = seat_wind.txts[0], float(seat_wind.scores[0])
+            tokens.append({"text": text, "confidence": confidence,
+                           "x": 824, "y": 514, "source": "isolated_seat_wind_crop"})
     # Fixed isolated digits avoid confusing the stick icon and multiplication
     # sign with the count; never substitute zero when recognition fails.
     for box, x in [((110, 132, 155, 178), 132), ((250, 132, 285, 178), 268)]:
