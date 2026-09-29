@@ -344,6 +344,23 @@ test("reaction policy certifies a strict-improvement yakuhai pon", async () => {
   assert.ok(result.handPlan.primaryTarget.length > 0);
 });
 
+test("Jev pass cannot override a certified strict-improvement call", async () => {
+  const callable = parseGameState({
+    phase: "reaction", seat: "south",
+    hand: ["P", "P", "3s", "8p", "3p", "3s", "5s", "7s", "7m", "2p", "3p", "5m", "E"],
+    pendingDiscard: { tile: "P", fromSeat: "east" }, availableUiActions: ["pon", "pass"], turn: 5,
+  });
+  const jev = { chooseReaction: async (_state: unknown, actions: any[]) => ({
+    actionId: actions.find((action) => action.action === "pass").id, confidence: 0.9,
+    probabilities: Object.fromEntries(actions.map((action) => [action.id, action.action === "pass" ? 0.9 : 0.1])),
+    model: "fake", promptVersion: "test", latencyMs: 1,
+  }) } as any;
+  const result = await decide(callable, { mode: "advisor", jev });
+  assert.equal(result.selectedAction.action, "pon");
+  assert.equal(result.callAssessments?.[0]?.approved, true);
+  assert.equal(result.source, "jev");
+});
+
 test("Jev cannot override call certification and late top placement folds", async () => {
   const state = parseGameState({
     phase: "reaction", round: "south_4", seat: "south", turn: 13,

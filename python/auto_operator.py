@@ -1959,9 +1959,9 @@ class PythonAutoOperator:
         if not region:
             raise RuntimeError(f"layout has no calibrated {action} button region")
         clip = {key: region[key] for key in ("x", "y", "width", "height")}
-        started = time.monotonic()
         expect_new_draw = action == "pass" and screen_before is not None and not self_turn_draw_visible(
             screen_before, self.layout, getattr(self, "cached_open_melds", 0))
+        started = time.monotonic()
         while time.monotonic() - started < self.args.confirmation_timeout:
             page.wait_for_timeout(100)
             delta = mean_pixel_delta(before, page.screenshot(clip=clip, animations="disabled"))

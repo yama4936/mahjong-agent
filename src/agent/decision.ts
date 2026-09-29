@@ -492,6 +492,7 @@ async function decideReaction(state: GameState, legalActions: LegalAction[], opt
     return decideImmediateSelfAction(state, base, legalActions, initialAction, options);
   }
   let selectedAction: LegalAction = initialAction;
+  let certifiedAction: LegalAction | undefined;
   let jev: JevDecision | undefined;
   const callAssessments = assessReactionCalls(state, legalActions);
 
@@ -500,7 +501,10 @@ async function decideReaction(state: GameState, legalActions: LegalAction[], opt
       .sort((left, right) => left.resultingShanten - right.resultingShanten
         || right.ukeire - left.ukeire || right.estimatedPoints - left.estimatedPoints
         || left.defenseLoss - right.defenseLoss);
-    if (certified[0]) selectedAction = legalActions.find((action) => action.id === certified[0]!.actionId)!;
+    if (certified[0]) {
+      certifiedAction = legalActions.find((action) => action.id === certified[0]!.actionId)!;
+      selectedAction = certifiedAction;
+    }
   }
 
   if (options.jev) {
@@ -509,9 +513,15 @@ async function decideReaction(state: GameState, legalActions: LegalAction[], opt
       const choice = legalActions.find((action) => action.id === jev!.actionId);
       if (!choice) throw new Error("Jev selected an unknown reaction");
       const callAssessment = callAssessments.find((assessment) => assessment.actionId === choice.id);
-      selectedAction = callAssessment && !callAssessment.approved
-        ? legalActions.find((action) => action.action === "pass") ?? initialAction
-        : choice;
+      if (callAssessment?.approved) {
+        selectedAction = choice;
+      } else if (certifiedAction) {
+        selectedAction = certifiedAction;
+      } else {
+        selectedAction = callAssessment
+          ? legalActions.find((action) => action.action === "pass") ?? initialAction
+          : choice;
+      }
       if (jev.confidence < (options.minJevConfidence ?? 0.55)) safetyReasons.push("jev_confidence_below_threshold");
     } catch (error) {
       safetyReasons.push(`jev_error:${error instanceof Error ? error.message : String(error)}`);
