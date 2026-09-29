@@ -171,3 +171,40 @@
 - rebase前の変更に対し `npm run build` 成功、TypeScript対象31件成功、`npm test` は166件中161成功・既存fixture不足5件skip・失敗0、`npm run test:python` は152件中114成功・38件skip・失敗0、`git diff --check` 成功。
 - 先行58コミットを統合した状態で `npm run build` 成功、`npm test` は189件中184成功・既存fixture不足5件skip・失敗0、`npm run test:python` は159件中121成功・38件skip・失敗0。保存済みghost-white-kan実画像のHybrid回帰も成功。
 - 固定コミットをpush後、友人戦・四人半荘・簡単CPU3名・300+0秒、`--action-deadline-ms=300000` で実機回帰する。初回フレーム、公開情報キャッシュ、自家副露・河、残り山0の入力を確認する。CPU友人戦は機能確認であり、段位戦の勝率評価とは分離する。
+
+## 13d0f43の300+0秒実機回帰
+
+### 条件と初回環境不備
+
+- 実行コードはpush済み `13d0f43`。四人半荘、300+0秒、簡単CPU3名、25000点開始、1位必要30000点、飛び有効、赤ドラ3、ローカル役無効、喰い断有効、一翻縛り、便利表示有効。`layout=config/layout-300-regression.json`、`--action-deadline-ms=300000`、`--force-auto-click-budget-ms=8000`、board-metadata・advance-screens有効。対局中はコード・設定を変更していない。
+- 部屋56845の初回起動は最初の打牌前に `safety_stop: No module named 'numpy'` となった。成果物は `artifacts/friend-300-fixed-13d0f43-20260929/`。打牌せず部屋を退出してから、既存の `python/requirements-ocr.txt` を `.runtime/python-auto-venv` へ導入した。`PYTHONPATH=python .runtime/python-auto-venv/bin/python -m unittest python/test_board_metadata.py` は16件成功。この中断は対局結果や機能回帰の成功例に数えない。
+
+### 部屋39481の完走結果
+
+- 設定・待機画面は `artifacts/live/300-fixed-13d0f43-room39481-ready-20260929.jpg`。成果物は `artifacts/friend-300-fixed-13d0f43-retry-20260929/`。開始は2026-09-28T17:10:20Z（日本時間9月29日）。
+- 最終結果は自家35100点・1位。CPUは26900/21000/17000点。結果画像は `artifacts/live/300-fixed-13d0f43-room39481-first-place-20260929.jpg`。
+- 140判断、反応プロンプト32件、和了操作2件。重複を除いたactionTiming 174件は期限超過0、最大evidenceToClickMs=23690。`safety_stop` 0。手牌変化を検出したretryableなaction abortが1件あり、その操作は送らず後続フレームで継続した。
+- 初局の最初の判断は正しい局・座席・25000点4家・残69枚から開始し、待機画面由来の公開情報を持ち越していない。全140判断に偽 `minkan PPPP` はなく、実在した他家の `pon CCC`、`pon WWW`、チーは保持された。
+- この半荘では自家鳴きが発生せず、残り山0枚の自家判断も発生しなかった。後者はオフライン境界回帰のみ成功で、実機境界の証拠にはしない。
+
+### 部屋18288の自家鳴き回帰
+
+- 自家鳴きを実機で確認するため、同じ設定・同じ `13d0f43` で追加完走。設定・待機画面は `artifacts/live/300-fixed-13d0f43-room18288-ready-20260929.jpg`、成果物は `artifacts/friend-300-fixed-13d0f43-call-regression-20260929/`。開始は2026-09-29T09:56:25Z。
+- 最終結果は自家36100点・2位。CPUは41600/23500/-1200点で、飛びにより東4局4本場で終了。結果画像は `artifacts/live/300-fixed-13d0f43-room18288-second-place-20260929.jpg`。
+- 128判断、actionTiming 167件は期限超過0、最大evidenceToClickMs=16995。`safety_stop` 0。手牌同一性不一致によるretryable abort 3件はクリックせず再取得した。
+- 東1局09:59:58Z、対面northの東をポン。`confirmation=hand_and_own_meld_changed`、openMelds=1、evidenceToClickMs=9603。次判断は10枚手牌、`melds=[pon EEE]`、`openMelds=1`、鳴き後3m切りを `hand_and_own_river_changed` で確認し、north河末尾の東は消えている。その直後にロン操作も成功した。
+- 東4局10:24:19Zにも対面northの9sをポン。evidenceToClickMs=10625。次判断以降6件で `melds=[pon 9s9s9s]` を保持し、north河に鳴かれた9sを残さず、鳴き後F切り以降の自家河を伸長した。次局では自家副露が残留していない。
+- `reaction_discard_verified` と `verifiedCallDiscard` は静的public-stateのeast基準座標で記録され、`state.pendingDiscard` はboard metadataで実座席へremapされる。最初の東はログ上west→実座席north、9sはsouth→north。両方の `called_river_reconciled.removedSnapshots=0` はキャッシュが鳴き牌追加前だったためで、直後の公開情報再走査と評価状態では実座席northの河から鳴き牌が除去済み。画像・型付き状態・河・操作結果を合わせると、座席違いによる誤補正ではない。
+- 追加戦128判断にも偽 `minkan PPPP` は0。残り山0枚の自家判断は発生しなかった。
+
+### 0.75境界を超えた7p→6p false-safeと修正
+
+- 東4局10:34:38Zのクリック直前同一性確認で、実牌7pを6pと誤認した。confidence=0.775317、runner-up=7p/0.223618、`recognitionSafe=true`。前段判断との牌不一致を別検査が検出したためクリックは中止され、誤打牌には至っていない。反例画像は `artifacts/live/seven-pin-read-six-safe-counterexample-13d0f43-20260929.jpg`。
+- 先の既知混同vetoはconfidence<0.75だったため、この反例を通した。保存画像の実モデル再生で同じ値を再現した。正しい6p/次点7pの既存対照はconfidence=0.788003なので、確認済みの間隙だけを使ってvetoをconfidence<0.78へ拡張した。
+- 純粋な境界テストで0.775317を拒否、0.788003を許可し、実モデル回帰で新反例を`safe=false`、既存の正しいshimmer対照を`safe=true`と確認した。全6pや全低信頼度認識を拒否する変更ではない。
+- 修正後に `npm run build` 成功。対象テスト5件成功。`npm test` は190件中185件成功・既存fixture不足5件skip・失敗0。`npm run test:python` は全159件を実行し、126件成功・33件skip・失敗0（OCR依存を導入したため、修正前よりskipが5件減少）。
+
+### 評価範囲
+
+- 2半荘はCPU友人戦の動作・回帰確認である。1位35100点と2位36100点は、段位戦の勝率改善や短い制限時間での性能を証明しない。段位戦の勝率評価は別サンプルとして継続する。
+- `remainingTiles=0` の終端確率修正は単体回帰済みだが、今回の固定コード実機2半荘では該当する自家判断がなく、実機境界は未観測のまま。

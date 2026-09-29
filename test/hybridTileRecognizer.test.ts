@@ -3,7 +3,11 @@ import test from "node:test";
 import sharp from "sharp";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { HybridTileRecognizer, mapHybridLabel } from "../src/recognition/hybridTileRecognizer.js";
+import {
+  HybridTileRecognizer,
+  isKnownSixSevenPinConfusion,
+  mapHybridLabel,
+} from "../src/recognition/hybridTileRecognizer.js";
 import { layoutSchema } from "../src/recognition/layout.js";
 
 test("uncertain red override cannot replace nine-man while real red fives survive", {
@@ -50,7 +54,19 @@ test("hybrid classifier preserves normal and red-gate decisions", async () => {
   assert.equal(result[1]?.redPrediction.label, "5m-");
 });
 
-test("live seven-pin confusion is unsafe while the verified shimmer hand remains safe", {
+test("six-pin seven-pin veto keeps the measured verified gap", () => {
+  assert.equal(isKnownSixSevenPinConfusion({
+    tile: "6p", runnerUpTile: "7p", confidence: 0.775317370891571,
+  }), true);
+  assert.equal(isKnownSixSevenPinConfusion({
+    tile: "6p", runnerUpTile: "7p", confidence: 0.788002610206604,
+  }), false);
+  assert.equal(isKnownSixSevenPinConfusion({
+    tile: "6p", runnerUpTile: "5p", confidence: 0.7,
+  }), false);
+});
+
+test("live seven-pin confusions are unsafe while the verified shimmer hand remains safe", {
   skip: !existsSync(".runtime/hybrid-vision/cvmaj-pretrained.tar")
     || !existsSync(".runtime/hybrid-vision/automajsoul-best-model.pt"),
 }, async () => {
@@ -64,6 +80,14 @@ test("live seven-pin confusion is unsafe while the verified shimmer hand remains
     assert.deepEqual(confused.tiles.slice(8, 10), ["6p", "6p"]);
     assert.ok(confused.confidence >= layout.minimumVitConfidence);
     assert.equal(confused.safe, false);
+
+    const laterFalseSafe = await recognizer.recognizeHand(
+      "artifacts/live/seven-pin-read-six-safe-counterexample-13d0f43-20260929.jpg", layout,
+    );
+    assert.equal(laterFalseSafe.matches[6]?.tile, "6p");
+    assert.equal(laterFalseSafe.matches[6]?.runnerUpTile, "7p");
+    assert.ok((laterFalseSafe.matches[6]?.confidence ?? 0) > 0.75);
+    assert.equal(laterFalseSafe.safe, false);
 
     const verified = await recognizer.recognizeHand(
       "artifacts/live/riichi-shimmer-hand-before-20260928.jpg", layout,

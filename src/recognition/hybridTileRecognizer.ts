@@ -23,6 +23,14 @@ export interface HybridTilePrediction extends VitTilePrediction {
   redPrediction: { label: string; confidence: number };
 }
 
+export function isKnownSixSevenPinConfusion(match: {
+  tile: GameTile;
+  runnerUpTile?: GameTile;
+  confidence: number;
+}): boolean {
+  return match.tile === "6p" && match.runnerUpTile === "7p" && match.confidence < 0.78;
+}
+
 const honors: Record<string, GameTile> = { "1z": "E", "2z": "S", "3z": "W", "4z": "N", "5z": "P", "6z": "F", "7z": "C" };
 
 export function mapHybridLabel(label: string): GameTile {
@@ -149,11 +157,10 @@ export class HybridTileRecognizer {
     const confidence = Math.min(...matches.map((match) => match.confidence));
     const ambiguityMargin = Math.min(...matches.map((match) => match.confidence - match.runnerUpConfidence));
     const turnReady = matches.length === slots.length;
-    // Two reviewed live frames contain actual 7p tiles that this model calls
-    // 6p at about 0.70 confidence with 7p second.  A verified correct 6p/7p
+    // Three reviewed live frames contain actual 7p tiles that this model calls
+    // 6p at 0.70-0.775 confidence with 7p second.  A verified correct 6p/7p
     // competition is 0.788, so fail closed only inside the measured gap.
-    const knownSixSevenPinConfusion = matches.some((match) =>
-      match.tile === "6p" && match.runnerUpTile === "7p" && match.confidence < 0.75);
+    const knownSixSevenPinConfusion = matches.some(isKnownSixSevenPinConfusion);
     return {
       backend: "hybrid" as const,
       tiles: matches.map((match) => match.tile),
