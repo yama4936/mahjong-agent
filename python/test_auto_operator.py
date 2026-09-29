@@ -104,7 +104,9 @@ class EvaluatorClickBudgetTest(unittest.TestCase):
                 operator.layout = load_json(root / "config/layout.json")
                 operator.layout["actionButtonRegions"] = {
                     "pass": {"x": 10, "y": 20, "width": 100, "height": 40}}
-                operator.args = argparse.Namespace(confirmation_timeout=0.02, action_pixel_delta=3)
+                operator.args = argparse.Namespace(
+                    confirmation_timeout=0.02, action_pixel_delta=3, river_pixel_delta=1,
+                )
                 page = Mock()
                 page.screenshot.side_effect = lambda **kwargs: unchanged_button if "clip" in kwargs else current
                 if accepted:
@@ -114,6 +116,73 @@ class EvaluatorClickBudgetTest(unittest.TestCase):
                 else:
                     with self.assertRaisesRegex(RuntimeError, "not confirmed"):
                         operator.confirm_action_button(page, "pass", unchanged_button, screen_before=prior)
+
+    def test_pass_confirmation_accepts_independent_river_advance(self):
+        root = Path(__file__).resolve().parents[1]
+        reaction = (root / "artifacts/live/pass-before-self-riichi-20260928.png").read_bytes()
+        layout = load_json(root / "config/layout.json")
+        changed = Image.open(io.BytesIO(reaction)).convert("RGB")
+        river = layout["publicTileRegions"]["ownDiscards"]
+        ImageDraw.Draw(changed).rectangle((
+            river["x"], river["y"], river["x"] + river["width"], river["y"] + river["height"],
+        ), fill="white")
+        changed_bytes = io.BytesIO()
+        changed.save(changed_bytes, format="PNG")
+        button = io.BytesIO()
+        Image.new("RGB", (100, 40), "black").save(button, format="PNG")
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.layout = layout
+        operator.layout["actionButtonRegions"] = {
+            "pass": {"x": 10, "y": 20, "width": 100, "height": 40},
+        }
+        operator.args = argparse.Namespace(
+            confirmation_timeout=0.1, action_pixel_delta=3, river_pixel_delta=1,
+        )
+        operator.cached_open_melds = 0
+        page = Mock()
+        page.screenshot.side_effect = lambda **kwargs: (
+            button.getvalue() if "clip" in kwargs else changed_bytes.getvalue()
+        )
+
+        receipt = operator.confirm_action_button(
+            page, "pass", button.getvalue(), screen_before=reaction,
+        )
+
+        self.assertEqual(receipt["confirmation"], "reaction_river_advanced")
+        self.assertEqual(receipt["riverRegion"], "ownDiscards")
+
+    def test_own_discard_mismatch_invalidates_concealed_cache(self):
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.pending_own_discard = {
+            "tile": "W", "before": ["1m", "2m"], "evidenceToClickMs": 6701,
+        }
+        operator.cached_concealed_tiles = ["1p"] * 13
+        operator.cached_public_observation = {"ownDiscards": ["1m", "2m", "3p"]}
+        operator.log = Mock()
+
+        operator.reconcile_own_discard()
+
+        self.assertIsNone(operator.cached_concealed_tiles)
+        self.assertIsNone(operator.pending_own_discard)
+        operator.log.assert_called_once_with(
+            "own_discard_mismatch", expected="W", actual="3p", evidenceToClickMs=6701,
+        )
+
+    def test_matching_own_discard_keeps_concealed_cache(self):
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        cached = ["1p"] * 13
+        operator.pending_own_discard = {
+            "tile": "W", "before": ["1m", "2m"], "evidenceToClickMs": 2200,
+        }
+        operator.cached_concealed_tiles = cached
+        operator.cached_public_observation = {"ownDiscards": ["1m", "2m", "W"]}
+        operator.log = Mock()
+
+        operator.reconcile_own_discard()
+
+        self.assertIs(operator.cached_concealed_tiles, cached)
+        self.assertIsNone(operator.pending_own_discard)
+        operator.log.assert_called_once_with("own_discard_reconciled", tile="W")
 
     def test_default_preserves_environment_and_explicit_test_budget_is_bounded(self):
         environment = {"FORCE_AUTO_CLICK_BUDGET_MS": "2600", "OTHER": "unchanged"}

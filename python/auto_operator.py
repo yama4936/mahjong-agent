@@ -670,6 +670,12 @@ def send_discard_click(mouse: Any, point: dict[str, float], viewport: dict[str, 
     mouse.move(viewport["width"] / 2, viewport["height"] * 0.72)
 
 
+def same_physical_tile(left: str, right: str) -> bool:
+    """Compare river identities while treating a red five as its base five."""
+    canonical = lambda tile: f"5{tile[1]}" if len(tile) == 2 and tile[0] == "0" else tile
+    return canonical(left) == canonical(right)
+
+
 def retreat_pointer_from_hand(mouse: Any, viewport: dict[str, int]) -> None:
     """Move startup/result-screen pointer positions off the concealed hand."""
     mouse.move(viewport["width"] / 2, viewport["height"] * 0.72)
@@ -840,6 +846,7 @@ class PythonAutoOperator:
         self.last_processed_hand: str | None = None
         self.previous_public_observation: dict[str, Any] | None = None
         self.cached_concealed_tiles: list[str] | None = None
+        self.pending_own_discard: dict[str, Any] | None = None
         self.cached_open_melds = 0
         self.dynamic_layout_required = False
         self.last_shanten: int | None = None
@@ -1487,6 +1494,7 @@ class PythonAutoOperator:
                 self.attach_outcome("match" if state == "match_result" else "round",
                                     screenshot, confidence)
             self.cached_concealed_tiles = None
+            self.pending_own_discard = None
             self.cached_open_melds = 0
             self.dynamic_layout_required = False
             self.restart_open_hand_probe_hash = None
@@ -1783,6 +1791,46 @@ class PythonAutoOperator:
         self.log("called_river_reconciled", pendingDiscard=pending, removedSnapshots=removed,
                  confirmedMeld=confirmed_meld, publicCacheGeneration=self.public_cache_generation)
 
+    def reconcile_own_discard(self) -> None:
+        """Trust the concealed-hand cache only after the observed river agrees.
+
+        On a short clock Mahjong Soul can tsumogiri while an evaluation is in
+        flight.  The resulting hand/river pixel changes used to be accepted as
+        proof that the requested tile was discarded, poisoning the cached hand
+        for every later turn.  The asynchronous public observation supplies an
+        independent tile identity before that cache may be reused.
+        """
+        pending = getattr(self, "pending_own_discard", None)
+        if not pending:
+            return
+        observation = getattr(self, "cached_public_observation", None)
+        if not observation:
+            return
+        before = pending["before"]
+        after = observation.get("ownDiscards", [])
+        if len(after) <= len(before):
+            return
+        if after[:len(before)] != before or len(after) != len(before) + 1:
+            self.cached_concealed_tiles = None
+            self.pending_own_discard = None
+            self.log(
+                "own_discard_reconciliation_failed",
+                expected=pending["tile"], before=before, observed=after,
+                reason="river_history_not_single_append",
+            )
+            return
+        actual = after[-1]
+        if not same_physical_tile(actual, pending["tile"]):
+            self.cached_concealed_tiles = None
+            self.log(
+                "own_discard_mismatch",
+                expected=pending["tile"], actual=actual,
+                evidenceToClickMs=pending.get("evidenceToClickMs"),
+            )
+        else:
+            self.log("own_discard_reconciled", tile=actual)
+        self.pending_own_discard = None
+
     def force_auto_reaction_fallback(
         self, screenshot: Path, *, contextual_prompt_verified: bool = False,
     ) -> dict[str, Any] | None:
@@ -2030,12 +2078,40 @@ class PythonAutoOperator:
                     "buttonPixelDelta": delta,
                     **({"handPixelDelta": hand_delta, "meldPixelDelta": meld_delta} if is_call else {}),
                 }
-            if expect_new_draw and self_turn_draw_visible(
-                page.screenshot(animations="disabled"), self.layout, getattr(self, "cached_open_melds", 0)
-            ):
-                return {"confirmation": "reaction_to_self_draw",
+            if expect_new_draw:
+                full_after = page.screenshot(animations="disabled")
+                if self_turn_draw_visible(
+                    full_after, self.layout, getattr(self, "cached_open_melds", 0)
+                ):
+                    return {"confirmation": "reaction_to_self_draw",
+                            "confirmationLatencyMs": round((time.monotonic() - started) * 1000),
+                            "buttonPixelDelta": delta}
+                # A second reaction prompt can replace the first one at the
+                # same fixed button coordinates before this loop samples it.
+                # Its pixels are then nearly identical, but a newly appended
+                # river tile independently proves that the original prompt
+                # has advanced (whether by our click or its timeout).
+                public_regions = self.layout.get("publicTileRegions", {})
+                river_deltas = {
+                    name: mean_pixel_delta(
+                        crop_screenshot(screen_before, region),
+                        crop_screenshot(full_after, region),
+                    )
+                    for name, region in public_regions.items()
+                    if name.endswith("Discards")
+                }
+                changed_river = next((
+                    (name, river_delta) for name, river_delta in river_deltas.items()
+                    if river_delta >= self.args.river_pixel_delta
+                ), None)
+                if changed_river:
+                    return {
+                        "confirmation": "reaction_river_advanced",
                         "confirmationLatencyMs": round((time.monotonic() - started) * 1000),
-                        "buttonPixelDelta": delta}
+                        "buttonPixelDelta": delta,
+                        "riverRegion": changed_river[0],
+                        "riverPixelDelta": changed_river[1],
+                    }
         raise RuntimeError(f"{action} click was not confirmed by its button region changing")
 
     def validate_action_certificate(self, action: str, evaluation: dict[str, Any]) -> dict[str, Any]:
@@ -2967,6 +3043,7 @@ class PythonAutoOperator:
                         self.log("self_turn_detected", screenshot=str(screenshot_path),
                                  source="evaluated_frame_draw_slot_pixels")
                 self.poll_public_recognition()
+                self.reconcile_own_discard()
                 # Force-auto never waits for public recognition on our turn;
                 # it consumes the newest completed opponent-turn snapshot.
                 if self.args.mode == "force-auto":
@@ -3113,7 +3190,8 @@ class PythonAutoOperator:
                             openMelds=verified_visible_open_melds,
                             source="verified_visible_own_melds",
                         )
-                elif self.cached_concealed_tiles is not None and not pending_discard:
+                elif self.cached_concealed_tiles is not None \
+                        and getattr(self, "pending_own_discard", None) is None and not pending_discard:
                     draw_recognition = self.recognize_resident(screenshot_path, draw_only=True)
                     if len(draw_recognition.get("tiles", [])) == 1:
                         recognition = {
@@ -3189,6 +3267,13 @@ class PythonAutoOperator:
                     self.pending_post_call_started_at = None
                     recognized_tiles = evaluation.get("recognition", {}).get("tiles", [])
                     click_index = evaluation.get("clickIndex")
+                    discarded_tile = evaluation.get("decision", {}).get("selectedAction", {}).get("tile")
+                    if discarded_tile:
+                        self.pending_own_discard = {
+                            "tile": discarded_tile,
+                            "before": list(evaluation.get("state", {}).get("ownDiscards", [])),
+                            "evidenceToClickMs": receipt.get("actionTiming", {}).get("evidenceToClickMs"),
+                        }
                     if isinstance(click_index, int) and len(recognized_tiles) == 14:
                         self.cached_concealed_tiles = [
                             tile for index, tile in enumerate(recognized_tiles) if index != click_index
