@@ -13,7 +13,7 @@ import threading
 from datetime import datetime, timezone
 from unittest.mock import Mock, patch
 
-from auto_operator import PythonAutoOperator, RetryableSafetyAbort, action_deadline_timing, away_resume_geometry, closed_concealed_row_visible, crop_screenshot, discard_point_in_hand_geometry, force_auto_call_buttons, force_auto_chi_choice_points, force_auto_reaction_win_button, force_auto_self_action_buttons, geometric_open_meld_count, is_away_resume_dialog, is_contextual_reaction_pass, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, mean_pixel_delta, merge_public_observations, open_hand_draw_slot, own_meld_surface_visible, post_call_transition, retreat_pointer_from_hand, selected_tile_comparison_region, send_discard_click, should_guard_tenpai_reaction, should_process_reaction_prompt, stable_hand_comparison_region, stable_hand_delta
+from auto_operator import PythonAutoOperator, RetryableSafetyAbort, action_deadline_timing, away_resume_geometry, closed_concealed_row_visible, confirmed_call_meld, crop_screenshot, discard_point_in_hand_geometry, force_auto_call_buttons, force_auto_chi_choice_points, force_auto_reaction_win_button, force_auto_self_action_buttons, geometric_open_meld_count, is_away_resume_dialog, is_contextual_reaction_pass, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, mean_pixel_delta, merge_public_observations, open_hand_draw_slot, own_meld_surface_visible, post_call_transition, retreat_pointer_from_hand, selected_chi_choice_point, selected_tile_comparison_region, send_discard_click, should_guard_tenpai_reaction, should_process_reaction_prompt, should_retry_call_policy, stable_hand_comparison_region, stable_hand_delta
 from screen_state import classify_screen, load_references
 from auto_operator import geometric_reaction_open_meld_count
 from auto_operator import configure_evaluator_click_budget
@@ -1410,6 +1410,57 @@ class AwayDialogDetectionTest(unittest.TestCase):
         })
         self.assertFalse(should_process_reaction_prompt(True))
         self.assertTrue(should_process_reaction_prompt(False))
+
+    def test_confirmed_call_builds_typed_meld_and_selects_requested_chi_variant(self) -> None:
+        selected = {
+            "id": "chi_3s_4s_5s", "action": "chi", "tile": "3s",
+            "consumedTiles": ["4s", "0s"],
+        }
+        legal = [
+            {"id": "chi_3s_2s_4s", "action": "chi"},
+            selected,
+            {"id": "pass", "action": "pass"},
+        ]
+        points = [{"x": 800.0, "y": 790.0}, {"x": 1100.0, "y": 790.0}]
+
+        self.assertEqual(selected_chi_choice_point(points, selected, legal), points[1])
+        self.assertEqual(confirmed_call_meld(selected), {
+            "type": "chi", "tiles": ["4s", "0s", "3s"], "confidence": 1.0,
+        })
+        self.assertIsNone(selected_chi_choice_point(points, None, legal))
+        self.assertIsNone(confirmed_call_meld({"action": "chi", "tile": "3s", "consumedTiles": ["4s"]}))
+
+    def test_persistent_call_tile_conflict_falls_back_to_safe_pass(self) -> None:
+        conflict = RetryableSafetyAbort("reaction_tile_count_conflict")
+        self.assertTrue(should_retry_call_policy(conflict, 19999))
+        self.assertFalse(should_retry_call_policy(conflict, 20000))
+        self.assertTrue(should_retry_call_policy(RetryableSafetyAbort("transient"), 30000))
+
+    def test_confirmed_call_persists_typed_meld_when_vision_could_not_classify_it(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        observation = {
+            "doraIndicators": ["1m"], "ownDiscards": ["N"],
+            "ownMelds": [], "ownMeldTiles": [], "ownMeldsObserved": False,
+            "opponentDiscards": [{"seat": "west", "discards": ["C", "3s"]}],
+        }
+        operator.cached_public_observation = observation
+        operator.previous_public_observation = None
+        operator.public_cache_generation = 4
+        operator.log = Mock()
+
+        operator.reconcile_confirmed_call_discard(
+            {"tile": "3s", "fromSeat": "west"},
+            {"id": "chi_3s_2s_4s", "action": "chi", "tile": "3s",
+             "consumedTiles": ["2s", "4s"]},
+        )
+
+        cached = operator.cached_public_observation
+        self.assertEqual(cached["opponentDiscards"][0]["discards"], ["C"])
+        self.assertEqual(cached["ownMelds"], [{
+            "type": "chi", "tiles": ["2s", "4s", "3s"], "confidence": 1.0,
+        }])
+        self.assertEqual(cached["ownMeldTiles"], ["2s", "4s", "3s"])
+        self.assertTrue(cached["ownMeldsObserved"])
 
     def test_restart_accepts_compact_hand_with_complete_visible_meld(self) -> None:
         observation = {

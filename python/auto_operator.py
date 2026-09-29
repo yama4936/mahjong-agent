@@ -300,6 +300,46 @@ def post_call_transition(call_action: str, prior_open_melds: int) -> dict[str, A
     }
 
 
+def confirmed_call_meld(selected_action: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Build typed meld evidence from a call that the UI visibly completed."""
+    if not selected_action:
+        return None
+    action = selected_action.get("action")
+    called_tile = selected_action.get("tile")
+    consumed = selected_action.get("consumedTiles")
+    if action not in {"chi", "pon", "minkan"} or not isinstance(called_tile, str) \
+            or not isinstance(consumed, list) or not all(isinstance(tile, str) for tile in consumed):
+        return None
+    expected_consumed = 3 if action == "minkan" else 2
+    if len(consumed) != expected_consumed:
+        return None
+    return {"type": action, "tiles": [*consumed, called_tile], "confidence": 1.0}
+
+
+def selected_chi_choice_point(
+    points: list[dict[str, float]], selected_action: dict[str, Any] | None,
+    legal_actions: list[dict[str, Any]] | None,
+) -> dict[str, float] | None:
+    """Map Mahjong Soul's left-to-right chi variants to the legal action order."""
+    if not points:
+        return None
+    chi_actions = [action for action in legal_actions or [] if action.get("action") == "chi"]
+    selected_id = selected_action.get("id") if selected_action else None
+    selected_index = next(
+        (index for index, action in enumerate(chi_actions) if action.get("id") == selected_id), None,
+    )
+    if selected_index is None:
+        return points[0] if len(points) == 1 else None
+    if len(points) != len(chi_actions) or selected_index >= len(points):
+        return None
+    return points[selected_index]
+
+
+def should_retry_call_policy(error: Exception, elapsed_ms: int) -> bool:
+    """Retry transient call conflicts briefly, then prefer a safe pass."""
+    return str(error) != "reaction_tile_count_conflict" or elapsed_ms < 20000
+
+
 def force_auto_chi_choice_points(screenshot: bytes, viewport: dict[str, int]) -> list[dict[str, float]]:
     """Locate complete two-tile choices in Mahjong Soul's post-chi selector."""
     left, right = round(viewport["width"] * 0.25), round(viewport["width"] * 0.75)
@@ -1698,8 +1738,10 @@ class PythonAutoOperator:
         evaluation["verifiedCallDiscard"] = dict(pending)
         return evaluation
 
-    def reconcile_confirmed_call_discard(self, pending: dict[str, Any]) -> None:
-        """Remove only the verified called tail after hand/meld confirmation.
+    def reconcile_confirmed_call_discard(
+        self, pending: dict[str, Any], selected_action: dict[str, Any] | None = None,
+    ) -> None:
+        """Record the confirmed meld and remove only the verified called tail.
 
         Old asynchronous snapshots must not restore the pre-call river. Do not
         interpret arbitrary OCR shrinkage as a call or remove an interior tile.
@@ -1708,6 +1750,7 @@ class PythonAutoOperator:
         self.public_cache_last_frame_hash = None
         self.last_public_scan_at = 0.0
         removed = 0
+        confirmed_meld = confirmed_call_meld(selected_action)
         for attribute in ("cached_public_observation", "previous_public_observation"):
             observation = getattr(self, attribute, None)
             if not observation:
@@ -1721,17 +1764,24 @@ class PythonAutoOperator:
                     removed += 1
                     changed = True
                 opponents.append(item)
+            own_melds = list(observation.get("ownMelds", []))
+            if confirmed_meld and confirmed_meld not in own_melds:
+                own_melds.append(confirmed_meld)
+                changed = True
+            own_meld_tiles = [tile for meld in own_melds for tile in meld.get("tiles", [])]
             if changed:
-                all_meld_tiles = [*observation.get("ownMeldTiles", []), *[
+                all_meld_tiles = [*own_meld_tiles, *[
                     tile for item in opponents for meld in item.get("melds", []) for tile in meld.get("tiles", [])
                 ]]
                 other_visible = [*[tile for item in opponents for tile in item.get("discards", [])], *all_meld_tiles]
                 setattr(self, attribute, {**observation, "opponentDiscards": opponents,
+                    "ownMelds": own_melds, "ownMeldTiles": own_meld_tiles,
+                    "ownMeldsObserved": True,
                     "allMeldTiles": all_meld_tiles, "otherVisibleTiles": other_visible,
                     "acceptedTiles": len(observation.get("doraIndicators", []))
                     + len(observation.get("ownDiscards", [])) + len(other_visible)})
         self.log("called_river_reconciled", pendingDiscard=pending, removedSnapshots=removed,
-                 publicCacheGeneration=self.public_cache_generation)
+                 confirmedMeld=confirmed_meld, publicCacheGeneration=self.public_cache_generation)
 
     def force_auto_reaction_fallback(
         self, screenshot: Path, *, contextual_prompt_verified: bool = False,
@@ -2302,6 +2352,8 @@ class PythonAutoOperator:
 
     def execute_force_auto_call(
         self, page: Page, screenshot: bytes, button: dict[str, Any],
+        selected_action: dict[str, Any] | None = None,
+        legal_actions: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         """Accept one unambiguous green call and arm the compact-hand discard."""
         if self.args.mode != "force-auto" or not getattr(self.args, "accept_single_call", False):
@@ -2336,7 +2388,9 @@ class PythonAutoOperator:
             if call_action == "chi" and not chi_choice_sent:
                 choices = force_auto_chi_choice_points(current, self.layout["viewport"])
                 if choices:
-                    choice = choices[0]
+                    choice = selected_chi_choice_point(choices, selected_action, legal_actions)
+                    if choice is None:
+                        raise RetryableSafetyAbort("chi choice variants did not match the selected legal action")
                     self.log("action_click_sent", action="chi_choice", clickPoint=choice,
                              choiceCount=len(choices), source="complete_two_tile_choice")
                     page.mouse.click(choice["x"], choice["y"])
@@ -2728,18 +2782,30 @@ class PythonAutoOperator:
                                 policy = self.evaluate_force_auto_call_policy(screenshot_path, call_action)
                             except RetryableSafetyAbort as error:
                                 self.log("reaction_call_policy_deferred", screenshot=str(screenshot_path), error=str(error))
-                                page.wait_for_timeout(max(100, round(self.args.poll * 1000)))
-                                continue
+                                elapsed_ms = self.configured_action_deadline_ms() - self.action_deadline_remaining_ms()
+                                if should_retry_call_policy(error, elapsed_ms):
+                                    page.wait_for_timeout(max(100, round(self.args.poll * 1000)))
+                                    continue
+                                self.log("reaction_call_policy_rejected", action=call_action,
+                                         reason="persistent_tile_count_conflict_safe_pass",
+                                         elapsedMs=elapsed_ms)
+                                policy = None
                             if policy:
+                                decision = policy.get("decision", {})
                                 try:
-                                    receipt = self.execute_force_auto_call(page, full_screen, call_buttons[0])
+                                    receipt = self.execute_force_auto_call(
+                                        page, full_screen, call_buttons[0],
+                                        decision.get("selectedAction"), decision.get("legalActions"),
+                                    )
                                 except RetryableSafetyAbort as error:
                                     self.log("reaction_call_unconfirmed", screenshot=str(screenshot_path), error=str(error))
                                     page.wait_for_timeout(max(100, round(self.args.poll * 1000)))
                                     continue
                                 if receipt.get("confirmation") == "hand_and_own_meld_changed" \
                                         and policy.get("verifiedCallDiscard"):
-                                    self.reconcile_confirmed_call_discard(policy["verifiedCallDiscard"])
+                                    self.reconcile_confirmed_call_discard(
+                                        policy["verifiedCallDiscard"], decision.get("selectedAction"),
+                                    )
                                 receipt["actionTiming"] = self.action_timing(decision_started_at, clear=True)
                                 self.log("reaction_call", screenshot=str(screenshot_path), evaluation=policy,
                                          execution=receipt)
