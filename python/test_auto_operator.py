@@ -961,6 +961,32 @@ class AwayDialogDetectionTest(unittest.TestCase):
 
         self.assertEqual(geometric_open_meld_count(frame, layout), 1)
 
+    def test_compact_self_draw_survives_exposed_meld_overlap_after_draw_slot(self) -> None:
+        layout = {
+            "viewport": {"width": 1920, "height": 1080},
+            "handSlots": [
+                {"x": 220 + index * 95, "y": 926, "width": 92, "height": 146}
+                for index in range(13)
+            ],
+            "drawSlot": {"x": 1485, "y": 926, "width": 92, "height": 146},
+        }
+        image = Image.new("RGB", (1920, 1080), (25, 55, 85))
+        draw = ImageDraw.Draw(image)
+        # One pon leaves ten concealed tiles plus the compact draw at slot 10.
+        for slot in layout["handSlots"][:11]:
+            draw.rectangle((slot["x"], slot["y"], slot["x"] + slot["width"], slot["y"] + slot["height"]),
+                           fill=(230, 225, 210))
+        # The actual exposed pon can cover the felt immediately to the draw's
+        # right. It must not turn a genuine self draw into an opponent turn.
+        overlap = layout["handSlots"][11]
+        draw.rectangle((overlap["x"], overlap["y"], overlap["x"] + overlap["width"],
+                        overlap["y"] + overlap["height"]), fill=(230, 225, 210))
+        draw.rectangle((1540, 910, 1880, 1070), fill=(230, 225, 210))
+        encoded = io.BytesIO()
+        image.save(encoded, format="PNG")
+
+        self.assertEqual(geometric_open_meld_count(encoded.getvalue(), layout), 1)
+
     def test_restart_geometry_recovers_three_melds_despite_closed_slot_overlap(self) -> None:
         project = Path(__file__).resolve().parents[1]
         layout = load_json(project / "config" / "layout.json")

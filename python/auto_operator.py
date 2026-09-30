@@ -552,11 +552,6 @@ def geometric_open_meld_count(screenshot: bytes, layout: dict[str, Any]) -> int 
     viewport = layout.get("viewport", {})
     if len(hand_slots) < 13 or not viewport:
         return None
-    pitches = sorted(
-        float(right["x"]) - float(left["x"])
-        for left, right in zip(hand_slots, hand_slots[1:])
-    )
-    pitch = pitches[len(pitches) // 2]
     if not own_meld_surface_visible(screenshot, layout):
         return None
     occupied = [is_draw_slot_occupied(screenshot, slot) for slot in hand_slots]
@@ -568,18 +563,12 @@ def geometric_open_meld_count(screenshot: bytes, layout: dict[str, Any]) -> int 
         dynamic_slot = open_hand_draw_slot(layout, open_melds)
         if concealed_before_draw < 1 or dynamic_slot is None:
             continue
-        # With several melds the exposed tiles overlap the far-right closed
-        # hand slots, so `occupied[-1]` is not evidence against a compact
-        # hand. Verify the calibrated felt gap immediately after the shifted
-        # draw tile instead; this remains between concealed and exposed rows.
-        gap_slot = {
-            "x": dynamic_slot["x"] + dynamic_slot["width"] + 4,
-            "y": dynamic_slot["y"],
-            "width": min(24.0, pitch / 3),
-            "height": dynamic_slot["height"],
-        }
+        # Exposed tiles can overlap every slot after the compact draw slot.
+        # In particular a one-meld self draw fills slots 0..10 while the
+        # right-side pon can make the immediately following felt gap look
+        # ivory.  The compact prefix plus its calibrated draw slot are the
+        # stable evidence; the slots to their right must not veto it.
         if all(occupied[:concealed_before_draw]) \
-                and not is_draw_slot_occupied(screenshot, gap_slot) \
                 and is_draw_slot_occupied(screenshot, dynamic_slot):
             return open_melds
     return None
