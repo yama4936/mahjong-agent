@@ -344,3 +344,12 @@
 
 - 今回の3位はCPU戦1半荘だけで戦術的な敗因を断定しない。副露・河・認識保護は動作した一方、意図牌不一致1回とfalse-safe境界の再発を具体的な改善対象として修正した。
 - 修正の実機回帰を完走してから、銅の間を独立評価する。その際は段位戦標準時間に合わせて `--action-deadline-ms=300000 --force-auto-click-budget-ms=2600` を明示し、CPU戦結果と混在させない。
+
+## 3141509の300+0秒CPU回帰（完走・1位）
+
+- 使用コードはpush済み `3141509`。友人戦部屋97243、四人南、簡単CPU3名、300+0秒、25000点開始、1位必要30000点、飛び有効、赤ドラ3、ローカル役無効、喰い断有効、一翻縛り、便利表示有効。開始前設定画面は `artifacts/live/300-fixed-3141509-preflight-20260930.png`。実行は `node scripts/run-operator.mjs force-auto --layout=config/layout-300-regression.json --artifacts=artifacts/friend-300-fixed-3141509-regression-20260930 --action-deadline-ms=300000 --force-auto-click-budget-ms=8000 --board-metadata --advance-screens --no-dashboard`。開始は2026-09-30T12:32:31Zで、対局中にコード・設定を変更していない。
+- 最終結果は自家34000点・1位、CPUは32400/17400/16200点。確定画面は `artifacts/friend-300-fixed-3141509-regression-20260930/frames/2026-09-30T13-38-25.637160+00-00.match_result.png`。これは300+0秒CPU友人戦の機能・回帰結果であり、銅の間の段位戦勝率評価とは分離する。
+- 214判断、51反応プロンプト、7自家鳴き、ロン2回を記録した。全214件で `deadlineMs=300000`、期限超過0、最長 `evidenceToClickMs=31075`、`safety_stop` 0。自河は188回照合して追従し、意図牌不一致5回ではキャッシュを再利用しなかった。鳴きは7回すべて `called_river_reconciled`（失敗0）となり、南4局の東ポンでは `openMelds=1`、10枚の副露後手牌、型付き `pon EEE`、後続の河更新を連続確認した。
+- 未解決項目の実機照合では、存在しない白カン・minkanは0件。残り山0枚の自家判断は2回あり、いずれも `winProbability=0`、`tenpaiProbability=0`。持ち上がりを含む手牌同一性照合は15回で、13回一致、2回はクリック前に `action_aborted` となり誤操作はなかった。
+- ただし13:03:06Zに期待3p・独立再認識Pという不一致で `recognitionSafe=true` が記録された。直前フレームの再実行ではPがconfidence 0.9989であり、独立照合フレームとの差が牌誤認か画面状態遷移かを現ログだけでは分離できない。既知の7p→6pとは異なり、一般化したvetoを追加する根拠は不足しているため、safeフラグだけで操作を許可していない既存の独立同一性ゲートを維持し、このフレーム対を次の認識調査用の反例として保留する。
+- CPU完走標本は既存の1位・2位・2位・3位・1位・3位に今回の1位を加えて7件、平均順位1.86、連対率約71%、1位率約43%となった。CPU難易度「簡単」の小標本であり段位戦の勝率改善証明ではないが、最新の認識・副露・残り山保護を完走回帰で確認できた。次の銅の間標本は別成果物で `--action-deadline-ms=300000 --force-auto-click-budget-ms=2600` を明示する。
