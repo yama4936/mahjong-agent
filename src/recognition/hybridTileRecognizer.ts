@@ -28,7 +28,7 @@ export function isKnownSixSevenPinConfusion(match: {
   runnerUpTile?: GameTile;
   confidence: number;
 }): boolean {
-  return match.tile === "6p" && match.runnerUpTile === "7p" && match.confidence < 0.78;
+  return match.tile === "6p" && match.runnerUpTile === "7p" && match.confidence < 0.788;
 }
 
 const honors: Record<string, GameTile> = { "1z": "E", "2z": "S", "3z": "W", "4z": "N", "5z": "P", "6z": "F", "7z": "C" };
@@ -158,7 +158,7 @@ export class HybridTileRecognizer {
     const ambiguityMargin = Math.min(...matches.map((match) => match.confidence - match.runnerUpConfidence));
     const turnReady = matches.length === slots.length;
     // Three reviewed live frames contain actual 7p tiles that this model calls
-    // 6p at 0.70-0.775 confidence with 7p second.  A verified correct 6p/7p
+    // 6p at 0.70-0.7803 confidence with 7p second.  A verified correct 6p/7p
     // competition is 0.788, so fail closed only inside the measured gap.
     const knownSixSevenPinConfusion = matches.some(isKnownSixSevenPinConfusion);
     return {

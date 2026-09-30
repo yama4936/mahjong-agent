@@ -318,3 +318,29 @@
 - 東3局の1pポンと南1局の789sチーは、いずれも `called_river_reconciled` とconfidence 1.0の型付き副露で確認された。後続の開いた手は10枚手牌、対応副露、河の更新として認識・打牌を継続した。
 - 残り山0枚の自家判断を1回観測し、候補の `winProbability=0`、未聴牌の `tenpaiProbability=0` だった。`safety_stop`、`reaction_river_advanced`、存在しない白カンはいずれも0件。なお、最長の `evidenceToClickMs=110615` は複数の相手巡をまたぐ既存の期限開始記録を含むため、操作遅延の証拠には使わない。
 - この中断後、ブラウザを再起動しようとしたところ、実行環境に `libnspr4.so` がないためPlaywright Chromiumを起動できなかった。これはリポジトリのコード変更ではなくOS依存関係の欠落であり、追加の実機回帰と銅の間の短時間2600ms評価はブラウザ環境の復旧後に再開する。
+
+## 1798d70の300+0秒完走回帰と7p/6p境界修正
+
+### 部屋97243・条件と結果
+
+- 実行コードはpush済み `1798d70`。友人戦部屋97243、四人半荘、簡単CPU3名、300+0秒、25000点開始、1位必要30000点、飛び有効、赤ドラ3、ローカル役無効、喰い断有効、一翻縛り、便利表示有効を開始前画面 `artifacts/live/300-fixed-1798d70-room97243-ready-20260930.png` で確認した。
+- 実行は `node scripts/run-operator.mjs force-auto --layout=config/layout-300-regression.json --artifacts=artifacts/friend-300-fixed-1798d70-regression-20260930 --action-deadline-ms=300000 --force-auto-click-budget-ms=8000 --board-metadata --advance-screens --no-dashboard`。開始は2026-09-30T11:36:32Z、対局中にコード・設定を変更していない。
+- 最終結果は自家19000点・3位。CPUは34500/27800/18700点。確定画面は `artifacts/friend-300-fixed-1798d70-regression-20260930/frames/2026-09-30T12-27-39.843349+00-00.match_result.png`。CPU友人戦の動作・回帰結果であり、銅の間の勝率評価には含めない。
+
+### 操作・状態照合の結果
+
+- 154打牌判断、53反応プロンプト、2自家鳴きを記録した。`safety_stop` 0、期限超過0。打牌・反応のすべての記録済みactionTimingは `deadlineMs=300000` を満たした。
+- `own_discard_reconciled` は126回、`called_river_reconciled` は2回。南4局の2sポン後には、10枚の副露後手牌、`melds=[pon 2s2s2s]`、`openMelds=1`、縮小手牌領域ゲート、および後続自河の伸長を連続して確認した。鳴き後の自分の副露・河整合性は実対局で再確認できた。
+- 公開情報の白カンは発生せず、`minkan` の誤登録も観測されなかった。残り山は南2局で2枚まで到達したが、今回は残り0枚の自家判断はなかった（既存の実機・単体回帰結果を維持）。
+- 意図牌と実河の差異は今回も1回（期待1p、観測9p）検出し、`own_discard_mismatch` として高速キャッシュを破棄した。複数牌進行の `own_discard_reconciliation_failed` も1回あり、同様にキャッシュを再利用しなかった。結果画面だけでなく、選択・クリック・河照合ログを使って扱った。
+
+### false-safeの再発と修正
+
+- 2026-09-30T11:54:21Zの閉じた手牌同一性確認で、期待7pを6pと読んだにもかかわらず `recognitionSafe=true` だった。confidence=0.7803、観測数14、手牌順序の不一致は検出され、`action_aborted` となったため誤クリックはない。
+- 原因は既知の6p/7p vetoが `confidence < 0.78` で、今回の0.7803をわずかに通していたこと。確認済みの正しい6p・次点7p対照は0.788003なので、`confidence < 0.788`へ拡張し、0.7803を拒否・0.788003を許可する単体回帰を追加した。
+- 修正後の `npm test` は191件中186件成功・5件skip・失敗0、`npm run build` 成功、`npm run test:python` は166件実行・133件成功・33件skip・失敗0。次の300+0秒CPU友人戦で、修正済み境界を実機回帰する。
+
+### 敗因の扱いと次段階
+
+- 今回の3位はCPU戦1半荘だけで戦術的な敗因を断定しない。副露・河・認識保護は動作した一方、意図牌不一致1回とfalse-safe境界の再発を具体的な改善対象として修正した。
+- 修正の実機回帰を完走してから、銅の間を独立評価する。その際は段位戦標準時間に合わせて `--action-deadline-ms=300000 --force-auto-click-budget-ms=2600` を明示し、CPU戦結果と混在させない。

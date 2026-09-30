@@ -59,6 +59,10 @@ test("six-pin seven-pin veto keeps the measured verified gap", () => {
     tile: "6p", runnerUpTile: "7p", confidence: 0.775317370891571,
   }), true);
   assert.equal(isKnownSixSevenPinConfusion({
+    // Live 7p->6p false-safe evidence from the 300-second regression.
+    tile: "6p", runnerUpTile: "7p", confidence: 0.7803,
+  }), true);
+  assert.equal(isKnownSixSevenPinConfusion({
     tile: "6p", runnerUpTile: "7p", confidence: 0.788002610206604,
   }), false);
   assert.equal(isKnownSixSevenPinConfusion({
