@@ -31,10 +31,9 @@ test("resident server rejects cached decision hands and recognizes the physical 
 
 test("resident force-auto evaluation preserves complete own pon and rejects mismatched counts", { timeout: 60_000 }, async () => {
   const directory = await mkdtemp(join(tmpdir(), "resident-own-meld-"));
-  // Deliberately annotated 11-tile subset of a known readable image. This
-  // tests the resident request/state pipeline, not compact-row localization.
+  // This tests the resident request/state pipeline with the normal
+  // calibration; a confirmed open meld selects its compact-row rectangles.
   const layout = JSON.parse(await readFile("config/layout.json", "utf8"));
-  layout.handSlots = layout.handSlots.slice(0, 10);
   const layoutPath = join(directory, "layout.json");
   await writeFile(layoutPath, JSON.stringify(layout));
   const child = spawn(process.execPath, ["--import", "tsx", "src/recognition/recognitionServer.ts",

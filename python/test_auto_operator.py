@@ -908,22 +908,21 @@ class AwayDialogDetectionTest(unittest.TestCase):
         Image.new("RGB", (300, 200), (25, 55, 85)).save(opponent_turn, format="PNG")
         self.assertFalse(is_draw_slot_occupied(opponent_turn.getvalue(), region))
 
-    def test_open_hand_draw_slot_shifts_three_tile_pitches_per_meld(self) -> None:
+    def test_open_hand_draw_slot_reuses_the_first_slot_after_compact_concealed_row(self) -> None:
         layout = {
             "viewport": {"width": 1920, "height": 1080},
             "handSlots": [
-                {"x": 223, "y": 926, "width": 92, "height": 146},
-                {"x": 318, "y": 926, "width": 92, "height": 146},
-                {"x": 413, "y": 926, "width": 92, "height": 146},
+                {"x": 223 + index * 95, "y": 926, "width": 92, "height": 146}
+                for index in range(13)
             ],
             "drawSlot": {"x": 1486, "y": 926, "width": 92, "height": 146},
         }
 
         self.assertEqual(open_hand_draw_slot(layout, 1), {
-            "x": 1201.0, "y": 926.0, "width": 92.0, "height": 146.0,
+            "x": 1173.0, "y": 926.0, "width": 92.0, "height": 146.0,
         })
         self.assertEqual(open_hand_draw_slot(layout, 2), {
-            "x": 916.0, "y": 926.0, "width": 92.0, "height": 146.0,
+            "x": 888.0, "y": 926.0, "width": 92.0, "height": 146.0,
         })
         self.assertIsNone(open_hand_draw_slot(layout, 0))
 

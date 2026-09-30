@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 import sharp from "sharp";
 import { calibratedOpenHandProposal, knownOpenHandProposalFitsCalibratedRow, layoutFromHandProposal, proposeHandLayout, proposeLiveHandLayout } from "../src/recognition/handLayoutProposal.js";
 import { layoutSchema } from "../src/recognition/layout.js";
+import { recognizeHand } from "../src/recognition/templateMatcher.js";
 
 async function calibratedLayout() {
   return layoutSchema.parse(JSON.parse(await readFile("config/layout.json", "utf8")));
@@ -188,10 +189,26 @@ test("rebuilds the first-pon compact row from calibration when call lighting hid
   const proposal = calibratedOpenHandProposal(layout, 1);
   assert.equal(proposal.handSlots.length, 10);
   assert.equal(proposal.clickPoints.length, 11);
-  assert.deepEqual(proposal.drawSlot, { x: 1201, y: 926, width: 92, height: 146 });
+  assert.deepEqual(proposal.drawSlot, { x: 1171, y: 926, width: 93, height: 146 });
   assert.equal(knownOpenHandProposalFitsCalibratedRow(proposal, layout, 1), true);
   assert.ok(proposal.clickPoints.every((point) => point.y === 999));
   assert.ok(performance.now() - started < 5_000);
+});
+
+test("calibrated compact row preserves the live pon hand instead of detector-trimmed crops", async (context) => {
+  const frame = "artifacts/friend-300-fixed-84230ae-regression-20260930/frames/2026-09-30T13-55-24.962822+00-00.jpg";
+  if (!requireLiveFixtures(context, [frame])) return;
+  const layout = layoutSchema.parse(JSON.parse(await readFile("config/layout-300-regression.json", "utf8")));
+  const proposal = calibratedOpenHandProposal(layout, 1);
+  const result = await recognizeHand(frame, {
+    ...layout,
+    ...proposal,
+    tileMatcher: layout.tileMatcher,
+    minimumTileConfidence: layout.minimumTileConfidence,
+    minimumTilePresence: layout.minimumTilePresence,
+  }, "templates/bootstrap");
+  assert.deepEqual(proposal.drawSlot, { x: 1171, y: 926, width: 93, height: 146 });
+  assert.deepEqual(result.tiles, ["3m", "4m", "7m", "8m", "8m", "9m", "2p", "2p", "0p", "6p", "6p"]);
 });
 
 test("converts a proposal to an Advisor-only layout", () => {

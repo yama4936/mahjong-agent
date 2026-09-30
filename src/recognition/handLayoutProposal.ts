@@ -129,7 +129,12 @@ export function calibratedOpenHandProposal(
   const pitch = pitches[Math.floor(pitches.length / 2)]!;
   const handSlots = layout.handSlots.slice(0, concealedCount);
   if (handSlots.length !== concealedCount) throw new Error("calibrated layout has too few hand slots");
-  const drawSlot = { ...layout.drawSlot, x: layout.drawSlot.x - openMelds * 3 * pitch };
+  // After a call, the drawn tile closes the ordinary gap and occupies the
+  // first calibrated closed-hand slot after the compact concealed row.  It
+  // does *not* retain the closed-hand draw gap.  Translating drawSlot by only
+  // three pitches crops its right third on the live one-meld row, which makes
+  // raw template matching drift even though the click centre looks plausible.
+  const drawSlot = { ...layout.handSlots[concealedCount]! };
   const rects = [...handSlots, drawSlot];
   return {
     viewport: layout.viewport,

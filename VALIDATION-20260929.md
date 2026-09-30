@@ -358,3 +358,25 @@
 
 - `84230ae`でCPU回帰後、ロビーから銅の間を選択した。画面は「現在の段位では入場不可。適した部屋に参加しましょう。」と表示して入場を拒否した。証拠は `artifacts/live/bronze-84230ae-bronze-menu-20260930.png`。
 - よって銅の間の段位戦は開始しておらず、対局設定・操作プロセス・対局結果は存在しない。`--action-deadline-ms=300000 --force-auto-click-budget-ms=2600` を設定した実行は行っていない。このアカウントが銅の間の参加条件を満たすまで、CPU友人戦の機能回帰と段位戦評価は引き続き分離する。
+
+## 84230aeの300+0秒CPU回帰と副露後手牌の誤認修正
+
+### 部屋38420・条件と結果
+
+- 使用コードはpush済み `84230ae`。友人戦部屋38420、四人南、簡単CPU3名、300+0秒、25000点開始、1位必要30000点、飛び有効、赤ドラ3、ローカル役無効、喰い断有効、一翻縛り、便利表示有効を開始前画面 `artifacts/live/300-84230ae-room38420-ready-20260930.png` で確認した。実行は `node scripts/run-operator.mjs force-auto --layout=config/layout-300-regression.json --artifacts=artifacts/friend-300-fixed-84230ae-regression-20260930 --action-deadline-ms=300000 --force-auto-click-budget-ms=8000 --board-metadata --advance-screens --no-dashboard`。開始は2026-09-30T13:49:44Zで、対局中はコード・設定を変更していない。
+- 最終結果は自家45900点・1位、CPUは27800/27100/-800点。確定画面は `artifacts/friend-300-fixed-84230ae-regression-20260930/frames/2026-09-30T14-16-35.603391+00-00.match_result.png`。CPU友人戦の機能・回帰結果であり、銅の間の段位戦勝率には含めない。
+- 89判断、反応プロンプト51件、自家鳴き1件。重複を除いた107件の actionTiming はすべて `deadlineMs=300000`、期限超過0、最大 `evidenceToClickMs=19094`、`safety_stop` 0。存在しない白のカン／`minkan` は0、残り山0枚の自家判断は0件だった。
+
+### 照合結果と原因
+
+- 東2局で西家の東をポンし、`confirmation=hand_and_own_meld_changed`、`called_river_reconciled`、型付き `pon EEE`、`openMelds=1`、副露後10枚手牌を確認した。従って鳴き後の副露・河の更新自体は成立していた。
+- ただし同局の副露後に `own_discard_mismatch` を4件検出した（期待2m→実河8mが2件、期待5s→8s、期待5s→6s）。河キャッシュを破棄したため不整合状態を次巡へ持ち越してはいないが、画像・判断・クリック・河を照合すると実際に意図外の牌を切っていた。
+- 反例フレーム `frames/2026-09-30T13-55-24.962822+00-00.jpg` は実牌が `3m 4m 7m 8m 8m 9m 2p 2p 0p 6p 6p`。bright-component動的提案は上端11pxを除いた `y=937,height=134` の矩形を返し、raw template認識は `5m 4m 7m 2m 2m 9m ...` と崩れ、4番目の2mを選んで8mの位置をクリックした。したがって敗因候補は河照合の遅れではなく、副露後に検出器がトリミングした手牌cropと通常テンプレートの不整合である。
+- 同一フレームを校正済み矩形で再認識すると上記11枚すべてが一致した。特に副露後の引き牌は従来の `x=1201`（閉じた手の隙間を残す座標）ではなく、通常列の次slot `x=1171,width=93` にあることを画像で確認した。
+- 14:10:35Zには期待7p2枚を6p2枚と読む独立同一性確認が再発したが、confidence=0.69989、`recognitionSafe=false` で `action_aborted` となりクリックしていない。`3141509` の0.788境界vetoが実機でfalse-safeを遮断した証拠である。
+
+### 修正と回帰
+
+- 確定済みの副露数がある場合、認識サーバーはbright-component提案を採用せず、校正済みの副露後矩形を使うよう変更した。Python操作者の引き牌監視・比較領域・クリック幾何も同一の「副露後の最初の通常slot」を使う。これにより認識とクリック座標の出所を一致させた。
+- 実フレームを使う回帰で、校正後の11枚が完全一致することを追加した。`npm run build`、`test/handLayoutProposal.test.ts`（9成功・4 fixture skip）、`python/test_auto_operator.py`（101成功・33 skip）に加え、全 `npm test` と全 `npm run test:python`（134実行、101成功・33 skip）を通過した。
+- CPU完走標本は8件となり、順位は1位・2位・2位・3位・1位・3位・1位・1位、平均順位1.75、連対率75%、1位率50%、4位0。ただし「簡単」CPUの小標本であり、銅の間の勝率改善の根拠にはしない。銅の間はアカウントの入場拒否が継続しているため、条件を満たした後に `--action-deadline-ms=300000 --force-auto-click-budget-ms=2600` で別評価する。

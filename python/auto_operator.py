@@ -498,18 +498,19 @@ def closed_concealed_row_visible(screenshot: bytes, layout: dict[str, Any]) -> b
 
 
 def open_hand_draw_slot(layout: dict[str, Any], open_melds: int) -> dict[str, float] | None:
-    """Shift the calibrated closed-hand draw slot by three tiles per open meld."""
+    """Return the compact-row draw tile, which replaces the closed-row gap."""
     draw_slot = layout.get("drawSlot")
     hand_slots = layout.get("handSlots", [])
     if not draw_slot or open_melds <= 0 or len(hand_slots) < 2:
         return None
-    pitches = sorted(
-        float(right["x"]) - float(left["x"])
-        for left, right in zip(hand_slots, hand_slots[1:])
-    )
-    pitch = pitches[len(pitches) // 2]
-    shifted = {key: float(draw_slot[key]) for key in ("x", "y", "width", "height")}
-    shifted["x"] -= open_melds * 3 * pitch
+    concealed_before_draw = 13 - open_melds * 3
+    if concealed_before_draw < 0 or concealed_before_draw >= len(hand_slots):
+        return None
+    # Calls remove three ordinary slots and the closed-hand draw gap.  The
+    # draw tile lands in the first remaining calibrated slot, not at the old
+    # draw coordinate merely translated by three pitches.
+    source = hand_slots[concealed_before_draw]
+    shifted = {key: float(source[key]) for key in ("x", "y", "width", "height")}
     viewport_width = float(layout.get("viewport", {}).get("width", 0))
     if shifted["x"] < 0 or shifted["x"] + shifted["width"] > viewport_width:
         return None
