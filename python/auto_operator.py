@@ -2864,7 +2864,11 @@ class PythonAutoOperator:
                                         decision.get("selectedAction"), decision.get("legalActions"),
                                     )
                                 except RetryableSafetyAbort as error:
-                                    self.log("reaction_call_unconfirmed", screenshot=str(screenshot_path), error=str(error))
+                                    self.log(
+                                        "reaction_call_unconfirmed", screenshot=str(screenshot_path), error=str(error),
+                                        selectedAction=decision.get("selectedAction"),
+                                        legalActions=decision.get("legalActions"),
+                                    )
                                     page.wait_for_timeout(max(100, round(self.args.poll * 1000)))
                                     continue
                                 if receipt.get("confirmation") == "hand_and_own_meld_changed" \
