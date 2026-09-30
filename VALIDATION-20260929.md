@@ -380,3 +380,10 @@
 - 確定済みの副露数がある場合、認識サーバーはbright-component提案を採用せず、校正済みの副露後矩形を使うよう変更した。Python操作者の引き牌監視・比較領域・クリック幾何も同一の「副露後の最初の通常slot」を使う。これにより認識とクリック座標の出所を一致させた。
 - 実フレームを使う回帰で、校正後の11枚が完全一致することを追加した。`npm run build`、`test/handLayoutProposal.test.ts`（9成功・4 fixture skip）、`python/test_auto_operator.py`（101成功・33 skip）に加え、全 `npm test` と全 `npm run test:python`（134実行、101成功・33 skip）を通過した。
 - CPU完走標本は8件となり、順位は1位・2位・2位・3位・1位・3位・1位・1位、平均順位1.75、連対率75%、1位率50%、4位0。ただし「簡単」CPUの小標本であり、銅の間の勝率改善の根拠にはしない。銅の間はアカウントの入場拒否が継続しているため、条件を満たした後に `--action-deadline-ms=300000 --force-auto-click-budget-ms=2600` で別評価する。
+
+## f9d3665の300+0秒副露後回帰（中断・結果評価から除外）
+
+- 使用コードはpush済み `f9d3665`。友人戦部屋38420、四人南、簡単CPU3名、300+0秒、開始25000点、1位必要30000点、飛び有効、赤ドラ3、ローカル役無効、喰い断有効、一翻縛り、便利表示有効を開始前画面 `artifacts/live/300-f9d3665-lobby-20260930.png` で確認した。実行は `node scripts/run-operator.mjs force-auto --layout=config/layout-300-regression.json --artifacts=artifacts/friend-300-fixed-f9d3665-regression-20260930 --action-deadline-ms=300000 --force-auto-click-budget-ms=8000 --board-metadata --advance-screens --no-dashboard`。開始は2026-09-30T14:31:03Zで、対局中にコード・設定を変更していない。
+- 東1局・全員25000点・残67枚から開始した。自家鳴き1回は `called_river_reconciled` と型付き副露で確認され、その後の自河照合2回は一致した。`own_discard_mismatch`、`safety_stop`、`action_aborted` はいずれも0件であり、修正対象だった副露後の意図外打牌は中断まで再発しなかった。
+- ただし14:50:29Zを最後に、操作者とCDPブラウザがともに消滅した。終了直前ログには `rearmed`、`opponent_turn_confirmed`、公開情報更新だけがあり、例外・安全停止・結果画面はない。CDPへの再接続は `ECONNREFUSED 127.0.0.1:9222`。成果物に `match_result` は存在しないため、順位・点数・CPU回帰成功/失敗・勝率には数えない。
+- 副露後の実画面は `artifacts/live/300-f9d3665-stall-20260930.png`。画面だけで停止原因を断定せず、操作ログとの照合からはブラウザ外部終了までしか確定できない。再開時はブラウザの生存を先に確認し、同一コミット・同一300+0条件で完走回帰をやり直す。
