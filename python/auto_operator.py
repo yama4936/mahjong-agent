@@ -1816,6 +1816,9 @@ class PythonAutoOperator:
                 "own_discard_mismatch",
                 expected=pending["tile"], actual=actual,
                 evidenceToClickMs=pending.get("evidenceToClickMs"),
+                before=before,
+                observed=after,
+                capturedAt=observation.get("capturedAt"),
             )
         else:
             self.log("own_discard_reconciled", tile=actual)

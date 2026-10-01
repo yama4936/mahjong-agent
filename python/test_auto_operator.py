@@ -166,6 +166,7 @@ class EvaluatorClickBudgetTest(unittest.TestCase):
         self.assertIsNone(operator.pending_own_discard)
         operator.log.assert_called_once_with(
             "own_discard_mismatch", expected="W", actual="3p", evidenceToClickMs=6701,
+            before=["1m", "2m"], observed=["1m", "2m", "3p"], capturedAt=None,
         )
 
     def test_matching_own_discard_keeps_concealed_cache(self):
