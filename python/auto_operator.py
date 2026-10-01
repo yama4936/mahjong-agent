@@ -806,6 +806,10 @@ class PythonAutoOperator:
         self.public_cache_last_frame_hash: str | None = None
         self.last_public_scan_at = 0.0
         self.cached_public_observation: dict[str, Any] | None = None
+        # A public OCR append immediately after our click is independent
+        # evidence, but not yet reliable enough to replace the trusted river.
+        # Keep it pending until a second asynchronous scan agrees.
+        self.pending_own_river_confirmation: list[str] | None = None
         if args.mode == "force-auto" and args.public_cache:
             try:
                 self.public_recognition_server = subprocess.Popen(
@@ -1069,6 +1073,23 @@ class PythonAutoOperator:
         current = envelope["result"]
         prior = self.cached_public_observation
         merged = merge_public_observations(prior, current, getattr(self, "cached_open_melds", 0))
+        pending_discard = getattr(self, "pending_own_discard", None)
+        if prior is not None and pending_discard:
+            prior_own = prior.get("ownDiscards", [])
+            merged_own = merged.get("ownDiscards", [])
+            if merged_own != prior_own:
+                confirmed = getattr(self, "pending_own_river_confirmation", None)
+                if confirmed == merged_own:
+                    self.pending_own_river_confirmation = None
+                    self.log("public_own_river_append_confirmed", ownDiscards=merged_own,
+                             capturedAt=merged.get("capturedAt"))
+                else:
+                    self.pending_own_river_confirmation = list(merged_own)
+                    # Do not let a single false tile identity alter safety,
+                    # remaining-tile counts, or a later discard decision.
+                    merged["ownDiscards"] = list(prior_own)
+                    self.log("public_own_river_append_pending", expected=pending_discard.get("tile"),
+                             observed=merged_own, capturedAt=merged.get("capturedAt"))
         def river_signature(observation: dict[str, Any]) -> tuple[Any, ...]:
             return (tuple(observation.get("ownDiscards", [])), tuple(sorted(
                 (item["seat"], tuple(item.get("discards", [])))
@@ -1495,6 +1516,7 @@ class PythonAutoOperator:
             self.public_cache_last_frame_hash = None
             self.cached_public_observation = None
             self.previous_public_observation = None
+            self.pending_own_river_confirmation = None
             self.last_shanten = None
             self.last_processed_hand = None
             self.armed = True
@@ -2621,6 +2643,7 @@ class PythonAutoOperator:
                         self.open_meld_candidate_frames = set()
                         self.cached_public_observation = None
                         self.previous_public_observation = None
+                        self.pending_own_river_confirmation = None
                         self.public_cache_generation += 1
                         self.public_cache_last_frame_hash = None
                         restart_open_melds = None
@@ -2767,6 +2790,7 @@ class PythonAutoOperator:
                     self.public_cache_last_frame_hash = None
                     self.cached_public_observation = None
                     self.previous_public_observation = None
+                    self.pending_own_river_confirmation = None
                     self.last_shanten = None
                     self.last_processed_hand = None
                     self.armed = True

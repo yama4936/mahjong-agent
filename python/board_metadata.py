@@ -92,7 +92,15 @@ def recognize_board(image_path: Path) -> dict:
         side_scores = [token for token in tokens
                        if abs(token["x"] - x) <= 24 and abs(token["y"] - y) <= 20
                        and re.fullmatch(r"-?\d{3,6}", token["text"])]
-        if not any(token["confidence"] >= 0.98 for token in side_scores):
+        # The opposite score is upside down in the full-board OCR crop.  OCR
+        # can therefore return a *high-confidence reversed* number (for
+        # example ``0086`` for 9800).  Do not let confidence alone suppress
+        # the calibrated upright retry for that seat: point conservation is
+        # only useful when the orientation is correct.
+        needs_upright_retry = side == "opposite" or not any(
+            token["confidence"] >= 0.98 for token in side_scores
+        )
+        if needs_upright_retry:
             upright = image.crop(box).rotate(angle, expand=True)
             # A second aspect ratio recovers short right-seat scores without
             # cropping digits or weakening the confidence/conservation gates.
@@ -105,6 +113,16 @@ def recognize_board(image_path: Path) -> dict:
                                    "x": x, "y": y, "source": f"upright_{side}_score_crop",
                                    "cropWidth": width})
                     if confidence >= 0.98 and re.fullmatch(r"-?\d{3,6}", text):
+                        if side == "opposite":
+                            # Prefer the calibrated upright reading over the
+                            # full-board token at this location.  Keeping
+                            # both makes parse_board_tokens correctly reject
+                            # the score as ambiguous, but also prevents a
+                            # valid corrected snapshot from being used.
+                            tokens[:] = [token for token in tokens
+                                         if not (abs(token["x"] - x) <= 24
+                                                 and abs(token["y"] - y) <= 20
+                                                 and token.get("source") != f"upright_{side}_score_crop")]
                         break
     # The own-seat wind is small and its full-scoreboard detection can be
     # stable but just below the strict 0.98 gate. Retry only the calibrated

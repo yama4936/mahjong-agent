@@ -774,6 +774,32 @@ class AwayDialogDetectionTest(unittest.TestCase):
             operator.previous_public_observation, operator.cached_public_observation,
         ))
 
+    def test_pending_own_discard_requires_two_matching_public_river_scans(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.public_recognition_lock = threading.Lock()
+        operator.public_cache_generation = 3
+        operator.cached_open_melds = 0
+        operator.cached_public_observation = {"ownDiscards": ["1m"]}
+        operator.previous_public_observation = None
+        operator.pending_own_discard = {"tile": "2p"}
+        operator.pending_own_river_confirmation = None
+        operator.log = Mock()
+        observed = {"ownDiscards": ["1m", "2p"], "opponentDiscards": []}
+
+        operator.public_recognition_result = {"generation": 3, "result": observed}
+        operator.poll_public_recognition()
+        self.assertEqual(operator.cached_public_observation["ownDiscards"], ["1m"])
+        self.assertEqual(operator.pending_own_river_confirmation, ["1m", "2p"])
+        self.assertTrue(any(call.args[0] == "public_own_river_append_pending"
+                            for call in operator.log.call_args_list))
+
+        operator.public_recognition_result = {"generation": 3, "result": observed}
+        operator.poll_public_recognition()
+        self.assertEqual(operator.cached_public_observation["ownDiscards"], ["1m", "2p"])
+        self.assertIsNone(operator.pending_own_river_confirmation)
+        self.assertTrue(any(call.args[0] == "public_own_river_append_confirmed"
+                            for call in operator.log.call_args_list))
+
     def test_public_cache_only_grows_rivers_and_preserves_riichi(self) -> None:
         previous = {
             "doraIndicators": ["4m"], "ownDiscards": ["1p"], "ownRiichiDeclared": True,

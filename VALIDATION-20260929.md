@@ -410,3 +410,11 @@
 - 191打牌判断、46反応プロンプト、5自家鳴き、1ロン操作を保存した。全191件で `deadlineMs=300000`、期限超過0、`safety_stop` 0、`reaction_call_unconfirmed` 0。鳴きは5件すべて `called_river_reconciled` となり、チー・ポン後の副露手牌ジオメトリ、自家手番、後続河更新まで実機で確認した。存在しない白のカン／`minkan` は0件だった。
 - 19件の `own_discard_mismatch`、2件の認識再試行、2件の手牌変化による安全中止があった。全て後続の再認識または河照合へ復帰し、クリック期限違反はない。ただし不一致ログは期待牌と観測末尾牌だけで、評価基準河や観測河全体を保持していなかったため、誤クリックと公開認識の時系列ずれをこの結果だけで区別できない。今回の3位の戦術的敗因を画像だけで断定しない。
 - 終局後に `own_discard_mismatch` へ `before`、`observed`、`capturedAt` を追加した。安全側のキャッシュ破棄は維持する。次の300+0秒回帰でこの証拠を取り、河認識・状態認識・判断・クリックを同一事例で照合してから、一般化した同期修正を判断する。
+
+## ed844f7の300+0秒CPU回帰（安全停止・結果評価から除外）
+
+- 使用コードは `ed844f7`。友人戦部屋20071、四人半荘、簡単CPU3名、300+0秒、開始25000点、1位必要30000点、飛び有効、赤ドラ3、ローカル役無効、喰い断有効、一翻縛り、便利表示有効で実施した。実行は `node scripts/run-operator.mjs force-auto --layout=config/layout-300-regression.json --artifacts=artifacts/friend-300-fixed-ed844f7-room20071-20261001 --action-deadline-ms=300000 --force-auto-click-budget-ms=8000 --board-metadata --advance-screens --no-dashboard`。対局中はコード・設定を変更していない。
+- 東4局で盤面メタデータが `scores_and_riichi_sticks_total_mismatch` を継続して返し、通常打牌の `recognition_retry` と反応の `reaction_call_policy_deferred` が反復した。5秒反応期限も `reaction_pass_deferred` となり、時間切れ後の `away_resumed` を経ても再発した。操作者は異常な安全停止として終了し、`match_result` はないため順位・CPU回帰成績・段位戦評価には含めない。
+- 同一失敗フレーム `frames/2026-10-01T01-37-41.252528+00-00.jpg` を直接再実行すると、全盤面OCRは対面点数を高信頼度の反転値 `0086` と読んだが、180度補正クロップは高信頼度で正しい `9800` を返した。修正後は南家44400、西家18900、北家9800、東家23900、供託3本、場供3、残39枚として保存則を満たし `verified=true` となる。保存則や信頼度閾値は緩めていない。
+- 副露後には `called_river_reconciled` と後続の6筒照合成功があった。一方、期待1萬に対して既存の6筒を河末尾として再読んだ事例、期待白に対して既存の7索を再読んだ事例を含む単一追加の `own_discard_mismatch` が観測された。画像単独で誤クリックと断定せず、河OCRの単発追加を2回一致まで保留する修正を追加した。これにより単発誤認識は公開状態・安全評価・残り牌計算に採用されない。
+- 修正後の `python -m unittest test_auto_operator.py test_board_metadata.py` は153件成功・33件skip、失敗0。次の友人戦300+0秒回帰で、対面スコア補正、単発河追加の保留、鳴き後の副露・河整合性を完走確認する。CPU友人戦の結果は段位戦の勝率評価とは引き続き分離する。
