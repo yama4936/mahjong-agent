@@ -555,3 +555,10 @@
 - 友人戦部屋12817、四人CPU戦（一局戦）・300+0秒の設定は `artifacts/live/friend-300-251ad86-settings-20261003.png` に保存した。実行は `node scripts/run-operator.mjs force-auto --layout=config/layout-300-regression.json --artifacts=artifacts/friend-300-251ad86-room12817-20261003 --action-deadline-ms=300000 --force-auto-click-budget-ms=8000 --board-metadata --advance-screens --no-dashboard`。対局中にコード・設定を変更していない。
 - 18判断・18クリック、`action_aborted` 0、`own_discard_mismatch` 0、fallback 0、期限超過0で、`match_completed_stop confidence=1.0`により自動停止した。結果は自家「テストjev」32200点・1位、CPUは25000/23000/19800点。終局証拠は `artifacts/friend-300-251ad86-room12817-20261003/frames/2026-10-02T20-57-10.312610+00-00.match_result.png`。
 - これは実クリック牌の通常照合を壊していないクリーンなCPU機能・回帰標本である。ただしfallbackそのものはこの局では発火していないため、該当分岐の実機直接再検証は将来の発火局で継続する。CPU友人戦の1位は段位戦の勝率改善の証明ではなく、段位戦成績とは明確に分離する。
+
+## 251ad86の銅の間・四人南（有効標本、4位）
+
+- アカウントは実画面で「初」と表示され、段位戦の銅の間には「初心者・雀士」と明記されていたため参加可能と確認した。銅の間の四人南を選択し、`artifacts/live/ranked-copper-east-251ad86-start-20261003.png` に開始画面、`artifacts/live/copper-match-type-20261003.png` に卓種選択画面を保存した。
+- 実行は `node scripts/run-operator.mjs force-auto --layout=config/layout-300-regression.json --artifacts=artifacts/ranked-251ad86-copper-east-20261003 --ranked-loop --action-deadline-ms=300000 --force-auto-click-budget-ms=2600 --board-metadata --no-dashboard`。CPU友人戦の8000msを流用せず、段位戦用2600msと明示的な300000ms deadlineを用いた。
+- 終局画面 `artifacts/live/ranked-251ad86-terminal-20261003.png` は自家「テストjev」13400点・4位・-26pt、他家36300/34200/16100点を示す。対局ログは129打牌判断・130操作、記録済み期限超過0、クリック前の`action_aborted`2件は未クリックの再観測後に復帰した。離席自動ツモ切り、`safety_stop`、期限切れは0件であり、この4位は段位戦の有効な成績標本としてCPU結果とは分離して扱う。
+- `own_discard_mismatch`は23件、`own_discard_reconciliation_failed`も存在した。各事象では公開河キャッシュを隔離し、直ちに物理クリック誤りとは結論しない。終局遷移ではゲームがmatchmakingへ移ったことを検出して`ranked_terminal_transition_stop`となったが、直後の実画面で結果を確認した。結果画面を安定して保存する遷移は、次回の修正・回帰対象とする。
