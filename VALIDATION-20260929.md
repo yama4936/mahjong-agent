@@ -462,3 +462,10 @@
 - 174打牌判断、176 replay、3自家鳴きの `called_river_reconciled` を記録した。期限開始はすべて `deadlineMs=300000`、`action_deadline_expired`、`safety_stop`、`screen_loss_stop` は0件。副露後の10枚手牌・shifted draw slot は実画面で通過した。残り山0枚の判断は2件あり、候補の `winProbability=0` と `tenpaiProbability=0` を確認した。存在しない白のカン／`minkan` はログに0件だった。
 - 終局を14:09:33Zに `match_result` として観測し、同じ早期判定経路で `match_completed_stop confidence=1.0` を記録してプロセスが終了した。結果画面を進めてmatchmakingを反復した前回の停止漏れは再発しなかった。
 - 自河照合では `own_discard_mismatch` 9件、`own_discard_reconciliation_failed` 10件、`action_aborted` 2件（いずれもクリック前の手牌変化）を記録した。不一致は公開キャッシュから隔離された。期待P→観測9m、期待1m→2m等の対は存在するが、観測が単一追加ではなく複数追加になった事例もあり、現ログだけでは河OCRの時系列ずれと意図外クリックを分離できない。画像だけで敗因と断定せず、クリック前後の河全体・手牌・ポインタを同一識別子で結ぶ調査を未完了として継続する。
+
+## a8c2391の銅の間・四人東（無効：操作者安全停止後の自動ツモ切り）
+
+- 銅の間は実画面で入場可能と確認し、四人東を選択した。実行は `node scripts/run-operator.mjs force-auto --layout=config/layout-300-regression.json --artifacts=artifacts/ranked-a8c2391-copper-east-20261002 --ranked-loop --action-deadline-ms=300000 --force-auto-click-budget-ms=2600 --board-metadata --no-dashboard`。これは300+0秒CPU友人戦と分離した段位戦用設定である。
+- 卓は東1局から開始したが、開始直後に実際には盤面であったフレームを `connection_error` と誤分類して安全停止した。操作者はクリック前で、画面確認後に同一設定で再接続した。東4局ではリーチボタンが事前安定性確認中に変化し、未確認クリックを避けて `safety_stop` した。離席自動ツモ切りモーダルを確認して「再開」し、操作者を再接続した。
+- 最終画面 `artifacts/ranked-a8c2391-copper-east-20261002/after-ranked-stop.png` は自家「テストjev」16300点・4位、-23pt（他家41400/26000/16300）。42判断、全記録済み期限は `deadlineMs=300000`、期限超過0。自己河不一致7件・照合失敗6件はキャッシュ隔離した。`ranked_terminal_transition_stop` は結果後に検証済み段位画面を経ずmatchmakingを観測して停止した安全策である。
+- 安全停止後に自動ツモ切りを含むため、この4位とポイント変動は段位戦勝率の有効標本に含めない。敗因を牌画像だけで断定しない。次の修正候補は、リーチボタンの表示遷移を安定性失敗として卓全体を停止せず、ボタン消失・手牌／河変化を再観測してリトライ可能にする経路である。修正前に該当フレームで再現テストを追加する。
