@@ -1846,6 +1846,16 @@ class PythonAutoOperator:
             self.log("own_discard_reconciled", tile=actual)
         self.pending_own_discard = None
 
+    def own_discard_reconciliation_pending(self) -> bool:
+        """Whether another discard would outrun independent river evidence.
+
+        A pending candidate is not the only unsafe state: immediately after a
+        click the public worker may not yet have returned its *first* scan.
+        Starting a later self turn in that interval permits two additions to
+        accumulate before either one can be checked as a single append.
+        """
+        return getattr(self, "pending_own_discard", None) is not None
+
     def force_auto_reaction_fallback(
         self, screenshot: Path, *, contextual_prompt_verified: bool = False,
     ) -> dict[str, Any] | None:
@@ -3082,6 +3092,26 @@ class PythonAutoOperator:
                     else self.infer_pending_discard(self.previous_public_observation, public_observation)
                 if public_observation and self.args.mode != "force-auto":
                     self.previous_public_observation = public_observation
+                if self.args.mode == "force-auto" and self.own_discard_reconciliation_pending():
+                    # A post-click river snapshot is independent evidence for
+                    # the concealed-hand cache.  With the 300+0 regression
+                    # deadline there is ample time to require it before any
+                    # subsequent discard; otherwise two self turns can be
+                    # folded into one observed river append.
+                    pending = self.pending_own_discard
+                    self.schedule_public_recognition(evaluation_frame, force=True)
+                    if not pending.get("reconciliationWaitLogged"):
+                        pending["reconciliationWaitLogged"] = True
+                        self.log(
+                            "own_discard_reconciliation_wait",
+                            expected=pending.get("tile"),
+                            before=pending.get("before"),
+                            confirmationCandidate=self.pending_own_river_confirmation,
+                        )
+                    self.last_processed_hand = None
+                    self.armed = True
+                    page.wait_for_timeout(max(100, round(self.args.poll * 1000)))
+                    continue
                 if self.args.mode == "force-auto" and not pending_discard:
                     self_action_buttons = force_auto_self_action_buttons(
                         evaluation_frame, self.layout["viewport"],

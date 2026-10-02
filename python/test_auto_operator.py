@@ -781,10 +781,16 @@ class AwayDialogDetectionTest(unittest.TestCase):
         operator.cached_open_melds = 0
         operator.cached_public_observation = {"ownDiscards": ["1m"]}
         operator.previous_public_observation = None
-        operator.pending_own_discard = {"tile": "2p"}
+        operator.pending_own_discard = {"tile": "2p", "before": ["1m"]}
+        operator.cached_concealed_tiles = ["1p"] * 13
         operator.pending_own_river_confirmation = None
         operator.log = Mock()
         observed = {"ownDiscards": ["1m", "2p"], "opponentDiscards": []}
+
+        # The gate applies before the first asynchronous scan too: otherwise a
+        # second self turn can be clicked while the first discard is still
+        # unverified, and both additions later look like one bad append.
+        self.assertTrue(operator.own_discard_reconciliation_pending())
 
         operator.public_recognition_result = {"generation": 3, "result": observed}
         operator.poll_public_recognition()
@@ -799,6 +805,8 @@ class AwayDialogDetectionTest(unittest.TestCase):
         self.assertIsNone(operator.pending_own_river_confirmation)
         self.assertTrue(any(call.args[0] == "public_own_river_append_confirmed"
                             for call in operator.log.call_args_list))
+        operator.reconcile_own_discard()
+        self.assertFalse(operator.own_discard_reconciliation_pending())
 
     def test_public_cache_only_grows_rivers_and_preserves_riichi(self) -> None:
         previous = {
