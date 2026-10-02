@@ -675,6 +675,19 @@ def selected_open_draw_is_ambiguous(evaluation: dict[str, Any]) -> bool:
     )
 
 
+def ambiguous_open_draw_fallback(evaluation: dict[str, Any]) -> tuple[str, int] | None:
+    """Choose the best evaluated tile known to be in the compact row."""
+    tiles = evaluation.get("recognition", {}).get("tiles", [])
+    if not isinstance(tiles, list) or len(tiles) < 2:
+        return None
+    concealed = tiles[:-1]
+    for candidate in evaluation.get("decision", {}).get("candidates", []):
+        tile = candidate.get("tile")
+        if candidate.get("action") == "discard" and tile in concealed:
+            return tile, max(index for index, observed in enumerate(concealed) if observed == tile)
+    return None
+
+
 def send_discard_click(mouse: Any, point: dict[str, float], viewport: dict[str, int]) -> None:
     """Select and confirm a Mahjong Soul tile at one guarded coordinate."""
     mouse.click(point["x"], point["y"], click_count=2, delay=80)
@@ -2400,6 +2413,15 @@ class PythonAutoOperator:
         click_index = evaluation.get("clickIndex")
         dynamic_click_point = evaluation.get("clickPoint")
         points = self.layout["clickPoints"]
+        if force_auto and selected_action == "discard" and selected_open_draw_is_ambiguous(evaluation):
+            fallback = ambiguous_open_draw_fallback(evaluation)
+            if fallback is None:
+                raise RetryableSafetyAbort("ambiguous independent draw-slot tile has no recognized fallback")
+            fallback_tile, click_index = fallback
+            selected = {"action": "discard", "tile": fallback_tile}
+            dynamic_click_point = points[click_index]
+            self.log("ambiguous_open_draw_fallback", rejectedTile=decision.get("selectedAction", {}).get("tile"),
+                     fallbackTile=fallback_tile, fallbackClickIndex=click_index)
         needs_tile_click = selected_action in {"discard", "riichi"}
         has_dynamic_click_point = (
             isinstance(dynamic_click_point, dict)
@@ -2472,8 +2494,6 @@ class PythonAutoOperator:
 
         if force_auto and needs_tile_click and self.refresh_discard_reconciliation_before_click():
             raise RetryableSafetyAbort("own discard reconciliation candidate arrived during evaluation")
-        if force_auto and selected_action == "discard" and selected_open_draw_is_ambiguous(evaluation):
-            raise RetryableSafetyAbort("ambiguous independent draw-slot tile cannot be force-auto discarded")
 
         hand_before = current_streamed_hand or crop_screenshot(pre_click_full, self.hand_clip)
         if force_auto:
