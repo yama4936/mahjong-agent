@@ -157,17 +157,46 @@ class EvaluatorClickBudgetTest(unittest.TestCase):
             "tile": "W", "before": ["1m", "2m"], "evidenceToClickMs": 6701,
         }
         operator.cached_concealed_tiles = ["1p"] * 13
-        operator.cached_public_observation = {"ownDiscards": ["1m", "2m", "3p"]}
+        operator.cached_public_observation = {
+            "ownDiscards": ["1m", "2m", "3p"],
+            "doraIndicators": ["4m"],
+            "opponentDiscards": [{"seat": "south", "discards": ["9s"]}],
+        }
+        operator.pending_own_river_confirmation = ["1m", "2m", "3p"]
         operator.log = Mock()
 
         operator.reconcile_own_discard()
 
         self.assertIsNone(operator.cached_concealed_tiles)
         self.assertIsNone(operator.pending_own_discard)
-        operator.log.assert_called_once_with(
+        self.assertIsNone(operator.pending_own_river_confirmation)
+        self.assertEqual(operator.cached_public_observation["ownDiscards"], ["1m", "2m"])
+        self.assertEqual(operator.cached_public_observation["doraIndicators"], ["4m"])
+        self.assertEqual(operator.cached_public_observation["opponentDiscards"],
+                         [{"seat": "south", "discards": ["9s"]}])
+        operator.log.assert_any_call(
             "own_discard_mismatch", expected="W", actual="3p", evidenceToClickMs=6701,
             before=["1m", "2m"], observed=["1m", "2m", "3p"], capturedAt=None,
         )
+        operator.log.assert_any_call(
+            "own_discard_mismatch_cache_quarantined", expected="W", rejected="3p",
+            retainedOwnDiscards=["1m", "2m"],
+        )
+
+    def test_force_auto_friend_match_result_stops_without_screen_advance(self):
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(mode="force-auto", ranked_loop=False, advance_screens=False)
+
+        self.assertTrue(operator.should_stop_after_match_result("match_result"))
+
+    def test_ranked_or_non_force_auto_match_result_does_not_use_friend_stop(self):
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(mode="force-auto", ranked_loop=True)
+        self.assertFalse(operator.should_stop_after_match_result("match_result"))
+        operator.args = argparse.Namespace(mode="auto", ranked_loop=False)
+        self.assertFalse(operator.should_stop_after_match_result("match_result"))
+        operator.args = argparse.Namespace(mode="force-auto", ranked_loop=False)
+        self.assertFalse(operator.should_stop_after_match_result("round_result"))
 
     def test_matching_own_discard_keeps_concealed_cache(self):
         operator = PythonAutoOperator.__new__(PythonAutoOperator)

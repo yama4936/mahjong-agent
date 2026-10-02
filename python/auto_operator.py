@@ -1834,6 +1834,15 @@ class PythonAutoOperator:
         actual = after[-1]
         if not same_physical_tile(actual, pending["tile"]):
             self.cached_concealed_tiles = None
+            # The independent river scan proved only that *some* tile was
+            # appended. It did not prove this OCR identity. Keeping that
+            # identity in the public cache would feed a false safe tile and
+            # false remaining-tile count into every subsequent decision.
+            # Retain the rest of the fresh public observation, but quarantine
+            # the untrusted own-river append until a later scan can establish
+            # it without being tied to this failed click reconciliation.
+            observation["ownDiscards"] = list(before)
+            self.pending_own_river_confirmation = None
             self.log(
                 "own_discard_mismatch",
                 expected=pending["tile"], actual=actual,
@@ -1841,6 +1850,11 @@ class PythonAutoOperator:
                 before=before,
                 observed=after,
                 capturedAt=observation.get("capturedAt"),
+            )
+            self.log(
+                "own_discard_mismatch_cache_quarantined",
+                expected=pending["tile"], rejected=actual,
+                retainedOwnDiscards=list(before),
             )
         else:
             self.log("own_discard_reconciled", tile=actual)
@@ -1859,6 +1873,19 @@ class PythonAutoOperator:
         return bool(
             getattr(self, "pending_own_discard", None)
             and getattr(self, "pending_own_river_confirmation", None) is not None
+        )
+
+    def should_stop_after_match_result(self, screen_state: str) -> bool:
+        """Stop a completed friend regression before it can reach matchmaking.
+
+        Ranked-loop is the only mode that is allowed to continue beyond a
+        match result. Friend functional runs must stop after result evidence
+        is attached even when callers intentionally disabled screen advances.
+        """
+        return bool(
+            screen_state == "match_result"
+            and getattr(self.args, "mode", None) == "force-auto"
+            and not getattr(self.args, "ranked_loop", False)
         )
 
     def force_auto_reaction_fallback(
@@ -2811,15 +2838,15 @@ class PythonAutoOperator:
                     self.armed = True
                     if screen_state not in {"rank_progress", "post_match_reward"}:
                         self.attach_outcome("match" if screen_state == "match_result" else "round", full_screen, screen_confidence)
+                    # A friend functional/regression run has no automated
+                    # destination after its final result. This must not be
+                    # coupled to --advance-screens: advancing a result can
+                    # put the UI on matchmaking before the next loop sees it.
+                    if self.should_stop_after_match_result(screen_state):
+                        self.log("match_completed_stop", confidence=screen_confidence)
+                        return
                     if self.args.advance_screens:
                         self.advance_result_screen_once(page, screen_state, screen_confidence)
-                        # A friend-match regression has no next automated
-                        # destination.  Once the final result is captured and
-                        # acknowledged, stop instead of repeatedly treating
-                        # the lingering result animation as gameplay.
-                        if screen_state == "match_result" and not self.args.ranked_loop:
-                            self.log("match_completed_stop", confidence=screen_confidence)
-                            return
                         time.sleep(self.args.poll)
                         continue
                 else:
