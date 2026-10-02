@@ -469,3 +469,11 @@
 - 卓は東1局から開始したが、開始直後に実際には盤面であったフレームを `connection_error` と誤分類して安全停止した。操作者はクリック前で、画面確認後に同一設定で再接続した。東4局ではリーチボタンが事前安定性確認中に変化し、未確認クリックを避けて `safety_stop` した。離席自動ツモ切りモーダルを確認して「再開」し、操作者を再接続した。
 - 最終画面 `artifacts/ranked-a8c2391-copper-east-20261002/after-ranked-stop.png` は自家「テストjev」16300点・4位、-23pt（他家41400/26000/16300）。42判断、全記録済み期限は `deadlineMs=300000`、期限超過0。自己河不一致7件・照合失敗6件はキャッシュ隔離した。`ranked_terminal_transition_stop` は結果後に検証済み段位画面を経ずmatchmakingを観測して停止した安全策である。
 - 安全停止後に自動ツモ切りを含むため、この4位とポイント変動は段位戦勝率の有効標本に含めない。敗因を牌画像だけで断定しない。次の修正候補は、リーチボタンの表示遷移を安定性失敗として卓全体を停止せず、ボタン消失・手牌／河変化を再観測してリトライ可能にする経路である。修正前に該当フレームで再現テストを追加する。
+
+## 98b5fa0の300+0秒CPU回帰（完走・リーチ遷移の再試行修正を確認）
+
+- 友人戦部屋75634。四人南・簡単CPU3名・300+0秒、開始25000点、返し30000点、飛び有効、赤ドラ3、ローカル役無効、喰い断有効、一翻縛り、便利表示有効を開始前画面 `artifacts/live/friend-300-98b5fa0-room75634-ready-20261002.png` で確認した。使用コードはpush済み `98b5fa0`。実行は `node scripts/run-operator.mjs force-auto --layout=config/layout-300-regression.json --artifacts=artifacts/friend-300-98b5fa0-room75634-20261002 --action-deadline-ms=300000 --force-auto-click-budget-ms=8000 --board-metadata --advance-screens --no-dashboard`。対局中にコード・設定は変更していない。
+- 最終結果は自家「テストjev」51300点・1位、CPUは32000/27400/-10700点。結果画面は `artifacts/friend-300-98b5fa0-room75634-20261002/frames/2026-10-02T15-07-44.494586+00-00.match_result.png`。これはCPU友人戦の機能・回帰結果であり、銅の間を含む段位戦の勝率評価には含めない。
+- 46打牌判断、48 replay、反応期限を含む102件の記録済み actionTiming はすべて `deadlineMs=300000`、`deadlineMet=true`（最大 `evidenceToClickMs=11813`）。`action_deadline_expired`、`safety_stop`、`retryable_safety_abort` はいずれも0件で、終局後は `match_completed_stop` を記録して自動停止した。ロンは3回、鳴き候補は7回とも河と戦略を照合して見送った。
+- 前回の銅の間で卓全体を安全停止させた「リーチボタンが事前安定性確認中に変化」の経路は、この回帰では再発しなかった。修正はリーチだけを `RetryableSafetyAbort` として再観測させるものであり、他の操作ボタンの表示変化に対する安全停止は維持している。実機で該当遷移そのものは発生していないため、分岐の直接カバレッジは引き続き単体再現で補う。
+- 自河の確定照合は41回、`called_river_reconciled` は0回（自家鳴きなし）。存在しない白のカン／`minkan` は0件、残り山0枚の自家判断も0件だった。途中の公開河候補の時系列ずれはログに残るため、意図外クリックとはこの結果だけで断定せず、既存のキャッシュ隔離・再認識方針を維持する。
