@@ -513,3 +513,10 @@
 - 終局画面は `artifacts/friend-300-038767b-room61662-20261003/frames/2026-10-02T18-04-28.302375+00-00.match_result.png`。自家「テストjev」は23500点・3位、CPUは30400/25500/20600点だった。これはCPU友人戦の機能回帰であり、段位戦の勝率評価には含めない。
 - 打牌33件と反応9件のすべては `deadlineMs=300000`、`deadlineMet=true`（打牌最大 `evidenceToClickMs=24854`、反応最大11807）。`safety_stop`、期限超過、`screen_loss_stop` は0件。副露後の10枚手牌とshifted draw slotは21件の `open_hand_geometry_gate` で確認し、鳴き候補の捨て牌検証・戦略的passも7件実行確認した。低信頼度のラウンド結果を一度進めた後に、最終 `match_result` を再検出して `match_completed_stop confidence=1.0` で停止した。
 - 自河不一致は3件（期待W→観測Sが2件、期待1m→観測7pが1件）で、全て公開キャッシュを隔離した。33判断すべての手牌認識は `safe=false`（confidence 0.515〜0.797）であり、safe=true誤認を示す証拠はない。一方、手牌同一性チェックのクリック前 `action_aborted` が東2局で7件あり、pixel delta 1.680〜3.831と7p/6pの再読差を記録した。自動打牌を含まず完走したが、これは無操作になり得る劣化候補であるため、フレーム・クリック・状態ログを突合して別途原因を調査する。
+
+## de45071の300+0秒CPU友人戦（一局戦・完走、1位）
+
+- 前試行で確認した閉じ手牌の行発光による偽 `action_aborted` を、RGB平均差ではなく牌面構造差で判定するよう修正した。実フレームでは旧RGB差が1.680〜3.831（閾値1.5超）である一方、構造差は最大1.119（閾値未満）、実6p/7pの牌面差は34.594であることを確認し、回帰テストを追加した。`python -m unittest test_auto_operator.py` は147件成功・33件skip。使用コードはpush済み `de45071`。
+- 友人戦部屋43582、四人CPU戦（一局戦）・300+0秒、開始25000点、返し30000点、飛び有効、赤ドラ3、ローカル役無効、喰い断有効、一翻縛り、便利表示有効を `artifacts/live/friend-300-de45071-cpu-settings-20261003.png` と `artifacts/live/friend-300-de45071-cpu-room-pending-20261003.png` で確認した。実行は `node scripts/run-operator.mjs force-auto --layout=config/layout-300-regression.json --artifacts=artifacts/friend-300-de45071-room43582-20261003 --action-deadline-ms=300000 --force-auto-click-budget-ms=8000 --board-metadata --advance-screens --no-dashboard`。対局中にコード・設定を変更していない。
+- 終局画面は `artifacts/friend-300-de45071-room43582-20261003/frames/2026-10-02T18-22-43.427599+00-00.match_result.png`。自家「テストjev」は33300点・1位、CPUは24900/21900/19900点。CPU友人戦の機能回帰であり、段位戦の勝率評価には含めない。
+- 打牌25件と反応3件はすべて `deadlineMs=300000`、`deadlineMet=true`（打牌最大 `evidenceToClickMs=11565`、反応最大12691）。`action_aborted`、`safety_stop`、期限超過、`screen_loss_stop` は0件。前回の低信頼度ラウンド画面も経由したが、最終 `match_result` を確定検出して `match_completed_stop confidence=1.0` で停止した。自己河不一致は期待E→観測Cの1件で公開キャッシュを隔離した。safe=true誤認の証拠ではなく、以後の打牌は継続・照合されている。
