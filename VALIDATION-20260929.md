@@ -432,3 +432,11 @@
 - 操作ログには04:33:15Zの `screen_advanced state=match_result confidence=1.0` がある一方、`match_completed_stop` は記録されなかった。その直後に結果画面を進めて `matchmaking` と認識し、約10,499回ポーリングを継続した。最終画面の「長時間無操作のため、接続が切断されました。」とログを照合し、対局自体の停止ではなく結果画面後の操作者停止漏れと確定した。
 - 東2局の反復ではなく、局ラベルの再登場を含む213件の判断（east_2=93）だった。反応見送り58件は57件が `pass` のみで確認・期限内、打牌も概ね6--10秒で `deadlineMet=true` であり、300秒の操作待ちを敗因とはしない。終盤には副露後を含む自己河不一致が10件まで増えたため、画像だけで誤クリックと断定せず、公開河OCR／副露状態キャッシュ汚染の候補として扱った。
 - この試行は切断後に手動停止しており、最終順位・点数・CPU回帰成績・段位戦勝率には含めない。後続 `5a4fa8b` で、force-autoかつ非rankedの友人戦は `match_result` を観測した時点で画面遷移前に停止するよう修正した。また `own_discard_mismatch` 時は誤認された自己河末尾を公開キャッシュから隔離し、danger／残存牌推定へ流用しない。Python関連単体テストを追加し、`python -m unittest test_auto_operator.py test_board_metadata.py` の完走を確認した。改修版の300+0秒CPU完走回帰は、雀魂の専用セッションが利用可能になってから実施する。
+
+## fb0de0aの銅の間・四人東（無効：期限超過と終局後遷移漏れ）
+
+- 使用コードは `fb0de0a`。実行は `node scripts/run-operator.mjs force-auto --layout=config/layout-300-regression.json --artifacts=artifacts/ranked-fb0de0a-recovery-20261002 --ranked-loop --force-auto-click-budget-ms=2600 --board-metadata --no-dashboard`。300+0秒CPU友人戦の回帰ではなく、段位戦用の短時間設定として分離して記録する。開始時には既存の銅の間・四人東対局が東3局で離席自動ツモ切り画面になっており、操作者が未実行であることを確認してから再開・復旧した。
+- 東3局では自家19500点・残21枚から、チー候補を戦略上パスと判定した。一方、反応評価は `detectionToDecisionMs=13783--14674`、通常打牌は `5440--6006`msなど、5秒期限を超えて `action_deadline_expired`／`action_aborted` となった。東4局でも同種の安全中止が継続し、離席復帰を2回記録した。盤面画像・状態メタデータ・判断・操作ログを照合すると、牌の誤クリックではなく、盤面認識・評価のレイテンシが段位戦期限を越えたことが直接原因である。
+- 終局画面は自家「テストjev」10200点・4位（-29pt）、他家42900/29000/17900点。証拠は `artifacts/ranked-fb0de0a-recovery-20261002/frames/2026-10-02T07-42-26.438849+00-00.match_result.png`。自動打牌を伴うため、この順位は勝率改善の有効標本に含めない。
+- `match_result`を07:42:26Zに観測して結果を添付・画面遷移した後、操作者は検証済みの段位画面を経ずに`matchmaking`として約3時間ポーリングを続け、長時間無操作による接続切断モーダルへ至った。終局画面、`match_result`ログ、後続の`screen_state_bypassed`、切断モーダルを照合して遷移認識漏れと確定した。操作者を停止した。
+- 後続修正では、ranked-loopが結果画面を観測した後に、検証済みのlobby/ranked_menu/ranked_roomを経ず`matchmaking`へ移った場合は安全停止する。新規起動時の正当な予約待ちは維持する。関連単体テスト（`test_auto_operator.py` 140成功・33 skip、`test_board_metadata.py` 17成功）を通過した。修正後は先に300+0秒CPU友人戦を完走回帰し、段位戦評価と混同しない。

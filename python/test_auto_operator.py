@@ -2967,6 +2967,45 @@ class AwayDialogDetectionTest(unittest.TestCase):
         self.assertIsNone(operator.result_screen_advanced)
         self.assertEqual(page.mouse.click.call_count, 2)
 
+    def test_ranked_result_to_unverified_matchmaking_requests_safe_stop(self) -> None:
+        """A result/disconnect transition cannot become an endless reservation poll."""
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(ranked_loop=True, advance_screens=False)
+        operator.layout = {"viewport": {"width": 1920, "height": 1080}}
+        operator.result_screen_advanced = "match_result"
+        operator.ranked_terminal_transition_pending = True
+        operator.ranked_terminal_transition_stop_requested = False
+        operator.log = Mock()
+        page = Mock()
+
+        self.assertTrue(operator.handle_early_non_gameplay_screen(page, "matchmaking", 1.0))
+        self.assertTrue(operator.ranked_terminal_transition_stop_requested)
+        page.mouse.click.assert_not_called()
+        operator.log.assert_called_once_with(
+            "ranked_terminal_transition_stop", state="matchmaking",
+            confidence=1.0, gameplayClicks=0,
+            reason="result_transition_missing_verified_ranked_navigation",
+        )
+
+    def test_ranked_matchmaking_without_prior_result_remains_a_valid_reservation(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(ranked_loop=True, advance_screens=False)
+        operator.layout = {"viewport": {"width": 1920, "height": 1080}}
+        operator.result_screen_advanced = None
+        operator.ranked_terminal_transition_pending = False
+        operator.ranked_terminal_transition_stop_requested = False
+        operator.last_ranked_loop_state = None
+        operator.last_ranked_loop_click_at = 0.0
+        operator.log = Mock()
+        page = Mock()
+
+        self.assertTrue(operator.handle_early_non_gameplay_screen(page, "matchmaking", 1.0))
+        self.assertFalse(operator.ranked_terminal_transition_stop_requested)
+        page.mouse.click.assert_not_called()
+        operator.log.assert_called_once_with(
+            "screen_state_bypassed", state="matchmaking", confidence=1.0, gameplayClicks=0,
+        )
+
     def test_compact_hand_requires_a_previously_observed_call(self) -> None:
         self.assertTrue(PythonAutoOperator.compact_hand_is_proven(0, False))
         self.assertTrue(PythonAutoOperator.compact_hand_is_proven(1, True))

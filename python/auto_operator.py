@@ -858,6 +858,12 @@ class PythonAutoOperator:
         self.closed_new_round_candidate_frames: set[str] = set()
         self.round_terminal_latched = False
         self.round_terminal_result_observed = False
+        # A result overlay may animate into a dark ranked screen that the
+        # generic classifier also recognizes as matchmaking.  Do not let a
+        # ranked loop treat that ambiguous first transition as proof that a
+        # fresh reservation is live.
+        self.ranked_terminal_transition_pending = False
+        self.ranked_terminal_transition_stop_requested = False
         self.last_ranked_loop_state: str | None = None
         self.last_ranked_loop_click_at = 0.0
         self.result_screen_advanced: str | None = None
@@ -1494,6 +1500,22 @@ class PythonAutoOperator:
         self.log("screen_advanced", state=state, confidence=confidence, clickPoint=point)
         return True
 
+    def ranked_terminal_transition_requires_stop(self, state: str) -> bool:
+        """Fail closed when a result immediately becomes only ``matchmaking``.
+
+        A verified result must return through a separately classified lobby,
+        room-selection screen, or ranked-room screen before a ranked loop can
+        trust a reservation again.  This prevents an unrecognized result
+        transition or disconnect modal from being polled as matchmaking for
+        hours.  A newly started operator has no pending result and may still
+        safely observe a real existing reservation.
+        """
+        return bool(
+            getattr(self.args, "ranked_loop", False)
+            and getattr(self, "ranked_terminal_transition_pending", False)
+            and state == "matchmaking"
+        )
+
     def handle_early_non_gameplay_screen(self, page: Page, state: str, confidence: float,
                                        screenshot: bytes | None = None) -> bool:
         """Handle verified non-gameplay screens before latency quick gates."""
@@ -1524,10 +1546,24 @@ class PythonAutoOperator:
             self.pending_post_call_started_at = None
             self.round_terminal_latched = True
             self.round_terminal_result_observed = True
+            if self.args.ranked_loop:
+                self.ranked_terminal_transition_pending = True
             if self.args.advance_screens or self.args.ranked_loop:
                 self.advance_result_screen_once(page, state, confidence)
             return True
         if state in {"lobby", "ranked_menu", "ranked_room", "matchmaking"}:
+            if self.ranked_terminal_transition_requires_stop(state):
+                self.ranked_terminal_transition_stop_requested = True
+                self.log(
+                    "ranked_terminal_transition_stop", state=state,
+                    confidence=confidence, gameplayClicks=0,
+                    reason="result_transition_missing_verified_ranked_navigation",
+                )
+                return True
+            if state in {"lobby", "ranked_menu", "ranked_room"} \
+                    and getattr(self, "ranked_terminal_transition_pending", False):
+                self.ranked_terminal_transition_pending = False
+                self.log("ranked_terminal_reentry_verified", state=state, confidence=confidence)
             self.result_screen_advanced = None
             if not self.advance_ranked_loop(page, state, confidence):
                 self.log("screen_state_bypassed", state=state,
@@ -2665,6 +2701,8 @@ class PythonAutoOperator:
                     if self.handle_early_non_gameplay_screen(
                         page, early_state, early_confidence, gate_frame,
                     ):
+                        if getattr(self, "ranked_terminal_transition_stop_requested", False):
+                            return
                         page.wait_for_timeout(max(20, round(self.args.poll * 1000)))
                         continue
                     gameplay_reactions_allowed = early_state == "match"
@@ -2836,6 +2874,8 @@ class PythonAutoOperator:
                     self.last_shanten = None
                     self.last_processed_hand = None
                     self.armed = True
+                    if self.args.ranked_loop:
+                        self.ranked_terminal_transition_pending = True
                     if screen_state not in {"rank_progress", "post_match_reward"}:
                         self.attach_outcome("match" if screen_state == "match_result" else "round", full_screen, screen_confidence)
                     # A friend functional/regression run has no automated
@@ -2845,12 +2885,19 @@ class PythonAutoOperator:
                     if self.should_stop_after_match_result(screen_state):
                         self.log("match_completed_stop", confidence=screen_confidence)
                         return
-                    if self.args.advance_screens:
+                    if self.args.advance_screens or self.args.ranked_loop:
                         self.advance_result_screen_once(page, screen_state, screen_confidence)
                         time.sleep(self.args.poll)
                         continue
                 else:
                     self.result_screen_advanced = None
+                if self.ranked_terminal_transition_requires_stop(screen_state):
+                    self.log(
+                        "ranked_terminal_transition_stop", state=screen_state,
+                        confidence=screen_confidence, gameplayClicks=0,
+                        reason="result_transition_missing_verified_ranked_navigation",
+                    )
+                    return
                 if getattr(self, "round_terminal_latched", False):
                     if getattr(self, "round_terminal_result_observed", False) and screen_state == "match" \
                             and closed_concealed_row_visible(full_screen, self.layout):
