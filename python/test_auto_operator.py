@@ -787,15 +787,15 @@ class AwayDialogDetectionTest(unittest.TestCase):
         operator.log = Mock()
         observed = {"ownDiscards": ["1m", "2p"], "opponentDiscards": []}
 
-        # The gate applies before the first asynchronous scan too: otherwise a
-        # second self turn can be clicked while the first discard is still
-        # unverified, and both additions later look like one bad append.
-        self.assertTrue(operator.own_discard_reconciliation_pending())
+        # A click with no observed river candidate must not consume the whole
+        # game timer if its visual post-click confirmation was false.
+        self.assertFalse(operator.own_discard_reconciliation_pending())
 
         operator.public_recognition_result = {"generation": 3, "result": observed}
         operator.poll_public_recognition()
         self.assertEqual(operator.cached_public_observation["ownDiscards"], ["1m"])
         self.assertEqual(operator.pending_own_river_confirmation, ["1m", "2p"])
+        self.assertTrue(operator.own_discard_reconciliation_pending())
         self.assertTrue(any(call.args[0] == "public_own_river_append_pending"
                             for call in operator.log.call_args_list))
 

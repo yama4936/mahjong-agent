@@ -1849,12 +1849,17 @@ class PythonAutoOperator:
     def own_discard_reconciliation_pending(self) -> bool:
         """Whether another discard would outrun independent river evidence.
 
-        A pending candidate is not the only unsafe state: immediately after a
-        click the public worker may not yet have returned its *first* scan.
-        Starting a later self turn in that interval permits two additions to
-        accumulate before either one can be checked as a single append.
+        Only an observed candidate can block a later self turn.  A pending
+        click without a candidate may be a false post-click confirmation; in
+        that state waiting for the river can consume the entire 300-second
+        game timer and turn the eventual automatic discard into fake evidence.
+        Once a candidate exists, however, a later discard could make two
+        additions indistinguishable from one bad append.
         """
-        return getattr(self, "pending_own_discard", None) is not None
+        return bool(
+            getattr(self, "pending_own_discard", None)
+            and getattr(self, "pending_own_river_confirmation", None) is not None
+        )
 
     def force_auto_reaction_fallback(
         self, screenshot: Path, *, contextual_prompt_verified: bool = False,
@@ -3093,11 +3098,13 @@ class PythonAutoOperator:
                 if public_observation and self.args.mode != "force-auto":
                     self.previous_public_observation = public_observation
                 if self.args.mode == "force-auto" and self.own_discard_reconciliation_pending():
-                    # A post-click river snapshot is independent evidence for
-                    # the concealed-hand cache.  With the 300+0 regression
-                    # deadline there is ample time to require it before any
-                    # subsequent discard; otherwise two self turns can be
-                    # folded into one observed river append.
+                    # A candidate post-click river snapshot is independent
+                    # evidence for the concealed-hand cache.  Require its
+                    # second observation before a subsequent discard, so two
+                    # self turns cannot be folded into one append.  Do not
+                    # block merely for a pending click with no observed
+                    # candidate: a false confirmation otherwise waits through
+                    # the game's entire 300-second timer.
                     pending = self.pending_own_discard
                     self.schedule_public_recognition(evaluation_frame, force=True)
                     if not pending.get("reconciliationWaitLogged"):
