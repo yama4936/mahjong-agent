@@ -562,3 +562,17 @@
 - 実行は `node scripts/run-operator.mjs force-auto --layout=config/layout-300-regression.json --artifacts=artifacts/ranked-251ad86-copper-east-20261003 --ranked-loop --action-deadline-ms=300000 --force-auto-click-budget-ms=2600 --board-metadata --no-dashboard`。CPU友人戦の8000msを流用せず、段位戦用2600msと明示的な300000ms deadlineを用いた。
 - 終局画面 `artifacts/live/ranked-251ad86-terminal-20261003.png` は自家「テストjev」13400点・4位・-26pt、他家36300/34200/16100点を示す。対局ログは129打牌判断・130操作、記録済み期限超過0、クリック前の`action_aborted`2件は未クリックの再観測後に復帰した。離席自動ツモ切り、`safety_stop`、期限切れは0件であり、この4位は段位戦の有効な成績標本としてCPU結果とは分離して扱う。
 - `own_discard_mismatch`は23件、`own_discard_reconciliation_failed`も存在した。各事象では公開河キャッシュを隔離し、直ちに物理クリック誤りとは結論しない。終局遷移ではゲームがmatchmakingへ移ったことを検出して`ranked_terminal_transition_stop`となったが、直後の実画面で結果を確認した。結果画面を安定して保存する遷移は、次回の修正・回帰対象とする。
+
+## 3bf0e37の銅の間・四人南（有効標本、4位）と終局遷移の診断
+
+- 銅の間・四人南を `node scripts/run-operator.mjs force-auto --layout=config/layout-300-regression.json --artifacts=artifacts/ranked-3bf0e37-copper-south-20261003 --ranked-loop --action-deadline-ms=300000 --force-auto-click-budget-ms=2600 --board-metadata --no-dashboard` で実行した。CPU友人戦とは別の段位戦用2600ms設定で、期限は全記録で300000ms、期限超過0だった。
+- 実画面の最終結果は `artifacts/live/ranked-3bf0e37-terminal-2-20261003.png` に保存した。自家「テストjev」は18400点・4位・-21pt、他家は30700/28600/22300点。離席自動ツモ切り、`safety_stop`、期限超過は0であるため、この4位は段位戦の有効標本であり、CPU回帰結果には含めない。
+- 36判断・36通常打牌、13反応操作を記録した。公開河の `own_discard_mismatch` 8件と `own_discard_reconciliation_failed` 9件は、直前の実行レシート（選択牌・手牌index・クリック座標）と突合して、評価／実クリックとも期待牌で一致し、公開河OCRだけが別牌を返した事象だった。物理誤クリックの証拠にはしない。
+- 東2・東3局の結果画面を確認後、暗転フレームを`lobby`と誤認して一時的に`ranked_terminal_reentry_verified`とした。最終結果では`matchmaking`を観測し、`ranked_terminal_transition_stop`で安全停止した。終了時の実画面は結果画面であり、停止は正当だった。
+
+## f997003の終局遷移保護修正と300+0秒CPU回帰（完走、2位）
+
+- 上記の実戦フレームに基づき、`lobby`単独では結果遷移保護を解除せず、`ranked_menu`または`ranked_room`を観測して初めて再入場を確認するよう修正した。ユニットテストには、lobby風の暗転では保護を維持し、その後のランクメニューでのみ解除する回帰を追加した。`PYTHONPATH=python .runtime/python-auto-venv/bin/python -m unittest python/test_auto_operator.py` は151件成功・33件skip。コミット`f997003`をpush済み。
+- 友人戦部屋75005は四人CPU戦（一局戦）・300+0秒、開始25000点、返し30000点、飛び有効、赤ドラ3、ローカル役無効、喰い断有効、一翻縛り、便利表示有効。設定の証跡は `artifacts/live/f997003-friend-300-settings-20261003.png`。実行は `node scripts/run-operator.mjs force-auto --layout=config/layout-300-regression.json --artifacts=artifacts/friend-300-f997003-room75005-20261003 --action-deadline-ms=300000 --force-auto-click-budget-ms=8000 --board-metadata --advance-screens --no-dashboard`。対局中にコード・設定は変更していない。
+- 29打牌判断・29通常操作・13反応操作で完走し、`match_completed_stop`で意図どおり停止した。`own_discard_mismatch`、`own_discard_reconciliation_failed`、`action_aborted`、`safety_stop`、期限超過はすべて0。結果画面は `artifacts/friend-300-f997003-room75005-20261003/frames/2026-10-02T22-56-58.036762+00-00.match_result.png`、自家「テストjev」は25000点・2位、CPUは31000/23000/23000点だった。
+- この結果は終局遷移保護と牌・状態・操作経路のCPU機能回帰であり、段位戦の勝率評価や上記の銅の間2局の成績とは明確に分離する。
