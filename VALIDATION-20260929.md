@@ -534,4 +534,11 @@
 - `match_completed_stop confidence=1.0`で完走したが、これは不一致が残った原因調査用のCPU回帰であり、成績を勝率改善根拠には使わない。副露後の19:54:52Zフレーム `frames/2026-10-02T19-54-52.522704+00-00.jpg` では、独立したツモ牌スロット（clickIndex 10, x=1217.5）に実際は`8p`がある。認識は同スロットを`1m`と返し、confidence=0.60364、ambiguityMargin=0.00283、safe=falseだった。クリック後の二重公開河観測は`8p`を確認し、`expected=1m / actual=8p`を記録した。
 - これは座標ずれや公開河遅延ではない。副露後の持ち上がった／独立ツモ牌の低信頼誤認をforce-autoが意図牌として使用したことが原因である。したがって次の修正対象は、safe=falseかつ極小余裕の独立ツモ牌を、通常手牌と同じ確定牌として戦略評価・クリック対象にしないことである。
 - CPU友人戦は機能確認であり、この試行の順位・結果を段位戦の勝率評価と混同しない。
+
+## b608021 / 01729d5の副露後ツモ牌保護試行（無効）と復旧確認
+
+- `b608021` は低信頼・曖昧な独立ツモ牌を直接force-auto打牌しない保護を追加した（Python 150成功・33 skip）。部屋12817の同一300+0 CPU戦で、保護自体は発火したが、同じフレームを31回以上再試行して局時計を消費した。操作者を停止したため、この試行は結果・勝率・CPU回帰成績から除外する。
+- `01729d5` は、独立ツモ牌が曖昧な場合、評価候補から確実に認識された副露後の既存手牌を選び直す代替打牌へ変更した（Python 151成功・33 skip）。先行試行で操作者を停止した対局へ復旧実行したため、順位・点数は回帰成績に含めない。実行は `node scripts/run-operator.mjs force-auto --layout=config/layout-300-regression.json --artifacts=artifacts/friend-300-01729d5-room12817-recovery-20261003 --action-deadline-ms=300000 --force-auto-click-budget-ms=8000 --board-metadata --advance-screens --no-dashboard`。
+- 復旧後は `ambiguous_open_draw_fallback` が2回発火し、無限再試行・`action_aborted`は0。32判断はすべて300000ms期限内で、`match_completed_stop confidence=1.0`により終局した。公開河不一致2件は停止前の非同期状態を引き継いだためで、座標誤りの根拠にはしない。終局画像は `artifacts/friend-300-01729d5-room12817-recovery-20261003/frames/2026-10-02T20-21-25.778306+00-00.match_result.png`。
+- 次の評価は、終了済みの新規部屋から`01729d5`以降のクリーンな300+0 CPU回帰として開始し、CPU機能結果と段位戦成績を分離する。
 - 打牌25件と反応3件はすべて `deadlineMs=300000`、`deadlineMet=true`（打牌最大 `evidenceToClickMs=11565`、反応最大12691）。`action_aborted`、`safety_stop`、期限超過、`screen_loss_stop` は0件。前回の低信頼度ラウンド画面も経由したが、最終 `match_result` を確定検出して `match_completed_stop confidence=1.0` で停止した。自己河不一致は期待E→観測Cの1件で公開キャッシュを隔離した。safe=true誤認の証拠ではなく、以後の打牌は継続・照合されている。
