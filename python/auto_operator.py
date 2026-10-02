@@ -850,6 +850,12 @@ class PythonAutoOperator:
         self.screencast_draw_occupied: bool | None = None
         self.screencast_draw_generation = 0
         self.rejected_screencast_size: tuple[int, int] | None = None
+        # A full-width but shorter stream is not a transient tile animation:
+        # it means the browser viewport has been replaced or resized.  Keep a
+        # separate latch so the run loop can stop before it interprets a
+        # non-game page as a compact/open hand.
+        self.rejected_viewport_frame_streak = 0
+        self.screen_loss_stop_requested = False
         self.pending_post_call_discard = False
         self.pending_post_call_started_at: float | None = None
         self.restart_open_hand_probe_hash: str | None = None
@@ -1159,8 +1165,26 @@ class PythonAutoOperator:
             if actual != self.rejected_screencast_size:
                 self.log("screencast_frame_rejected", expected=list(expected), actual=list(actual))
                 self.rejected_screencast_size = actual
+            # CDP can interleave tiny iframe/thumbnail captures with the
+            # top-level stream.  Count only repeated full-width frames whose
+            # height no longer matches the calibrated table viewport.  Three
+            # such frames without a calibrated frame in between is evidence
+            # that the table has been lost, not a momentary stream hiccup.
+            if actual[0] == expected[0] and actual[1] > 0:
+                self.rejected_viewport_frame_streak = \
+                    getattr(self, "rejected_viewport_frame_streak", 0) + 1
+                if self.rejected_viewport_frame_streak >= 3 \
+                        and not getattr(self, "screen_loss_stop_requested", False):
+                    self.screen_loss_stop_requested = True
+                    self.log(
+                        "screen_loss_stop", expected=list(expected), actual=list(actual),
+                        rejectedViewportFrames=self.rejected_viewport_frame_streak,
+                        gameplayClicks=0,
+                        reason="repeated_full_width_screencast_dimension_mismatch",
+                    )
             return False
         self.rejected_screencast_size = None
+        self.rejected_viewport_frame_streak = 0
         self.latest_screencast_frame = frame
         draw_slot = self.layout.get("drawSlot")
         if draw_slot:
@@ -2657,6 +2681,12 @@ class PythonAutoOperator:
             if self.args.max_iterations and iterations > self.args.max_iterations:
                 return
             try:
+                if getattr(self, "screen_loss_stop_requested", False):
+                    # The CDP callback has already established that the
+                    # calibrated game viewport disappeared.  Return rather
+                    # than allowing force-auto's unknown-screen bypass to
+                    # run hand geometry on a different browser tab.
+                    return
                 self.poll_public_recognition()
                 # Force-auto quick/exact gates consume the newest completed
                 # public snapshot. Establish it before either branch; the

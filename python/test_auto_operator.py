@@ -11,7 +11,7 @@ import json
 import time
 import threading
 from datetime import datetime, timezone
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 from auto_operator import PythonAutoOperator, RetryableSafetyAbort, action_deadline_timing, away_resume_geometry, closed_concealed_row_visible, confirmed_call_meld, crop_screenshot, discard_point_in_hand_geometry, force_auto_call_buttons, force_auto_chi_choice_points, force_auto_reaction_win_button, force_auto_self_action_buttons, geometric_open_meld_count, is_away_resume_dialog, is_contextual_reaction_pass, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, mean_pixel_delta, merge_public_observations, open_hand_draw_slot, own_meld_surface_visible, post_call_transition, retreat_pointer_from_hand, selected_chi_choice_point, selected_tile_comparison_region, send_discard_click, should_guard_tenpai_reaction, should_process_reaction_prompt, should_retry_call_policy, stable_hand_comparison_region, stable_hand_delta
 from screen_state import classify_screen, load_references
@@ -571,6 +571,74 @@ class AwayDialogDetectionTest(unittest.TestCase):
         operator.log.assert_called_once_with(
             "screencast_frame_rejected", expected=[1920, 1080], actual=[1058, 1080],
         )
+
+    def test_screencast_repeated_full_width_resize_requests_screen_loss_stop(self) -> None:
+        """A replaced tab must not be treated as an open hand indefinitely."""
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.layout = {
+            "viewport": {"width": 1920, "height": 1080},
+            "drawSlot": {"x": 1600, "y": 900, "width": 100, "height": 100},
+        }
+        operator.latest_screencast_frame = b"stale calibrated frame"
+        operator.screencast_sequence = 0
+        operator.screencast_draw_occupied = True
+        operator.screencast_draw_generation = 0
+        operator.rejected_screencast_size = None
+        operator.rejected_viewport_frame_streak = 0
+        operator.screen_loss_stop_requested = False
+        operator.log = Mock()
+        resized = io.BytesIO()
+        Image.new("RGB", (1920, 733), "white").save(resized, format="JPEG")
+
+        for _ in range(3):
+            self.assertFalse(operator.accept_screencast_frame(resized.getvalue()))
+
+        self.assertTrue(operator.screen_loss_stop_requested)
+        self.assertEqual(operator.rejected_viewport_frame_streak, 3)
+        self.assertIsNone(operator.latest_screencast_frame)
+        self.assertEqual(operator.log.call_args_list[-1], call(
+            "screen_loss_stop", expected=[1920, 1080], actual=[1920, 733],
+            rejectedViewportFrames=3, gameplayClicks=0,
+            reason="repeated_full_width_screencast_dimension_mismatch",
+        ))
+
+    def test_screencast_calibrated_frame_clears_pending_screen_loss_streak(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.layout = {
+            "viewport": {"width": 1920, "height": 1080},
+            "drawSlot": {"x": 1600, "y": 900, "width": 100, "height": 100},
+        }
+        operator.latest_screencast_frame = None
+        operator.screencast_sequence = 0
+        operator.screencast_draw_occupied = None
+        operator.screencast_draw_generation = 0
+        operator.rejected_screencast_size = (1920, 733)
+        operator.rejected_viewport_frame_streak = 2
+        operator.screen_loss_stop_requested = False
+        operator.log = Mock()
+        calibrated = io.BytesIO()
+        Image.new("RGB", (1920, 1080), "white").save(calibrated, format="JPEG")
+
+        self.assertTrue(operator.accept_screencast_frame(calibrated.getvalue()))
+
+        self.assertEqual(operator.rejected_viewport_frame_streak, 0)
+        self.assertFalse(operator.screen_loss_stop_requested)
+
+    def test_run_returns_before_gameplay_after_screen_loss_is_latched(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(mode="observer", max_iterations=0)
+        operator.screen_loss_stop_requested = True
+        operator.screencast_session = None
+        operator.ensure_viewport = Mock()
+        operator.start_screencast_gate = Mock()
+        operator.poll_public_recognition = Mock()
+        operator.log = Mock()
+        page = Mock()
+        page.url = "https://mahjongsoul.game.yo-star.com/"
+
+        operator.run(page)
+
+        operator.poll_public_recognition.assert_not_called()
 
     def test_screencast_accepts_calibrated_frame_after_resize(self) -> None:
         operator = PythonAutoOperator.__new__(PythonAutoOperator)

@@ -440,3 +440,10 @@
 - 終局画面は自家「テストjev」10200点・4位（-29pt）、他家42900/29000/17900点。証拠は `artifacts/ranked-fb0de0a-recovery-20261002/frames/2026-10-02T07-42-26.438849+00-00.match_result.png`。自動打牌を伴うため、この順位は勝率改善の有効標本に含めない。
 - `match_result`を07:42:26Zに観測して結果を添付・画面遷移した後、操作者は検証済みの段位画面を経ずに`matchmaking`として約3時間ポーリングを続け、長時間無操作による接続切断モーダルへ至った。終局画面、`match_result`ログ、後続の`screen_state_bypassed`、切断モーダルを照合して遷移認識漏れと確定した。操作者を停止した。
 - 後続修正では、ranked-loopが結果画面を観測した後に、検証済みのlobby/ranked_menu/ranked_roomを経ず`matchmaking`へ移った場合は安全停止する。新規起動時の正当な予約待ちは維持する。関連単体テスト（`test_auto_operator.py` 140成功・33 skip、`test_board_metadata.py` 17成功）を通過した。修正後は先に300+0秒CPU友人戦を完走回帰し、段位戦評価と混同しない。
+
+## a9ac400の300+0秒CPU回帰（無効：雀魂タブの置換）
+
+- 友人戦部屋65400。四人南・300+0秒・簡単CPU3人、開始25000点、返し30000点、飛び有効、赤ドラ3、ローカル役無効、喰い断有効、一翻縛り、便利表示有効を部屋画面 `artifacts/live/300-a9ac400-room65400-ready-20261002.png` で確認した。使用コードはpush済み `a9ac400`。実行は `node scripts/run-operator.mjs force-auto --layout=config/layout-300-regression.json --artifacts=artifacts/friend-300-a9ac400-room65400-20261002 --action-deadline-ms=300000 --force-auto-click-budget-ms=8000 --board-metadata --advance-screens --no-dashboard`。開始後はコード・設定を変更していない。
+- 東1局・全員25000点・残66枚から始まり、少なくとも10判断を記録した。各記録済み打牌は `deadlineMs=300000` と `deadlineMet=true` で、期限超過、`safety_stop`、`action_aborted`、`own_discard_mismatch` はいずれも0件だった。自河は `public_own_river_append_confirmed` と `own_discard_reconciled` で追従した。チー候補は河の提示フレームを検証できなかったため `reaction_call_policy_rejected` とし、passを選んだ。
+- 11:01:29Zに操作者の画面取得が期待1920x1080から1920x733へ変化し、`screencast_frame_rejected` を記録した。CDPの唯一のタブは雀魂ではなく `Ticket Observatory` で、後続フレーム `frames/2026-10-02T11-02-48.351179+00-00.png` は黒画面、ログは `screen_state_bypassed state=unknown` と `open_hand_geometry_gate` の反復だけになった。画像、CDPタブ、操作ログを照合して、手牌認識・判断・クリックの失敗ではなく、雀魂タブが置換されて操作者が対局画面を失ったことまでを確定した。
+- 11:03:02Zに操作者を停止した。`match_result` はなく、終局順位・点数・CPU回帰成績・段位戦勝率には含めない。次の修正では、許容されない画面寸法又は雀魂以外のページが連続したとき、未知画面を無限反復せず明示的な安全停止にする。その単体テスト後、雀魂専用タブが維持される環境で同一300+0秒CPU回帰をやり直す。
