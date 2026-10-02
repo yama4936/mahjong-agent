@@ -2601,6 +2601,10 @@ class PythonAutoOperator:
         return {
             "clicked": True,
             "policy": "force_auto" if force_auto else "certified_auto" if certified_auto else "local_discard_only",
+            # The physical discard can differ from the evaluator's selection
+            # when an ambiguous independent draw slot is replaced with a
+            # compact-row fallback.  Later reconciliation must use this one.
+            "discardedTile": selected.get("tile") if selected_action in {"discard", "riichi"} else None,
             "clickIndex": click_index,
             "clickPoint": point,
             "clickedAt": clicked_at,
@@ -3552,8 +3556,10 @@ class PythonAutoOperator:
                     self.pending_post_call_discard = False
                     self.pending_post_call_started_at = None
                     recognized_tiles = evaluation.get("recognition", {}).get("tiles", [])
-                    click_index = evaluation.get("clickIndex")
-                    discarded_tile = evaluation.get("decision", {}).get("selectedAction", {}).get("tile")
+                    # A force-auto open-draw fallback can change both the tile
+                    # and its physical index after evaluation.
+                    click_index = receipt.get("clickIndex", evaluation.get("clickIndex"))
+                    discarded_tile = receipt.get("discardedTile") or evaluation.get("decision", {}).get("selectedAction", {}).get("tile")
                     if discarded_tile:
                         self.pending_own_discard = {
                             "tile": discarded_tile,
