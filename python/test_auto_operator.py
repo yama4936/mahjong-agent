@@ -13,7 +13,7 @@ import threading
 from datetime import datetime, timezone
 from unittest.mock import Mock, call, patch
 
-from auto_operator import PythonAutoOperator, RetryableSafetyAbort, action_deadline_timing, away_resume_geometry, closed_concealed_row_visible, confirmed_call_meld, crop_screenshot, discard_point_in_hand_geometry, force_auto_call_buttons, force_auto_chi_choice_points, force_auto_reaction_win_button, force_auto_self_action_buttons, geometric_open_meld_count, is_away_resume_dialog, is_contextual_reaction_pass, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, mean_pixel_delta, merge_public_observations, open_hand_draw_slot, own_meld_surface_visible, post_call_transition, retreat_pointer_from_hand, selected_chi_choice_point, selected_tile_comparison_region, send_discard_click, should_guard_tenpai_reaction, should_process_reaction_prompt, should_retry_call_policy, stable_hand_comparison_region, stable_hand_delta
+from auto_operator import PythonAutoOperator, RetryableSafetyAbort, action_deadline_timing, away_resume_geometry, closed_concealed_row_visible, confirmed_call_meld, crop_screenshot, discard_point_in_hand_geometry, force_auto_call_buttons, force_auto_chi_choice_points, force_auto_reaction_win_button, force_auto_self_action_buttons, geometric_open_meld_count, is_away_resume_dialog, is_contextual_reaction_pass, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, mean_pixel_delta, merge_public_observations, open_hand_draw_slot, own_meld_surface_visible, post_call_transition, retreat_pointer_from_hand, selected_chi_choice_point, selected_tile_comparison_region, send_discard_click, should_guard_tenpai_reaction, should_process_reaction_prompt, should_retry_call_policy, stable_hand_comparison_region, stable_hand_delta, tile_face_structure_delta
 from screen_state import classify_screen, load_references
 from auto_operator import geometric_reaction_open_meld_count
 from auto_operator import configure_evaluator_click_budget
@@ -2412,6 +2412,39 @@ class AwayDialogDetectionTest(unittest.TestCase):
         self.assertTrue(receipt["clicked"])
         self.assertLess(time.monotonic() - started, 5.0)
         page.mouse.click.assert_called_once_with(268.5, 999.5, click_count=2, delay=80)
+
+    def test_closed_hand_relighting_uses_glyph_structure(self) -> None:
+        """A live East-2 retry must not turn static tile faces into a stale turn.
+
+        The paired frames are from the same 14-tile closed hand in the 300+0
+        CPU regression.  RGB changes from Mahjong Soul's row relighting,
+        whereas the tile glyphs did not change.  This is the false abort that
+        previously repeated until a later fresh recognition happened to pass.
+        """
+        project = Path(__file__).resolve().parents[1]
+        frames = project / "artifacts" / "friend-300-038767b-room61662-20261003" / "frames"
+        evaluated_full = (frames / "2026-10-02T17-59-05.837878+00-00.jpg").read_bytes()
+        current_full = (frames / "2026-10-02T17-59-09.206336+00-00.identity.jpg").read_bytes()
+        layout = load_json(project / "config" / "layout-300-regression.json")
+        stable_region = stable_hand_comparison_region(layout, 0)
+        self.assertIsNotNone(stable_region)
+        evaluated_faces = crop_screenshot(evaluated_full, stable_region)
+        current_faces = crop_screenshot(current_full, stable_region)
+
+        self.assertGreater(mean_pixel_delta(evaluated_faces, current_faces), 1.5)
+        self.assertLess(stable_hand_delta(evaluated_faces, current_faces, 0), 1.5)
+
+        # A real face substitution remains well beyond the same guard.  The
+        # adjacent 6p/7p faces in this hand are deliberately compared at the
+        # same tile ROI dimensions rather than relying on a synthetic image.
+        slots = layout["handSlots"]
+        def face(index):
+            slot = slots[index]
+            return crop_screenshot(evaluated_full, {
+                "x": slot["x"] + 10, "y": slot["y"] + 10,
+                "width": slot["width"] - 20, "height": slot["height"] - 38,
+            })
+        self.assertGreater(tile_face_structure_delta(face(7), face(8)), 1.5)
 
     def test_two_meld_post_pon_sequence_discards_before_calibrated_fallback(self) -> None:
         project = Path(__file__).resolve().parents[1]

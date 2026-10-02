@@ -120,10 +120,16 @@ def tile_face_structure_delta(first: bytes, second: bytes, threshold: int = 120)
 
 
 def stable_hand_delta(first: bytes, second: bytes, open_melds: int) -> float:
-    """Compare equivalent hand evidence, tolerating post-call relighting."""
-    if open_melds > 0:
-        return tile_face_structure_delta(first, second)
-    return mean_pixel_delta(first, second)
+    """Compare equivalent tile faces while ignoring non-semantic relighting.
+
+    Mahjong Soul can relight an otherwise unchanged closed row while an
+    opponent's discard/reaction animation completes.  That changed the RGB
+    average enough to make the force-auto pre-click guard repeatedly abort a
+    still-current draw.  The dark/light glyph structure is stable across that
+    effect and still changes materially when a tile face changes.  It is also
+    the comparison already used for compact post-call rows.
+    """
+    return tile_face_structure_delta(first, second)
 
 
 def crop_screenshot(screenshot: bytes, clip: dict[str, float]) -> bytes:
