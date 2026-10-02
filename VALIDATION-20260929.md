@@ -499,3 +499,10 @@
 - 残り山0枚の自家判断は東3・南1〜4の計5件で、各候補の `winProbability=0`、`tenpaiProbability=0` を確認した。従って「残り山0枚でも将来和了確率を評価する」問題はこの実機回帰では再発しなかった。
 - 自河の `own_discard_mismatch` は9件、`own_discard_reconciliation_failed` は13件だった。ログ・手牌認識・河画像を照合すると、9件はすべて直前の認識が `safe=false`（confidence 0.644〜0.833）の force-auto打牌であり、`safe=true` の誤認識は0件。代表例は選択1mに対して安定後の河が9pとなったものだが、直前認識もsafe=falseだった。13件の失敗は隔離済みの未確認追加牌が次の打牌までに累積して `river_history_not_single_append` になった二次事象である。`own_discard_mismatch_cache_quarantined` が公開キャッシュを隔離できており、照合ロジック変更の根拠は得られなかった。force-autoのunsafe認識クリックは明示仕様のため、今回の証拠だけでは変更しない。
 - 終局を `match_result` として観測後、`match_completed_stop confidence=1.0` を記録して操作者は自動停止した。0点スコア修正、終局停止、副露・河整合性の実機経路を完走確認したが、今回の4位は簡単CPUに対する成績不振の追加標本である。段位戦への昇格判断には使用せず、勝率改善はより多い有効CPU標本と原因別の練習で継続する。
+
+## 038767bの銅の間・四人東（無効：先行安全停止後の離席自動ツモ切り）
+
+- 銅の間は実画面の先頭行（初心者・雀士）を選び、四人東を開始した。初回実行は `f68ad89`、`node scripts/run-operator.mjs force-auto --layout=config/layout-300-regression.json --artifacts=artifacts/ranked-f68ad89-copper-east-20261003 --ranked-loop --action-deadline-ms=300000 --force-auto-click-budget-ms=2600 --board-metadata --no-dashboard` であり、段位戦用の短時間クリック予算と明示した300000msの action deadline を使用した。開始直後のパスボタンがクリック前安定性確認中に変化し、クリックを送らず `safety_stop: pass button changed during pre-click stability check`（JSONL 212行目）で停止した。
+- この停止はボタン遷移の再観測として扱うべきであるため、`038767b` でパスボタンの同じ変化を `RetryableSafetyAbort` にして反応状態を再観測する修正と単体回帰を追加した。`python -m unittest test_auto_operator.py` は146件成功・33件skip、失敗0。コミット・push済みである。
+- 初回停止後はゲーム側の離席自動ツモ切りが発生した。したがって、復帰実行 `node scripts/run-operator.mjs force-auto --layout=config/layout-300-regression.json --artifacts=artifacts/ranked-038767b-copper-east-recovery-20261003 --ranked-loop --action-deadline-ms=300000 --force-auto-click-budget-ms=2600 --board-metadata --no-dashboard` は、修正済み動作の確認には使うが段位戦の勝率標本には含めない。`away_resumed` 後に南1局まで打牌・反応を継続し、記録済み action timing は300000ms期限内だった。結果後は検証済みの段位画面を経ず `matchmaking` へ遷移したことを検出し、`ranked_terminal_transition_stop` で停止した。
+- 復帰ログには `match_result` がなく、終局順位・点数の保存証跡もない。画像だけで敗因や順位を補わず、初回の自動ツモ切りと終局結果欠落のため、段位戦の成績評価から除外する。次の有効な段位戦前に、`038767b` の300+0秒・簡単CPU3名・四人南の完走回帰を行い、CPU結果と段位戦成績を分離して記録する。
