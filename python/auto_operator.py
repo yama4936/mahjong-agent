@@ -2550,7 +2550,15 @@ class PythonAutoOperator:
         before = page.screenshot(clip=button_clip, animations="disabled")
         page.wait_for_timeout(120)
         if mean_pixel_delta(before, page.screenshot(clip=button_clip, animations="disabled")) > self.args.stability_pixel_delta:
-            raise RuntimeError("pass button changed during pre-click stability check")
+            # A reaction prompt can be withdrawn while its button is being
+            # animated (for example when another player has already acted).
+            # No mouse event has been sent at this point.  Do not treat that
+            # benign UI transition as a terminal operator failure: return to
+            # the turn gate, which captures a fresh full frame and verifies
+            # the current hand/river before deciding whether a prompt remains.
+            raise RetryableSafetyAbort(
+                "pass button changed during pre-click stability check; reobserve reaction state"
+            )
         point = observed["center"]
         self.require_action_deadline()
         self.log("action_click_sent", action="pass", clickPoint=point,
@@ -3405,6 +3413,16 @@ class PythonAutoOperator:
                 if evaluation.get("status") == "reaction_prompt":
                     try:
                         receipt = self.execute_reaction_pass(page, evaluation)
+                    except RetryableSafetyAbort as error:
+                        # The pass affordance can disappear before any click.
+                        # Re-arm the turn gate so it re-observes the full
+                        # hand/river rather than treating the old prompt as a
+                        # completed (or failed) action.
+                        self.last_processed_hand = None
+                        self.armed = True
+                        self.log("reaction_pass_deferred", screenshot=str(screenshot_path), error=str(error))
+                        time.sleep(self.args.poll)
+                        continue
                     except Exception as error:
                         self.last_processed_hand = hand_hash
                         self.armed = False

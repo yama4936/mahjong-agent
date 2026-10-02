@@ -2806,6 +2806,31 @@ class AwayDialogDetectionTest(unittest.TestCase):
         self.assertEqual(receipt["policy"], "force_auto")
         page.mouse.click.assert_called_once_with(60, 40)
 
+    def test_reaction_pass_button_transition_retries_without_clicking(self) -> None:
+        """A withdrawn/animated prompt must be re-observed, never clicked."""
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(mode="force-auto", stability_pixel_delta=1.5)
+        operator.layout = {"actionButtonRegions": {"pass": {"x": 10, "y": 20, "width": 100, "height": 40}}}
+        operator.log = Mock()
+        operator.confirm_action_button = Mock()
+        page = Mock()
+        black = io.BytesIO()
+        white = io.BytesIO()
+        Image.new("RGB", (100, 40), "black").save(black, format="PNG")
+        Image.new("RGB", (100, 40), "white").save(white, format="PNG")
+        page.screenshot.side_effect = [black.getvalue(), white.getvalue()]
+        evaluation = {
+            "recognition": {"safe": False, "tiles": ["1m"] * 13},
+            "availableUiActions": ["pass"],
+            "actionButton": {"action": "pass", "present": True, "confidence": 1,
+                             "center": {"x": 60, "y": 40}},
+        }
+
+        with self.assertRaisesRegex(RetryableSafetyAbort, "pass button changed.*reobserve"):
+            operator.execute_reaction_pass(page, evaluation)
+        page.mouse.click.assert_not_called()
+        operator.confirm_action_button.assert_not_called()
+
     def test_successful_tsumo_arms_round_terminal_latch(self) -> None:
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
         operator.args = argparse.Namespace(mode="force-auto", allow_local_discard=False,
