@@ -214,6 +214,15 @@ class EvaluatorClickBudgetTest(unittest.TestCase):
         self.assertIsNone(operator.pending_own_discard)
         operator.log.assert_called_once_with("own_discard_reconciled", tile="W")
 
+    def test_pending_discard_uses_public_cache_not_stale_evaluation_river(self):
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.cached_public_observation = {"ownDiscards": ["W", "4p", "P"]}
+
+        baseline = operator.own_discard_baseline({"state": {"ownDiscards": ["W"]}})
+
+        self.assertEqual(baseline, ["W", "4p", "P"])
+        self.assertIsNot(baseline, operator.cached_public_observation["ownDiscards"])
+
     def test_default_preserves_environment_and_explicit_test_budget_is_bounded(self):
         environment = {"FORCE_AUTO_CLICK_BUDGET_MS": "2600", "OTHER": "unchanged"}
         self.assertIs(configure_evaluator_click_budget(environment, None, 5000), environment)

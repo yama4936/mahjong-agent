@@ -1940,6 +1940,22 @@ class PythonAutoOperator:
             self.log("own_discard_reconciled", tile=actual)
         self.pending_own_discard = None
 
+    def own_discard_baseline(self, evaluation: dict[str, Any]) -> list[str]:
+        """Return the river snapshot that the asynchronous verifier will extend.
+
+        A force-auto evaluation may carry an older, independently recognized
+        public state while the resident public-cache worker has already
+        observed additional own discards.  Comparing that old evaluation
+        snapshot to a later cache observation makes a single correct discard
+        look like a multi-tile jump.  The pending verifier must therefore use
+        the cache snapshot it will subsequently reconcile against.
+        """
+        cached = getattr(self, "cached_public_observation", None)
+        if isinstance(cached, dict) and isinstance(cached.get("ownDiscards"), list):
+            return list(cached["ownDiscards"])
+        state = evaluation.get("state", {})
+        return list(state.get("ownDiscards", []))
+
     def own_discard_reconciliation_pending(self) -> bool:
         """Whether another discard would outrun independent river evidence.
 
@@ -3485,7 +3501,7 @@ class PythonAutoOperator:
                     if discarded_tile:
                         self.pending_own_discard = {
                             "tile": discarded_tile,
-                            "before": list(evaluation.get("state", {}).get("ownDiscards", [])),
+                            "before": self.own_discard_baseline(evaluation),
                             "evidenceToClickMs": receipt.get("actionTiming", {}).get("evidenceToClickMs"),
                         }
                     if isinstance(click_index, int) and len(recognized_tiles) == 14:
