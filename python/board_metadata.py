@@ -31,8 +31,8 @@ def ocr_engine():
 
 
 def parse_board_tokens(tokens: list[dict], expected_total_points: int = 100000) -> dict:
-    def at(x: float, y: float, pattern: str):
-        matches = [item for item in tokens if item["confidence"] >= 0.98
+    def at(x: float, y: float, pattern: str, minimum_confidence: float = 0.98):
+        matches = [item for item in tokens if item["confidence"] >= minimum_confidence
                    and abs(item["x"] - x) <= 24 and abs(item["y"] - y) <= 20
                    and re.fullmatch(pattern, item["text"])]
         return matches[0]["text"] if len(matches) == 1 else None
@@ -45,7 +45,17 @@ def parse_board_tokens(tokens: list[dict], expected_total_points: int = 100000) 
     scores = {}
     # Relative clockwise order: own, right, opposite, left.
     for offset, (x, y) in enumerate([(960, 482), (1047, 419), (958, 364), (876, 423)]):
+        # A player can be at exactly zero points.  OCR assigns a slightly
+        # lower confidence to this single glyph than to multi-digit scores;
+        # admit it only at this tightly calibrated HUD position.  The four
+        # score conservation check below remains mandatory, so a 1000+ score
+        # misread as zero cannot become a verified board.
         text = at(x, y, r"-?\d{3,6}")
+        if text is None:
+            # Keep the normal 0.98 ambiguity gate for every multi-digit
+            # score.  The narrowly lower gate applies only to the lone zero
+            # glyph, not to a competing low-confidence numeric reading.
+            text = at(x, y, r"0", 0.95)
         if text is None:
             return {"verified": False, "reason": "four_scores_not_verified"}
         scores[SEATS[(SEATS.index(seat) + offset) % 4]] = int(text)

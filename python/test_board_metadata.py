@@ -193,6 +193,43 @@ class BoardMetadataTest(unittest.TestCase):
         self.assertEqual(result["reason"], "scores_and_riichi_sticks_total_mismatch")
         self.assertTrue(parse_board_tokens(tokens, expected_total_points=110000)["verified"])
 
+    def test_zero_score_real_frame_confidence_is_admitted_only_with_conservation(self):
+        # room 74709, East 3: the opposite player was at 0 while one riichi
+        # stick was on the table.  RapidOCR read the visual zero at 0.97473,
+        # below the ordinary multi-digit threshold.  Its exact scoreboard
+        # total is still required before this reading is usable by policy.
+        tokens = self.tokens()
+        values = ["24000", "27000", "0", "48000"]
+        for token, value in zip(tokens[2:6], values):
+            token["text"] = value
+        tokens[4]["confidence"] = 0.97473
+        tokens[7]["text"] = "1"
+        result = parse_board_tokens(tokens)
+        self.assertTrue(result["verified"], result)
+        self.assertEqual(result["scores"], {"south": 24000, "west": 27000,
+                                             "north": 0, "east": 48000})
+        self.assertEqual(result["riichiSticks"], 1)
+
+        tokens[4]["confidence"] = 0.949
+        self.assertEqual(parse_board_tokens(tokens)["reason"], "four_scores_not_verified")
+        tokens[4]["confidence"] = 0.97473
+        tokens[2]["text"] = "25000"
+        self.assertEqual(parse_board_tokens(tokens)["reason"],
+                         "scores_and_riichi_sticks_total_mismatch")
+
+    @unittest.skipUnless(importlib.util.find_spec("rapidocr"), "optional OCR dependencies not installed")
+    def test_room_74709_zero_score_frame_recovers_with_conservation(self):
+        frame = (Path(__file__).resolve().parents[1]
+                 / "artifacts/friend-300-628c989-room74709-20261003/frames"
+                 / "2026-10-02T15-51-12.615825+00-00.jpg")
+        result = recognize_board(frame)
+        self.assertTrue(result["verified"], result)
+        self.assertEqual(result["seat"], "east")
+        self.assertEqual(result["round"], "east_3")
+        self.assertEqual(result["scores"], {"east": 24000, "south": 27000,
+                                             "west": 0, "north": 48000})
+        self.assertEqual(result["riichiSticks"], 1)
+
     def test_score_retry_does_not_accept_ambiguous_or_malformed_numbers(self):
         tokens = self.tokens()
         right = tokens[3]
