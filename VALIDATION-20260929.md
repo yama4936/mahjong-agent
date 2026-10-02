@@ -490,3 +490,12 @@
 - 自動ツモ切りを含むため、対局結果・順位・CPU回帰成績・段位戦勝率には含めない。画像だけで1000点の誤読と断定せず、OCRトークン、中心盤面、四者合計、供託を照合して実0点と確定した。
 - 後続修正では校正済みスコア位置の単独`0`だけをconfidence 0.95以上で候補化し、多桁の0.98基準と四者合計＋供託=100000の保存則を維持した。実失敗フレームの回帰、0.95未満拒否、1000以上を0へ誤読した保存則不一致拒否を追加する。
 - 修正後の `9723910` で同一対局の離席モーダルを再開したところ、操作者はすでに `match_result` を観測し、`match_completed_stop` を記録して正常終了した。終局画面は自家17700点・3位、CPU48300/31700/2300点（`artifacts/friend-300-9723910-room74709-recovery-20261003/frames/2026-10-02T16-08-08.693270+00-00.match_result.png`）。先行した自動ツモ切りを含むため、これは修正後CPU回帰の成績には含めない。
+
+## 9723910の300+0秒CPU回帰（完走・0点スコア修正を確認、4位）
+
+- 友人戦部屋51086。四人南・簡単CPU3名・300+0秒、開始25000点、返し30000点、飛び有効、赤ドラ3、ローカル役無効、喰い断有効、一翻縛り、便利表示有効を `artifacts/live/9723910-room51086-cpus-20261003.png` で確認した。使用コードは `9723910`（実行時HEADは記録のみ追加した `efc64b6`）。実行は `node scripts/run-operator.mjs force-auto --layout=config/layout-300-regression.json --artifacts=artifacts/friend-300-9723910-room51086-20261003 --action-deadline-ms=300000 --force-auto-click-budget-ms=8000 --board-metadata --advance-screens --no-dashboard`。対局中にコード・設定を変更していない。
+- 終局画面は `artifacts/friend-300-9723910-room51086-20261003/frames/2026-10-02T17-07-30.291442+00-00.match_result.png`。自家「テストjev」は19000点・4位、CPUは36900/24300/19800点だった。CPU友人戦の機能回帰結果であり、段位戦の勝率評価には含めない。
+- 153打牌判断、161 replay、2件の `called_river_reconciled` を記録した。重複を除く359件の actionTiming はすべて `deadlineMs=300000`、期限超過0、最大 `evidenceToClickMs=33245`、`safety_stop` 0。副露後の10枚手牌・shifted draw slot は34回の `open_hand_geometry_gate` として実機で継続確認した。存在しない白のカン／`minkan` は0件。
+- 残り山0枚の自家判断は東3・南1〜4の計5件で、各候補の `winProbability=0`、`tenpaiProbability=0` を確認した。従って「残り山0枚でも将来和了確率を評価する」問題はこの実機回帰では再発しなかった。
+- 自河の `own_discard_mismatch` は9件、`own_discard_reconciliation_failed` は13件だった。ログ・手牌認識・河画像を照合すると、9件はすべて直前の認識が `safe=false`（confidence 0.644〜0.833）の force-auto打牌であり、`safe=true` の誤認識は0件。代表例は選択1mに対して安定後の河が9pとなったものだが、直前認識もsafe=falseだった。13件の失敗は隔離済みの未確認追加牌が次の打牌までに累積して `river_history_not_single_append` になった二次事象である。`own_discard_mismatch_cache_quarantined` が公開キャッシュを隔離できており、照合ロジック変更の根拠は得られなかった。force-autoのunsafe認識クリックは明示仕様のため、今回の証拠だけでは変更しない。
+- 終局を `match_result` として観測後、`match_completed_stop confidence=1.0` を記録して操作者は自動停止した。0点スコア修正、終局停止、副露・河整合性の実機経路を完走確認したが、今回の4位は簡単CPUに対する成績不振の追加標本である。段位戦への昇格判断には使用せず、勝率改善はより多い有効CPU標本と原因別の練習で継続する。
