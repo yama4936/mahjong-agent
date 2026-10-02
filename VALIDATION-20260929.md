@@ -425,3 +425,10 @@
 - 初回打牌は期待2sに対し公開河が4sとして2回確認され、`own_discard_mismatch` が安全側で高速手牌キャッシュを破棄した。画像単独では誤クリックと河OCR誤認を区別しない。
 - 次の期待5sでは公開河候補がない状態でも確認待ちになった。300秒後、ゲーム側の自動打牌後に河が `[4s,5p]` と観測され、`own_discard_mismatch expected=5s actual=5p` となった。ログの `own_discard_reconciliation_wait`、`public_own_river_append_confirmed`、画面・クリック確認を照合し、候補なしのpending全体を保留した実装が自動打牌を待つ停止不具合と確定した。
 - 操作者を停止して部屋を退出した。最終順位・点数・勝率には含めず、段位戦評価にも使わない。後続 `1e9017d` で、実際の河候補がある場合だけ次手番を保留し、候補なしの偽確認では待機しないよう修正した。関連Python 153件成功・33件skip。最新修正の完走300+0秒回帰は未実施。
+
+## 1e9017dの300+0秒CPU回帰（無効：結果画面後の停止漏れ）
+
+- 友人戦部屋78780。四人半荘・300+0秒・簡単CPU3人、開始25000点、返し30000点、飛び有効、赤ドラ3、ローカル役無効、喰い断有効、一翻縛り、便利表示有効を部屋画面で確認した。実行は `1e9017d`、`layout=config/layout-300-regression.json`、`--action-deadline-ms=300000 --force-auto-click-budget-ms=8000 --board-metadata --advance-screens --no-dashboard`。成果物は `artifacts/friend-300-fixed-1e9017d-room78780-20261002` に保存した。対局中にコード・設定は変更していない。
+- 操作ログには04:33:15Zの `screen_advanced state=match_result confidence=1.0` がある一方、`match_completed_stop` は記録されなかった。その直後に結果画面を進めて `matchmaking` と認識し、約10,499回ポーリングを継続した。最終画面の「長時間無操作のため、接続が切断されました。」とログを照合し、対局自体の停止ではなく結果画面後の操作者停止漏れと確定した。
+- 東2局の反復ではなく、局ラベルの再登場を含む213件の判断（east_2=93）だった。反応見送り58件は57件が `pass` のみで確認・期限内、打牌も概ね6--10秒で `deadlineMet=true` であり、300秒の操作待ちを敗因とはしない。終盤には副露後を含む自己河不一致が10件まで増えたため、画像だけで誤クリックと断定せず、公開河OCR／副露状態キャッシュ汚染の候補として扱った。
+- この試行は切断後に手動停止しており、最終順位・点数・CPU回帰成績・段位戦勝率には含めない。後続 `5a4fa8b` で、force-autoかつ非rankedの友人戦は `match_result` を観測した時点で画面遷移前に停止するよう修正した。また `own_discard_mismatch` 時は誤認された自己河末尾を公開キャッシュから隔離し、danger／残存牌推定へ流用しない。Python関連単体テストを追加し、`python -m unittest test_auto_operator.py test_board_metadata.py` の完走を確認した。改修版の300+0秒CPU完走回帰は、雀魂の専用セッションが利用可能になってから実施する。
