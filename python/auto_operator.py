@@ -1971,6 +1971,20 @@ class PythonAutoOperator:
             and getattr(self, "pending_own_river_confirmation", None) is not None
         )
 
+    def refresh_discard_reconciliation_before_click(self) -> bool:
+        """Close the async-cache race between evaluation and a next click."""
+        if hasattr(self, "public_recognition_lock"):
+            self.poll_public_recognition()
+        if not self.own_discard_reconciliation_pending():
+            return False
+        pending = self.pending_own_discard
+        self.log(
+            "own_discard_reconciliation_pre_click_wait",
+            expected=pending.get("tile"), before=pending.get("before"),
+            confirmationCandidate=self.pending_own_river_confirmation,
+        )
+        return True
+
     def should_stop_after_match_result(self, screen_state: str) -> bool:
         """Stop a completed friend regression before it can reach matchmaking.
 
@@ -2438,6 +2452,9 @@ class PythonAutoOperator:
         if is_away_resume_dialog(pre_click_full, self.layout["viewport"]):
             self.resume_if_away(page, pre_click_full)
             raise RetryableSafetyAbort("decision canceled because away dialog appeared during evaluation")
+
+        if force_auto and needs_tile_click and self.refresh_discard_reconciliation_before_click():
+            raise RetryableSafetyAbort("own discard reconciliation candidate arrived during evaluation")
 
         hand_before = current_streamed_hand or crop_screenshot(pre_click_full, self.hand_clip)
         if force_auto:

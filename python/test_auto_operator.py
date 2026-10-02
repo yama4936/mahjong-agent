@@ -223,6 +223,21 @@ class EvaluatorClickBudgetTest(unittest.TestCase):
         self.assertEqual(baseline, ["W", "4p", "P"])
         self.assertIsNot(baseline, operator.cached_public_observation["ownDiscards"])
 
+    def test_pre_click_refresh_blocks_new_river_confirmation_candidate(self):
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.pending_own_discard = {"tile": "E", "before": ["S"]}
+        operator.pending_own_river_confirmation = ["S", "E"]
+        operator.public_recognition_lock = threading.Lock()
+        operator.poll_public_recognition = Mock()
+        operator.log = Mock()
+
+        self.assertTrue(operator.refresh_discard_reconciliation_before_click())
+        operator.poll_public_recognition.assert_called_once_with()
+        operator.log.assert_called_once_with(
+            "own_discard_reconciliation_pre_click_wait", expected="E", before=["S"],
+            confirmationCandidate=["S", "E"],
+        )
+
     def test_default_preserves_environment_and_explicit_test_budget_is_bounded(self):
         environment = {"FORCE_AUTO_CLICK_BUDGET_MS": "2600", "OTHER": "unchanged"}
         self.assertIs(configure_evaluator_click_budget(environment, None, 5000), environment)
