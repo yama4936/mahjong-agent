@@ -454,3 +454,11 @@
 - 東4局の飛び終了で自家「テストjev」31900点・2位、CPUは41800/31000/-4700点となった。結果画面は `artifacts/friend-300-f1d8571-room57225-20261002/frames/2026-10-02T13-06-35.641773+00-00.match_result.png`。78判断はすべて `deadlineMs=300000`、期限超過・`safety_stop`・`screen_loss_stop` は0件だった。`action_aborted` 3件、`own_discard_mismatch` 4件、`own_discard_reconciliation_failed` 3件はキャッシュ隔離・再認識へ戻ったため、画面だけで誤クリックとは断定しない。自家鳴き1件は `called_river_reconciled` を記録し、リーチ、ロン操作と局結果もログで連続確認した。
 - ただし13:06:35Zに `screen_advanced match_result` を記録した直後、早期スクリーン判定経路が結果画面を進めて `matchmaking` とし、通常の `match_completed_stop` 判定へ到達しなかった。`round_terminal_wait` が反復したため13:07:32Zに手動停止した。よってこの2位はCPU機能回帰の完走結果・段位戦勝率のいずれにも含めない。
 - 原因はscreencastの早期結果判定が、通常の全画面経路にある友人戦終了停止より先に `--advance-screens` を実行していたことだった。後続修正では早期経路でも結果遷移前に `match_completed_stop` を要求し、画面遷移しない単体回帰を追加した。修正後の同一300+0秒CPU完走回帰が必要である。
+
+## 43bd5d6の300+0秒CPU回帰（完走・停止修正を確認）
+
+- 友人戦部屋57225。四人南・300+0秒・簡単CPU3人、開始25000点、返し30000点、飛び有効、赤ドラ3、ローカル役無効、喰い断有効、一翻縛り、便利表示有効を `artifacts/live/43bd5d6-preflight-browser-20261002.png` と開始直後の `artifacts/friend-300-43bd5d6-room57225-20261002/preflight-started.png` で確認した。使用コードは `43bd5d6`。実行は `node scripts/run-operator.mjs force-auto --layout=config/layout-300-regression.json --artifacts=artifacts/friend-300-43bd5d6-room57225-20261002 --action-deadline-ms=300000 --force-auto-click-budget-ms=8000 --board-metadata --advance-screens --no-dashboard`。対局中にコード・設定を変更していない。
+- 終局画面は `artifacts/friend-300-43bd5d6-room57225-20261002/frames/2026-10-02T14-09-33.457422+00-00.match_result.png`。自家「テストjev」は16400点・4位、CPUは47000/19400/17200点だった。CPU友人戦の機能・回帰結果であり、段位戦の勝率評価には含めない。
+- 174打牌判断、176 replay、3自家鳴きの `called_river_reconciled` を記録した。期限開始はすべて `deadlineMs=300000`、`action_deadline_expired`、`safety_stop`、`screen_loss_stop` は0件。副露後の10枚手牌・shifted draw slot は実画面で通過した。残り山0枚の判断は2件あり、候補の `winProbability=0` と `tenpaiProbability=0` を確認した。存在しない白のカン／`minkan` はログに0件だった。
+- 終局を14:09:33Zに `match_result` として観測し、同じ早期判定経路で `match_completed_stop confidence=1.0` を記録してプロセスが終了した。結果画面を進めてmatchmakingを反復した前回の停止漏れは再発しなかった。
+- 自河照合では `own_discard_mismatch` 9件、`own_discard_reconciliation_failed` 10件、`action_aborted` 2件（いずれもクリック前の手牌変化）を記録した。不一致は公開キャッシュから隔離された。期待P→観測9m、期待1m→2m等の対は存在するが、観測が単一追加ではなく複数追加になった事例もあり、現ログだけでは河OCRの時系列ずれと意図外クリックを分離できない。画像だけで敗因と断定せず、クリック前後の河全体・手牌・ポインタを同一識別子で結ぶ調査を未完了として継続する。
