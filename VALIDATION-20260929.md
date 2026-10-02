@@ -527,4 +527,11 @@
 - 終局画面は `artifacts/friend-300-1a56964-room12817-20261003/frames/2026-10-02T19-47-31.773388+00-00.match_result.png`。自家「テストjev」は25000点・3位、CPUは33300/25000/16700点。32打牌はすべて`deadlineMs=300000`内（最大`evidenceToClickMs=8233`）、`action_aborted`、`own_discard_mismatch`、安全停止は0。公開河の二重確認は29候補中28件が一致した。
 - ただし開始直後、最初の打牌 `S` の公開観測がまだ候補化される前に次の`E`を打牌し、後続スキャンが`[S,E]`を返したため、旧pendingの基準`[]`に対して`own_discard_reconciliation_failed`が1件発生した。これは誤クリックの証拠ではなく、候補到着と次打牌の間の非同期競合である。公開河基準の遅延混入は解消されたが、この候補到着直前の上書き競合は未完了として次修正で防ぐ。
 - `match_completed_stop confidence=1.0`で正常終了した。このCPU結果は実動作・回帰確認であり、段位戦の順位／勝率評価とは分離する。
+
+## 1dd294dの300+0秒CPU友人戦（完走、要修正の副露後ツモ牌誤認）
+
+- `1dd294d` は公開河候補が評価後・クリック前に到着した場合に再照合を優先するガードを追加した。Pythonテストは149件成功・33件skip。友人戦部屋12817、四人CPU戦（一局戦）・300+0秒、開始25000点、返し30000点、飛び有効、赤ドラ3、ローカル役無効、喰い断有効、一翻縛り、便利表示有効。開始前設定は `artifacts/live/friend-300-1dd294d-settings-20261003.png`。実行は `node scripts/run-operator.mjs force-auto --layout=config/layout-300-regression.json --artifacts=artifacts/friend-300-1dd294d-room12817-20261003 --action-deadline-ms=300000 --force-auto-click-budget-ms=8000 --board-metadata --advance-screens --no-dashboard`。対局中にコード・設定は変更していない。
+- `match_completed_stop confidence=1.0`で完走したが、これは不一致が残った原因調査用のCPU回帰であり、成績を勝率改善根拠には使わない。副露後の19:54:52Zフレーム `frames/2026-10-02T19-54-52.522704+00-00.jpg` では、独立したツモ牌スロット（clickIndex 10, x=1217.5）に実際は`8p`がある。認識は同スロットを`1m`と返し、confidence=0.60364、ambiguityMargin=0.00283、safe=falseだった。クリック後の二重公開河観測は`8p`を確認し、`expected=1m / actual=8p`を記録した。
+- これは座標ずれや公開河遅延ではない。副露後の持ち上がった／独立ツモ牌の低信頼誤認をforce-autoが意図牌として使用したことが原因である。したがって次の修正対象は、safe=falseかつ極小余裕の独立ツモ牌を、通常手牌と同じ確定牌として戦略評価・クリック対象にしないことである。
+- CPU友人戦は機能確認であり、この試行の順位・結果を段位戦の勝率評価と混同しない。
 - 打牌25件と反応3件はすべて `deadlineMs=300000`、`deadlineMet=true`（打牌最大 `evidenceToClickMs=11565`、反応最大12691）。`action_aborted`、`safety_stop`、期限超過、`screen_loss_stop` は0件。前回の低信頼度ラウンド画面も経由したが、最終 `match_result` を確定検出して `match_completed_stop confidence=1.0` で停止した。自己河不一致は期待E→観測Cの1件で公開キャッシュを隔離した。safe=true誤認の証拠ではなく、以後の打牌は継続・照合されている。
