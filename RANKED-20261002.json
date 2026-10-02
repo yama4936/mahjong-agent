@@ -1,0 +1,143 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-02",
+  "revision": "e61f73003f5eae0613d9354d40166f7cd9eee278",
+  "purpose": "User-requested monitored ranked attempt; not friend-match functional regression or a valid win-rate benchmark.",
+  "match": {
+    "room": "Bronze",
+    "players": 4,
+    "length": "East",
+    "timeControl": "5+20 seconds (visually observed)",
+    "operatorActionDeadlineMs": 5000,
+    "mode": "force-auto",
+    "layout": "config/layout-300-regression.json",
+    "boardMetadata": false,
+    "rankedLoop": false
+  },
+  "status": "operator_safety_stopped_match_unfinished",
+  "lastObservedRound": "East 2, honba 1",
+  "lastObservedOwnScoreBeforeStop": 25000,
+  "finalRank": null,
+  "finalScore": null,
+  "runs": [
+    {
+      "log": "artifacts/ranked-east-monitored-20261002/python-operator.jsonl",
+      "startedAt": "2026-10-02T07:17:50.589183+00:00",
+      "lastEventAt": "2026-10-02T07:21:01.908037+00:00",
+      "clickBudgetMs": 2600,
+      "consensusFrames": 3,
+      "eventCounts": {
+        "started": 1,
+        "screen_state_bypassed": 28,
+        "action_deadline_started": 8,
+        "public_context_deferred": 1,
+        "public_cache_updated": 20,
+        "action_deadline_expired": 6,
+        "action_aborted": 6,
+        "click_sent": 5,
+        "decision": 5,
+        "replay_saved": 5,
+        "rearmed": 4,
+        "public_own_river_append_pending": 5,
+        "own_discard_reconciliation_wait": 1,
+        "public_own_river_append_confirmed": 5,
+        "own_discard_mismatch": 2,
+        "own_discard_mismatch_cache_quarantined": 2,
+        "reaction_gate_candidate": 1,
+        "reaction_discard_verified": 1,
+        "reaction_call_policy_rejected": 1,
+        "screencast_frame_rejected": 6,
+        "reaction_pass_deferred": 1,
+        "own_discard_reconciliation_failed": 2,
+        "stopped": 1
+      },
+      "decisionEvidenceToClickMs": [
+        4535,
+        4689,
+        4616,
+        4274,
+        4329
+      ],
+      "stopEvents": []
+    },
+    {
+      "log": "artifacts/ranked-east-monitored-20261002-fast/python-operator.jsonl",
+      "startedAt": "2026-10-02T07:21:18.525572+00:00",
+      "lastEventAt": "2026-10-02T07:31:37.625115+00:00",
+      "clickBudgetMs": 1200,
+      "consensusFrames": 2,
+      "eventCounts": {
+        "started": 1,
+        "action_deadline_started": 28,
+        "away_resumed": 4,
+        "public_cache_updated": 60,
+        "click_sent": 15,
+        "decision": 15,
+        "replay_saved": 15,
+        "public_own_river_append_pending": 15,
+        "rearmed": 12,
+        "public_own_river_append_confirmed": 15,
+        "own_discard_mismatch": 6,
+        "own_discard_mismatch_cache_quarantined": 6,
+        "reaction_gate_candidate": 4,
+        "reaction_discard_verified": 2,
+        "reaction_call_policy_rejected": 4,
+        "screencast_frame_rejected": 24,
+        "action_deadline_expired": 13,
+        "reaction_pass_deferred": 3,
+        "own_discard_reconciliation_failed": 3,
+        "outcome_observed": 2,
+        "outcome_attached": 2,
+        "screen_advanced": 2,
+        "round_terminal_latch_cleared": 2,
+        "own_discard_reconciled": 3,
+        "action_aborted": 16,
+        "own_discard_reconciliation_wait": 1,
+        "round_terminal_wait": 1,
+        "safety_stop": 1
+      },
+      "decisionEvidenceToClickMs": [
+        3881,
+        4630,
+        4600,
+        4371,
+        4020,
+        3764,
+        4006,
+        4371,
+        4221,
+        4162,
+        4060,
+        4048,
+        4409,
+        4173,
+        4511
+      ],
+      "stopEvents": [
+        {
+          "timestamp": "2026-10-02T07:31:37.625115+00:00",
+          "event": "safety_stop",
+          "error": "pass button changed during pre-click stability check"
+        }
+      ]
+    }
+  ],
+  "findings": [
+    "Repeated action deadline overruns and automatic away resumes.",
+    "Logged hand-and-river pixel-change confirmations were followed by tile identity mismatches; decision count is not successful discard count.",
+    "Reducing click budget to 1200 ms and consensus to 2 frames did not eliminate mismatches.",
+    "Screencast frames with unexpected dimensions were rejected. Early independent Playwright screenshots could interfere with viewport; monitoring switched to dashboard. Unexpected dimensions also occurred later around operator reaction screenshots.",
+    "Final stop: pass button changed during pre-click stability check. Operator was not restarted after this safety stop.",
+    "Post-stop screenshot confirms game client away/automatic tsumogiri dialog. The match remains active; final placement was not obtained."
+  ],
+  "evidence": "artifacts/ranked-east-monitored-20261002-fast/stopped-current.png",
+  "validation": [
+    "npm run build passed before the ranked attempt.",
+    "No implementation changes; report aggregates saved JSONL evidence."
+  ],
+  "limitations": [
+    "Single interrupted match with two runtime configurations; cannot estimate ranked win rate.",
+    "Own seat and scores were not supplied through board metadata OCR; recorded policy state can contain defaults.",
+    "Ignored local artifacts are not included in the commit."
+  ]
+}
