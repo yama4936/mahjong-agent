@@ -542,3 +542,16 @@
 - 復旧後は `ambiguous_open_draw_fallback` が2回発火し、無限再試行・`action_aborted`は0。32判断はすべて300000ms期限内で、`match_completed_stop confidence=1.0`により終局した。公開河不一致2件は停止前の非同期状態を引き継いだためで、座標誤りの根拠にはしない。終局画像は `artifacts/friend-300-01729d5-room12817-recovery-20261003/frames/2026-10-02T20-21-25.778306+00-00.match_result.png`。
 - 次の評価は、終了済みの新規部屋から`01729d5`以降のクリーンな300+0 CPU回帰として開始し、CPU機能結果と段位戦成績を分離する。
 - 打牌25件と反応3件はすべて `deadlineMs=300000`、`deadlineMet=true`（打牌最大 `evidenceToClickMs=11565`、反応最大12691）。`action_aborted`、`safety_stop`、期限超過、`screen_loss_stop` は0件。前回の低信頼度ラウンド画面も経由したが、最終 `match_result` を確定検出して `match_completed_stop confidence=1.0` で停止した。自己河不一致は期待E→観測Cの1件で公開キャッシュを隔離した。safe=true誤認の証拠ではなく、以後の打牌は継続・照合されている。
+
+## 01729d5のクリーン300+0秒CPU回帰（完走、診断用・不合格）
+
+- 新規開始の友人戦部屋12817・四人CPU戦（一局戦）・300+0秒を `artifacts/live/friend-300-01729d5-clean-settings-20261003.png` で確認した。実行は `node scripts/run-operator.mjs force-auto --layout=config/layout-300-regression.json --artifacts=artifacts/friend-300-01729d5-clean-room12817-20261003 --action-deadline-ms=300000 --force-auto-click-budget-ms=8000 --board-metadata --advance-screens --no-dashboard`。対局中にコード・設定を変更していない。
+- 68判断・68クリックで完走し、期限超過0、`match_completed_stop confidence=1.0`。自家は19500点・3位、CPUは37100/26500/16900点（`artifacts/friend-300-01729d5-clean-room12817-20261003/frames/2026-10-02T20-45-19.803317+00-00.match_result.png`）。CPU友人戦の機能結果であり、段位戦勝率には含めない。
+- ただし`action_aborted` 6件、`own_discard_mismatch` 2件、`ambiguous_open_draw_fallback` 1件を記録したため合格標本にはしない。うち後者の不一致は、fallbackで実クリックした2mに対して評価器の元の1mをpending照合していた実装不整合だった。もう一件（期待E、観測N）は、クリック座標x=1407.5の手牌Eと河画像を照合し、公開河OCRがEをNと誤読した証拠であり、物理クリック誤りとは断定しない。公開河は隔離され、安全側で継続した。
+
+## 251ad86の300+0秒CPU回帰（完走・実クリック牌照合修正を確認、1位）
+
+- `251ad86` は曖昧な独立ツモ牌のfallback後、評価時の選択ではなく実際にクリックした牌・indexをpending河照合と手牌キャッシュへ渡す修正である。`PYTHONPATH=python .runtime/python-auto-venv/bin/python -m unittest python/test_auto_operator.py` は151件成功・33件skip。コミットとpush済み。
+- 友人戦部屋12817、四人CPU戦（一局戦）・300+0秒の設定は `artifacts/live/friend-300-251ad86-settings-20261003.png` に保存した。実行は `node scripts/run-operator.mjs force-auto --layout=config/layout-300-regression.json --artifacts=artifacts/friend-300-251ad86-room12817-20261003 --action-deadline-ms=300000 --force-auto-click-budget-ms=8000 --board-metadata --advance-screens --no-dashboard`。対局中にコード・設定を変更していない。
+- 18判断・18クリック、`action_aborted` 0、`own_discard_mismatch` 0、fallback 0、期限超過0で、`match_completed_stop confidence=1.0`により自動停止した。結果は自家「テストjev」32200点・1位、CPUは25000/23000/19800点。終局証拠は `artifacts/friend-300-251ad86-room12817-20261003/frames/2026-10-02T20-57-10.312610+00-00.match_result.png`。
+- これは実クリック牌の通常照合を壊していないクリーンなCPU機能・回帰標本である。ただしfallbackそのものはこの局では発火していないため、該当分岐の実機直接再検証は将来の発火局で継続する。CPU友人戦の1位は段位戦の勝率改善の証明ではなく、段位戦成績とは明確に分離する。
