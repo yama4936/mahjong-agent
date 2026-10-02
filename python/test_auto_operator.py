@@ -3185,11 +3185,16 @@ class AwayDialogDetectionTest(unittest.TestCase):
         page.mouse.click.assert_called_once_with(1747.2, 993.6)
         self.assertFalse(operator.pending_post_call_discard)
         self.assertTrue(operator.round_terminal_result_observed)
-        # Once the resulting lobby is visible, the result latch clears and
-        # ranked navigation resumes rather than issuing a gameplay action.
+        # A lobby-looking result fade is not enough to clear the terminal
+        # guard.  Navigation may be clicked, but only a subsequent ranked
+        # menu/room observation independently proves re-entry.
+        operator.ranked_terminal_transition_pending = True
         self.assertTrue(operator.handle_early_non_gameplay_screen(page, "lobby", 1.0))
         self.assertIsNone(operator.result_screen_advanced)
         self.assertEqual(page.mouse.click.call_count, 2)
+        self.assertTrue(operator.ranked_terminal_transition_pending)
+        self.assertTrue(operator.handle_early_non_gameplay_screen(page, "ranked_menu", 1.0))
+        self.assertFalse(operator.ranked_terminal_transition_pending)
 
     def test_ranked_result_to_unverified_matchmaking_requests_safe_stop(self) -> None:
         """A result/disconnect transition cannot become an endless reservation poll."""

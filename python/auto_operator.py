@@ -1634,7 +1634,14 @@ class PythonAutoOperator:
                     reason="result_transition_missing_verified_ranked_navigation",
                 )
                 return True
-            if state in {"lobby", "ranked_menu", "ranked_room"} \
+            # The table-result fade can match the generic lobby reference for
+            # several frames (including after a *round*, not a match, result).
+            # A lobby alone is therefore not independent proof that ranked
+            # navigation has resumed.  Keep the terminal transition guard
+            # armed until the rank menu or room is observed after the lobby
+            # navigation click.  This still permits that click below, while a
+            # subsequent ambiguous matchmaking frame remains fail-closed.
+            if state in {"ranked_menu", "ranked_room"} \
                     and getattr(self, "ranked_terminal_transition_pending", False):
                 self.ranked_terminal_transition_pending = False
                 self.log("ranked_terminal_reentry_verified", state=state, confidence=confidence)
