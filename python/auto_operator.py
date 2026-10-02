@@ -658,6 +658,23 @@ def local_discard_allowed(args: argparse.Namespace, evaluation: dict[str, Any]) 
     )
 
 
+def selected_open_draw_is_ambiguous(evaluation: dict[str, Any]) -> bool:
+    """Whether force-auto selected an unreliable independent draw-slot tile."""
+    open_melds = evaluation.get("openMelds", 0)
+    tiles = evaluation.get("recognition", {}).get("tiles", [])
+    click_index = evaluation.get("clickIndex")
+    recognition = evaluation.get("recognition", {})
+    return bool(
+        open_melds > 0
+        and isinstance(click_index, int)
+        and click_index == len(tiles) - 1
+        and (
+            recognition.get("confidence", 0) < 0.80
+            or recognition.get("ambiguityMargin", 1) < 0.05
+        )
+    )
+
+
 def send_discard_click(mouse: Any, point: dict[str, float], viewport: dict[str, int]) -> None:
     """Select and confirm a Mahjong Soul tile at one guarded coordinate."""
     mouse.click(point["x"], point["y"], click_count=2, delay=80)
@@ -2455,6 +2472,8 @@ class PythonAutoOperator:
 
         if force_auto and needs_tile_click and self.refresh_discard_reconciliation_before_click():
             raise RetryableSafetyAbort("own discard reconciliation candidate arrived during evaluation")
+        if force_auto and selected_action == "discard" and selected_open_draw_is_ambiguous(evaluation):
+            raise RetryableSafetyAbort("ambiguous independent draw-slot tile cannot be force-auto discarded")
 
         hand_before = current_streamed_hand or crop_screenshot(pre_click_full, self.hand_clip)
         if force_auto:

@@ -13,13 +13,22 @@ import threading
 from datetime import datetime, timezone
 from unittest.mock import Mock, call, patch
 
-from auto_operator import PythonAutoOperator, RetryableSafetyAbort, action_deadline_timing, away_resume_geometry, closed_concealed_row_visible, confirmed_call_meld, crop_screenshot, discard_point_in_hand_geometry, force_auto_call_buttons, force_auto_chi_choice_points, force_auto_reaction_win_button, force_auto_self_action_buttons, geometric_open_meld_count, is_away_resume_dialog, is_contextual_reaction_pass, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, mean_pixel_delta, merge_public_observations, open_hand_draw_slot, own_meld_surface_visible, post_call_transition, retreat_pointer_from_hand, selected_chi_choice_point, selected_tile_comparison_region, send_discard_click, should_guard_tenpai_reaction, should_process_reaction_prompt, should_retry_call_policy, stable_hand_comparison_region, stable_hand_delta, tile_face_structure_delta
+from auto_operator import PythonAutoOperator, RetryableSafetyAbort, action_deadline_timing, away_resume_geometry, closed_concealed_row_visible, confirmed_call_meld, crop_screenshot, discard_point_in_hand_geometry, force_auto_call_buttons, force_auto_chi_choice_points, force_auto_reaction_win_button, force_auto_self_action_buttons, geometric_open_meld_count, is_away_resume_dialog, is_contextual_reaction_pass, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, mean_pixel_delta, merge_public_observations, open_hand_draw_slot, own_meld_surface_visible, post_call_transition, retreat_pointer_from_hand, selected_chi_choice_point, selected_open_draw_is_ambiguous, selected_tile_comparison_region, send_discard_click, should_guard_tenpai_reaction, should_process_reaction_prompt, should_retry_call_policy, stable_hand_comparison_region, stable_hand_delta, tile_face_structure_delta
 from screen_state import classify_screen, load_references
 from auto_operator import geometric_reaction_open_meld_count
 from auto_operator import configure_evaluator_click_budget
 
 
 class EvaluatorClickBudgetTest(unittest.TestCase):
+    def test_ambiguous_open_draw_slot_is_not_an_auto_discard_target(self):
+        evaluation = {"openMelds": 1, "clickIndex": 10,
+                      "recognition": {"tiles": ["1m"] * 11, "confidence": 0.60,
+                                      "ambiguityMargin": 0.003}}
+        self.assertTrue(selected_open_draw_is_ambiguous(evaluation))
+        evaluation["recognition"] = {"tiles": ["1m"] * 11, "confidence": 0.91,
+                                      "ambiguityMargin": 0.12}
+        self.assertFalse(selected_open_draw_is_ambiguous(evaluation))
+
     def test_call_tile_count_conflict_retries_and_unexpected_errors_propagate(self):
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
         operator.public_state = {"seat": "north"}
