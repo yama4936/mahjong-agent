@@ -2096,6 +2096,20 @@ class AwayDialogDetectionTest(unittest.TestCase):
         operator.poll_public_recognition()
         self.assertIsNone(operator.cached_public_observation)
 
+    def test_early_friend_match_result_requests_stop_before_screen_advance(self) -> None:
+        """The fast gate must stop a completed friend run at its result."""
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(mode="force-auto", ranked_loop=False, advance_screens=True)
+        operator.match_completed_stop_requested = False
+        operator.log = Mock()
+        operator.advance_result_screen_once = Mock()
+        page = Mock()
+
+        self.assertTrue(operator.handle_early_non_gameplay_screen(page, "match_result", 0.98))
+        self.assertTrue(operator.match_completed_stop_requested)
+        operator.advance_result_screen_once.assert_not_called()
+        operator.log.assert_called_once_with("match_completed_stop", confidence=0.98)
+
     def test_riichi_button_is_not_merged_with_concealed_tile_borders(self) -> None:
         from auto_operator import self_turn_draw_visible
         screenshot = (Path(__file__).resolve().parents[1] / "artifacts/live/riichi-button-hand-border-20260928.jpg").read_bytes()

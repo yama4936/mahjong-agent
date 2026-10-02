@@ -447,3 +447,10 @@
 - 東1局・全員25000点・残66枚から始まり、少なくとも10判断を記録した。各記録済み打牌は `deadlineMs=300000` と `deadlineMet=true` で、期限超過、`safety_stop`、`action_aborted`、`own_discard_mismatch` はいずれも0件だった。自河は `public_own_river_append_confirmed` と `own_discard_reconciled` で追従した。チー候補は河の提示フレームを検証できなかったため `reaction_call_policy_rejected` とし、passを選んだ。
 - 11:01:29Zに操作者の画面取得が期待1920x1080から1920x733へ変化し、`screencast_frame_rejected` を記録した。CDPの唯一のタブは雀魂ではなく `Ticket Observatory` で、後続フレーム `frames/2026-10-02T11-02-48.351179+00-00.png` は黒画面、ログは `screen_state_bypassed state=unknown` と `open_hand_geometry_gate` の反復だけになった。画像、CDPタブ、操作ログを照合して、手牌認識・判断・クリックの失敗ではなく、雀魂タブが置換されて操作者が対局画面を失ったことまでを確定した。
 - 11:03:02Zに操作者を停止した。`match_result` はなく、終局順位・点数・CPU回帰成績・段位戦勝率には含めない。次の修正では、許容されない画面寸法又は雀魂以外のページが連続したとき、未知画面を無限反復せず明示的な安全停止にする。その単体テスト後、雀魂専用タブが維持される環境で同一300+0秒CPU回帰をやり直す。
+
+## f1d8571の300+0秒CPU回帰（無効：早期終局経路の停止漏れ）
+
+- 友人戦部屋57225。四人南・300+0秒・簡単CPU3人、開始25000点、返し30000点、飛び有効、赤ドラ3、ローカル役無効、喰い断有効、一翻縛り、便利表示有効を開始前画面 `artifacts/live/f1d8571-room57225-ready-20261002.png` で確認した。使用コードはpush済み `f1d8571`。実行は `node scripts/run-operator.mjs force-auto --layout=config/layout-300-regression.json --artifacts=artifacts/friend-300-f1d8571-room57225-20261002 --action-deadline-ms=300000 --force-auto-click-budget-ms=8000 --board-metadata --advance-screens --no-dashboard`。対局中にコード・設定を変更していない。
+- 東4局の飛び終了で自家「テストjev」31900点・2位、CPUは41800/31000/-4700点となった。結果画面は `artifacts/friend-300-f1d8571-room57225-20261002/frames/2026-10-02T13-06-35.641773+00-00.match_result.png`。78判断はすべて `deadlineMs=300000`、期限超過・`safety_stop`・`screen_loss_stop` は0件だった。`action_aborted` 3件、`own_discard_mismatch` 4件、`own_discard_reconciliation_failed` 3件はキャッシュ隔離・再認識へ戻ったため、画面だけで誤クリックとは断定しない。自家鳴き1件は `called_river_reconciled` を記録し、リーチ、ロン操作と局結果もログで連続確認した。
+- ただし13:06:35Zに `screen_advanced match_result` を記録した直後、早期スクリーン判定経路が結果画面を進めて `matchmaking` とし、通常の `match_completed_stop` 判定へ到達しなかった。`round_terminal_wait` が反復したため13:07:32Zに手動停止した。よってこの2位はCPU機能回帰の完走結果・段位戦勝率のいずれにも含めない。
+- 原因はscreencastの早期結果判定が、通常の全画面経路にある友人戦終了停止より先に `--advance-screens` を実行していたことだった。後続修正では早期経路でも結果遷移前に `match_completed_stop` を要求し、画面遷移しない単体回帰を追加した。修正後の同一300+0秒CPU完走回帰が必要である。

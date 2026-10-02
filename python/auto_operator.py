@@ -870,6 +870,11 @@ class PythonAutoOperator:
         # fresh reservation is live.
         self.ranked_terminal_transition_pending = False
         self.ranked_terminal_transition_stop_requested = False
+        # The fast screencast gate handles result overlays before the regular
+        # full-screen branch.  Keep its completed friend-run stop request
+        # explicit so that it cannot advance into matchmaking on the next
+        # frame.
+        self.match_completed_stop_requested = False
         self.last_ranked_loop_state: str | None = None
         self.last_ranked_loop_click_at = 0.0
         self.result_screen_advanced: str | None = None
@@ -1572,6 +1577,15 @@ class PythonAutoOperator:
             self.round_terminal_result_observed = True
             if self.args.ranked_loop:
                 self.ranked_terminal_transition_pending = True
+            # The normal full-screen branch exits a completed friend
+            # regression before advancing the result.  The screencast quick
+            # gate must preserve that invariant as well; otherwise a
+            # --advance-screens run can click through to matchmaking before
+            # the regular branch observes the result.
+            if self.should_stop_after_match_result(state):
+                self.match_completed_stop_requested = True
+                self.log("match_completed_stop", confidence=confidence)
+                return True
             if self.args.advance_screens or self.args.ranked_loop:
                 self.advance_result_screen_once(page, state, confidence)
             return True
@@ -2731,7 +2745,8 @@ class PythonAutoOperator:
                     if self.handle_early_non_gameplay_screen(
                         page, early_state, early_confidence, gate_frame,
                     ):
-                        if getattr(self, "ranked_terminal_transition_stop_requested", False):
+                        if (getattr(self, "ranked_terminal_transition_stop_requested", False)
+                                or getattr(self, "match_completed_stop_requested", False)):
                             return
                         page.wait_for_timeout(max(20, round(self.args.poll * 1000)))
                         continue
