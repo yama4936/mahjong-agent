@@ -2798,6 +2798,13 @@ class PythonAutoOperator:
                         self.attach_outcome("match" if screen_state == "match_result" else "round", full_screen, screen_confidence)
                     if self.args.advance_screens:
                         self.advance_result_screen_once(page, screen_state, screen_confidence)
+                        # A friend-match regression has no next automated
+                        # destination.  Once the final result is captured and
+                        # acknowledged, stop instead of repeatedly treating
+                        # the lingering result animation as gameplay.
+                        if screen_state == "match_result" and not self.args.ranked_loop:
+                            self.log("match_completed_stop", confidence=screen_confidence)
+                            return
                         time.sleep(self.args.poll)
                         continue
                 else:

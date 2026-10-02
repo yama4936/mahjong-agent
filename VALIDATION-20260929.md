@@ -414,7 +414,7 @@
 ## ed844f7の300+0秒CPU回帰（安全停止・結果評価から除外）
 
 - 使用コードは `ed844f7`。友人戦部屋20071、四人半荘、簡単CPU3名、300+0秒、開始25000点、1位必要30000点、飛び有効、赤ドラ3、ローカル役無効、喰い断有効、一翻縛り、便利表示有効で実施した。実行は `node scripts/run-operator.mjs force-auto --layout=config/layout-300-regression.json --artifacts=artifacts/friend-300-fixed-ed844f7-room20071-20261001 --action-deadline-ms=300000 --force-auto-click-budget-ms=8000 --board-metadata --advance-screens --no-dashboard`。対局中はコード・設定を変更していない。
-- 東4局で盤面メタデータが `scores_and_riichi_sticks_total_mismatch` を継続して返し、通常打牌の `recognition_retry` と反応の `reaction_call_policy_deferred` が反復した。5秒反応期限も `reaction_pass_deferred` となり、時間切れ後の `away_resumed` を経ても再発した。操作者は異常な安全停止として終了し、`match_result` はないため順位・CPU回帰成績・段位戦評価には含めない。
+- 東4局で盤面メタデータが `scores_and_riichi_sticks_total_mismatch` を継続して返し、通常打牌の `recognition_retry` と反応の `reaction_call_policy_deferred` が反復した。5秒反応期限も `reaction_pass_deferred` となり、時間切れ後の `away_resumed` を経ても再発した。操作者は異常な安全停止として終了した。離席後に表示された自家37100点・2位、CPU44800/11600/6500点の画面（`frames/2026-10-01T01-45-00+00-00.match_result.after_away.png`）は東4局後の一時順位表示であり、最終結果ではない。自動ツモ切りを含むため順位・CPU回帰成績・段位戦評価には含めない。
 - 同一失敗フレーム `frames/2026-10-01T01-37-41.252528+00-00.jpg` を直接再実行すると、全盤面OCRは対面点数を高信頼度の反転値 `0086` と読んだが、180度補正クロップは高信頼度で正しい `9800` を返した。修正後は南家44400、西家18900、北家9800、東家23900、供託3本、場供3、残39枚として保存則を満たし `verified=true` となる。保存則や信頼度閾値は緩めていない。
 - 副露後には `called_river_reconciled` と後続の6筒照合成功があった。一方、期待1萬に対して既存の6筒を河末尾として再読んだ事例、期待白に対して既存の7索を再読んだ事例を含む単一追加の `own_discard_mismatch` が観測された。画像単独で誤クリックと断定せず、河OCRの単発追加を2回一致まで保留する修正を追加した。これにより単発誤認識は公開状態・安全評価・残り牌計算に採用されない。
 - 修正後の `python -m unittest test_auto_operator.py test_board_metadata.py` は153件成功・33件skip、失敗0。次の友人戦300+0秒回帰で、対面スコア補正、単発河追加の保留、鳴き後の副露・河整合性を完走確認する。CPU友人戦の結果は段位戦の勝率評価とは引き続き分離する。
