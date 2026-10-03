@@ -603,3 +603,15 @@
 - `699d317` は、実段位戦の `4m→N`、`F→8p`、`F→0p` のレシートから確認した、ブラウザ二重クリックの第2打が独立ツモ牌へ入る問題を修正する。第1打で牌を選択後、第2打を同じx・44px上の持ち上がった牌面内に送る。単体回帰は `PYTHONPATH=python .runtime/python-auto-venv/bin/python -m unittest python/test_auto_operator.py` で152成功・33 skip、コミット・push済みである。
 - 友人戦部屋50067は四人CPU戦（一局戦）・300+0秒、開始25000点、返し30000点、飛び有効、赤ドラ3、ローカル役無効、喰い断有効、一翻縛り、便利表示有効。設定証跡は `artifacts/live/699d317-friend-room-20261003.png`。実行は `node scripts/run-operator.mjs force-auto --layout=config/layout-300-regression.json --artifacts=artifacts/friend-300-699d317-room50067-20261003 --action-deadline-ms=300000 --force-auto-click-budget-ms=8000 --board-metadata --advance-screens --no-dashboard` であり、対局中にコード・設定は変更していない。
 - `match_completed_stop` により完走した。10判断・9通常クリック・4反応操作、`own_discard_mismatch`、`own_discard_reconciliation_failed`、期限超過はいずれも0で、1件の `action_aborted` は未クリックの再観測である。結果画面は `artifacts/live/699d317-friend-300-result-20261003.png`、自家「テストjev」は37000点・1位、CPUは21000/21000/21000点だった。この結果は持ち上がり確認クリックと牌・河・操作経路のCPU機能回帰であり、段位戦の勝率評価には含めない。
+
+## 1f18f5dの銅の間・四人東（有効標本、4位／待機なしの持ち上がり誤打牌）
+
+- 銅の間・四人東を段位戦用の `--ranked-loop --action-deadline-ms=300000 --force-auto-click-budget-ms=2600` で実行した。実画面の結果は `artifacts/live/1f18f5d-ranked-terminal-20261003.png` に保存し、自家「テストjev」は14800点・4位・PT -25だった。離席自動打牌、期限超過、安全停止はなく、有効な段位戦標本としてCPU回帰とは分離する。
+- 43判断・43通常クリック・17反応操作で、`own_discard_mismatch` 11件、`own_discard_reconciliation_failed` 13件を記録した。レシートを照合すると、期待 `C` が `2s/6s/2s/5p/6m`、期待 `N` が `1m`、期待 `3p` が `3m` など、選択牌と無関係な河牌に置き換わった。持ち上がった牌の第2確認クリックを y-44 へ送るだけでは、牌が上がるアニメーションより早い場合があることを示す直接証拠である。
+- 後続 `fff8ff0` では、第1クリック後に選択状態を最大120ms待ってから同じ牌の持ち上がり位置へ第2クリックを送る。単体テストは152成功・33 skipで、変更とpush済みである。
+
+## fff8ff0の300+0秒CPU回帰（完走、2位／持ち上がり待機修正を確認）
+
+- 新規友人戦部屋10133。画面 `artifacts/live/fff8ff0-friend-room-20261003.png` で、四人CPU戦・一局戦・300+0秒、開始25000点、返し30000点、飛び有効、赤ドラ3、ローカル役無効、喰い断有効、一翻縛り、便利表示有効を確認した。実行は `node scripts/run-operator.mjs force-auto --layout=config/layout-300-regression.json --artifacts=artifacts/friend-300-fff8ff0-room10133-20261003 --action-deadline-ms=300000 --force-auto-click-budget-ms=8000 --board-metadata --advance-screens --no-dashboard`。開始前にNode/Pythonの両PIDを確認し、対局中はコード・設定を変更していない。
+- 10判断・10通常クリック・10反応期限記録で、`own_discard_mismatch`、`own_discard_reconciliation_failed`、`action_deadline_missed`、`action_aborted` はいずれも0。全打牌で明示的な300000ms deadlineを満たし、自己河は `public_own_river_append_confirmed` と `own_discard_reconciled` で追従した。`match_completed_stop confidence=1.0` を記録して自動停止した。
+- 結果画面 `artifacts/friend-300-fff8ff0-room10133-20261003/final-screen.png` は自家「テストjev」24000点・2位、CPUは30000/24000/22000点を示す。この結果は持ち上がり待機、牌認識・状態認識・判断・操作のCPU機能回帰であり、段位戦の勝率評価には含めない。段位戦ではなお有効標本が連続4位であり、勝率上向きの十分な標本は未達であるため、次回も原因分析を優先する。
