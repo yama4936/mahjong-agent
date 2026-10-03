@@ -2808,12 +2808,19 @@ class AwayDialogDetectionTest(unittest.TestCase):
 
     def test_discard_selects_and_confirms_the_same_guarded_coordinate(self) -> None:
         mouse = RecordingMouse()
-        send_discard_click(mouse, {"x": 933, "y": 996.5}, {"width": 1920, "height": 1080})
+        settle = Mock()
+        send_discard_click(
+            mouse,
+            {"x": 933, "y": 996.5},
+            {"width": 1920, "height": 1080},
+            settle,
+        )
         self.assertEqual(mouse.calls, [
             (933, 996.5, {}),
             (933, 952.5, {"delay": 80}),
             ("move", 960, 777.6),
         ])
+        settle.assert_called_once_with(120)
 
     def test_startup_clears_tile_hover_before_starting_first_frame_stream(self) -> None:
         operator = PythonAutoOperator.__new__(PythonAutoOperator)

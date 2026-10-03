@@ -22,7 +22,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from playwright.sync_api import Browser, CDPSession, Page, sync_playwright
 from PIL import Image, ImageChops, ImageStat
@@ -688,7 +688,12 @@ def ambiguous_open_draw_fallback(evaluation: dict[str, Any]) -> tuple[str, int] 
     return None
 
 
-def send_discard_click(mouse: Any, point: dict[str, float], viewport: dict[str, int]) -> None:
+def send_discard_click(
+    mouse: Any,
+    point: dict[str, float],
+    viewport: dict[str, int],
+    wait_for_selection: Callable[[float], None],
+) -> None:
     """Select a tile, then confirm it inside its raised hitbox.
 
     Mahjong Soul lifts the selected tile between the two input events.  A
@@ -699,8 +704,16 @@ def send_discard_click(mouse: Any, point: dict[str, float], viewport: dict[str, 
     clicks on the same tile.  Keep the x coordinate fixed and aim 44 pixels
     higher for the confirmation, which remains well inside the raised tile
     face for both the normal and compact rows.
+
+    The wait must be *between* the two click events.  ``mouse.click(delay=…)``
+    only holds the second press down; it does not let the client apply the
+    first click's raised-tile transform.  The ranked 1f18f5d evidence showed
+    the selected C still raised after confirmation while unrelated automatic
+    discards reached the river.  Wait for that transform before targeting its
+    raised hitbox.
     """
     mouse.click(point["x"], point["y"])
+    wait_for_selection(120)
     mouse.click(point["x"], point["y"] - 44, delay=80)
     # Once the row closes, the next tile can slide under the pointer and stay
     # raised. Move to inert table felt before post-action recognition.
@@ -2618,7 +2631,12 @@ class PythonAutoOperator:
             clickPoint=point,
         )
         self.last_action_clicked_at = time.monotonic()
-        send_discard_click(page.mouse, point, self.layout["viewport"])
+        send_discard_click(
+            page.mouse,
+            point,
+            self.layout["viewport"],
+            lambda milliseconds: page.wait_for_timeout(milliseconds),
+        )
         receipt = self.confirm_discard(page, hand_before, river_before, recognition["tiles"], click_index)
         return {
             "clicked": True,
