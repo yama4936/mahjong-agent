@@ -2569,12 +2569,15 @@ class PythonAutoOperator:
             meld_before = page.screenshot(clip=meld_clip, animations="disabled") if button_action in {"chi", "pon", "kan"} and meld_clip else None
             page.wait_for_timeout(120)
             if mean_pixel_delta(button_before, page.screenshot(clip=button_clip, animations="disabled")) > self.args.stability_pixel_delta:
-                # Riichi can legitimately disappear while the declaration is
-                # being animated.  Nothing has been clicked yet, so retry
-                # from a fresh self-turn frame rather than abandoning the
-                # whole live table (which triggers auto-tsumogiri).
-                if selected_action == "riichi":
-                    raise RetryableSafetyAbort("riichi button changed during pre-click stability check")
+                # Riichi and tsumo affordances can legitimately disappear
+                # while their turn UI is being animated. Nothing has been
+                # clicked yet, so retry from a fresh self-turn frame rather
+                # than abandoning the whole live table (which triggers
+                # auto-tsumogiri).
+                if selected_action in {"riichi", "tsumo"}:
+                    raise RetryableSafetyAbort(
+                        f"{button_action} button changed during pre-click stability check"
+                    )
                 raise RuntimeError(f"{button_action} button changed during pre-click stability check")
             point = observed["center"]
             self.require_action_deadline()
