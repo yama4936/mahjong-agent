@@ -3355,6 +3355,33 @@ class AwayDialogDetectionTest(unittest.TestCase):
         self.assertFalse(operator.ranked_terminal_transition_requires_stop("match_result"))
         self.assertIsNone(operator.ranked_terminal_matchmaking_seen_at)
 
+    def test_ranked_round_result_does_not_arm_terminal_stop_in_later_hand(self) -> None:
+        """A normal hand result must not poison the following in-match screen."""
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(ranked_loop=True, advance_screens=False)
+        operator.layout = {"viewport": {"width": 1920, "height": 1080}}
+        operator.result_screen_advanced = None
+        # A stale value must also be cleared by the independently recognized
+        # hand summary, rather than leaking into the hand that follows it.
+        operator.ranked_terminal_transition_pending = True
+        operator.ranked_terminal_transition_stop_requested = False
+        operator.last_ranked_loop_state = None
+        operator.last_ranked_loop_click_at = 0.0
+        operator.log = Mock()
+        page = Mock()
+
+        self.assertTrue(operator.handle_early_non_gameplay_screen(page, "round_result", 1.0))
+        self.assertFalse(operator.ranked_terminal_transition_pending)
+
+        # Regression: East 1's result formerly armed this guard, so an
+        # in-progress East 2 frame classified as matchmaking stopped the run.
+        self.assertTrue(operator.handle_early_non_gameplay_screen(page, "matchmaking", 1.0))
+        self.assertFalse(operator.ranked_terminal_transition_stop_requested)
+        self.assertFalse(any(
+            call.args and call.args[0] == "ranked_terminal_transition_stop"
+            for call in operator.log.call_args_list
+        ))
+
     def test_ranked_matchmaking_without_prior_result_remains_a_valid_reservation(self) -> None:
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
         operator.args = argparse.Namespace(ranked_loop=True, advance_screens=False)

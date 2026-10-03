@@ -1696,14 +1696,14 @@ class PythonAutoOperator:
         return True
 
     def ranked_terminal_transition_requires_stop(self, state: str) -> bool:
-        """Fail closed when a result immediately becomes only ``matchmaking``.
+        """Fail closed when a *verified match result* becomes ``matchmaking``.
 
-        A verified result must return through a separately classified lobby,
-        room-selection screen, or ranked-room screen before a ranked loop can
-        trust a reservation again.  This prevents an unrecognized result
-        transition or disconnect modal from being polled as matchmaking for
-        hours.  A newly started operator has no pending result and may still
-        safely observe a real existing reservation.
+        A round-result summary is not a terminal transition: normal play
+        continues at the next hand.  Only the independently classified
+        match-result sequence (result board, rank progress, or reward) may
+        arm this guard.  That prevents a completed hand from making a later
+        in-match frame stop the operator merely because it resembles the
+        ranked reservation screen.
         """
         if not (getattr(self.args, "ranked_loop", False)
                 and getattr(self, "ranked_terminal_transition_pending", False)
@@ -1749,8 +1749,14 @@ class PythonAutoOperator:
             self.pending_post_call_started_at = None
             self.round_terminal_latched = True
             self.round_terminal_result_observed = True
+            # A hand summary is a normal in-match transition.  Never carry a
+            # ranked-navigation guard from it into the next hand; only the
+            # independently recognized match-end result sequence can justify
+            # stopping on an unverified matchmaking screen.
             if self.args.ranked_loop:
-                self.ranked_terminal_transition_pending = True
+                self.ranked_terminal_transition_pending = state in {
+                    "match_result", "rank_progress", "post_match_reward",
+                }
             # The normal full-screen branch exits a completed friend
             # regression before advancing the result.  The screencast quick
             # gate must preserve that invariant as well; otherwise a
@@ -3184,7 +3190,13 @@ class PythonAutoOperator:
                     self.last_processed_hand = None
                     self.armed = True
                     if self.args.ranked_loop:
-                        self.ranked_terminal_transition_pending = True
+                        # Do not arm a ranked terminal-transition stop for a
+                        # round summary.  A verified match-end result is
+                        # required before matchmaking can be considered an
+                        # unsafe, unverified navigation transition.
+                        self.ranked_terminal_transition_pending = screen_state in {
+                            "match_result", "rank_progress", "post_match_reward",
+                        }
                     if screen_state not in {"rank_progress", "post_match_reward"}:
                         self.attach_outcome("match" if screen_state == "match_result" else "round", full_screen, screen_confidence)
                     # A friend functional/regression run has no automated
@@ -3212,6 +3224,12 @@ class PythonAutoOperator:
                             and closed_concealed_row_visible(full_screen, self.layout):
                         self.round_terminal_latched = False
                         self.round_terminal_result_observed = False
+                        # Defensive cleanup for runs upgraded while a prior
+                        # version had armed the terminal guard from a round
+                        # result.  A visible closed row independently proves
+                        # that play resumed, so it cannot be a match-end
+                        # navigation transition.
+                        self.ranked_terminal_transition_pending = False
                         self.last_observed_outcome_kind = None
                         self.log("round_terminal_latch_cleared", source="verified_new_round_closed_row")
                     else:
