@@ -357,7 +357,7 @@ class ActionDeadlineTest(unittest.TestCase):
                 if same_generation and verified:
                     self.assertTrue(operator.execute(page, evaluation, crop_screenshot(before, operator.hand_clip),
                                                     before, 5)["clicked"])
-                    page.mouse.click.assert_called_once()
+                    self.assertEqual(page.mouse.click.call_count, 2)
                 else:
                     with self.assertRaises(RetryableSafetyAbort):
                         operator.execute(page, evaluation, crop_screenshot(before, operator.hand_clip), before, 5)
@@ -2371,7 +2371,7 @@ class AwayDialogDetectionTest(unittest.TestCase):
         self.assertEqual(receipt["confirmation"], "hand_and_own_river_changed")
         self.assertTrue(receipt["tileMultisetVerification"]["verified"])
         operator.confirm_discard.assert_called_once()
-        page.mouse.click.assert_called_once_with(1247, 999, click_count=2, delay=80)
+        self.assertEqual(page.mouse.click.call_args_list, [call(1247, 999), call(1247, 955, delay=80)])
 
     def test_post_pon_animation_uses_stable_tile_faces_and_discards_within_clock(self) -> None:
         project = Path(__file__).resolve().parents[1]
@@ -2423,7 +2423,7 @@ class AwayDialogDetectionTest(unittest.TestCase):
 
         self.assertTrue(receipt["clicked"])
         self.assertLess(time.monotonic() - started, 5.0)
-        page.mouse.click.assert_called_once_with(1217.5, 996.5, click_count=2, delay=80)
+        self.assertEqual(page.mouse.click.call_args_list, [call(1217.5, 996.5), call(1217.5, 952.5, delay=80)])
 
     def test_three_meld_relighting_uses_glyph_structure_and_discards_within_clock(self) -> None:
         project = Path(__file__).resolve().parents[1]
@@ -2476,7 +2476,7 @@ class AwayDialogDetectionTest(unittest.TestCase):
 
         self.assertTrue(receipt["clicked"])
         self.assertLess(time.monotonic() - started, 5.0)
-        page.mouse.click.assert_called_once_with(268.5, 999.5, click_count=2, delay=80)
+        self.assertEqual(page.mouse.click.call_args_list, [call(268.5, 999.5), call(268.5, 955.5, delay=80)])
 
     def test_closed_hand_relighting_uses_glyph_structure(self) -> None:
         """A live East-2 retry must not turn static tile faces into a stale turn.
@@ -2555,7 +2555,7 @@ class AwayDialogDetectionTest(unittest.TestCase):
 
         self.assertTrue(receipt["clicked"])
         self.assertLess(time.monotonic() - started, 5.0)
-        page.mouse.click.assert_called_once_with(743, 996.5, click_count=2, delay=80)
+        self.assertEqual(page.mouse.click.call_args_list, [call(743, 996.5), call(743, 952.5, delay=80)])
 
     def test_three_meld_moving_layout_uses_same_generation_selected_tile(self) -> None:
         project = Path(__file__).resolve().parents[1]
@@ -2610,7 +2610,7 @@ class AwayDialogDetectionTest(unittest.TestCase):
 
         self.assertTrue(receipt["clicked"])
         self.assertLess(time.monotonic() - started, 5.0)
-        page.mouse.click.assert_called_once_with(363.5, 996.5, click_count=2, delay=80)
+        self.assertEqual(page.mouse.click.call_args_list, [call(363.5, 996.5), call(363.5, 952.5, delay=80)])
 
         changed_target = Image.open(io.BytesIO(settled_full)).convert("RGB")
         ImageDraw.Draw(changed_target).rectangle((328, 936, 399, 1044), fill="white")
@@ -2702,7 +2702,7 @@ class AwayDialogDetectionTest(unittest.TestCase):
             rejectedInferredOpenMelds=4,
             recognizedConcealedTiles=11,
         )
-        page.mouse.click.assert_called_once_with(1247, 999, click_count=2, delay=80)
+        self.assertEqual(page.mouse.click.call_args_list, [call(1247, 999), call(1247, 955, delay=80)])
 
     def test_pre_click_meld_anchor_rejects_genuine_compact_geometry_change(self) -> None:
         project = Path(__file__).resolve().parents[1]
@@ -2810,7 +2810,8 @@ class AwayDialogDetectionTest(unittest.TestCase):
         mouse = RecordingMouse()
         send_discard_click(mouse, {"x": 933, "y": 996.5}, {"width": 1920, "height": 1080})
         self.assertEqual(mouse.calls, [
-            (933, 996.5, {"click_count": 2, "delay": 80}),
+            (933, 996.5, {}),
+            (933, 952.5, {"delay": 80}),
             ("move", 960, 777.6),
         ])
 

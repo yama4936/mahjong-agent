@@ -689,8 +689,19 @@ def ambiguous_open_draw_fallback(evaluation: dict[str, Any]) -> tuple[str, int] 
 
 
 def send_discard_click(mouse: Any, point: dict[str, float], viewport: dict[str, int]) -> None:
-    """Select and confirm a Mahjong Soul tile at one guarded coordinate."""
-    mouse.click(point["x"], point["y"], click_count=2, delay=80)
+    """Select a tile, then confirm it inside its raised hitbox.
+
+    Mahjong Soul lifts the selected tile between the two input events.  A
+    Playwright ``click_count=2`` repeats the original, lower coordinate after
+    that animation.  In live ranked evidence that second event was consumed
+    by the independent draw slot (for example ``F`` at index 12 became the
+    draw ``8p``), so it is not safe to treat a browser double-click as two
+    clicks on the same tile.  Keep the x coordinate fixed and aim 44 pixels
+    higher for the confirmation, which remains well inside the raised tile
+    face for both the normal and compact rows.
+    """
+    mouse.click(point["x"], point["y"])
+    mouse.click(point["x"], point["y"] - 44, delay=80)
     # Once the row closes, the next tile can slide under the pointer and stay
     # raised. Move to inert table felt before post-action recognition.
     mouse.move(viewport["width"] / 2, viewport["height"] * 0.72)
