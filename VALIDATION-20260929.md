@@ -597,3 +597,9 @@
 - 終局画面は同画像に保存した。自家「テストjev」は18200点・4位・-41.8（PT -41）、他家は44000/31800/26000点だった。23通常打牌判断・23クリック・13反応操作、期限超過0である。`ranked_terminal_transition_stop` は結果遷移後に `result_transition_missing_verified_ranked_navigation` を検出して停止したもので、未検証の自動再入場は行っていない。
 - 自河照合は `own_discard_mismatch` 3件、`own_discard_reconciliation_failed` 5件だった。不一致のうち二件は同じ座標の系統的な誤操作を直接示す。認識・判断は發 (`F`) を選び index 12、座標 `(1407.5,999)` をクリックし、手牌／自河の変化も受領確認したが、安定後の自河はツモ牌8筒（`F→8p`）と赤5筒（`F→0p`）だった。もう一件も `4m` を index 0・`(269,999)` でクリックした後に北（`N`）となった。各レシートは JSONL の `2026-10-03T02:13:39.895180+00:00`、`02:14:32.673077+00:00`、`02:16:11.213637+00:00` にある。
 - 特に `F→8p` の直前フレーム `frames/2026-10-03T02-14-13.020380+00-00.jpg` は認識結果・選択 index・クリック座標・実河を同時に照合できる。これは公開河OCRだけの誤読ではなく、持ち上がり／クリック時の手牌位置変化による誤打牌を調査・修正する根拠である。対局終了後にのみ、このクリック経路を修正対象として切り出した。
+
+## 699d317の300+0秒CPU回帰（完走、1位／持ち上がり確認クリック修正）
+
+- `699d317` は、実段位戦の `4m→N`、`F→8p`、`F→0p` のレシートから確認した、ブラウザ二重クリックの第2打が独立ツモ牌へ入る問題を修正する。第1打で牌を選択後、第2打を同じx・44px上の持ち上がった牌面内に送る。単体回帰は `PYTHONPATH=python .runtime/python-auto-venv/bin/python -m unittest python/test_auto_operator.py` で152成功・33 skip、コミット・push済みである。
+- 友人戦部屋50067は四人CPU戦（一局戦）・300+0秒、開始25000点、返し30000点、飛び有効、赤ドラ3、ローカル役無効、喰い断有効、一翻縛り、便利表示有効。設定証跡は `artifacts/live/699d317-friend-room-20261003.png`。実行は `node scripts/run-operator.mjs force-auto --layout=config/layout-300-regression.json --artifacts=artifacts/friend-300-699d317-room50067-20261003 --action-deadline-ms=300000 --force-auto-click-budget-ms=8000 --board-metadata --advance-screens --no-dashboard` であり、対局中にコード・設定は変更していない。
+- `match_completed_stop` により完走した。10判断・9通常クリック・4反応操作、`own_discard_mismatch`、`own_discard_reconciliation_failed`、期限超過はいずれも0で、1件の `action_aborted` は未クリックの再観測である。結果画面は `artifacts/live/699d317-friend-300-result-20261003.png`、自家「テストjev」は37000点・1位、CPUは21000/21000/21000点だった。この結果は持ち上がり確認クリックと牌・河・操作経路のCPU機能回帰であり、段位戦の勝率評価には含めない。
