@@ -1946,6 +1946,8 @@ class PythonAutoOperator:
                 "own_discard_reconciliation_failed",
                 expected=pending["tile"], before=before, observed=after,
                 reason="river_history_not_single_append",
+                clickIndex=pending.get("clickIndex"), clickPoint=pending.get("clickPoint"),
+                clickedAt=pending.get("clickedAt"), confirmation=pending.get("confirmation"),
             )
             return
         actual = after[-1]
@@ -1967,6 +1969,8 @@ class PythonAutoOperator:
                 before=before,
                 observed=after,
                 capturedAt=observation.get("capturedAt"),
+                clickIndex=pending.get("clickIndex"), clickPoint=pending.get("clickPoint"),
+                clickedAt=pending.get("clickedAt"), confirmation=pending.get("confirmation"),
             )
             self.log(
                 "own_discard_mismatch_cache_quarantined",
@@ -3572,6 +3576,10 @@ class PythonAutoOperator:
                             "tile": discarded_tile,
                             "before": self.own_discard_baseline(evaluation),
                             "evidenceToClickMs": receipt.get("actionTiming", {}).get("evidenceToClickMs"),
+                            "clickIndex": click_index,
+                            "clickPoint": receipt.get("clickPoint"),
+                            "clickedAt": receipt.get("clickedAt"),
+                            "confirmation": receipt.get("confirmation"),
                         }
                     if isinstance(click_index, int) and len(recognized_tiles) == 14:
                         self.cached_concealed_tiles = [

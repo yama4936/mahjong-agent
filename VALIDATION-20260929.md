@@ -576,3 +576,10 @@
 - 友人戦部屋75005は四人CPU戦（一局戦）・300+0秒、開始25000点、返し30000点、飛び有効、赤ドラ3、ローカル役無効、喰い断有効、一翻縛り、便利表示有効。設定の証跡は `artifacts/live/f997003-friend-300-settings-20261003.png`。実行は `node scripts/run-operator.mjs force-auto --layout=config/layout-300-regression.json --artifacts=artifacts/friend-300-f997003-room75005-20261003 --action-deadline-ms=300000 --force-auto-click-budget-ms=8000 --board-metadata --advance-screens --no-dashboard`。対局中にコード・設定は変更していない。
 - 29打牌判断・29通常操作・13反応操作で完走し、`match_completed_stop`で意図どおり停止した。`own_discard_mismatch`、`own_discard_reconciliation_failed`、`action_aborted`、`safety_stop`、期限超過はすべて0。結果画面は `artifacts/friend-300-f997003-room75005-20261003/frames/2026-10-02T22-56-58.036762+00-00.match_result.png`、自家「テストjev」は25000点・2位、CPUは31000/23000/23000点だった。
 - この結果は終局遷移保護と牌・状態・操作経路のCPU機能回帰であり、段位戦の勝率評価や上記の銅の間2局の成績とは明確に分離する。
+
+## d51a64dの銅の間・四人南（有効標本、3位）
+
+- 銅の間・四人南を `node scripts/run-operator.mjs force-auto --layout=config/layout-300-regression.json --artifacts=artifacts/ranked-d51a64d-copper-south-20261003 --ranked-loop --action-deadline-ms=300000 --force-auto-click-budget-ms=2600 --board-metadata --no-dashboard` で実行した。CPU友人戦の機能確認とは別の段位戦評価であり、300000ms deadline と段位戦用2600msクリック予算を明示した。
+- 終局画面は `artifacts/live/d51a64d-ranked-terminal-20261003.png`。自家「テストjev」は13800点・3位・-16.2（PT -16）、他家は56600/24500/5100点だった。160判断・160通常クリック・51反応操作、記録済み期限超過0。`action_aborted` 6件は離席ダイアログ2件または手牌変化4件を検出した未クリックの再観測であり、操作取り違えではない。
+- 自家河では `own_discard_mismatch` 20件、`own_discard_reconciliation_failed` 26件を記録した。前者の期待→観測は `S→9p`、`E→3p`、`4m→7s` など相互に無関係な組合せで、単一方向の座標ずれを支持しない。後者はすべて `river_history_not_single_append` であり、公開河の非同期OCRが一枚ずつの履歴追加を観測できなかったものだった。キャッシュは既存の隔離経路へ移行し、物理誤クリックと断定しない。次の改善では、各不一致に実行レシート（クリック牌・index・座標）を直接関連付けて、OCR誤読と操作誤りをログ単独で分離できるようにする。
+- 副露後は `called_river_reconciled` と `open_hand_geometry_gate` を複数回観測し、実対局で自分の副露・河・自手番の整合が継続した。終局後は検証済みの段位メニューを経ず `matchmaking` を観測して `ranked_terminal_transition_stop` となった。結果画面が実在することを上記画像で確認しており、無関係なロビー操作を防いだ安全停止である。

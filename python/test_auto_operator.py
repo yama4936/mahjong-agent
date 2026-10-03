@@ -172,6 +172,8 @@ class EvaluatorClickBudgetTest(unittest.TestCase):
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
         operator.pending_own_discard = {
             "tile": "W", "before": ["1m", "2m"], "evidenceToClickMs": 6701,
+            "clickIndex": 4, "clickPoint": {"x": 555, "y": 999},
+            "clickedAt": "2026-10-03T00:00:00+00:00", "confirmation": "hand_and_own_river_changed",
         }
         operator.cached_concealed_tiles = ["1p"] * 13
         operator.cached_public_observation = {
@@ -194,10 +196,32 @@ class EvaluatorClickBudgetTest(unittest.TestCase):
         operator.log.assert_any_call(
             "own_discard_mismatch", expected="W", actual="3p", evidenceToClickMs=6701,
             before=["1m", "2m"], observed=["1m", "2m", "3p"], capturedAt=None,
+            clickIndex=4, clickPoint={"x": 555, "y": 999},
+            clickedAt="2026-10-03T00:00:00+00:00", confirmation="hand_and_own_river_changed",
         )
         operator.log.assert_any_call(
             "own_discard_mismatch_cache_quarantined", expected="W", rejected="3p",
             retainedOwnDiscards=["1m", "2m"],
+        )
+
+    def test_reconciliation_failure_records_click_receipt(self):
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.pending_own_discard = {
+            "tile": "W", "before": ["1m"], "clickIndex": 2,
+            "clickPoint": {"x": 363.5, "y": 999}, "clickedAt": "when",
+            "confirmation": "hand_and_own_river_changed",
+        }
+        operator.cached_concealed_tiles = ["1p"] * 13
+        operator.cached_public_observation = {"ownDiscards": ["1m", "2m", "3p"]}
+        operator.log = Mock()
+
+        operator.reconcile_own_discard()
+
+        operator.log.assert_called_once_with(
+            "own_discard_reconciliation_failed", expected="W", before=["1m"],
+            observed=["1m", "2m", "3p"], reason="river_history_not_single_append",
+            clickIndex=2, clickPoint={"x": 363.5, "y": 999}, clickedAt="when",
+            confirmation="hand_and_own_river_changed",
         )
 
     def test_force_auto_friend_match_result_stops_without_screen_advance(self):
