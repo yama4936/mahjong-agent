@@ -583,3 +583,10 @@
 - 終局画面は `artifacts/live/d51a64d-ranked-terminal-20261003.png`。自家「テストjev」は13800点・3位・-16.2（PT -16）、他家は56600/24500/5100点だった。160判断・160通常クリック・51反応操作、記録済み期限超過0。`action_aborted` 6件は離席ダイアログ2件または手牌変化4件を検出した未クリックの再観測であり、操作取り違えではない。
 - 自家河では `own_discard_mismatch` 20件、`own_discard_reconciliation_failed` 26件を記録した。前者の期待→観測は `S→9p`、`E→3p`、`4m→7s` など相互に無関係な組合せで、単一方向の座標ずれを支持しない。後者はすべて `river_history_not_single_append` であり、公開河の非同期OCRが一枚ずつの履歴追加を観測できなかったものだった。キャッシュは既存の隔離経路へ移行し、物理誤クリックと断定しない。次の改善では、各不一致に実行レシート（クリック牌・index・座標）を直接関連付けて、OCR誤読と操作誤りをログ単独で分離できるようにする。
 - 副露後は `called_river_reconciled` と `open_hand_geometry_gate` を複数回観測し、実対局で自分の副露・河・自手番の整合が継続した。終局後は検証済みの段位メニューを経ず `matchmaking` を観測して `ranked_terminal_transition_stop` となった。結果画面が実在することを上記画像で確認しており、無関係なロビー操作を防いだ安全停止である。
+
+## f0eb441の不一致レシート記録と300+0秒CPU回帰（完走、3位）
+
+- `f0eb441` は公開河の `own_discard_mismatch` と `own_discard_reconciliation_failed` に、実クリック牌に加え click index・座標・クリック時刻・受領確認を直接記録する改善である。これにより将来の不一致をOCR誤読か物理操作かへログ単独で分類できる。ユニットテストは `PYTHONPATH=python .runtime/python-auto-venv/bin/python -m unittest python/test_auto_operator.py` で152成功・33 skip。コミット・push済み。
+- 先行した部屋80901は、バックグラウンド起動が親シェル終了で消えたためゲーム側が無操作切断した。`artifacts/live/f0eb441-friend-after-launch-20261003.png` に切断表示を保存した。この試行は自動ツモ切りを含むため回帰・成績標本から除外する。以後は部屋開始前に `nohup setsid` でNode/Python PIDと成果物ディレクトリが実在することを確認してから開始する。
+- 有効な新規部屋70494は四人CPU戦（一局戦）・300+0秒、開始25000点、返し30000点、飛び有効、赤ドラ3、ローカル役無効、喰い断有効、一翻縛り、便利表示有効。設定証跡は `artifacts/live/f0eb441-friend-300-settings2-20261003.png` と `artifacts/live/f0eb441-friend-room3-20261003.png`。実行は `node scripts/run-operator.mjs force-auto --layout=config/layout-300-regression.json --artifacts=artifacts/friend-300-f0eb441-room70494-20261003 --action-deadline-ms=300000 --force-auto-click-budget-ms=8000 --board-metadata --advance-screens --no-dashboard`。
+- 31判断・31通常クリック・10反応操作、`action_aborted`、`own_discard_mismatch`、`own_discard_reconciliation_failed`、`safety_stop`、期限超過はすべて0で、`match_completed_stop`により完走した。結果画面は `artifacts/live/f0eb441-friend-300-result-20261003.png`、自家「テストjev」は22000点・3位、CPUは32500/25000/20500点。この結果は新ログ相関と副露・河・操作経路のCPU機能回帰であり、段位戦の勝率評価には含めない。
