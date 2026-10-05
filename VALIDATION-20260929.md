@@ -630,3 +630,10 @@
 - 専用Chromeの通常表示とソフトウェア描画ではCDP画面取得が30秒でタイムアウトし、安全停止した。ヘッドレスかつソフトウェア描画では画面取得と認識サーバーが稼働した。読み取り専用操作者の初回ログは `artifacts/preflight-headless-snapshot-167e2fb-20261005/python-operator.jsonl`。保存画面 `artifacts/live/login-screen-20261005.png` はログイン画面だったが、従来の画面認識は `matchmaking confidence=1.0` と誤判定していた。
 - 金色のログインボタンを識別して `login` を先に判定する修正後、`artifacts/preflight-login-fixed-20261005/python-operator.jsonl` に `login confidence=1.0` と画面スナップショットを確認した。読み取り専用操作者は重複起動せず、実戦操作はしていない。新規プロファイルは未ログインのため、友人戦300+0秒の設定、`--action-deadline-ms=300000` の実戦回帰、段位戦再評価はまだ実施できない。対局成績標本は追加しない。
 - 関連チェックは `python/test_screen_state.py` 3件、`python/test_auto_operator.py` 153件成功・34件skip、`npm run build`、`npm run operator:setup` が成功。全体 `npm test` と `npm run test:python` は、この新規チェックアウトに存在しない旧・Git除外の検証画像を参照するテストで失敗した。失敗は今回の実戦成績ではない。
+
+## 2026-10-05 ログイン復旧の追加診断（対局未開始）
+
+- `ab5b45f` の読み取りでは専用プロファイルが `login confidence=1.0` のままだった。対局・友人戦部屋は存在せず、旧操作者を止めてから `--action-deadline-ms=300000 --force-auto-click-budget-ms=8000` でログインボタンを一度だけ押した。`artifacts/login-recovery-ab5b45f-20261005/python-operator.jsonl` にクリック座標 `(1495.68,469.8)` を記録した。
+- クリック後の実画面 `artifacts/live/account-modal-20261005.png` は YOSTAR のメールアドレス・認証コード入力画面だった。画面認識がこれも `matchmaking` と誤判定していた。中央の白い認証ダイアログを `account_modal` と識別するよう修正した。
+- 修正後の `artifacts/login-required-stop-20261005/python-operator.jsonl` は `login_required_stop state=account_modal confidence=1.0` を記録し、操作者はゲーム操作をせず正常終了した。自動で利用できるログイン済みセッションは存在しない。認証入力はユーザー操作が必要で、300+0秒友人戦回帰と段位戦は未開始のままである。
+- 操作者にはログインボタンの一度だけの試行、認証画面の安全停止、画面種別ごとの任意スナップショットを追加した。空白画面を認証画面と誤認しない判定も確認した。`python/test_screen_state.py python/test_auto_operator.py` の関連157件は34件skipを除き成功し、`npm run build` も成功した。

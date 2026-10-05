@@ -9,6 +9,11 @@ class RiichiSelectionScreenTest(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         self.assertEqual(classify_screen(root / "artifacts/live/login-screen-20261005.png", {}), ("login", 1.0))
 
+    def test_authentication_dialog_is_not_matchmaking(self):
+        root = Path(__file__).resolve().parents[1]
+        self.assertEqual(classify_screen(root / "artifacts/live/account-modal-20261005.png", {}),
+                         ("account_modal", 1.0))
+
     def test_dimmed_riichi_selection_remains_match(self):
         root = Path(__file__).resolve().parents[1]
         self.assertEqual(classify_screen(root / "artifacts/live/riichi-selection-dimmed-20260928.png", {}), ("match", 1.0))

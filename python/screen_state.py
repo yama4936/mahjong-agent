@@ -209,6 +209,21 @@ def _is_cherry_blossom_login(image: Image.Image) -> bool:
     return gold >= .5
 
 
+def _is_account_modal(image: Image.Image) -> bool:
+    """Recognize the centered white YOSTAR authentication dialog."""
+    width, height = image.size
+    if width < 1200 or height < 700:
+        return False
+    dialog = image.crop((width * .39, height * .32, width * .61, height * .69)).convert("RGB")
+    pixels = list(dialog.getdata())
+    white = sum(1 for red, green, blue in pixels
+                if min(red, green, blue) > 205 and max(red, green, blue) - min(red, green, blue) < 40)
+    surround = image.crop((width * .02, height * .05, width * .20, height * .20)).convert("RGB")
+    outer_pixels = list(surround.getdata())
+    dark = sum(1 for red, green, blue in outer_pixels if max(red, green, blue) < 100)
+    return white / max(1, len(pixels)) >= .65 and dark / max(1, len(outer_pixels)) >= .6
+
+
 def load_references(directory: Path) -> dict[str, tuple[ScreenState, Image.Image]]:
     return {
         f"{state}:{index}": (state, _open(directory / filename))
@@ -237,6 +252,8 @@ def classify_screen(
         return "connection_error", 1.0
     if _has_bottom_tile_faces(image):
         return "match", 1.0
+    if _is_account_modal(image):
+        return "account_modal", 1.0
     if _is_cherry_blossom_login(image):
         return "login", 1.0
     if _is_cherry_blossom_matchmaking(image):

@@ -937,6 +937,7 @@ class PythonAutoOperator:
         self.match_completed_stop_requested = False
         self.last_ranked_loop_state: str | None = None
         self.last_ranked_loop_click_at = 0.0
+        self.login_button_clicked_at: float | None = None
         self.result_screen_advanced: str | None = None
         self.action_evidence_started_at: float | None = None
         self.action_evidence_kind: str | None = None
@@ -3097,11 +3098,40 @@ class PythonAutoOperator:
                         )
                         page.wait_for_timeout(max(20, round(self.args.poll * 1000)))
                         continue
+                if self.args.mode == "force-auto" and screen_state == "login" and screen_confidence >= .95:
+                    if self.login_button_clicked_at is None:
+                        point = {"x": self.layout["viewport"]["width"] * .779,
+                                 "y": self.layout["viewport"]["height"] * .435}
+                        page.mouse.click(point["x"], point["y"])
+                        self.login_button_clicked_at = time.monotonic()
+                        self.log("login_button_clicked", clickPoint=point, confidence=screen_confidence)
+                    elif time.monotonic() - self.login_button_clicked_at > 5:
+                        self.log("login_required_stop", state=screen_state, confidence=screen_confidence)
+                        return
+                    page.wait_for_timeout(max(100, round(self.args.poll * 1000)))
+                    continue
+                if self.login_button_clicked_at is not None:
+                    if screen_state == "lobby":
+                        self.log("login_session_restored", state=screen_state, confidence=screen_confidence)
+                        self.login_button_clicked_at = None
+                        if not self.args.ranked_loop:
+                            return
+                    elif screen_state in {"account_modal", "unknown"} \
+                            or time.monotonic() - self.login_button_clicked_at > 5:
+                        snapshot = self.frames / f"{utc_stamp()}.login-after-click.png"
+                        snapshot.write_bytes(full_screen)
+                        snapshot.chmod(0o600)
+                        self.log("login_required_stop", state=screen_state,
+                                 confidence=screen_confidence, screenshot=str(snapshot))
+                        return
+                if self.args.mode == "force-auto" and screen_state == "account_modal":
+                    self.log("login_required_stop", state=screen_state, confidence=screen_confidence)
+                    return
                 if self.advance_ranked_loop(page, screen_state, screen_confidence):
                     page.wait_for_timeout(max(100, round(self.args.poll * 1000)))
                     continue
                 if screen_state != "match" and self.args.mode != "force-auto":
-                    if self.args.mode == "observer" and screen_state == "login" \
+                    if self.args.mode == "observer" and (screen_state == "login" or getattr(self.args, "snapshot_nonmatch", False)) \
                             and getattr(self, "last_observer_screen_state", None) != screen_state:
                         snapshot = self.frames / f"{utc_stamp()}.{screen_state}.png"
                         snapshot.write_bytes(full_screen)
@@ -3681,6 +3711,8 @@ def parse_args() -> argparse.Namespace:
                         help="explicit recognition+decision budget; 8000 for OCR in 300+0 tests, must fit action deadline")
     parser.add_argument("--env-file", default=".env.local", help="private Jev environment file; use an empty value to disable")
     parser.add_argument("--artifacts", default="artifacts/python-auto")
+    parser.add_argument("--snapshot-nonmatch", action="store_true",
+                        help="Save one local screenshot per observed non-match state for diagnosis")
     parser.add_argument("--mode", choices=("observer", "advisor", "auto", "force-auto"), default="advisor",
                         help="force-auto ignores confidence and calibration gates but keeps stability and post-click checks")
     parser.add_argument("--poll", type=float, default=0.1)
