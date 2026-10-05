@@ -669,3 +669,10 @@
 
 - 使用コミット `6925f35` の300+0秒CPU友人戦を準備したが、四人麻雀・CPU戦・一局戦・300+0秒の作成ボタンから部屋へ進まなかった。ブラウザ再読み込み後、ゲーム側が「対局を放棄する行為が頻繁に検出されたため」アカウントを **2026/10/05 14:52（JST）まで一時利用停止** と表示した。証跡は `artifacts/live/account-suspension-20261005.png`。このため新規対局は開始できず、回帰結果・段位戦成績の標本は得られていない。
 - 先行する短時間段位戦では操作期限切れで39回打牌できず、対局自体は継続した。今回の制限と関連する可能性はあるが、ゲーム側が個別の原因対局を示していないため断定しない。解除後は300+0秒の回帰を完走し、打牌確認が取れる設定で段位戦を再評価する。制限中は再入場や追加の対局操作を行わない。
+
+## c6ceee6 の300+0秒CPU友人戦回帰（完走、2位）
+
+- 2026-10-05 14:52 JSTの制限解除後、同じYostarアカウントで再ログインできた。新規ルーム20598で四人CPU(簡単)・一局戦・300+0秒、開始25000点、返し30000点、飛び有効、赤ドラ3、ローカル役無効、喰い断有効、一翻縛り、便利表示有効を確認した。設定と開始前画面は `artifacts/friend-300-c6ceee6-room20598-20261005/preflight-settings.png` と `preflight-room.png`。使用コミットはpush済み `c6ceee6`。
+- 開始前に操作者・認識サーバーがないことを確認し、`node scripts/run-operator.mjs force-auto --layout=config/layout-300-regression.json --artifacts=artifacts/friend-300-c6ceee6-room20598-20261005 --action-deadline-ms=300000 --force-auto-click-budget-ms=8000 --board-metadata --advance-screens --no-dashboard` を一組だけ起動した。対局中はソース・設定を変更していない。
+- `python-operator.jsonl` と19件のリプレイで牌認識・公開状態認識・判断・実クリック・手牌と河の変化による確認を記録した。19判断・19通常クリック・6反応操作、19件全て `deadlineMs=300000` と `deadlineMet=true`、最大 `evidenceToClickMs=12562`。`action_aborted`、`action_deadline_expired`、`safety_stop`、`own_discard_mismatch`、`own_discard_reconciliation_failed` は0。局・点数OCRの検証25件、公開情報キャッシュ更新44件を記録し、`match_completed_stop` で正常終了した。
+- 終局画像 `artifacts/friend-300-c6ceee6-room20598-20261005/frames/2026-10-05T06-15-20.843948+00-00.match_result.png` は自家「テストjev」25000点・2位、CPUは30000/23000/22000点。この対局は最新修正の300+0秒での機能回帰合格であり、段位戦勝率評価には含めない。
