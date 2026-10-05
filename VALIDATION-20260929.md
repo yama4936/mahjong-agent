@@ -651,3 +651,16 @@
 - 友人戦部屋36717を新しく開始し、四人CPU(簡単)・一局戦・300+0秒、開始25000点、返し30000点、飛び有効、赤ドラ3、ローカル役無効、喰い断有効、一翻縛り、便利表示有効を `artifacts/friend-300-1b4137f-room36717-clean-20261005/preflight-room.png` で再確認した。使用コミットはpush済みの`1b4137f`。開始前に操作者・認識サーバーの不在を確認してから一組だけ起動した。実行は `node scripts/run-operator.mjs force-auto --layout=config/layout-300-regression.json --artifacts=artifacts/friend-300-1b4137f-room36717-clean-20261005 --action-deadline-ms=300000 --force-auto-click-budget-ms=8000 --board-metadata --advance-screens --no-dashboard`。対局中はコード・設定を変更していない。
 - 最初の手番から公開情報認識が成功した。`python-operator.jsonl` とリプレイ13件に、牌認識、状態認識、判断、実クリック、および手牌・自己河変化による13件すべての操作確認を記録した。13判断すべて `deadlineMs=300000`、`deadlineMet=true`、最大 `evidenceToClickMs=19870`。`public_cache_failed`、`action_aborted`、`own_discard_mismatch`、`safety_stop`、期限超過はいずれも0。2局を経て `match_completed_stop confidence=1.0` で正常終了した。
 - 終局画像 `artifacts/friend-300-1b4137f-room36717-clean-20261005/frames/2026-10-05T03-28-33.314509+00-00.match_result.png` で、自家「テストjev」31200点・1位、CPU26000/22000/20800点を確認した。これは300+0秒CPU友人戦の機能回帰合格であり、短時間の段位戦での成績や勝率改善を示す標本には含めない。
+
+## 2026-10-05 銅の間・四人東の短時間診断（無効な成績標本）
+
+- 実画面 `artifacts/live/ranked-entry-1b4137f-20261005.png` はアカウント「初心」と銅の間の対象段位「初心者、雀士」を示す。銅の間パネルを `(1385,412)` で選ぶと `artifacts/live/copper-selected-1b4137f-20261005.png` に四人東・四人南が表示された。四人東を `(1379,403)` で選んだ `artifacts/live/copper-east-click-d956490-20261005.png` は「エラーコード1308、マッチング成功。まもなく対局が開始します」と示す。実際に銅の間・四人東の卓に入り、入場条件の拒否はなかった。
+- 操作者はpush済み`d956490`、`--ranked-loop --force-auto-click-budget-ms=2600 --board-metadata --advance-screens --no-dashboard`、既定 `action-deadline-ms=5000` で開始した。最初の実行 `artifacts/ranked-d956490-copper-east-20261005/python-operator.jsonl` は成功通知を `connection_error` と誤認し、打牌0で安全停止した。ゲーム対局は中断せず、同じ設定で `artifacts/ranked-d956490-copper-east-recovery-20261005` に再接続した。
+- 復旧操作者は公開情報と局・点数を認識したが、打牌判断までの7〜10秒程度が5000ms期限を超え、`action_deadline_expired` 39件、`action_aborted` 39件、操作者による打牌0件となった。後半には局結果の直後に一時画面を `matchmaking` と誤認し、`ranked_terminal_transition_stop` で安全停止した。終局実画面 `artifacts/live/ranked-after-transition-stop-20261005.png` は自家「テストjev」5300点・4位・PT -34。操作者が打牌していないので、この結果は段位戦勝率の有効標本に含めない。
+- 成功通知と接続エラーは同じ枠・確認ボタンであり、中央のメッセージ部分の画像差は0.059、従来の共通枠を含む比較範囲では0.030で誤一致した。通知文の領域を別に照合して区別する修正を行い、実画像を `matchmaking`、接続エラー画像を `connection_error` と再判定できた。結果後の一時的な`matchmaking`検出には5秒の猶予を設け、継続する不正な遷移だけを安全停止する。短時間打牌の処理時間問題は別に継続検証する。
+
+## 短時間段位戦向けの盤面OCR先行キャッシュ（回帰待ち）
+
+- 先の段位戦ログでは、打牌可能の検出から認識用フレームの保存まで約3〜4秒、局・点数OCR完了までさらに約2秒、打牌判断まで合計約7〜10秒であった。保存済み段位戦フレームを使った単独実測では、局・点数OCRが初回4966ms、ウォーム後3289/2658msだった。5秒操作期限で一律中断する主要因と照合できる。
+- 相手の手番中のストリーム画面から局・点数OCRを別スレッドで先行させる。自手番では8秒以内の検証済み結果を、局・四家点数・本場/供託表示の画像が現在の画面と一致する場合のみ使用する。差があれば元の同期OCRへ戻し、先行認識がまだ動作中なら安全に再試行する。結果画面ではキャッシュを消す。保存済み画面の同局・異局の比較はそれぞれ一致・不一致となり、保存済み東2局画面での先行OCRは4871ms、キャッシュ適用は10msだった。
+- `PYTHONPATH=python .runtime/python-auto-venv/bin/python -m unittest python.test_screen_state python.test_auto_operator` は160件中34件skipを除き成功した。これは処理時間改善の単体確認であり、300+0秒実戦回帰と短時間段位戦での有効打牌はまだ未確認。

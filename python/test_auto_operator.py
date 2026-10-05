@@ -17,6 +17,7 @@ from auto_operator import PythonAutoOperator, RetryableSafetyAbort, action_deadl
 from screen_state import classify_screen, load_references
 from auto_operator import geometric_reaction_open_meld_count
 from auto_operator import configure_evaluator_click_budget
+from auto_operator import board_state_signature, board_state_signature_matches
 
 
 class EvaluatorClickBudgetTest(unittest.TestCase):
@@ -478,6 +479,41 @@ class ActionDeadlineTest(unittest.TestCase):
 
 
 class AwayDialogDetectionTest(unittest.TestCase):
+    def test_board_metadata_cache_requires_same_recent_scoreboard(self) -> None:
+        def frame_with_score(color: tuple[int, int, int]) -> bytes:
+            image = Image.new("RGB", (1920, 1080), (20, 30, 50))
+            ImageDraw.Draw(image).rectangle((910, 460, 1010, 505), fill=color)
+            output = io.BytesIO()
+            image.save(output, format="PNG")
+            return output.getvalue()
+
+        first = frame_with_score((45, 50, 55))
+        changed = frame_with_score((120, 130, 140))
+        self.assertTrue(board_state_signature_matches(board_state_signature(first), board_state_signature(first)))
+        self.assertFalse(board_state_signature_matches(board_state_signature(first), board_state_signature(changed)))
+        with tempfile.TemporaryDirectory() as directory:
+            operator = PythonAutoOperator.__new__(PythonAutoOperator)
+            operator.args = argparse.Namespace(board_metadata=True)
+            operator.frames = Path(directory)
+            operator.board_metadata_thread = None
+            operator.board_metadata_result = None
+            operator.board_metadata_cache = None
+            operator.board_metadata_lock = threading.Lock()
+            operator.board_metadata_ocr_lock = threading.Lock()
+            operator.board_metadata_last_scan_at = 0.0
+            operator.log = Mock()
+            path = Path(directory) / "current.png"
+            path.write_bytes(first)
+            metadata = {"verified": True, "round": "east_1", "scores": {"east": 25000}}
+            with patch("board_metadata.recognize_board", return_value=metadata) as recognize:
+                operator.schedule_board_metadata(first)
+                operator.board_metadata_thread.join(timeout=2)
+                self.assertEqual(operator.current_board_metadata(path), metadata)
+                self.assertEqual(recognize.call_count, 1)
+                path.write_bytes(changed)
+                self.assertEqual(operator.current_board_metadata(path), metadata)
+                self.assertEqual(recognize.call_count, 2)
+
     def setUp(self) -> None:
         # Captured live-match frames are intentionally gitignored. Keep these
         # regressions active on workstations that retain them, while allowing a
@@ -3279,6 +3315,7 @@ class AwayDialogDetectionTest(unittest.TestCase):
         operator.result_screen_advanced = "match_result"
         operator.ranked_terminal_transition_pending = True
         operator.ranked_terminal_transition_stop_requested = False
+        operator.ranked_terminal_matchmaking_seen_at = time.monotonic() - 6
         operator.log = Mock()
         page = Mock()
 
@@ -3290,6 +3327,15 @@ class AwayDialogDetectionTest(unittest.TestCase):
             confidence=1.0, gameplayClicks=0,
             reason="result_transition_missing_verified_ranked_navigation",
         )
+
+    def test_ranked_result_transition_allows_brief_matchmaking_false_positive(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(ranked_loop=True)
+        operator.ranked_terminal_transition_pending = True
+        self.assertFalse(operator.ranked_terminal_transition_requires_stop("matchmaking"))
+        self.assertIsNotNone(operator.ranked_terminal_matchmaking_seen_at)
+        self.assertFalse(operator.ranked_terminal_transition_requires_stop("match_result"))
+        self.assertIsNone(operator.ranked_terminal_matchmaking_seen_at)
 
     def test_ranked_matchmaking_without_prior_result_remains_a_valid_reservation(self) -> None:
         operator = PythonAutoOperator.__new__(PythonAutoOperator)

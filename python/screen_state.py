@@ -55,7 +55,13 @@ def _matches_blocking_dialog(image: Image.Image, reference: Image.Image | None) 
     if image.size != reference.size:
         return False
     box = (image.width * .35, image.height * .4, image.width * .65, image.height * .69)
-    return _distance(image.crop(box), reference.crop(box)) < .035
+    if _distance(image.crop(box), reference.crop(box)) >= .035:
+        return False
+    # Mahjong Soul uses the same frame and confirm button for informational
+    # messages (including matchmaking success). Compare the message itself,
+    # not only the shared dialog chrome.
+    message = (image.width * .31, image.height * .42, image.width * .70, image.height * .54)
+    return _distance(image.crop(message), reference.crop(message)) < .04
 
 
 @lru_cache(maxsize=2)

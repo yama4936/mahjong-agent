@@ -37,6 +37,28 @@ def utc_stamp() -> str:
     return datetime.now(timezone.utc).isoformat().replace(":", "-")
 
 
+BOARD_STATE_REGIONS = (
+    (900, 385, 1020, 425), (910, 460, 1010, 505),
+    (1020, 375, 1070, 465), (905, 340, 1010, 380),
+    (848, 375, 905, 470), (80, 120, 310, 190),
+)
+
+
+def board_state_signature(frame: bytes) -> tuple[Image.Image, ...]:
+    """Capture stable score/round HUD regions, excluding the draw counter."""
+    with Image.open(io.BytesIO(frame)) as source:
+        image = source.convert("RGB")
+        return tuple(image.crop(box) for box in BOARD_STATE_REGIONS)
+
+
+def board_state_signature_matches(left: tuple[Image.Image, ...],
+                                  right: tuple[Image.Image, ...]) -> bool:
+    return len(left) == len(right) == len(BOARD_STATE_REGIONS) and all(
+        sum(ImageStat.Stat(ImageChops.difference(a, b)).mean) / 3 <= 3.0
+        for a, b in zip(left, right)
+    )
+
+
 def load_json(path: Path) -> dict[str, Any]:
     with path.open("r", encoding="utf-8") as handle:
         return json.load(handle)
@@ -862,6 +884,12 @@ class PythonAutoOperator:
         self.public_recognition_result: dict[str, Any] | None = None
         self.public_recognition_lock = threading.Lock()
         self.public_recognition_request_id = 0
+        self.board_metadata_thread: threading.Thread | None = None
+        self.board_metadata_result: dict[str, Any] | None = None
+        self.board_metadata_cache: dict[str, Any] | None = None
+        self.board_metadata_lock = threading.Lock()
+        self.board_metadata_ocr_lock = threading.Lock()
+        self.board_metadata_last_scan_at = 0.0
         self.public_cache_generation = 0
         self.public_cache_last_frame_hash: str | None = None
         self.last_public_scan_at = 0.0
@@ -1370,9 +1398,84 @@ class PythonAutoOperator:
                  ageMs=cache.get("ageMs"))
         return True
 
+    def schedule_board_metadata(self, frame: bytes) -> None:
+        if not getattr(self.args, "board_metadata", False):
+            return
+        self.poll_board_metadata()
+        if self.board_metadata_thread and self.board_metadata_thread.is_alive():
+            return
+        now = time.monotonic()
+        if now - self.board_metadata_last_scan_at < 6.0:
+            return
+        self.board_metadata_last_scan_at = now
+        path = self.frames / f"{utc_stamp()}.board-cache.jpg"
+        path.write_bytes(frame)
+        signature = board_state_signature(frame)
+
+        def recognize() -> None:
+            from board_metadata import recognize_board
+            try:
+                with self.board_metadata_ocr_lock:
+                    result = recognize_board(path)
+            except Exception as error:
+                with self.board_metadata_lock:
+                    self.board_metadata_result = {"error": str(error), "screenshot": str(path)}
+                return
+            with self.board_metadata_lock:
+                self.board_metadata_result = {
+                    "metadata": result, "signature": signature,
+                    "capturedAt": now, "screenshot": str(path),
+                }
+
+        self.board_metadata_thread = threading.Thread(target=recognize, daemon=True)
+        self.board_metadata_thread.start()
+
+    def poll_board_metadata(self) -> None:
+        with self.board_metadata_lock:
+            result = self.board_metadata_result
+            self.board_metadata_result = None
+        if result and result.get("error"):
+            self.log("board_metadata_cache_failed", screenshot=result["screenshot"], error=result["error"])
+        elif result and result["metadata"].get("verified"):
+            self.board_metadata_cache = result
+            self.log("board_metadata_cache_updated", screenshot=result["screenshot"],
+                     round=result["metadata"].get("round"),
+                     scores=result["metadata"].get("scores"))
+
+    def current_board_metadata(self, screenshot: Path) -> dict[str, Any]:
+        from board_metadata import recognize_board
+        if not hasattr(self, "board_metadata_lock"):
+            # Isolated frame-state probes construct the operator without its
+            # background worker; keep their direct OCR path intact.
+            return recognize_board(screenshot)
+        self.poll_board_metadata()
+        frame = screenshot.read_bytes()
+        cache = self.board_metadata_cache
+        if cache:
+            age_ms = round((time.monotonic() - cache["capturedAt"]) * 1000)
+            if age_ms <= 8000 and board_state_signature_matches(
+                board_state_signature(frame), cache["signature"],
+            ):
+                self.log("board_metadata_cache_applied", screenshot=str(screenshot),
+                         source=cache["screenshot"], ageMs=age_ms)
+                return cache["metadata"]
+        if self.board_metadata_thread and self.board_metadata_thread.is_alive():
+            self.board_metadata_thread.join(timeout=0.3)
+            self.poll_board_metadata()
+            cache = self.board_metadata_cache
+            if cache and round((time.monotonic() - cache["capturedAt"]) * 1000) <= 8000 \
+                    and board_state_signature_matches(board_state_signature(frame), cache["signature"]):
+                self.log("board_metadata_cache_applied", screenshot=str(screenshot),
+                         source=cache["screenshot"], ageMs=round((time.monotonic() - cache["capturedAt"]) * 1000))
+                return cache["metadata"]
+            if self.board_metadata_thread.is_alive():
+                raise RetryableSafetyAbort("board metadata refresh in progress")
+        with self.board_metadata_ocr_lock:
+            return recognize_board(screenshot)
+
     def frame_metadata_state(self, screenshot: Path, observation=None, pending=None, *, refresh_public_cache=False):
-        from board_metadata import recognize_board, remap_seats
-        metadata = recognize_board(screenshot)
+        from board_metadata import remap_seats
+        metadata = self.current_board_metadata(screenshot)
         if not metadata.get("verified"):
             raise RetryableSafetyAbort(f"board metadata not verified: {metadata.get('reason')}")
         if refresh_public_cache:
@@ -1600,11 +1703,17 @@ class PythonAutoOperator:
         hours.  A newly started operator has no pending result and may still
         safely observe a real existing reservation.
         """
-        return bool(
-            getattr(self.args, "ranked_loop", False)
-            and getattr(self, "ranked_terminal_transition_pending", False)
-            and state == "matchmaking"
-        )
+        if not (getattr(self.args, "ranked_loop", False)
+                and getattr(self, "ranked_terminal_transition_pending", False)
+                and state == "matchmaking"):
+            self.ranked_terminal_matchmaking_seen_at = None
+            return False
+        now = time.monotonic()
+        first_seen = getattr(self, "ranked_terminal_matchmaking_seen_at", None)
+        if first_seen is None:
+            self.ranked_terminal_matchmaking_seen_at = now
+            return False
+        return now - first_seen >= 5.0
 
     def handle_early_non_gameplay_screen(self, page: Page, state: str, confidence: float,
                                        screenshot: bytes | None = None) -> bool:
@@ -1627,6 +1736,8 @@ class PythonAutoOperator:
             self.public_cache_generation = getattr(self, "public_cache_generation", 0) + 1
             self.public_cache_last_frame_hash = None
             self.cached_public_observation = None
+            self.board_metadata_cache = None
+            self.board_metadata_last_scan_at = 0.0
             self.previous_public_observation = None
             self.pending_own_river_confirmation = None
             self.last_shanten = None
@@ -2842,6 +2953,8 @@ class PythonAutoOperator:
                     # run hand geometry on a different browser tab.
                     return
                 self.poll_public_recognition()
+                if getattr(self.args, "board_metadata", False):
+                    self.poll_board_metadata()
                 # Force-auto quick/exact gates consume the newest completed
                 # public snapshot. Establish it before either branch; the
                 # non-force path captures synchronously later in the loop.
@@ -3257,6 +3370,8 @@ class PythonAutoOperator:
                         # a separate resident worker so this turn gate remains
                         # responsive while opponents are acting.
                         self.schedule_periodic_public_recognition(full_screen)
+                        if getattr(self.args, "board_metadata", False):
+                            self.schedule_board_metadata(full_screen)
                         page.wait_for_timeout(max(20, round(self.args.poll * 1000)))
                         continue
                 if self.args.mode == "force-auto" and self.screencast_session is not None:
