@@ -17,10 +17,17 @@ download() {
   local url="$1"
   local output="$2"
   local expected="$3"
-  if [[ ! -f "$output" ]] || [[ "$(sha256sum "$output" | cut -d' ' -f1)" != "$expected" ]]; then
+  local actual=""
+  if [[ -f "$output" ]]; then
+    actual="$(shasum -a 256 "$output" | cut -d' ' -f1)"
+  fi
+  if [[ "$actual" != "$expected" ]]; then
     curl --fail --location --silent --show-error "$url" --output "$output"
   fi
-  echo "$expected  $output" | sha256sum --check --status
+  [[ "$(shasum -a 256 "$output" | cut -d' ' -f1)" == "$expected" ]] || {
+    echo "SHA-256 mismatch: $output" >&2
+    return 1
+  }
 }
 
 download \

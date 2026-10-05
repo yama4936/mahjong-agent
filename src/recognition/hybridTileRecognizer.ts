@@ -82,6 +82,10 @@ export class HybridTileRecognizer {
       child.stderr.on("data", (chunk) => { stderr = `${stderr}${String(chunk)}`.slice(-4000); });
       child.once("error", (error) => {
         if (!settled) { settled = true; reject(error); }
+        if (this.child === child) {
+          this.child = undefined;
+          this.ready = undefined;
+        }
       });
       child.once("exit", (code) => {
         const error = new Error(`Hybrid vision worker exited with code ${code}${stderr ? `: ${stderr.trim()}` : ""}`);
@@ -91,8 +95,10 @@ export class HybridTileRecognizer {
           request.reject(error);
         }
         this.pending.clear();
-        this.child = undefined;
-        this.ready = undefined;
+        if (this.child === child) {
+          this.child = undefined;
+          this.ready = undefined;
+        }
       });
     });
     return this.ready;

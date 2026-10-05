@@ -3,6 +3,9 @@ import test from "node:test";
 import sharp from "sharp";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
+import { mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   HybridTileRecognizer,
   isKnownSixSevenPinConfusion,
@@ -33,6 +36,28 @@ test("maps cvmaj honors and AutoMajsoul red fives", () => {
   assert.equal(mapHybridLabel("7z"), "C");
   assert.equal(mapHybridLabel("0m"), "0m");
   assert.equal(mapHybridLabel("5s"), "5s");
+});
+
+test("hybrid worker retries after its executable is installed", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "hybrid-worker-retry-"));
+  const executable = join(directory, "python");
+  const worker = join(directory, "worker.cjs");
+  await writeFile(worker, `process.stdout.write(JSON.stringify({ready:true})+'\\n');
+    let buffer=''; process.stdin.on('data', chunk => { buffer += chunk;
+      let end; while ((end=buffer.indexOf('\\n')) >= 0) {
+        const request=JSON.parse(buffer.slice(0,end)); buffer=buffer.slice(end+1);
+        process.stdout.write(JSON.stringify({id:request.id,predictions:[]})+'\\n');
+      }
+    });`);
+  const recognizer = new HybridTileRecognizer(executable, "unused", "unused", worker) as any;
+  try {
+    await assert.rejects(recognizer.predict([Buffer.from("tile")]), /ENOENT/);
+    await symlink(process.execPath, executable);
+    assert.deepEqual(await recognizer.predict([Buffer.from("tile")]), []);
+  } finally {
+    await recognizer.close();
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test("hybrid classifier preserves normal and red-gate decisions", async () => {

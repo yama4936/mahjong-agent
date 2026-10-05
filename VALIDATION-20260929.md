@@ -637,3 +637,11 @@
 - クリック後の実画面 `artifacts/live/account-modal-20261005.png` は YOSTAR のメールアドレス・認証コード入力画面だった。画面認識がこれも `matchmaking` と誤判定していた。中央の白い認証ダイアログを `account_modal` と識別するよう修正した。
 - 修正後の `artifacts/login-required-stop-20261005/python-operator.jsonl` は `login_required_stop state=account_modal confidence=1.0` を記録し、操作者はゲーム操作をせず正常終了した。自動で利用できるログイン済みセッションは存在しない。認証入力はユーザー操作が必要で、300+0秒友人戦回帰と段位戦は未開始のままである。
 - 操作者にはログインボタンの一度だけの試行、認証画面の安全停止、画面種別ごとの任意スナップショットを追加した。空白画面を認証画面と誤認しない判定も確認した。`python/test_screen_state.py python/test_auto_operator.py` の関連157件は34件skipを除き成功し、`npm run build` も成功した。
+
+## 2026-10-05 友人戦36717・認識環境復旧（診断標本、回帰不合格）
+
+- Yostarメール認証と利用規約への同意後、アカウント「テストjev」で友人戦部屋36717を開始した。四人CPU(簡単)・一局戦・300+0秒、開始25000点、返し30000点、飛び有効、赤ドラ3などの設定画像は `artifacts/friend-300-8bb7941-room36717-20261005/preflight-room.png`。使用コミットは `8bb7941`。初回操作者は `--action-deadline-ms=300000 --force-auto-click-budget-ms=8000 --board-metadata --advance-screens --no-dashboard` で実行した。
+- `artifacts/friend-300-8bb7941-room36717-20261005/python-operator.jsonl` に `public_cache_failed`（`.runtime/vision-venv/bin/python ENOENT`）と `public_context_deferred` の反復を記録した。盤面認識は東1局・残り66枚を読み続けたが打牌できず、持ち時間切れでゲーム側の自動打牌が混入した。初回操作者の機能回帰は失敗。画像だけで原因を断定せず、認識サーバーのspawnエラーと実行環境の不存在を照合した。
+- ソース・設定を対局中に変更せず、欠けていた `.runtime/vision-venv` と固定ハッシュのハイブリッド認識モデルを導入した。`npm run hybrid-vision:setup` はmacOSに `sha256sum` がなく失敗したため、固定SHA-256を `shasum -a 256` で検証してモデルを配置した。稼働中サーバーは失敗したworkerのPromiseを保持して回復しなかった。異常な操作者のみ停止し、ゲーム対局を退出せず同じ設定で再接続した。
+- 復旧実行は `artifacts/friend-300-8bb7941-room36717-recovery-20261005/python-operator.jsonl`。公開情報キャッシュ更新、牌認識、判断、実クリック、河と手牌の変化による操作確認、リプレイ28件を記録した。東1局は流局、東2局の終局で `match_completed_stop confidence=1.0`。結果は自家「テストjev」33300点・1位、CPU22900/22900/20900点。終局画像は同ディレクトリの `frames/2026-10-05T03-13-32.511836+00-00.match_result.png`。序盤にゲーム側自動打牌があったため、順位はクリーンな機能回帰標本にも段位戦勝率標本にも含めない。
+- セットアップをmacOSで動くSHA-256検証へ修正し、workerの起動失敗後に次要求で再試行できるよう修正した。`npm run hybrid-vision:setup` の再実行、`npm run build`、`node --import tsx --test test/hybridTileRecognizer.test.ts`（6件成功）は通過した。全体`npm test`は193件中186成功・6skip・1失敗で、既存の`test/recognitionServer.test.ts`が`cached-hand-drift-20260928.jpg`を11枚の副露手牌として期待する一方、現認識では14枚と判定する。単独再実行でも同じ失敗を確認した。この失敗は今回修正した起動再試行分岐とは別に残る。
