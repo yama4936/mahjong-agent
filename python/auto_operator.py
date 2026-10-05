@@ -3101,6 +3101,12 @@ class PythonAutoOperator:
                     page.wait_for_timeout(max(100, round(self.args.poll * 1000)))
                     continue
                 if screen_state != "match" and self.args.mode != "force-auto":
+                    if self.args.mode == "observer" and screen_state == "login" \
+                            and getattr(self, "last_observer_screen_state", None) != screen_state:
+                        snapshot = self.frames / f"{utc_stamp()}.{screen_state}.png"
+                        snapshot.write_bytes(full_screen)
+                        self.last_observer_screen_state = screen_state
+                        self.log("observer_screen_snapshot", state=screen_state, screenshot=str(snapshot))
                     self.log("screen_state", state=screen_state, confidence=screen_confidence)
                     time.sleep(self.args.poll)
                     continue

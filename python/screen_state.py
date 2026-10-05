@@ -197,6 +197,18 @@ def _is_cherry_blossom_matchmaking(image: Image.Image) -> bool:
     return dark >= 0.65
 
 
+def _is_cherry_blossom_login(image: Image.Image) -> bool:
+    """The large gold login button otherwise resembles a dark ranked menu."""
+    width, height = image.size
+    if width < 1200 or height < 700:
+        return False
+    button = image.crop((width * .67, height * .39, width * .89, height * .49)).convert("RGB")
+    pixels = list(button.getdata())
+    gold = sum(1 for red, green, blue in pixels
+               if red > 160 and green > 110 and blue < 120) / max(1, len(pixels))
+    return gold >= .5
+
+
 def load_references(directory: Path) -> dict[str, tuple[ScreenState, Image.Image]]:
     return {
         f"{state}:{index}": (state, _open(directory / filename))
@@ -225,6 +237,8 @@ def classify_screen(
         return "connection_error", 1.0
     if _has_bottom_tile_faces(image):
         return "match", 1.0
+    if _is_cherry_blossom_login(image):
+        return "login", 1.0
     if _is_cherry_blossom_matchmaking(image):
         return "matchmaking", 1.0
     if _is_cherry_blossom_ranked_menu(image):

@@ -622,3 +622,11 @@
 - `bca8399` はツモボタンの同じ表示遷移を、クリック前の `RetryableSafetyAbort` として再観測するよう修正した。リーチの既存安全経路と同じく、卓全体を停止させず、未クリックを保証する。`PYTHONPATH=python .runtime/python-auto-venv/bin/python -m unittest python/test_auto_operator.py` は153成功・33 skip。コミットとpush済み。
 - 新規友人戦部屋31845で、四人CPU戦・一局戦・300+0秒、開始25000点、返し30000点、飛び有効、赤ドラ3、ローカル役無効、喰い断有効、一翻縛り、便利表示有効を `artifacts/live/bca8399-friend-room-20261003.png` で確認した。実行は `node scripts/run-operator.mjs force-auto --layout=config/layout-300-regression.json --artifacts=artifacts/friend-300-bca8399-room31845-20261003 --action-deadline-ms=300000 --force-auto-click-budget-ms=8000 --board-metadata --advance-screens --no-dashboard`。開始前にNode/Python PIDを確認し、対局中にコード・設定は変更していない。
 - 7判断・7通常クリックで `match_completed_stop confidence=1.0` により完走した。`own_discard_mismatch`、`own_discard_reconciliation_failed`、`action_aborted`、期限超過、`safety_stop` はすべて0。終局画面 `artifacts/friend-300-bca8399-room31845-20261003/final-screen.png` は自家18600点・4位、CPU31400/25000/25000点を示す。このCPU結果はツモ遷移復旧を含む機能回帰であり、段位戦成績とは分離する。
+
+## 2026-10-05 起動復旧の事前確認（対局未開始）
+
+- 作業開始時は `167e2fb`、clean な `main` と `origin/main` を確認した。専用ブラウザ、操作者、認識サーバーの稼働はなく、実行中の対局もなかった。このチェックアウトには除外対象の `.runtime`、牌テンプレート、対局ログが存在しなかった。
+- `npm ci`、TypeScript build、Python仮想環境とOCR依存関係、固定リビジョン `8c0f22e7c6b64be55bb1d2767fe1a63981788de7` の牌テンプレート1091ファイルを用意した。`uv venv` が作る環境には `pip` がないため、`operator:setup` は従来失敗した。セットアップを `uv pip` にフォールバックさせ、再実行成功を確認した。
+- 専用Chromeの通常表示とソフトウェア描画ではCDP画面取得が30秒でタイムアウトし、安全停止した。ヘッドレスかつソフトウェア描画では画面取得と認識サーバーが稼働した。読み取り専用操作者の初回ログは `artifacts/preflight-headless-snapshot-167e2fb-20261005/python-operator.jsonl`。保存画面 `artifacts/live/login-screen-20261005.png` はログイン画面だったが、従来の画面認識は `matchmaking confidence=1.0` と誤判定していた。
+- 金色のログインボタンを識別して `login` を先に判定する修正後、`artifacts/preflight-login-fixed-20261005/python-operator.jsonl` に `login confidence=1.0` と画面スナップショットを確認した。読み取り専用操作者は重複起動せず、実戦操作はしていない。新規プロファイルは未ログインのため、友人戦300+0秒の設定、`--action-deadline-ms=300000` の実戦回帰、段位戦再評価はまだ実施できない。対局成績標本は追加しない。
+- 関連チェックは `python/test_screen_state.py` 3件、`python/test_auto_operator.py` 153件成功・34件skip、`npm run build`、`npm run operator:setup` が成功。全体 `npm test` と `npm run test:python` は、この新規チェックアウトに存在しない旧・Git除外の検証画像を参照するテストで失敗した。失敗は今回の実戦成績ではない。

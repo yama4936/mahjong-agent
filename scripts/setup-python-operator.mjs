@@ -33,5 +33,11 @@ if (!existsSync(python)) {
   console.error(`Python environment was not created: ${python}`);
   process.exit(1);
 }
-run(python, ["-m", "pip", "install", "-r", path.join(root, "python", "requirements.txt")]);
+const requirements = path.join(root, "python", "requirements.txt");
+const pip = spawnSync(python, ["-m", "pip", "--version"], { cwd: root, stdio: "ignore" });
+if (pip.status === 0) {
+  run(python, ["-m", "pip", "install", "-r", requirements]);
+} else {
+  run("uv", ["pip", "install", "--python", python, "-r", requirements]);
+}
 console.log(`Python operator ready: ${python}`);
