@@ -4,10 +4,20 @@ import unittest
 
 from PIL import Image, ImageDraw
 
-from screen_state import _matches_blocking_dialog, classify_screen
+from screen_state import _matches_blocking_dialog, _rgb_fraction, classify_screen
 
 
 class RiichiSelectionScreenTest(unittest.TestCase):
+    def test_native_rgb_fraction_preserves_exact_color_thresholds(self):
+        image = Image.new("RGB", (4, 2))
+        pixels = [
+            (181, 131, 119), (180, 131, 119), (181, 130, 119), (181, 131, 120),
+            (255, 200, 0), (20, 40, 80), (182, 132, 118), (181, 131, 121),
+        ]
+        image.putdata(pixels)
+        self.assertEqual(_rgb_fraction(image, ((">", 180), (">", 130), ("<", 120))), 3 / 8)
+        self.assertEqual(_rgb_fraction(image, (("<", 100),) * 3), 1 / 8)
+
     def test_live_rank_progress_and_reward_are_not_matchmaking(self):
         root = Path(__file__).resolve().parents[1]
         self.assertEqual(classify_screen(root / "artifacts/live/ranked-rank-progress-20261006.png", {}),

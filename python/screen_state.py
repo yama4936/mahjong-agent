@@ -84,18 +84,27 @@ def _is_round_result_summary(image: Image.Image) -> bool:
     return 0.25 <= blue <= 0.75 and bright >= 0.05
 
 
+def _rgb_fraction(image: Image.Image, limits: tuple[tuple[str, int], ...]) -> float:
+    """Count a three-channel color condition with Pillow's native pixel loops."""
+    masks = []
+    for band, (comparison, threshold) in zip(image.split(), limits):
+        values = [255 if (value > threshold if comparison == ">" else value < threshold)
+                  else 0 for value in range(256)]
+        masks.append(band.point(values))
+    combined = ImageChops.multiply(ImageChops.multiply(masks[0], masks[1]), masks[2])
+    return combined.histogram()[255] / max(1, image.width * image.height)
+
+
 def _is_ranked_match_result(image: Image.Image) -> bool:
     """Detect the four-place result board plus its yellow confirm button."""
     width, height = image.size
     if width < 1200 or height < 700:
         return False
     button = image.crop((width * 0.84, height * 0.88, width * 0.98, height * 0.97)).convert("RGB")
-    pixels = list(button.getdata())
-    yellow = sum(1 for red, green, blue in pixels if red > 180 and green > 130 and blue < 120) / max(1, len(pixels))
+    yellow = _rgb_fraction(button, ((">", 180), (">", 130), ("<", 120)))
     board = image.crop((width * 0.42, height * 0.16, width * 0.94, height * 0.87)).convert("RGB")
-    board_pixels = list(board.getdata())
-    dark = sum(1 for pixel in board_pixels if max(pixel) < 100) / max(1, len(board_pixels))
-    white = sum(1 for pixel in board_pixels if min(pixel) > 180) / max(1, len(board_pixels))
+    dark = _rgb_fraction(board, (("<", 100),) * 3)
+    white = _rgb_fraction(board, ((">", 180),) * 3)
     return yellow >= 0.25 and dark >= 0.25 and white >= 0.03
 
 
@@ -110,15 +119,11 @@ def _is_rank_progress(image: Image.Image) -> bool:
     if width < 1200 or height < 700:
         return False
     button = image.crop((width * 0.84, height * 0.88, width * 0.98, height * 0.97)).convert("RGB")
-    button_pixels = list(button.getdata())
-    yellow = sum(
-        1 for red, green, blue in button_pixels if red > 180 and green > 130 and blue < 120
-    ) / max(1, len(button_pixels))
+    yellow = _rgb_fraction(button, ((">", 180), (">", 130), ("<", 120)))
     # The dark right-hand board distinguishes rank progress from the four-place
     # result, which also has a yellow confirm button but a bright score board.
     board = image.crop((width * 0.50, height * 0.20, width * 0.90, height * 0.85)).convert("RGB")
-    board_pixels = list(board.getdata())
-    dark = sum(1 for pixel in board_pixels if max(pixel) < 100) / max(1, len(board_pixels))
+    dark = _rgb_fraction(board, (("<", 100),) * 3)
     return yellow >= 0.25 and dark >= 0.85
 
 
