@@ -3140,7 +3140,16 @@ class PythonAutoOperator:
                     if not quick_draw and not quick_pass and not quick_calls and not quick_reaction_win and iterations % 10:
                         page.wait_for_timeout(max(20, round(self.args.poll * 1000)))
                         continue
-                full_screen = gate_frame or page.screenshot(animations="disabled")
+                if quick_draw and self.args.mode == "force-auto":
+                    # A room-start click or stale hover can lift one tile into
+                    # the fixed recognition crop. Retreat before the first
+                    # full hand image, including when the room was started
+                    # after this operator attached.
+                    retreat_pointer_from_hand(page.mouse, self.layout["viewport"])
+                    page.wait_for_timeout(100)
+                    full_screen = page.screenshot(animations="disabled")
+                else:
+                    full_screen = gate_frame or page.screenshot(animations="disabled")
                 draw_slot_heuristic_occupied = False
                 screen_state, screen_confidence = classify_screen(full_screen, self.screen_references)
                 if screen_state == "away":

@@ -103,7 +103,8 @@ def _is_rank_progress(image: Image.Image) -> bool:
     """Detect the post-result rank gauge and its second confirm button.
 
     This overlay shares the darkened ranked-room background with matchmaking,
-    so require both the yellow confirmation control and the cyan circular gauge.
+    so require the yellow confirmation control and the dark right-hand board.
+    The cyan arc is absent during the first frames of the rank animation.
     """
     width, height = image.size
     if width < 1200 or height < 700:
@@ -113,19 +114,12 @@ def _is_rank_progress(image: Image.Image) -> bool:
     yellow = sum(
         1 for red, green, blue in button_pixels if red > 180 and green > 130 and blue < 120
     ) / max(1, len(button_pixels))
-    gauge = image.crop((width * 0.70, height * 0.30, width * 0.89, height * 0.67)).convert("RGB")
-    gauge_pixels = list(gauge.getdata())
-    cyan = sum(
-        1 for red, green, blue in gauge_pixels
-        if green > 100 and blue > 120 and blue - red > 30 and green - red > 20
-    ) / max(1, len(gauge_pixels))
-    # The rank animation leaves only a thin cyan arc on some frames. Its
-    # otherwise dark right-hand board distinguishes it from the four-place
-    # result, which can also contain cyan text near the same region.
+    # The dark right-hand board distinguishes rank progress from the four-place
+    # result, which also has a yellow confirm button but a bright score board.
     board = image.crop((width * 0.50, height * 0.20, width * 0.90, height * 0.85)).convert("RGB")
     board_pixels = list(board.getdata())
     dark = sum(1 for pixel in board_pixels if max(pixel) < 100) / max(1, len(board_pixels))
-    return yellow >= 0.25 and cyan >= 0.006 and dark >= 0.85
+    return yellow >= 0.25 and dark >= 0.85
 
 
 def _is_post_match_reward(image: Image.Image) -> bool:

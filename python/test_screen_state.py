@@ -1,3 +1,4 @@
+import io
 from pathlib import Path
 import unittest
 
@@ -13,6 +14,15 @@ class RiichiSelectionScreenTest(unittest.TestCase):
                          ("rank_progress", 1.0))
         self.assertEqual(classify_screen(root / "artifacts/live/ranked-post-match-reward-20261006.png", {}),
                          ("post_match_reward", 1.0))
+
+    def test_rank_progress_before_gauge_animation_is_not_matchmaking(self):
+        root = Path(__file__).resolve().parents[1]
+        image = Image.open(root / "artifacts/live/ranked-rank-progress-after-stop-20261006.png").convert("RGB")
+        # The gauge arc has not yet appeared when the result overlay first fades.
+        ImageDraw.Draw(image).rectangle((1344, 324, 1709, 724), fill=(20, 27, 42))
+        output = io.BytesIO()
+        image.save(output, format="PNG")
+        self.assertEqual(classify_screen(output.getvalue(), {}), ("rank_progress", 1.0))
 
     def test_informational_dialog_is_not_a_connection_error(self):
         reference = Image.new("RGB", (1920, 1080), (26, 37, 67))
