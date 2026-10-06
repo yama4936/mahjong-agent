@@ -335,6 +335,35 @@ export async function recognizeConfiguredPublicTilesWithVit(
   const predictions = images.length > 0 ? await classifier.classifyTileImages(images) : [];
   if (predictions.length !== jobs.length) throw new Error("Model public classifier returned the wrong prediction count");
 
+  // A tight bright-component crop can cut off the edge of a newly discarded
+  // tile. Two reviewed own-river frames classified East as North and 8m as
+  // 6m at 0.53-0.56 confidence. Four pixels of surrounding table restored
+  // both faces, while padding every crop degraded a correctly read red five.
+  const weakOwnRiver = jobs.flatMap((job, index) => (
+    job.name === "ownDiscards" && predictions[index]!.confidence < 0.7 ? [index] : []
+  ));
+  if (weakOwnRiver.length > 0) {
+    const { width, height } = await sharp(screenshot).metadata();
+    if (!width || !height) throw new Error("Public screenshot has no dimensions");
+    const paddedImages = await Promise.all(weakOwnRiver.map((index) => {
+      const { candidate, region } = jobs[index]!;
+      const left = Math.max(0, candidate.x - 4);
+      const top = Math.max(0, candidate.y - 4);
+      const right = Math.min(width, candidate.x + candidate.width + 4);
+      const bottom = Math.min(height, candidate.y + candidate.height + 4);
+      return sharp(screenshot).extract({ left, top, width: right - left, height: bottom - top })
+        .rotate(region.rotationToUpright).png().toBuffer();
+    }));
+    const paddedPredictions = await classifier.classifyTileImages(paddedImages);
+    if (paddedPredictions.length !== weakOwnRiver.length) throw new Error("Model public retry returned the wrong prediction count");
+    weakOwnRiver.forEach((index, retryIndex) => {
+      const original = predictions[index]!;
+      const padded = paddedPredictions[retryIndex]!;
+      if (padded.confidence >= 0.8 && padded.confidence - original.confidence >= 0.15
+        && padded.confidence - padded.runnerUpConfidence >= 0.5) predictions[index] = padded;
+    });
+  }
+
   const grouped = new Map<PublicTileRegionName, RecognizedPublicTile[]>();
   jobs.forEach((job, index) => {
     const prediction = predictions[index]!;

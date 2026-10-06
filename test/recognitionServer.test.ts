@@ -52,7 +52,8 @@ test("resident force-auto evaluation preserves complete own pon and rejects mism
     };
     for (const [id, ownMelds] of [[1, observation.ownMelds], [2, []]] as const) {
       child.stdin.write(JSON.stringify({ id, screenshot: "artifacts/live/cached-hand-drift-20260928.jpg",
-        evaluateForceAuto: true, openMelds: 1, publicObservation: { ...observation, ownMelds } }) + "\n");
+        evaluateForceAuto: true, dynamicLayout: true, openMelds: 1,
+        publicObservation: { ...observation, ownMelds } }) + "\n");
       const response = await read();
       assert.equal(response.error, undefined);
       const result = response.result;

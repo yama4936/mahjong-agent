@@ -25,6 +25,34 @@ function publicRegion(tiles: Array<{ tile: any; x: number; y?: number; width?: n
   };
 }
 
+test("production own river reads the last East tile after a discard", {
+  skip: !existsSync(".runtime/hybrid-vision/cvmaj-pretrained.tar") || !existsSync(".runtime/hybrid-vision/automajsoul-best-model.pt"),
+}, async () => {
+  const layout = layoutSchema.parse(JSON.parse(await readFile("config/layout-300-regression.json", "utf8")));
+  const ownDiscards = layout.publicTileRegions!.ownDiscards!;
+  assert.equal(ownDiscards.luminanceThreshold, 210);
+  const recognizer = new HybridTileRecognizer();
+  try {
+    const result = await recognizeConfiguredPublicTilesWithVit(
+      "artifacts/live/own-river-east-as-north-20261006.jpg",
+      { ...layout, publicTileRegions: { ownDiscards } }, recognizer,
+    );
+    assert.equal(result.ownDiscards?.classificationSafe, true);
+    assert.deepEqual(result.ownDiscards?.recognized.map((tile) => tile.tile),
+      ["4m", "F", "C", "S", "9m", "1m", "E", "9p", "8m", "9p", "8p", "7s", "E"]);
+    assert.ok(result.ownDiscards!.recognized.at(-1)!.confidence >= 0.8);
+
+    const eightMan = await recognizeConfiguredPublicTilesWithVit(
+      "artifacts/live/own-river-eight-man-as-six-20261006.jpg",
+      { ...layout, publicTileRegions: { ownDiscards } }, recognizer,
+    );
+    assert.equal(eightMan.ownDiscards?.classificationSafe, true);
+    assert.deepEqual(eightMan.ownDiscards?.recognized.map((tile) => tile.tile),
+      ["S", "4s", "P", "8s", "9m", "6s", "8s", "6s", "6m", "7m", "0m", "7m", "8m"]);
+    assert.ok(eightMan.ownDiscards!.recognized.at(-1)!.confidence >= 0.8);
+  } finally { await recognizer.close(); }
+});
+
 test("production left river excludes face-border contamination with real Hybrid", {
   skip: !existsSync(".runtime/hybrid-vision/cvmaj-pretrained.tar") || !existsSync(".runtime/hybrid-vision/automajsoul-best-model.pt"),
 }, async () => {
