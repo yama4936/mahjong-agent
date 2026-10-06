@@ -7,6 +7,13 @@ from screen_state import _matches_blocking_dialog, classify_screen
 
 
 class RiichiSelectionScreenTest(unittest.TestCase):
+    def test_live_rank_progress_and_reward_are_not_matchmaking(self):
+        root = Path(__file__).resolve().parents[1]
+        self.assertEqual(classify_screen(root / "artifacts/live/ranked-rank-progress-20261006.png", {}),
+                         ("rank_progress", 1.0))
+        self.assertEqual(classify_screen(root / "artifacts/live/ranked-post-match-reward-20261006.png", {}),
+                         ("post_match_reward", 1.0))
+
     def test_informational_dialog_is_not_a_connection_error(self):
         reference = Image.new("RGB", (1920, 1080), (26, 37, 67))
         message = (595, 455, 1335, 584)

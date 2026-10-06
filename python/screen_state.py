@@ -119,7 +119,13 @@ def _is_rank_progress(image: Image.Image) -> bool:
         1 for red, green, blue in gauge_pixels
         if green > 100 and blue > 120 and blue - red > 30 and green - red > 20
     ) / max(1, len(gauge_pixels))
-    return yellow >= 0.25 and cyan >= 0.025
+    # The rank animation leaves only a thin cyan arc on some frames. Its
+    # otherwise dark right-hand board distinguishes it from the four-place
+    # result, which can also contain cyan text near the same region.
+    board = image.crop((width * 0.50, height * 0.20, width * 0.90, height * 0.85)).convert("RGB")
+    board_pixels = list(board.getdata())
+    dark = sum(1 for pixel in board_pixels if max(pixel) < 100) / max(1, len(board_pixels))
+    return yellow >= 0.25 and cyan >= 0.006 and dark >= 0.85
 
 
 def _is_post_match_reward(image: Image.Image) -> bool:
