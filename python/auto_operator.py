@@ -1092,7 +1092,9 @@ class PythonAutoOperator:
                 except subprocess.TimeoutExpired:
                     self.public_recognition_server.kill()
 
-    def schedule_public_recognition(self, screenshot: bytes, *, force: bool = False) -> None:
+    def schedule_public_recognition(
+        self, screenshot: bytes, *, force: bool = False, verified_match: bool = False,
+    ) -> None:
         server = self.public_recognition_server
         if not server or server.poll() is not None:
             return
@@ -1105,7 +1107,7 @@ class PythonAutoOperator:
             with Image.open(io.BytesIO(screenshot)) as image:
                 if image.size != (1920, 1080):
                     return
-            screen_state, _ = classify_screen(screenshot, {})
+            screen_state = "match" if verified_match else classify_screen(screenshot, {})[0]
         except Exception:
             return
         if screen_state != "match":
@@ -1152,7 +1154,7 @@ class PythonAutoOperator:
         self.public_recognition_thread.start()
 
     def schedule_periodic_public_recognition(
-        self, screenshot: bytes, *, now: float | None = None,
+        self, screenshot: bytes, *, now: float | None = None, verified_match: bool = False,
     ) -> bool:
         """Refresh dora and other public tiles independently of turn state."""
         if not getattr(self.args, "public_cache", False) or not self.public_recognition_server:
@@ -1162,7 +1164,7 @@ class PythonAutoOperator:
         if observed_at - self.last_public_scan_at < interval:
             return False
         self.last_public_scan_at = observed_at
-        self.schedule_public_recognition(screenshot)
+        self.schedule_public_recognition(screenshot, verified_match=verified_match)
         return True
 
     def poll_public_recognition(self) -> None:
@@ -3275,7 +3277,7 @@ class PythonAutoOperator:
                     continue
                 # Dora can change after any kan and must not depend on whether
                 # this is currently classified as our turn or an opponent's.
-                self.schedule_periodic_public_recognition(full_screen)
+                self.schedule_periodic_public_recognition(full_screen, verified_match=screen_state == "match")
                 if self.args.mode == "force-auto":
                     pass_region = self.layout.get("actionButtonRegions", {}).get("pass")
                     call_buttons = force_auto_call_buttons(full_screen, self.layout["viewport"]) \
@@ -3378,7 +3380,7 @@ class PythonAutoOperator:
                         # away/result handling. Public tiles are classified by
                         # a separate resident worker so this turn gate remains
                         # responsive while opponents are acting.
-                        self.schedule_periodic_public_recognition(full_screen)
+                        self.schedule_periodic_public_recognition(full_screen, verified_match=screen_state == "match")
                         if getattr(self.args, "board_metadata", False):
                             self.schedule_board_metadata(full_screen)
                         page.wait_for_timeout(max(20, round(self.args.poll * 1000)))

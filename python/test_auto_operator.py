@@ -1129,6 +1129,24 @@ class AwayDialogDetectionTest(unittest.TestCase):
             self.assertEqual(operator.public_recognition_request_id, 1)
             self.assertEqual(len(list(operator.frames.glob("*.public-cache.jpg"))), 1)
 
+    def test_public_cache_scheduler_reuses_verified_match_state_for_same_frame(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        screenshot = (root / "artifacts/live/board-score-opposite-low-confidence-20260928.png").read_bytes()
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.public_recognition_server = Mock()
+        operator.public_recognition_server.poll.return_value = None
+        operator.public_recognition_thread = None
+        operator.public_cache_last_frame_hash = None
+        operator.public_recognition_request_id = 0
+        operator.public_cache_generation = 3
+        with tempfile.TemporaryDirectory() as directory:
+            operator.frames = Path(directory)
+            with patch("auto_operator.classify_screen", side_effect=AssertionError("duplicate classification")):
+                with patch("auto_operator.threading.Thread") as worker:
+                    operator.schedule_public_recognition(screenshot, verified_match=True)
+                    worker.assert_called_once()
+            self.assertEqual(operator.public_recognition_request_id, 1)
+
     def test_draw_slot_presence_distinguishes_own_and_opponent_turns(self) -> None:
         region = {"x": 100, "y": 50, "width": 100, "height": 100}
         own_turn = io.BytesIO()
