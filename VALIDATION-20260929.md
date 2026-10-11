@@ -757,3 +757,10 @@
 - push済み `fd33dd9` はranked-loopに限り、連続3回のクリック予算超過で `ranked_click_budget_safety_stop` を記録して、離席ダイアログに触れずrun loopを終了する。実地確認 `artifacts/ranked-fd33dd9-budget-stop-20261011/python-operator.jsonl` では3回目（frame age 5893ms）に同イベントが記録され、プロセスは終了した。安全停止前に反応パスが `evidenceToClickMs=6994` でクリックされたことを発見したため、この試行も勝率標本から除外する。
 - push済み `c2a582e` は反応のpass・鳴き・ronにも同じcapture時刻予算チェックを追加した。2600msを超える反応評価はクリック前に中止する。`PYTHONPATH=python .runtime/python-auto-venv/bin/python -m unittest python.test_auto_operator python.test_screen_state -q` は179成功、33 skip。短時間の段位戦を再開する前に、最新コミットで300+0秒CPU友人戦を完走し、短時間操作速度の根本改善も別途必要である。
 - push済み `285f1c8` はCDPフレーム受信時刻でframe ageを計算し、force-autoの手牌認識を始める前に2600ms予算を使い切ったフレームを `recognition_deferred_stale_capture` として再観測する。クリック直前の保護は残す。click budget未指定の300+0秒経路には影響させない。統合テストは180成功、33 skip。これは期限超過後の無駄な認識を削る安全な前処理であり、2600ms内の有効打牌達成はまだ実地で確認していない。
+
+## 2026-10-11 反応パス鮮度修正と300+0秒CPU復帰局
+
+- 新規CPU友人戦ルーム35795は四人麻雀・一局戦・CPU戦・300+0秒で、開始25000点、返し30000点、飛び有効、赤ドラ3、ローカル役無効、喰い断有効、一翻縛り、便利表示有効。作成画面は `artifacts/live/285f1c8-friend-create-20261011.png`、ルーム設定は `artifacts/live/285f1c8-friend-room-20261011.png`。初回 `6a1a888` の操作者は明示的な `--action-deadline-ms=300000 --force-auto-click-budget-ms=8000` で一系統だけ起動した。
+- 初回は反応passで、独立に最新ボタンを安定確認済みであるにもかかわらず、古い評価フレーム時刻（10--11秒）を8秒予算と比較して繰り返し中止した。これは `artifacts/friend-300-6a1a888-room35795-20261011/python-operator.jsonl` の `reaction_pass_deferred` と `force_auto_click_budget_expired` にある。停止前には手牌変化による中止1件、反応鳴き候補の安全中止、通常打牌・副露・自己河照合を確認したが、この初回は完走しなかった。
+- push済み `1ae7770` はpassだけ、クリック直前の安定ボタン再確認で取得した新鮮な時刻から予算を測るよう修正した。鳴き・ロンは依然として評価フレームの鮮度を必須にする。統合テスト `PYTHONPATH=python .runtime/python-auto-venv/bin/python -m unittest python.test_auto_operator python.test_screen_state -q` は180成功、33 skip。
+- 同ルームの復帰実行 `artifacts/friend-300-1ae7770-room35795-recovery-20261011` は同じ300+0秒／300000ms期限／8000ms予算で、遅延していたpassを `action_click_sent` として一度だけ確認し、その後通常打牌へ復帰して `match_completed_stop` で完走した。終局画像は `frames/2026-10-11T12-35-18.022897+00-00.match_result.png`、自家24000点・3位。復帰ログには13通常打牌、2反応ボタン操作、1件の期限超過打牌中止、1件の期限超過鳴き中止がある。初回停止の前に発生した自己河不一致（期待二萬、観測八萬）と再照合失敗、および途中再起動が混入したため、この対局はクリーンなCPU回帰標本・段位勝率標本から除外する。新規クリーンCPU戦で再検証が必要である。
