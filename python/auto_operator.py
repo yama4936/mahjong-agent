@@ -1117,6 +1117,18 @@ class PythonAutoOperator:
         budget = getattr(getattr(self, "args", None), "force_auto_click_budget_ms", None)
         return budget if isinstance(budget, int) and budget > 0 else None
 
+    def force_auto_capture_age_ms(self, captured_at: float | None) -> int | None:
+        """Age of the actual frame receipt used for a force-auto decision.
+
+        This deliberately uses the CDP receipt timestamp, not the time a
+        temporary PNG happened to be written.  File-write time can make an
+        already old streamed frame look fresh and start a recognizer that no
+        longer has any chance of producing a safe ranked click.
+        """
+        if captured_at is None:
+            return None
+        return max(0, round((time.monotonic() - captured_at) * 1000))
+
     def require_force_auto_click_budget(
         self, captured_at: float | None, *, phase: str,
     ) -> None:
@@ -1130,7 +1142,9 @@ class PythonAutoOperator:
         budget = self.force_auto_click_budget_ms()
         if budget is None or captured_at is None:
             return
-        capture_age_ms = max(0, round((time.monotonic() - captured_at) * 1000))
+        capture_age_ms = self.force_auto_capture_age_ms(captured_at)
+        if capture_age_ms is None:
+            return
         if capture_age_ms < budget:
             return
         self.log(
@@ -3639,6 +3653,29 @@ class PythonAutoOperator:
                 if hand_hash == self.last_processed_hand:
                     time.sleep(self.args.poll)
                     continue
+                if self.args.mode == "force-auto":
+                    # Do not write and synchronously recognize a streamed
+                    # frame whose *receipt* already consumed the entire
+                    # ranked decision-to-click budget.  The later guard in
+                    # execute() protects the click; this earlier guard avoids
+                    # spending several seconds evaluating a decision that can
+                    # only be discarded as stale.  Keep 300+0 runs unchanged
+                    # unless they explicitly opt into a click budget.
+                    try:
+                        self.require_force_auto_click_budget(
+                            evaluation_captured_at, phase="before_recognition",
+                        )
+                    except RetryableSafetyAbort as error:
+                        self.last_processed_hand = None
+                        self.armed = True
+                        self.log(
+                            "recognition_deferred_stale_capture",
+                            captureAgeMs=self.force_auto_capture_age_ms(evaluation_captured_at),
+                            clickBudgetMs=self.force_auto_click_budget_ms(),
+                            error=str(error),
+                        )
+                        page.wait_for_timeout(max(20, round(self.args.poll * 1000)))
+                        continue
                 frame_suffix = ".jpg" if evaluation_frame.startswith(b"\xff\xd8\xff") else ".png"
                 screenshot_path = self.frames / f"{utc_stamp()}{frame_suffix}"
                 screenshot_path.write_bytes(evaluation_frame)

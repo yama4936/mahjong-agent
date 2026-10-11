@@ -1542,6 +1542,13 @@ class AwayDialogDetectionTest(unittest.TestCase):
 
         operator.log.assert_not_called()
 
+    def test_ranked_capture_age_uses_stream_receipt_not_temporary_file_time(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+
+        with patch("auto_operator.time.monotonic", return_value=12.601):
+            self.assertEqual(operator.force_auto_capture_age_ms(10.0), 2601)
+            self.assertIsNone(operator.force_auto_capture_age_ms(None))
+
     def test_ranked_click_budget_stops_after_three_consecutive_expiries(self) -> None:
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
         operator.args = argparse.Namespace(force_auto_click_budget_ms=2600, ranked_loop=True)
