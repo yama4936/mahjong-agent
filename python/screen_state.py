@@ -81,7 +81,15 @@ def _is_round_result_summary(image: Image.Image) -> bool:
     pixels = list(region.getdata())
     blue = sum(1 for red, green, value in pixels if value > 70 and value > red * 0.75 and red < 120) / max(1, len(pixels))
     bright = sum(1 for red, green, value in pixels if red > 150 and green > 130 and value < 140) / max(1, len(pixels))
-    return 0.25 <= blue <= 0.75 and bright >= 0.05
+    # The button itself is a saturated blue rectangle.  A looser blue test
+    # also matches the lower-right exposed melds and felt while a player is
+    # deciding after a call (see friend-300-eaacede-room73637).  Require the
+    # stronger blue fill present in the actual confirmation control.
+    confirm_blue = sum(
+        1 for red, green, value in pixels
+        if value > 100 and value > red * 1.1 and value > green * 1.05
+    ) / max(1, len(pixels))
+    return 0.20 <= confirm_blue <= 0.75 and bright >= 0.05
 
 
 def _rgb_fraction(image: Image.Image, limits: tuple[tuple[str, int], ...]) -> float:

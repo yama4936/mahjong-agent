@@ -617,6 +617,24 @@ def geometric_reaction_open_meld_count(screenshot: bytes, layout: dict[str, Any]
     return None
 
 
+def round_result_conflicts_with_live_table(screenshot: bytes, layout: dict[str, Any]) -> dict[str, Any] | None:
+    """Return direct live-table evidence which vetoes a round-result guess.
+
+    Result overlays dim and hide the hand enough that neither calibrated hand
+    geometry should be visible.  In contrast, a closed 13-tile row or a
+    compact row plus own exposed meld is positive evidence that play is still
+    live.  This deliberately does not use a mere cached hand: stale cache
+    state must never hide a genuine result screen.
+    """
+    if closed_concealed_row_visible(screenshot, layout):
+        return {"kind": "closed_concealed_row"}
+    open_melds = geometric_open_meld_count(screenshot, layout)
+    if open_melds is not None:
+        return {"kind": "open_hand_geometry", "openMelds": open_melds,
+                "selfDrawVisible": self_turn_draw_visible(screenshot, layout, open_melds)}
+    return None
+
+
 def discard_point_in_hand_geometry(
     point: dict[str, float], layout: dict[str, Any], open_melds: int,
 ) -> bool:
@@ -2335,6 +2353,9 @@ class PythonAutoOperator:
             if terminal_transition:
                 full_screen = page.screenshot(animations="disabled")
                 screen_state, screen_confidence = classify_screen(full_screen, self.screen_references)
+                if screen_state == "round_result" and getattr(self, "layout", None) \
+                        and round_result_conflicts_with_live_table(full_screen, self.layout):
+                    screen_state, screen_confidence = "match", 1.0
                 if screen_state in {"round_result", "match_result"}:
                     self.cached_concealed_tiles = None
                     return {
@@ -3160,6 +3181,12 @@ class PythonAutoOperator:
                     full_screen = gate_frame or page.screenshot(animations="disabled")
                 draw_slot_heuristic_occupied = False
                 screen_state, screen_confidence = classify_screen(full_screen, self.screen_references)
+                if screen_state == "round_result":
+                    live_evidence = round_result_conflicts_with_live_table(full_screen, self.layout)
+                    if live_evidence is not None:
+                        self.log("round_result_rejected_live_table", confidence=screen_confidence,
+                                 liveTableEvidence=live_evidence)
+                        screen_state, screen_confidence = "match", 1.0
                 if screen_state == "away":
                     if self.resume_if_away(page, full_screen):
                         time.sleep(self.args.poll)

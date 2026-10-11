@@ -59,6 +59,11 @@ class RiichiSelectionScreenTest(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         self.assertNotEqual(classify_screen(root / "artifacts/live/friend-menu-no-hand-20260928.png", {})[0], "match")
 
+    def test_live_open_hand_is_not_a_round_result_from_lower_right_melds(self):
+        root = Path(__file__).resolve().parents[1]
+        frame = root / "artifacts/friend-300-eaacede-room73637-20261011/frames/2026-10-11T08-17-50.273158+00-00.round_result.png"
+        self.assertEqual(classify_screen(frame, {}), ("match", 1.0))
+
 
 if __name__ == "__main__":
     unittest.main()

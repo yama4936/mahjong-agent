@@ -13,7 +13,7 @@ import threading
 from datetime import datetime, timezone
 from unittest.mock import Mock, call, patch
 
-from auto_operator import PythonAutoOperator, RetryableSafetyAbort, action_deadline_timing, ambiguous_open_draw_fallback, away_resume_geometry, closed_concealed_row_visible, confirmed_call_meld, crop_screenshot, discard_point_in_hand_geometry, force_auto_call_buttons, force_auto_chi_choice_points, force_auto_reaction_win_button, force_auto_self_action_buttons, geometric_open_meld_count, is_away_resume_dialog, is_contextual_reaction_pass, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, mean_pixel_delta, merge_public_observations, open_hand_draw_slot, own_meld_surface_visible, post_call_transition, retreat_pointer_from_hand, selected_chi_choice_point, selected_open_draw_is_ambiguous, selected_tile_comparison_region, send_discard_click, should_guard_tenpai_reaction, should_process_reaction_prompt, should_retry_call_policy, stable_hand_comparison_region, stable_hand_delta, tile_face_structure_delta
+from auto_operator import PythonAutoOperator, RetryableSafetyAbort, action_deadline_timing, ambiguous_open_draw_fallback, away_resume_geometry, closed_concealed_row_visible, confirmed_call_meld, crop_screenshot, discard_point_in_hand_geometry, force_auto_call_buttons, force_auto_chi_choice_points, force_auto_reaction_win_button, force_auto_self_action_buttons, geometric_open_meld_count, is_away_resume_dialog, is_contextual_reaction_pass, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, mean_pixel_delta, merge_public_observations, open_hand_draw_slot, own_meld_surface_visible, post_call_transition, retreat_pointer_from_hand, round_result_conflicts_with_live_table, selected_chi_choice_point, selected_open_draw_is_ambiguous, selected_tile_comparison_region, send_discard_click, should_guard_tenpai_reaction, should_process_reaction_prompt, should_retry_call_policy, stable_hand_comparison_region, stable_hand_delta, tile_face_structure_delta
 from screen_state import classify_screen, load_references
 from auto_operator import geometric_reaction_open_meld_count
 from auto_operator import configure_evaluator_click_budget
@@ -21,6 +21,17 @@ from auto_operator import board_state_signature, board_state_signature_matches
 
 
 class EvaluatorClickBudgetTest(unittest.TestCase):
+    def test_live_open_hand_vetoes_round_result_transition(self):
+        project = Path(__file__).resolve().parents[1]
+        frame = (project / "artifacts/friend-300-eaacede-room73637-20261011/frames/2026-10-11T08-17-50.273158+00-00.round_result.png").read_bytes()
+        layout = load_json(project / "config/layout-300-regression.json")
+        self.assertEqual(
+            round_result_conflicts_with_live_table(frame, layout),
+            {"kind": "open_hand_geometry", "openMelds": 1, "selfDrawVisible": True},
+        )
+        actual_result = (project / "artifacts/live/round-result.png").read_bytes()
+        self.assertIsNone(round_result_conflicts_with_live_table(actual_result, layout))
+
     def test_ambiguous_open_draw_slot_is_not_an_auto_discard_target(self):
         evaluation = {"openMelds": 1, "clickIndex": 10,
                       "recognition": {"tiles": ["1m"] * 11, "confidence": 0.60,
