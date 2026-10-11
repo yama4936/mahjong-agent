@@ -1542,6 +1542,66 @@ class AwayDialogDetectionTest(unittest.TestCase):
 
         operator.log.assert_not_called()
 
+    def test_ranked_click_budget_stops_after_three_consecutive_expiries(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(force_auto_click_budget_ms=2600, ranked_loop=True)
+        operator.log = Mock()
+
+        with patch("auto_operator.time.monotonic", return_value=12.601):
+            for _ in range(3):
+                with self.assertRaisesRegex(RetryableSafetyAbort, "click budget expired"):
+                    operator.require_force_auto_click_budget(10.0, phase="before_discard_click")
+
+        self.assertEqual(operator.ranked_click_budget_expiry_streak, 3)
+        self.assertTrue(operator.ranked_click_budget_safety_stop_requested)
+        stop = operator.log.call_args_list[-1]
+        self.assertEqual(stop.args[0], "ranked_click_budget_safety_stop")
+        self.assertEqual(stop.kwargs["expiryStreak"], 3)
+        self.assertEqual(stop.kwargs["reason"], "three_consecutive_force_auto_click_budget_expiries")
+
+    def test_non_ranked_click_budget_expiry_does_not_request_safety_stop(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(force_auto_click_budget_ms=2600, ranked_loop=False)
+        operator.log = Mock()
+
+        with patch("auto_operator.time.monotonic", return_value=12.601):
+            for _ in range(3):
+                with self.assertRaisesRegex(RetryableSafetyAbort, "click budget expired"):
+                    operator.require_force_auto_click_budget(10.0, phase="before_discard_click")
+
+        self.assertFalse(getattr(operator, "ranked_click_budget_safety_stop_requested", False))
+        self.assertFalse(any(call.args[0] == "ranked_click_budget_safety_stop"
+                             for call in operator.log.call_args_list))
+
+    def test_confirmed_ranked_action_resets_click_budget_expiry_streak(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.ranked_click_budget_expiry_streak = 2
+
+        operator.reset_ranked_click_budget_expiry_streak()
+
+        self.assertEqual(operator.ranked_click_budget_expiry_streak, 0)
+
+    def test_ranked_click_budget_safety_stop_returns_before_away_resume(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(mode="force-auto", max_iterations=1, board_metadata=False)
+        operator.layout = {"viewport": {"width": 1920, "height": 1080}}
+        operator.latest_screencast_frame = None
+        operator.screencast_session = None
+        operator.ranked_click_budget_safety_stop_requested = True
+        operator.ensure_viewport = Mock()
+        operator.start_screencast_gate = Mock()
+        operator.poll_public_recognition = Mock()
+        operator.resume_if_away = Mock()
+        operator.log = Mock()
+        page = Mock()
+        page.url = "https://game.mahjongsoul.com/index.html"
+
+        operator.run(page)
+
+        operator.poll_public_recognition.assert_not_called()
+        operator.resume_if_away.assert_not_called()
+        page.mouse.click.assert_not_called()
+
     def test_execute_never_clicks_a_stale_ranked_capture(self) -> None:
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
         operator.args = argparse.Namespace(

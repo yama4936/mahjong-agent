@@ -993,6 +993,10 @@ class PythonAutoOperator:
         # non-game page as a compact/open hand.
         self.rejected_viewport_frame_streak = 0
         self.screen_loss_stop_requested = False
+        # Ranked play must not silently turn a persistently too-slow decision
+        # pipeline into repeated away-dialog resumes and automatic discards.
+        self.ranked_click_budget_expiry_streak = 0
+        self.ranked_click_budget_safety_stop_requested = False
         self.pending_post_call_discard = False
         self.pending_post_call_started_at: float | None = None
         self.restart_open_hand_probe_hash: str | None = None
@@ -1136,9 +1140,26 @@ class PythonAutoOperator:
             captureAgeBeforeDecisionMs=capture_age_ms,
             decisionBudgetMs=max(0, budget - capture_age_ms),
         )
+        if getattr(getattr(self, "args", None), "ranked_loop", False):
+            streak = getattr(self, "ranked_click_budget_expiry_streak", 0) + 1
+            self.ranked_click_budget_expiry_streak = streak
+            if streak >= 3:
+                self.ranked_click_budget_safety_stop_requested = True
+                self.log(
+                    "ranked_click_budget_safety_stop",
+                    expiryStreak=streak,
+                    clickBudgetMs=budget,
+                    captureAgeBeforeDecisionMs=capture_age_ms,
+                    reason="three_consecutive_force_auto_click_budget_expiries",
+                )
         raise RetryableSafetyAbort(
             "force-auto click budget expired before safe click; reobserve current hand"
         )
+
+    def reset_ranked_click_budget_expiry_streak(self) -> None:
+        """A confirmed action proves the ranked click path recovered."""
+        if getattr(self, "ranked_click_budget_expiry_streak", 0):
+            self.ranked_click_budget_expiry_streak = 0
 
     def require_action_deadline(self) -> None:
         remaining = self.action_deadline_remaining_ms()
@@ -3093,6 +3114,11 @@ class PythonAutoOperator:
                     # than allowing force-auto's unknown-screen bypass to
                     # run hand geometry on a different browser tab.
                     return
+                if getattr(self, "ranked_click_budget_safety_stop_requested", False):
+                    # Do not click an away dialog after repeated stale-frame
+                    # aborts. The active ranked match is no longer a valid
+                    # automation evaluation and needs human review.
+                    return
                 self.poll_public_recognition()
                 if getattr(self.args, "board_metadata", False):
                     self.poll_board_metadata()
@@ -3915,6 +3941,8 @@ class PythonAutoOperator:
                     self.record_replay(evaluation, screenshot_path, execution_error=str(error))
                     raise
                 receipt["actionTiming"] = self.action_timing(decision_started_at, clear=True)
+                if receipt.get("clicked"):
+                    self.reset_ranked_click_budget_expiry_streak()
                 evaluation["actionTiming"] = receipt["actionTiming"]
                 replay_path = self.record_replay(evaluation, screenshot_path, execution=receipt)
                 self.log("decision", screenshot=str(screenshot_path), evaluation=evaluation, execution=receipt)
