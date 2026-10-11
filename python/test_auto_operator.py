@@ -1627,13 +1627,14 @@ class AwayDialogDetectionTest(unittest.TestCase):
 
         page.mouse.click.assert_not_called()
 
-    def test_reaction_pass_never_clicks_a_stale_ranked_capture(self) -> None:
+    def test_reaction_pass_uses_its_fresh_button_confirmation_not_stale_evaluation(self) -> None:
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
         operator.args = argparse.Namespace(
             mode="force-auto", stability_pixel_delta=1.5, force_auto_click_budget_ms=2600,
         )
         operator.layout = {"actionButtonRegions": {"pass": {"x": 10, "y": 20, "width": 100, "height": 40}}}
         operator.log = Mock()
+        operator.confirm_action_button = Mock(return_value={"confirmation": "action_button_region_changed"})
         page = Mock()
         button = io.BytesIO()
         Image.new("RGB", (100, 40), "black").save(button, format="PNG")
@@ -1643,11 +1644,14 @@ class AwayDialogDetectionTest(unittest.TestCase):
             "actionButton": {"action": "pass", "center": {"x": 60, "y": 40}},
         }
 
+        # The evaluator's full-frame timestamp is already 2.7 seconds old,
+        # but execute_reaction_pass has independently just sampled a stable
+        # pass button.  Its short ranked budget begins at that confirmation.
         with patch("auto_operator.time.monotonic", return_value=12.7):
-            with self.assertRaisesRegex(RetryableSafetyAbort, "click budget expired"):
-                operator.execute_reaction_pass(page, evaluation, evaluated_captured_at=10.0)
+            receipt = operator.execute_reaction_pass(page, evaluation, evaluated_captured_at=10.0)
 
-        page.mouse.click.assert_not_called()
+        self.assertTrue(receipt["clicked"])
+        page.mouse.click.assert_called_once_with(60, 40)
 
     def test_reaction_call_never_clicks_a_stale_ranked_capture(self) -> None:
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
@@ -3191,10 +3195,12 @@ class AwayDialogDetectionTest(unittest.TestCase):
         self.assertEqual(receipt["policy"], "force_auto")
         page.mouse.click.assert_called_once_with(60, 40)
 
-    def test_reaction_pass_button_transition_retries_without_clicking(self) -> None:
-        """A withdrawn/animated prompt must be re-observed, never clicked."""
+    def test_reaction_pass_stale_evaluation_without_fresh_confirmation_never_clicks(self) -> None:
+        """A stale evaluation cannot pass unless its current button check stabilizes."""
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
-        operator.args = argparse.Namespace(mode="force-auto", stability_pixel_delta=1.5)
+        operator.args = argparse.Namespace(
+            mode="force-auto", stability_pixel_delta=1.5, force_auto_click_budget_ms=2600,
+        )
         operator.layout = {"actionButtonRegions": {"pass": {"x": 10, "y": 20, "width": 100, "height": 40}}}
         operator.log = Mock()
         operator.confirm_action_button = Mock()
@@ -3211,8 +3217,9 @@ class AwayDialogDetectionTest(unittest.TestCase):
                              "center": {"x": 60, "y": 40}},
         }
 
-        with self.assertRaisesRegex(RetryableSafetyAbort, "pass button changed.*reobserve"):
-            operator.execute_reaction_pass(page, evaluation)
+        with patch("auto_operator.time.monotonic", return_value=12.7):
+            with self.assertRaisesRegex(RetryableSafetyAbort, "pass button changed.*reobserve"):
+                operator.execute_reaction_pass(page, evaluation, evaluated_captured_at=10.0)
         page.mouse.click.assert_not_called()
         operator.confirm_action_button.assert_not_called()
 

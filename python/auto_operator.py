@@ -2965,7 +2965,8 @@ class PythonAutoOperator:
         button_clip = {key: region[key] for key in ("x", "y", "width", "height")}
         before = page.screenshot(clip=button_clip, animations="disabled")
         page.wait_for_timeout(120)
-        if mean_pixel_delta(before, page.screenshot(clip=button_clip, animations="disabled")) > self.args.stability_pixel_delta:
+        confirmed = page.screenshot(clip=button_clip, animations="disabled")
+        if mean_pixel_delta(before, confirmed) > self.args.stability_pixel_delta:
             # A reaction prompt can be withdrawn while its button is being
             # animated (for example when another player has already acted).
             # No mouse event has been sent at this point.  Do not treat that
@@ -2975,10 +2976,18 @@ class PythonAutoOperator:
             raise RetryableSafetyAbort(
                 "pass button changed during pre-click stability check; reobserve reaction state"
             )
+        # The evaluated full-table frame may be old after recognition.  Pass
+        # is exceptional: unlike calls and ron, it cannot select a tile or a
+        # reaction option, and the fixed pass affordance has just been
+        # observed unchanged twice.  Anchor its short ranked budget to that
+        # independent, current UI confirmation rather than to the stale
+        # evaluator frame.  Calls and ron deliberately retain their strict
+        # evaluated-frame budget checks.
+        pass_confirmed_at = time.monotonic()
         point = observed["center"]
         if self.args.mode == "force-auto":
             self.require_force_auto_click_budget(
-                evaluated_captured_at, phase="before_reaction_pass_click",
+                pass_confirmed_at, phase="before_reaction_pass_click",
             )
         self.require_action_deadline()
         self.log("action_click_sent", action="pass", clickPoint=point,
