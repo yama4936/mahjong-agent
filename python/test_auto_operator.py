@@ -1620,6 +1620,70 @@ class AwayDialogDetectionTest(unittest.TestCase):
 
         page.mouse.click.assert_not_called()
 
+    def test_reaction_pass_never_clicks_a_stale_ranked_capture(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(
+            mode="force-auto", stability_pixel_delta=1.5, force_auto_click_budget_ms=2600,
+        )
+        operator.layout = {"actionButtonRegions": {"pass": {"x": 10, "y": 20, "width": 100, "height": 40}}}
+        operator.log = Mock()
+        page = Mock()
+        button = io.BytesIO()
+        Image.new("RGB", (100, 40), "black").save(button, format="PNG")
+        page.screenshot.return_value = button.getvalue()
+        evaluation = {
+            "recognition": {"safe": False, "tiles": ["1m"] * 13},
+            "actionButton": {"action": "pass", "center": {"x": 60, "y": 40}},
+        }
+
+        with patch("auto_operator.time.monotonic", return_value=12.7):
+            with self.assertRaisesRegex(RetryableSafetyAbort, "click budget expired"):
+                operator.execute_reaction_pass(page, evaluation, evaluated_captured_at=10.0)
+
+        page.mouse.click.assert_not_called()
+
+    def test_reaction_call_never_clicks_a_stale_ranked_capture(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(
+            mode="force-auto", accept_single_call=True, force_auto_click_budget_ms=2600,
+        )
+        operator.layout = {"viewport": {"width": 1920, "height": 1080}, "publicTileRegions": {}}
+        operator.hand_clip = {"x": 0, "y": 0, "width": 10, "height": 10}
+        operator.log = Mock()
+        page = Mock()
+        button = {"action": "pon", "center": {"x": 800, "y": 700}}
+        frame = io.BytesIO()
+        Image.new("RGB", (1920, 1080), "black").save(frame, format="PNG")
+
+        with patch("auto_operator.force_auto_call_buttons", return_value=[button]), \
+                patch("auto_operator.time.monotonic", return_value=12.7):
+            with self.assertRaisesRegex(RetryableSafetyAbort, "click budget expired"):
+                operator.execute_force_auto_call(
+                    page, frame.getvalue(), button, evaluated_captured_at=10.0,
+                )
+
+        page.mouse.click.assert_not_called()
+
+    def test_reaction_win_never_clicks_a_stale_ranked_capture(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(mode="force-auto", force_auto_click_budget_ms=2600)
+        operator.layout = {
+            "viewport": {"width": 1920, "height": 1080},
+            "actionButtonRegions": {"pass": {"x": 10, "y": 20, "width": 100, "height": 40}},
+        }
+        operator.log = Mock()
+        page = Mock()
+        button = {"action": "ron", "center": {"x": 1010, "y": 824}}
+
+        with patch("auto_operator.force_auto_reaction_win_button", return_value=button), \
+                patch("auto_operator.time.monotonic", return_value=12.7):
+            with self.assertRaisesRegex(RetryableSafetyAbort, "click budget expired"):
+                operator.execute_force_auto_reaction_win(
+                    page, b"frame", button, evaluated_captured_at=10.0,
+                )
+
+        page.mouse.click.assert_not_called()
+
     def test_single_missing_frame_does_not_clear_first_evidence(self) -> None:
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
         operator.action_evidence_started_at = 10.0

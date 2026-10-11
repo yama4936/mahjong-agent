@@ -2929,7 +2929,10 @@ class PythonAutoOperator:
             **receipt,
         }
 
-    def execute_reaction_pass(self, page: Page, evaluation: dict[str, Any]) -> dict[str, Any]:
+    def execute_reaction_pass(
+        self, page: Page, evaluation: dict[str, Any], *,
+        evaluated_captured_at: float | None = None,
+    ) -> dict[str, Any]:
         """Dismiss any reaction prompt without guessing its discarded tile.
 
         The Python path does not yet construct a trusted pendingDiscard, so it
@@ -2959,6 +2962,10 @@ class PythonAutoOperator:
                 "pass button changed during pre-click stability check; reobserve reaction state"
             )
         point = observed["center"]
+        if self.args.mode == "force-auto":
+            self.require_force_auto_click_budget(
+                evaluated_captured_at, phase="before_reaction_pass_click",
+            )
         self.require_action_deadline()
         self.log("action_click_sent", action="pass", clickPoint=point,
                  availableUiActions=evaluation.get("availableUiActions", []))
@@ -2974,6 +2981,7 @@ class PythonAutoOperator:
         self, page: Page, screenshot: bytes, button: dict[str, Any],
         selected_action: dict[str, Any] | None = None,
         legal_actions: list[dict[str, Any]] | None = None,
+        *, evaluated_captured_at: float | None = None,
     ) -> dict[str, Any]:
         """Accept one unambiguous green call and arm the compact-hand discard."""
         if self.args.mode != "force-auto" or not getattr(self.args, "accept_single_call", False):
@@ -2990,6 +2998,9 @@ class PythonAutoOperator:
         hand_before = crop_screenshot(screenshot, self.hand_clip)
         meld_region = self.layout.get("publicTileRegions", {}).get("ownMelds")
         meld_before = crop_screenshot(screenshot, meld_region) if meld_region else None
+        self.require_force_auto_click_budget(
+            evaluated_captured_at, phase="before_reaction_call_click",
+        )
         self.require_action_deadline()
         self.log("action_click_sent", action=call_action, clickPoint=point, source="single_call_button")
         sequence_before = self.screencast_sequence
@@ -3044,6 +3055,7 @@ class PythonAutoOperator:
 
     def execute_force_auto_reaction_win(
         self, page: Page, screenshot: bytes, button: dict[str, Any],
+        *, evaluated_captured_at: float | None = None,
     ) -> dict[str, Any]:
         """Accept an unambiguous ron button and verify that the prompt closes."""
         if self.args.mode != "force-auto":
@@ -3056,6 +3068,9 @@ class PythonAutoOperator:
         if not current:
             raise RetryableSafetyAbort("reaction win button was not stable before click")
         point = current["center"]
+        self.require_force_auto_click_budget(
+            evaluated_captured_at, phase="before_reaction_win_click",
+        )
         self.require_action_deadline()
         self.log("action_click_sent", action="ron", clickPoint=point, source="reaction_win_color")
         self.last_action_clicked_at = time.monotonic()
@@ -3318,8 +3333,13 @@ class PythonAutoOperator:
                     retreat_pointer_from_hand(page.mouse, self.layout["viewport"])
                     page.wait_for_timeout(100)
                     full_screen = page.screenshot(animations="disabled")
+                    full_screen_captured_at = time.monotonic()
                 else:
                     full_screen = gate_frame or page.screenshot(animations="disabled")
+                    # A missing stream frame falls back to a synchronous
+                    # screenshot.  It is still reaction evidence and must
+                    # carry a receipt time for the short ranked click guard.
+                    full_screen_captured_at = gate_captured_at if gate_frame else time.monotonic()
                 draw_slot_heuristic_occupied = False
                 screen_state, screen_confidence = classify_screen(full_screen, self.screen_references)
                 if screen_state == "round_result":
@@ -3490,7 +3510,10 @@ class PythonAutoOperator:
                         if reaction_win is None and len(orange_buttons) == 1:
                             reaction_win = {**orange_buttons[0], "source": "contextual_reaction_prompt"}
                         if reaction_win:
-                            receipt = self.execute_force_auto_reaction_win(page, full_screen, reaction_win)
+                            receipt = self.execute_force_auto_reaction_win(
+                                page, full_screen, reaction_win,
+                                evaluated_captured_at=full_screen_captured_at,
+                            )
                             receipt["actionTiming"] = self.action_timing(decision_started_at, clear=True)
                             self.log("reaction_win", screenshot=str(screenshot_path), execution=receipt)
                             time.sleep(self.args.poll)
@@ -3515,6 +3538,7 @@ class PythonAutoOperator:
                                     receipt = self.execute_force_auto_call(
                                         page, full_screen, call_buttons[0],
                                         decision.get("selectedAction"), decision.get("legalActions"),
+                                        evaluated_captured_at=full_screen_captured_at,
                                     )
                                 except RetryableSafetyAbort as error:
                                     self.log(
@@ -3547,7 +3571,9 @@ class PythonAutoOperator:
                         )
                         if reaction:
                             try:
-                                receipt = self.execute_reaction_pass(page, reaction)
+                                receipt = self.execute_reaction_pass(
+                                    page, reaction, evaluated_captured_at=full_screen_captured_at,
+                                )
                             except RetryableSafetyAbort as error:
                                 self.log("reaction_pass_deferred", screenshot=str(screenshot_path), error=str(error))
                                 page.wait_for_timeout(max(100, round(self.args.poll * 1000)))
@@ -3891,7 +3917,9 @@ class PythonAutoOperator:
                         evaluation = reaction_fallback
                 if evaluation.get("status") == "reaction_prompt":
                     try:
-                        receipt = self.execute_reaction_pass(page, evaluation)
+                        receipt = self.execute_reaction_pass(
+                            page, evaluation, evaluated_captured_at=evaluation_captured_at,
+                        )
                     except RetryableSafetyAbort as error:
                         # The pass affordance can disappear before any click.
                         # Re-arm the turn gate so it re-observes the full
