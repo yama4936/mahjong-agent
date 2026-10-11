@@ -13,7 +13,7 @@ import threading
 from datetime import datetime, timezone
 from unittest.mock import Mock, call, patch
 
-from auto_operator import PythonAutoOperator, RetryableSafetyAbort, action_deadline_timing, ambiguous_open_draw_fallback, away_resume_geometry, closed_concealed_row_visible, confirmed_call_meld, crop_screenshot, discard_point_in_hand_geometry, force_auto_call_buttons, force_auto_chi_choice_points, force_auto_reaction_win_button, force_auto_self_action_buttons, geometric_open_meld_count, is_away_resume_dialog, is_contextual_reaction_pass, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, mean_pixel_delta, merge_public_observations, open_hand_draw_slot, own_meld_surface_visible, post_call_transition, retreat_pointer_from_hand, round_result_conflicts_with_live_table, selected_chi_choice_point, selected_open_draw_is_ambiguous, selected_tile_comparison_region, send_discard_click, should_guard_tenpai_reaction, should_process_reaction_prompt, should_retry_call_policy, stable_hand_comparison_region, stable_hand_delta, tile_face_structure_delta
+from auto_operator import PythonAutoOperator, RetryableSafetyAbort, action_deadline_timing, ambiguous_open_draw_fallback, away_resume_geometry, closed_concealed_row_visible, confirmed_call_meld, crop_screenshot, discard_point_in_hand_geometry, force_auto_call_buttons, force_auto_chi_choice_points, force_auto_reaction_win_button, force_auto_self_action_buttons, geometric_open_meld_count, is_away_resume_dialog, is_contextual_reaction_pass, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, mean_pixel_delta, merge_public_observations, open_hand_draw_slot, own_meld_surface_visible, post_call_transition, retreat_pointer_from_hand, riichi_selection_is_visible, round_result_conflicts_with_live_table, selected_chi_choice_point, selected_open_draw_is_ambiguous, selected_tile_comparison_region, send_discard_click, should_guard_tenpai_reaction, should_process_reaction_prompt, should_retry_call_policy, stable_hand_comparison_region, stable_hand_delta, tile_face_structure_delta
 from screen_state import classify_screen, load_references
 from auto_operator import geometric_reaction_open_meld_count
 from auto_operator import configure_evaluator_click_budget
@@ -338,6 +338,44 @@ class RecordingMouse:
 
 
 class ActionDeadlineTest(unittest.TestCase):
+    def test_riichi_selection_signature_requires_dimmed_hand(self) -> None:
+        project = Path(__file__).resolve().parents[1]
+        selection = (project / "artifacts/live/riichi-selection-dimmed-20260928.png").read_bytes()
+        ordinary = (project / "artifacts/live/riichi-button-hand-border-20260928.jpg").read_bytes()
+        hand_clip = {"x": 223, "y": 926, "width": 1355, "height": 146}
+        self.assertTrue(riichi_selection_is_visible(crop_screenshot(selection, hand_clip)))
+        self.assertFalse(riichi_selection_is_visible(crop_screenshot(ordinary, hand_clip)))
+
+    def test_riichi_confirmation_accepts_dimmed_selection_not_unchanged_button(self) -> None:
+        project = Path(__file__).resolve().parents[1]
+        selection = (project / "artifacts/live/riichi-selection-dimmed-20260928.png").read_bytes()
+        ordinary = (project / "artifacts/live/riichi-button-hand-border-20260928.jpg").read_bytes()
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(confirmation_timeout=1, action_pixel_delta=1.5)
+        operator.layout = load_json(project / "config/layout-300-regression.json")
+        operator.hand_clip = {"x": 223, "y": 926, "width": 1355, "height": 146}
+        operator.screen_references = {}
+        region = {"x": 894, "y": 775, "width": 229, "height": 50}
+        before_button = crop_screenshot(ordinary, region)
+        before_hand = crop_screenshot(ordinary, operator.hand_clip)
+        page = Mock()
+
+        def screenshot(**kwargs):
+            clip = kwargs.get("clip")
+            if clip == region:
+                return before_button
+            if clip == operator.hand_clip:
+                return crop_screenshot(selection, operator.hand_clip)
+            return selection
+
+        page.screenshot.side_effect = screenshot
+        receipt = operator.confirm_action_button(
+            page, "riichi", before_button, before_hand, region_override=region,
+        )
+        self.assertEqual(receipt["confirmation"], "riichi_selection_hand_changed")
+        self.assertEqual(receipt["buttonPixelDelta"], 0)
+        self.assertEqual(receipt["screenState"], "match")
+
     def test_startup_pointer_retreats_to_table_felt(self) -> None:
         mouse = RecordingMouse()
         retreat_pointer_from_hand(mouse, {"width": 1920, "height": 1080})
@@ -1476,6 +1514,51 @@ class AwayDialogDetectionTest(unittest.TestCase):
             operator.require_action_deadline()
         self.assertTrue(any(call.args[0] == "action_deadline_expired"
                             for call in operator.log.call_args_list))
+
+    def test_ranked_click_budget_rejects_stale_evaluated_capture(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(force_auto_click_budget_ms=2600)
+        operator.log = Mock()
+
+        with patch("auto_operator.time.monotonic", return_value=12.601):
+            with self.assertRaisesRegex(RetryableSafetyAbort, "click budget expired"):
+                operator.require_force_auto_click_budget(10.0, phase="before_discard_click")
+
+        operator.log.assert_called_once_with(
+            "force_auto_click_budget_expired",
+            phase="before_discard_click",
+            clickBudgetMs=2600,
+            captureAgeBeforeDecisionMs=2601,
+            decisionBudgetMs=0,
+        )
+
+    def test_ranked_click_budget_keeps_fresh_evaluated_capture(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(force_auto_click_budget_ms=2600)
+        operator.log = Mock()
+
+        with patch("auto_operator.time.monotonic", return_value=12.599):
+            operator.require_force_auto_click_budget(10.0, phase="before_discard_click")
+
+        operator.log.assert_not_called()
+
+    def test_execute_never_clicks_a_stale_ranked_capture(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(
+            mode="force-auto", allow_local_discard=False, force_auto_click_budget_ms=2600,
+        )
+        operator.log = Mock()
+        page = Mock()
+        evaluation = {
+            "decision": {"selectedAction": {"action": "discard", "tile": "1m"}},
+            "recognition": {"tiles": ["1m"] * 14},
+        }
+
+        with patch("auto_operator.time.monotonic", return_value=12.7):
+            with self.assertRaisesRegex(RetryableSafetyAbort, "click budget expired"):
+                operator.execute(page, evaluation, evaluated_captured_at=10.0)
+
+        page.mouse.click.assert_not_called()
 
     def test_single_missing_frame_does_not_clear_first_evidence(self) -> None:
         operator = PythonAutoOperator.__new__(PythonAutoOperator)

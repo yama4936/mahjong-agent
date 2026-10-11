@@ -166,6 +166,31 @@ def crop_screenshot(screenshot: bytes, clip: dict[str, float]) -> bytes:
         return output.getvalue()
 
 
+def riichi_selection_is_visible(hand: bytes) -> bool:
+    """Recognize the dimmed concealed row shown after pressing Riichi.
+
+    Pressing the orange Riichi affordance does not discard a tile.  It changes
+    the row into a selection UI: unavailable faces are neutral grey while the
+    ordinary self-turn row is predominantly bright, near-neutral tile faces.
+    This is deliberately a *state* signature, rather than accepting any hand
+    pixel movement (which could be the next player's animation).
+    """
+    with Image.open(io.BytesIO(hand)) as image:
+        pixels = list(image.convert("RGB").getdata())
+    if not pixels:
+        return False
+    total = len(pixels)
+    muted = sum(
+        1 for red, green, blue in pixels
+        if 60 <= min(red, green, blue) <= 160 and max(red, green, blue) - min(red, green, blue) < 25
+    ) / total
+    bright_tile_faces = sum(
+        1 for red, green, blue in pixels
+        if min(red, green, blue) > 180 and max(red, green, blue) - min(red, green, blue) < 60
+    ) / total
+    return muted >= 0.45 and bright_tile_faces <= 0.20
+
+
 def perceptual_hash(data: bytes) -> str:
     with Image.open(io.BytesIO(data)) as image:
         pixels = image.convert("L").resize((32, 8)).getdata()
@@ -952,6 +977,12 @@ class PythonAutoOperator:
         self.last_shanten: int | None = None
         self.screencast_session: CDPSession | None = None
         self.latest_screencast_frame: bytes | None = None
+        # Monotonic receipt time for the exact streamed frame above.  A
+        # force-auto evaluator can finish after the short ranked click budget
+        # even though the much longer action deadline is still healthy.  Keep
+        # this separately from the evidence clock so a stale decision cannot
+        # be clicked just because the table has not changed yet.
+        self.latest_screencast_captured_at: float | None = None
         self.screencast_sequence = 0
         self.screencast_draw_occupied: bool | None = None
         self.screencast_draw_generation = 0
@@ -1076,6 +1107,38 @@ class PythonAutoOperator:
         if started is None:
             return self.configured_action_deadline_ms()
         return max(0, self.configured_action_deadline_ms() - round((time.monotonic() - started) * 1000))
+
+    def force_auto_click_budget_ms(self) -> int | None:
+        """Return the optional short decision-to-click budget for ranked play."""
+        budget = getattr(getattr(self, "args", None), "force_auto_click_budget_ms", None)
+        return budget if isinstance(budget, int) and budget > 0 else None
+
+    def require_force_auto_click_budget(
+        self, captured_at: float | None, *, phase: str,
+    ) -> None:
+        """Fail closed when a force-auto decision is based on an old frame.
+
+        ``action_deadline_ms`` is deliberately long in 300+0 functional
+        tests.  It must not accidentally permit a ranked 2600ms decision to
+        click a hand captured several seconds before recognition completed.
+        Re-observation is safe; clicking that frame is not.
+        """
+        budget = self.force_auto_click_budget_ms()
+        if budget is None or captured_at is None:
+            return
+        capture_age_ms = max(0, round((time.monotonic() - captured_at) * 1000))
+        if capture_age_ms < budget:
+            return
+        self.log(
+            "force_auto_click_budget_expired",
+            phase=phase,
+            clickBudgetMs=budget,
+            captureAgeBeforeDecisionMs=capture_age_ms,
+            decisionBudgetMs=max(0, budget - capture_age_ms),
+        )
+        raise RetryableSafetyAbort(
+            "force-auto click budget expired before safe click; reobserve current hand"
+        )
 
     def require_action_deadline(self) -> None:
         remaining = self.action_deadline_remaining_ms()
@@ -1300,6 +1363,7 @@ class PythonAutoOperator:
         self.rejected_screencast_size = None
         self.rejected_viewport_frame_streak = 0
         self.latest_screencast_frame = frame
+        self.latest_screencast_captured_at = time.monotonic()
         draw_slot = self.layout.get("drawSlot")
         if draw_slot:
             occupied = is_draw_slot_clip_occupied(crop_screenshot(frame, draw_slot))
@@ -2451,6 +2515,28 @@ class PythonAutoOperator:
                     "buttonPixelDelta": delta,
                     **({"handPixelDelta": hand_delta, "meldPixelDelta": meld_delta} if is_call else {}),
                 }
+            if action == "riichi" and hand_before is not None:
+                # The Riichi button sometimes remains painted in the same
+                # region while the client switches to its discard-selection
+                # UI.  Do not treat a changed hand alone as a receipt: a
+                # late turn animation could cause that.  Require the known
+                # dimmed selection signature and a still-live match screen.
+                hand_after = page.screenshot(clip=self.hand_clip, animations="disabled")
+                hand_delta = mean_pixel_delta(hand_before, hand_after)
+                if hand_delta >= self.args.action_pixel_delta and riichi_selection_is_visible(hand_after):
+                    full_after = page.screenshot(animations="disabled")
+                    screen_state, screen_confidence = classify_screen(
+                        full_after, getattr(self, "screen_references", {}),
+                    )
+                    if screen_state == "match":
+                        return {
+                            "confirmation": "riichi_selection_hand_changed",
+                            "confirmationLatencyMs": round((time.monotonic() - started) * 1000),
+                            "buttonPixelDelta": delta,
+                            "handPixelDelta": hand_delta,
+                            "screenState": screen_state,
+                            "screenConfidence": screen_confidence,
+                        }
             if expect_new_draw:
                 full_after = page.screenshot(animations="disabled")
                 if self_turn_draw_visible(
@@ -2546,6 +2632,7 @@ class PythonAutoOperator:
     def execute(
         self, page: Page, evaluation: dict[str, Any], evaluated_hand: bytes | None = None,
         evaluated_full: bytes | None = None, evaluated_draw_generation: int | None = None,
+        evaluated_captured_at: float | None = None,
     ) -> dict[str, Any]:
         decision = evaluation["decision"]
         recognition = evaluation["recognition"]
@@ -2556,6 +2643,10 @@ class PythonAutoOperator:
         local_auto = local_discard_allowed(self.args, evaluation)
         if not force_auto and not certified_auto and not local_auto:
             return {"clicked": False, "reason": "advisor_or_safety_stop"}
+        if force_auto:
+            self.require_force_auto_click_budget(
+                evaluated_captured_at, phase="before_pre_click_validation",
+            )
         # Certified Auto independently re-recognizes consensus frames.  In
         # force-auto, compare the current hand pixels with the stable hand
         # that produced the decision instead.  Re-running the template
@@ -2721,6 +2812,10 @@ class PythonAutoOperator:
                     )
                 raise RuntimeError(f"{button_action} button changed during pre-click stability check")
             point = observed["center"]
+            if force_auto:
+                self.require_force_auto_click_budget(
+                    evaluated_captured_at, phase="before_action_button_click",
+                )
             self.require_action_deadline()
             self.log("action_click_sent", action=button_action, clickPoint=point)
             self.last_action_clicked_at = time.monotonic()
@@ -2735,6 +2830,19 @@ class PythonAutoOperator:
                     self.round_terminal_result_observed = False
                 return {"clicked": True, "policy": "certified_auto", "action": selected_action,
                         "clickPoint": point, **action_receipt}
+            # A successful Riichi declaration enters a dimmed tile-selection
+            # state before the actual discard.  Establish a new baseline so
+            # its visual transition cannot be mistaken for confirmation of
+            # the following tile click.
+            post_riichi_full = page.screenshot(animations="disabled")
+            post_riichi_hand = crop_screenshot(post_riichi_full, self.hand_clip)
+            post_riichi_state, _ = classify_screen(
+                post_riichi_full, getattr(self, "screen_references", {}),
+            )
+            if post_riichi_state != "match" or not riichi_selection_is_visible(post_riichi_hand):
+                raise RetryableSafetyAbort("riichi selection state disappeared before discard click")
+            hand_before = post_riichi_hand
+            river_before = crop_screenshot(post_riichi_full, self.river_clip)
 
         point = dynamic_click_point if has_dynamic_click_point else points[click_index]
         if force_auto and needs_tile_click:
@@ -2766,6 +2874,10 @@ class PythonAutoOperator:
                     f"discard click point is outside current hand geometry: {point}"
                 )
         clicked_at = datetime.now(timezone.utc).isoformat()
+        if force_auto:
+            self.require_force_auto_click_budget(
+                evaluated_captured_at, phase="before_discard_click",
+            )
         self.require_action_deadline()
         self.log(
             "click_sent",
@@ -2991,6 +3103,7 @@ class PythonAutoOperator:
                     if self.args.mode == "force-auto" else None
                 self.ensure_viewport(page)
                 gate_frame = None
+                gate_captured_at: float | None = None
                 quick_draw = False
                 quick_pass = False
                 quick_calls: list[dict[str, Any]] = []
@@ -3006,6 +3119,7 @@ class PythonAutoOperator:
                     else:
                         silent_gate_polls = 0
                     gate_frame = self.latest_screencast_frame
+                    gate_captured_at = getattr(self, "latest_screencast_captured_at", None)
                     gate_content_hash = perceptual_hash(gate_frame) if gate_frame else None
                     if gate_content_hash is not None and gate_content_hash == last_gate_content_hash:
                         unchanged_gate_content_polls += 1
@@ -3015,6 +3129,7 @@ class PythonAutoOperator:
                     if unchanged_gate_content_polls >= 5 \
                             and self.refresh_silent_screencast_gate(page):
                         gate_frame = self.latest_screencast_frame
+                        gate_captured_at = getattr(self, "latest_screencast_captured_at", None)
                         last_gate_content_hash = perceptual_hash(gate_frame) if gate_frame else None
                         unchanged_gate_content_polls = 0
                         refreshed_stable_gate = True
@@ -3442,6 +3557,11 @@ class PythonAutoOperator:
                         continue
                     decision_started_at = time.monotonic()
                     evaluation_frame = gate_frame
+                    # ``gate_frame`` is the frame that feeds recognition, not
+                    # necessarily the newest frame when execute() eventually
+                    # runs.  Bind its receipt time here so the short ranked
+                    # budget measures the decision's actual visual evidence.
+                    evaluation_captured_at = gate_captured_at
                     hand = crop_screenshot(evaluation_frame, self.hand_clip)
                     action_image = crop_screenshot(evaluation_frame, self.action_clip) if self.action_clip else b""
                 else:
@@ -3455,6 +3575,7 @@ class PythonAutoOperator:
                         continue
                     action_image = page.screenshot(clip=self.action_clip, animations="disabled") if self.action_clip else b""
                     evaluation_frame = page.screenshot(animations="disabled")
+                    evaluation_captured_at = time.monotonic()
                 evaluation_draw_generation = self.screencast_draw_generation if self.screencast_session else None
                 hand_hash = hashlib.sha256((perceptual_hash(hand) + (perceptual_hash(action_image) if action_image else "")).encode()).hexdigest()
                 if not self.armed:
@@ -3776,6 +3897,7 @@ class PythonAutoOperator:
                     receipt = self.execute(
                         page, evaluation, evaluated_hand=hand, evaluated_full=evaluation_frame,
                         evaluated_draw_generation=evaluation_draw_generation,
+                        evaluated_captured_at=evaluation_captured_at,
                     )
                 except RetryableSafetyAbort as error:
                     self.record_replay(evaluation, screenshot_path, execution_error=str(error))
