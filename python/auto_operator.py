@@ -3171,8 +3171,11 @@ class PythonAutoOperator:
                 quick_draw = False
                 quick_pass = False
                 quick_calls: list[dict[str, Any]] = []
+                quick_self_actions: list[dict[str, Any]] = []
                 quick_reaction_win = False
                 refreshed_stable_gate = False
+                gate_screen_state: str | None = None
+                gate_screen_confidence: float | None = None
                 if self.args.mode == "force-auto" and self.layout.get("drawSlot"):
                     if self.screencast_sequence == last_gate_sequence:
                         silent_gate_polls += 1
@@ -3203,6 +3206,7 @@ class PythonAutoOperator:
                     # reaction/draw gate and never run gameplay clicks there.
                     early_state, early_confidence = classify_screen(gate_frame, self.screen_references) \
                         if gate_frame else ("unknown", 0.0)
+                    gate_screen_state, gate_screen_confidence = early_state, early_confidence
                     if self.handle_early_non_gameplay_screen(
                         page, early_state, early_confidence, gate_frame,
                     ):
@@ -3267,7 +3271,6 @@ class PythonAutoOperator:
                         or dynamic_draw_occupied \
                         or self.pending_post_call_discard or restart_open_hand_probe
                     pass_region = self.layout.get("actionButtonRegions", {}).get("pass")
-                    quick_self_actions: list[dict[str, Any]] = []
                     if gate_frame and pass_region and gameplay_reactions_allowed \
                             and not self.pending_post_call_discard:
                         quick_calls = force_auto_call_buttons(gate_frame, self.layout["viewport"])
@@ -3364,7 +3367,22 @@ class PythonAutoOperator:
                     # carry a receipt time for the short ranked click guard.
                     full_screen_captured_at = gate_captured_at if gate_frame else time.monotonic()
                 draw_slot_heuristic_occupied = False
-                screen_state, screen_confidence = classify_screen(full_screen, self.screen_references)
+                # The low-latency gate above has already classified this exact
+                # streamed frame and found its action buttons.  Re-running the
+                # full-image classifier and colour scans here consumed about
+                # 0.6s before recognition on the ranked 2600ms path.  Reuse
+                # only identical bytes from that gate; synchronous snapshots
+                # and any changed frame retain the independent checks.
+                reused_gate_frame = (
+                    self.args.mode == "force-auto"
+                    and full_screen is gate_frame
+                    and gate_screen_state is not None
+                    and gate_screen_confidence is not None
+                )
+                if reused_gate_frame:
+                    screen_state, screen_confidence = gate_screen_state, gate_screen_confidence
+                else:
+                    screen_state, screen_confidence = classify_screen(full_screen, self.screen_references)
                 if screen_state == "round_result":
                     live_evidence = round_result_conflicts_with_live_table(full_screen, self.layout)
                     if live_evidence is not None:
@@ -3509,9 +3527,13 @@ class PythonAutoOperator:
                 self.schedule_periodic_public_recognition(full_screen, verified_match=screen_state == "match")
                 if self.args.mode == "force-auto":
                     pass_region = self.layout.get("actionButtonRegions", {}).get("pass")
-                    call_buttons = force_auto_call_buttons(full_screen, self.layout["viewport"]) \
-                        if should_process_reaction_prompt(self.pending_post_call_discard) else []
-                    orange_buttons = force_auto_self_action_buttons(full_screen, self.layout["viewport"])
+                    if reused_gate_frame:
+                        call_buttons = quick_calls
+                        orange_buttons = quick_self_actions
+                    else:
+                        call_buttons = force_auto_call_buttons(full_screen, self.layout["viewport"]) \
+                            if should_process_reaction_prompt(self.pending_post_call_discard) else []
+                        orange_buttons = force_auto_self_action_buttons(full_screen, self.layout["viewport"])
                     pass_prompt_present = bool(pass_region and (
                         is_force_auto_pass_prompt(full_screen, pass_region)
                         or is_contextual_reaction_pass(
