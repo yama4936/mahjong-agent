@@ -1406,10 +1406,14 @@ class AwayDialogDetectionTest(unittest.TestCase):
             page = Mock()
             page.url = "https://mahjongsoul.game.yo-star.com/"
 
-            with patch("auto_operator.classify_screen", return_value=("match", 1.0)):
+            with patch("auto_operator.classify_screen", return_value=("match", 1.0)) as classify:
                 operator.run(page)
 
             operator.recognize_resident.assert_called_once()
+            # The two loop passes establish the stable streamed draw.  The
+            # decision pass must reuse that gate's classification rather than
+            # classifying the same bytes again in the full-screen branch.
+            self.assertEqual(classify.call_count, 2)
             self.assertEqual(operator.recognize_resident.call_args.kwargs["open_melds"], 1)
             self.assertTrue(operator.dynamic_layout_required)
             self.assertEqual(operator.cached_open_melds, 1)
