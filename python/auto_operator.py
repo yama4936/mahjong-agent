@@ -3184,6 +3184,14 @@ class PythonAutoOperator:
                         if silent_gate_polls >= 5 and self.refresh_silent_screencast_gate(page):
                             silent_gate_polls = 0
                             refreshed_stable_gate = True
+                        # Never manufacture the two-frame stability gate by
+                        # inspecting the same received pixels again.  On the
+                        # ranked path that leaves the eventual recognition
+                        # tied to a frame which can already be seconds old.
+                        # Wait for a distinct stream frame, or for the
+                        # bounded silent-stream refresh above to publish one.
+                        if self.screencast_sequence == last_gate_sequence:
+                            continue
                     else:
                         silent_gate_polls = 0
                     gate_frame = self.latest_screencast_frame

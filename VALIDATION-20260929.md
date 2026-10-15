@@ -813,3 +813,9 @@
 - 既存の銅の間ログでは、3回の `recognition_deferred_stale_capture` が認識開始前のキャプチャ年齢2981ms、2998ms、3138msを記録している。一方で認識器の最適化後単体処理は944msであり、残りの短時間予算障害を画像から推測してはならない。
 - 次の実機回帰で原因を分離するため、同イベントへ `gateTiming` を追加した。CDPフレーム受信時の年齢、画面分類・鳴き/自己アクション・手牌形状を含むゲート走査時間、認識直前までの合計時間を記録するだけで、ゲート・クリック・安全停止の条件は変更していない。
 - `PYTHONPATH=python .runtime/python-auto-venv/bin/python -m unittest python.test_auto_operator python.test_screen_state -q` は180件成功、33件skip、`git diff --check` は成功した。解除後の300+0秒CPU回帰で測定値を取得してから、同一フレームの安定確認や同期処理を変更する。
+
+## CDPゲートの同一フレーム安定化を禁止
+
+- 旧実装は同じ `screencast_sequence` のままでもループごとに安定フレーム数を増やせた。その結果、最初のフレームを受信してからゲート処理中に数秒経過しても、同じ画像を認識へ渡しうる。これは2981--3138msの認識開始前キャプチャ年齢と整合する実装上の経路である。
+- `auto_operator.py` は、同じシーケンスなら新しいCDPフレームを待つようにした。5回の短いポーリングでストリームが沈黙している場合だけ、既存の安定したスクリーンショット再撮影を使う。したがって、二重の安定確認は異なるフレーム受信または再撮影済みフレームにのみ基づく。クリック条件・2600ms安全停止・離席処理は変更していない。
+- `PYTHONPATH=python .runtime/python-auto-venv/bin/python -m unittest python.test_auto_operator -q` は171件成功、33件skip、`python.test_screen_state` は9件成功、`git diff --check` は成功した。利用停止中のため実機300+0秒回帰は未実施であり、解除後に新しい `gateTiming` とともに検証する。
