@@ -777,3 +777,10 @@
 - ホームを覆っていた「累計参拝報酬」は未受領の1回分を受け取り、確認後に閉じた。対局設定は変更していない。ロビーと銅の間選択の証跡はそれぞれ `artifacts/live/b2a16a7-lobby-unblocked-20261015.png`、`artifacts/live/b2a16a7-copper-menu-20261015.png`。
 - 銅の間を選ぶとゲームは「現在の段位では入場不可。適した部屋に参加しましょう。」と表示した。証跡は `artifacts/live/b2a16a7-copper-menu-20261015.png` と `artifacts/live/b2a16a7-novice-ranked-menu-20261015.png`。アカウント表示は「初心」であり、キュー投入も操作者起動もしていない。このため今回の段位戦結果・勝率標本は0件で、入場制限を回避する操作は行わない。
 - 直近の300+0秒CPU機能回帰は成功している一方、通常打牌の平均 `evidenceToClickMs=8713.9` が短時間段位戦用2600ms予算を満たす根拠はまだない。入場可能になった場合も、最初に一局だけ `--ranked-loop --action-deadline-ms=300000 --force-auto-click-budget-ms=2600` を明示して実行し、旧いフレームによるクリック、離席復帰、自己河不一致がないかを段位結果とは別に照合する。
+
+### 銅の間・四人東の実選択、操作安全停止、アカウント停止
+
+- 上の「入場不可」は銅の間ではなく、段位一覧で誤って y=750 の金の間を選んだときのメッセージだった。段位一覧へ戻り、銅の間（y=410）を選択してから、同室内の四人東（y=410）を選択すると `予約中` となった。証跡は `artifacts/live/48925ca-copper-preflight-20261015.png`、`artifacts/live/48925ca-copper-east-selected-20261015.png`。この訂正後は銅の間への入室に成功しており、アカウント段位を理由とする入場拒否は確認されていない。
+- 使用コードはpush済み `48925ca`。操作者は一系統だけ、`node scripts/run-operator.mjs force-auto --layout=config/layout-300-regression.json --artifacts=artifacts/ranked-48925ca-copper-east-20261015 --ranked-loop --action-deadline-ms=300000 --force-auto-click-budget-ms=2600 --board-metadata --advance-screens --no-dashboard` で開始した。ログには `click_sent` / `action_click_sent` / 自己河照合イベントが0件で、最初の2局面でキャプチャ年齢2981ms、2998ms、3137msを測定して `force_auto_click_budget_expired` が3件、3件目で `ranked_click_budget_safety_stop` が1件ある。したがって、操作はすべてクリック前に中止され、誤打牌は送られていない。
+- 安全停止後は離席自動ツモ切りに移行したため、再開・再起動・対局中のコードや設定変更は行わず、終局まで待機した。最終表示は自家3位・PT -8だが、操作者停止後の自動ツモ切りが混入しているため、段位戦の勝率標本から除外する。終局結果とゲーム側のダイアログは `artifacts/live/48925ca-ranked-state-recheck3-20261015.png` に保存され、「エラーコード: 503 このアカウントは利用停止されています」と明示された。
+- アカウント停止中は対局キュー、再開ボタン、段位画面の再試行を行わない。解除後に、ストリームフレームの鮮度予算を使い切る前に実行される画面判定・公開情報処理をプロファイルし、根拠に基づく修正を300+0秒CPU友人戦（`--action-deadline-ms=300000`）で完走確認してから、2600ms予算の銅の間へ戻る。
