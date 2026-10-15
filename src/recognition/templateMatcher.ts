@@ -238,16 +238,20 @@ function scorePrepared(sample: PreparedImage, templates: Map<GameTile, PreparedI
   }).sort((a, b) => b.coarse - a.coarse).slice(0, options.allClasses ? templates.size : 4);
   const scores = shortlist.map(({ tile, variants }) => ({
     tile,
+    variants,
     discriminativeScore: Math.max(...variants.map((variant) => similarity(sample, variant))),
-    confidence: Math.max(...variants.map((variant) => cosineSimilarity(sample, variant))),
   })).sort((a, b) => b.discriminativeScore - a.discriminativeScore);
   const winner = scores[0]!;
   const margin = winner.discriminativeScore - scores[1]!.discriminativeScore;
+  // Confidence only contributes to the selected tile's safety gate.  Computing
+  // it for every losing candidate repeats 25-offset cosine work without
+  // affecting either the winner or the reported margin.
+  const confidence = Math.max(...winner.variants.map((variant) => cosineSimilarity(sample, variant)));
   return {
     tile: ["5m", "5p", "5s"].includes(winner.tile) && sample.redUpperGlyph
       ? parseGameTile(`0${winner.tile.slice(1)}`) : winner.tile,
-    confidence: winner.confidence,
-    runnerUpConfidence: Math.max(0, winner.confidence - margin),
+    confidence,
+    runnerUpConfidence: Math.max(0, confidence - margin),
   };
 }
 
