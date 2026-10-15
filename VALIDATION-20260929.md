@@ -784,3 +784,9 @@
 - 使用コードはpush済み `48925ca`。操作者は一系統だけ、`node scripts/run-operator.mjs force-auto --layout=config/layout-300-regression.json --artifacts=artifacts/ranked-48925ca-copper-east-20261015 --ranked-loop --action-deadline-ms=300000 --force-auto-click-budget-ms=2600 --board-metadata --advance-screens --no-dashboard` で開始した。ログには `click_sent` / `action_click_sent` / 自己河照合イベントが0件で、最初の2局面でキャプチャ年齢2981ms、2998ms、3137msを測定して `force_auto_click_budget_expired` が3件、3件目で `ranked_click_budget_safety_stop` が1件ある。したがって、操作はすべてクリック前に中止され、誤打牌は送られていない。
 - 安全停止後は離席自動ツモ切りに移行したため、再開・再起動・対局中のコードや設定変更は行わず、終局まで待機した。最終表示は自家3位・PT -8だが、操作者停止後の自動ツモ切りが混入しているため、段位戦の勝率標本から除外する。終局結果とゲーム側のダイアログは `artifacts/live/48925ca-ranked-state-recheck3-20261015.png` に保存され、「エラーコード: 503 このアカウントは利用停止されています」と明示された。
 - アカウント停止中は対局キュー、再開ボタン、段位画面の再試行を行わない。解除後に、ストリームフレームの鮮度予算を使い切る前に実行される画面判定・公開情報処理をプロファイルし、根拠に基づく修正を300+0秒CPU友人戦（`--action-deadline-ms=300000`）で完走確認してから、2600ms予算の銅の間へ戻る。
+
+## 36876de の段位戦前処理重複削減（アカウント停止中のオフライン検証）
+
+- 段位戦の実フレーム `artifacts/ranked-48925ca-copper-east-20261015/frames/2026-10-15T07-22-47.536959+00-00.public-cache.jpg` を再計測した。CDPゲート側では画面分類約297ms、鳴きボタン走査約336ms、自己アクション走査約166msを行った後、同じバイト列に対して通常経路で分類約126ms、鳴き走査約325ms、自己アクション走査約153msを再実行していた。後半の重複は約0.6秒で、2600ms予算では無視できない。
+- `36876de` は、CDPゲートで既に `match` と確認した**同一フレーム**に限って、後段の画面分類と反応ボタン走査を再利用する。同期再撮影・異なるフレームは従来どおり独立検査し、クリック直前の鮮度・手牌・自己河確認も変更していない。これは停止を無効化する変更ではなく、同じ安全根拠を二度計算しない最適化である。
+- `PYTHONPATH=python .runtime/python-auto-venv/bin/python -m unittest python.test_auto_operator python.test_screen_state -q` は180件成功、33件skip。ゲーム側の503利用停止が継続しているため、修正後の300+0秒CPU友人戦および銅の間の実機検証は未実施であり、勝率改善の根拠にはしない。
