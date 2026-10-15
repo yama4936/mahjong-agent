@@ -3176,6 +3176,7 @@ class PythonAutoOperator:
                 refreshed_stable_gate = False
                 gate_screen_state: str | None = None
                 gate_screen_confidence: float | None = None
+                gate_timing: dict[str, int] | None = None
                 if self.args.mode == "force-auto" and self.layout.get("drawSlot"):
                     if self.screencast_sequence == last_gate_sequence:
                         silent_gate_polls += 1
@@ -3187,6 +3188,7 @@ class PythonAutoOperator:
                         silent_gate_polls = 0
                     gate_frame = self.latest_screencast_frame
                     gate_captured_at = getattr(self, "latest_screencast_captured_at", None)
+                    gate_processing_started_at = time.monotonic()
                     gate_content_hash = perceptual_hash(gate_frame) if gate_frame else None
                     if gate_content_hash is not None and gate_content_hash == last_gate_content_hash:
                         unchanged_gate_content_polls += 1
@@ -3346,6 +3348,10 @@ class PythonAutoOperator:
                             or (quick_reaction_win and reaction_win_gate_streak < 2)):
                         page.wait_for_timeout(20)
                         continue
+                    gate_timing = {
+                        "frameReceiptAgeAtGateMs": self.force_auto_capture_age_ms(gate_captured_at),
+                        "screenAndSignalScanMs": round((time.monotonic() - gate_processing_started_at) * 1000),
+                    }
                     # The small regions are the latency-critical turn gate.
                     # Keep a periodic full frame for away/result handling.
                     if not quick_draw and not quick_pass and not quick_calls and not quick_reaction_win and iterations % 10:
@@ -3703,6 +3709,12 @@ class PythonAutoOperator:
                             "recognition_deferred_stale_capture",
                             captureAgeMs=self.force_auto_capture_age_ms(evaluation_captured_at),
                             clickBudgetMs=self.force_auto_click_budget_ms(),
+                            **({
+                                "gateTiming": {
+                                    **gate_timing,
+                                    "gateToRecognitionMs": round((time.monotonic() - gate_processing_started_at) * 1000),
+                                },
+                            } if gate_timing is not None else {}),
                             error=str(error),
                         )
                         page.wait_for_timeout(max(20, round(self.args.poll * 1000)))

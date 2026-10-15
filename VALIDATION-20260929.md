@@ -807,3 +807,9 @@
 - 保存済み段位戦フレーム `artifacts/ranked-48925ca-copper-east-20261015/frames/2026-10-15T07-22-47.536959+00-00.public-cache.jpg` をCPUプロファイルした。段位用レイアウトは `raw` マッチャーで既に4クラスへ候補を絞っている一方、採用されない候補についても25オフセットのコサイン信頼度を計算していた。この値は返却されず、牌の選択・マージン・安全判定にも影響しない。
 - `templateMatcher.ts` では、従来と同じ識別スコアで勝者とマージンを決めた後、勝者の3テンプレート候補だけでコサイン信頼度を計算するようにした。保存フレームの認識牌列、confidence `0.5142128845106297`、ambiguityMargin `0.07096426514411319`、`safe=false` は変更前後で同一である。認識サーバーの `processingElapsedMs` は1236msから944msへ短縮した。
 - `npm run build`、`npm test -- --runInBand test/pipeline.test.ts test/recognitionImprovements.test.ts`、`git diff --check` は成功した。これはオフライン最適化であり、利用停止中のため300+0秒CPU回帰・5+20練習・段位戦の結果や勝率には含めない。
+
+## CDPゲート鮮度の計測追加（利用停止中）
+
+- 既存の銅の間ログでは、3回の `recognition_deferred_stale_capture` が認識開始前のキャプチャ年齢2981ms、2998ms、3138msを記録している。一方で認識器の最適化後単体処理は944msであり、残りの短時間予算障害を画像から推測してはならない。
+- 次の実機回帰で原因を分離するため、同イベントへ `gateTiming` を追加した。CDPフレーム受信時の年齢、画面分類・鳴き/自己アクション・手牌形状を含むゲート走査時間、認識直前までの合計時間を記録するだけで、ゲート・クリック・安全停止の条件は変更していない。
+- `PYTHONPATH=python .runtime/python-auto-venv/bin/python -m unittest python.test_auto_operator python.test_screen_state -q` は180件成功、33件skip、`git diff --check` は成功した。解除後の300+0秒CPU回帰で測定値を取得してから、同一フレームの安定確認や同期処理を変更する。
