@@ -770,3 +770,10 @@
 - 同じ設定の空ルーム35795を再利用し、途中操作・再起動なしで `83d310a`（コードは `1ae7770` を含む）の操作者を一系統だけ起動した。実行は `node scripts/run-operator.mjs force-auto --layout=config/layout-300-regression.json --artifacts=artifacts/friend-300-83d310a-room35795-clean-20261011 --action-deadline-ms=300000 --force-auto-click-budget-ms=8000 --board-metadata --advance-screens --no-dashboard`。設定証跡は `artifacts/live/285f1c8-friend-room-20261011.png` にあり、四人CPU・一局戦・300+0秒、開始25000点、返し30000点、飛び有効、赤ドラ3、ローカル役無効、喰い断有効、一翻縛り、便利表示有効を示す。対局中にコード・設定変更や手動操作はしていない。
 - `match_completed_stop confidence=1.0` で完走。51通常打牌、22反応ボタン操作、52リプレイを保存し、自己河の `own_discard_mismatch` と `own_discard_reconciliation_failed`、`safety_stop`、`away_resumed` は全て0だった。手牌変化による安全中止は1件。反応鳴き候補は9件が8秒の鮮度予算（8103--8230ms）を超えてクリック前に中止され、遅い鳴き・ロンを誤操作しなかった。通常打牌の`evidenceToClickMs`は平均8713.9ms、最大16783msで、これは300秒設定では動作したが、銅の間の短時間要件を満たす証拠ではない。
 - 終局画面 `artifacts/friend-300-83d310a-room35795-clean-20261011/frames/2026-10-11T13-02-27.885527+00-00.match_result.png` は自家「テストjev」25000点・3位、CPU37600/26000/11400点。これは鮮度保護、反応pass、状態遷移、副露を含むCPU機能回帰の成功記録であり、段位勝率評価には含めない。
+
+## 2026-10-15 段位戦再開の事前確認（入場不可）
+
+- 実行環境のブラウザが停止していたため、既存プロファイルを使ってheadless Chromiumを復旧した。`libnspr4.so` が標準探索パスにないため、ローカルの `~/.local/share/jantama-auto/chromium-libs/usr/lib/x86_64-linux-gnu` を `LD_LIBRARY_PATH` に加えて起動した。CDP `127.0.0.1:9222` へ接続し、ログイン済みの自家「テストjev」と、操作者プロセスおよび進行中の対局がないことを確認した。
+- ホームを覆っていた「累計参拝報酬」は未受領の1回分を受け取り、確認後に閉じた。対局設定は変更していない。ロビーと銅の間選択の証跡はそれぞれ `artifacts/live/b2a16a7-lobby-unblocked-20261015.png`、`artifacts/live/b2a16a7-copper-menu-20261015.png`。
+- 銅の間を選ぶとゲームは「現在の段位では入場不可。適した部屋に参加しましょう。」と表示した。証跡は `artifacts/live/b2a16a7-copper-menu-20261015.png` と `artifacts/live/b2a16a7-novice-ranked-menu-20261015.png`。アカウント表示は「初心」であり、キュー投入も操作者起動もしていない。このため今回の段位戦結果・勝率標本は0件で、入場制限を回避する操作は行わない。
+- 直近の300+0秒CPU機能回帰は成功している一方、通常打牌の平均 `evidenceToClickMs=8713.9` が短時間段位戦用2600ms予算を満たす根拠はまだない。入場可能になった場合も、最初に一局だけ `--ranked-loop --action-deadline-ms=300000 --force-auto-click-budget-ms=2600` を明示して実行し、旧いフレームによるクリック、離席復帰、自己河不一致がないかを段位結果とは別に照合する。
