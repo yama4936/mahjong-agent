@@ -1373,6 +1373,11 @@ class PythonAutoOperator:
             # emitting resized pixels. Fixed ROIs against the observed
             # 1058x1080 frame caused both PIL index and Sharp extract errors.
             self.latest_screencast_frame = None
+            # Keep the frame and its receipt together.  A stale timestamp
+            # must never be paired with a later fallback capture (or survive
+            # as apparently valid evidence after this stream gate was
+            # invalidated).
+            self.latest_screencast_captured_at = None
             self.screencast_draw_occupied = None
             if actual != self.rejected_screencast_size:
                 self.log("screencast_frame_rejected", expected=list(expected), actual=list(actual))

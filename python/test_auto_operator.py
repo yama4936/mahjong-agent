@@ -704,6 +704,7 @@ class AwayDialogDetectionTest(unittest.TestCase):
             "drawSlot": {"x": 1600, "y": 900, "width": 100, "height": 100},
         }
         operator.latest_screencast_frame = b"stale calibrated frame"
+        operator.latest_screencast_captured_at = 123.456
         operator.screencast_sequence = 4
         operator.screencast_draw_occupied = True
         operator.screencast_draw_generation = 2
@@ -715,6 +716,7 @@ class AwayDialogDetectionTest(unittest.TestCase):
         self.assertFalse(operator.accept_screencast_frame(resized.getvalue()))
 
         self.assertIsNone(operator.latest_screencast_frame)
+        self.assertIsNone(operator.latest_screencast_captured_at)
         self.assertIsNone(operator.screencast_draw_occupied)
         self.assertEqual(operator.screencast_draw_generation, 2)
         self.assertEqual(operator.screencast_sequence, 5)
