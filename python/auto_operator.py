@@ -1566,15 +1566,19 @@ class PythonAutoOperator:
         screenshot.  The second request will fail closed if either side was
         produced from another frame or with another compact-row layout.
         """
+        started_at = time.monotonic()
         staged: dict[str, Any] = {}
         failure: list[BaseException] = []
+        hand_staged_at: float | None = None
 
         def stage_hand() -> None:
+            nonlocal hand_staged_at
             try:
                 staged.update(self.recognize_resident(
                     screenshot, dynamic_layout=dynamic_layout, open_melds=open_melds,
                     stage_force_auto_recognition=True,
                 ))
+                hand_staged_at = time.monotonic()
             except BaseException as error:
                 failure.append(error)
 
@@ -1584,6 +1588,7 @@ class PythonAutoOperator:
             frame_public_state, public_observation, _ = self.frame_metadata_state(
                 screenshot, public_observation, refresh_public_cache=True,
             )
+            board_metadata_ready_at = time.monotonic()
         finally:
             worker.join()
         if failure:
@@ -1591,12 +1596,24 @@ class PythonAutoOperator:
         recognition_id = staged.get("recognitionId")
         if not isinstance(recognition_id, str):
             raise RuntimeError("resident recognition staging returned no recognition id")
-        return self.recognize_resident(
+        result = self.recognize_resident(
             screenshot, evaluate_force_auto=True, dynamic_layout=dynamic_layout,
             open_melds=open_melds, public_observation=public_observation,
             force_auto_action_buttons=force_auto_action_buttons,
             force_auto_recognition_id=recognition_id, frame_public_state=frame_public_state,
         )
+        completed_at = time.monotonic()
+        # Keep profiling attached to the evaluation rather than the wall-clock
+        # action timing.  The latter intentionally ends at the physical click;
+        # adding post-click confirmation to it previously obscured where a
+        # short ranked budget was actually consumed.
+        result["operatorTiming"] = {
+            "parallelHandRecognitionMs": round(((hand_staged_at or completed_at) - started_at) * 1000),
+            "parallelBoardMetadataMs": round((board_metadata_ready_at - started_at) * 1000),
+            "forceAutoDecisionAfterParallelMs": round((completed_at - board_metadata_ready_at) * 1000),
+            "forceAutoRecognitionAndDecisionMs": round((completed_at - started_at) * 1000),
+        }
+        return result
 
     def defer_missing_public_context(self, evaluation: dict[str, Any], frame: bytes) -> bool:
         if self.args.mode != "force-auto" or not getattr(self.args, "public_cache", False):

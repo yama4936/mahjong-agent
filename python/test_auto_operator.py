@@ -3779,7 +3779,17 @@ class AwayDialogDetectionTest(unittest.TestCase):
             public_observation=None, force_auto_action_buttons=[{"x": 1}],
         )
 
-        self.assertEqual(result, {"status": "decision"})
+        self.assertEqual(result["status"], "decision")
+        self.assertEqual(
+            set(result["operatorTiming"]),
+            {
+                "parallelHandRecognitionMs",
+                "parallelBoardMetadataMs",
+                "forceAutoDecisionAfterParallelMs",
+                "forceAutoRecognitionAndDecisionMs",
+            },
+        )
+        self.assertTrue(all(value >= 0 for value in result["operatorTiming"].values()))
         operator.frame_metadata_state.assert_called_once_with(
             screenshot, None, refresh_public_cache=True,
         )
