@@ -819,3 +819,10 @@
 - 旧実装は同じ `screencast_sequence` のままでもループごとに安定フレーム数を増やせた。その結果、最初のフレームを受信してからゲート処理中に数秒経過しても、同じ画像を認識へ渡しうる。これは2981--3138msの認識開始前キャプチャ年齢と整合する実装上の経路である。
 - `auto_operator.py` は、同じシーケンスなら新しいCDPフレームを待つようにした。5回の短いポーリングでストリームが沈黙している場合だけ、既存の安定したスクリーンショット再撮影を使う。したがって、二重の安定確認は異なるフレーム受信または再撮影済みフレームにのみ基づく。クリック条件・2600ms安全停止・離席処理は変更していない。
 - `PYTHONPATH=python .runtime/python-auto-venv/bin/python -m unittest python.test_auto_operator -q` は171件成功、33件skip、`python.test_screen_state` は9件成功、`git diff --check` は成功した。利用停止中のため実機300+0秒回帰は未実施であり、解除後に新しい `gateTiming` とともに検証する。
+
+## 2026-10-16 fe9c3b4 の300+0秒CPU友人戦（完走、鮮度超過の診断標本）
+
+- 利用停止解除後にYostarログインを復旧し、友人戦ルーム53493を新規作成した。開始前の画面は `artifacts/live/browser-recovery-20261016/friend-300-room-created.png`、設定は四人麻雀・CPU戦（簡単）・一局戦・300+0秒、開始25000点、返し30000点、飛び有効、赤ドラ3、ローカル役無効、喰い断有効、一翻縛り、便利表示有効である。使用コミットはpush済みの `fe9c3b4`。開始前に操作者・認識サーバーの不在を確認した。
+- 操作者は一系統だけ `node scripts/run-operator.mjs force-auto --layout=config/layout-300-regression.json --artifacts=artifacts/friend-300-fe9c3b4-room53493-20261016 --action-deadline-ms=300000 --force-auto-click-budget-ms=8000 --board-metadata --advance-screens --no-dashboard` で起動した。対局中にコード・設定・操作者構成を変更していない。`match_completed_stop confidence=1.0` で完走し、終局画像 `frames/2026-10-16T01-35-40.008965+00-00.match_result.png` は自家「テストjev」30500点・1位、CPU27000/24000/18500点を示す。CPU友人戦結果であり、段位戦勝率には含めない。
+- `python-operator.jsonl` は23判断・23打牌・12反応操作・23リプレイを記録した。判断23件はすべて `deadlineMs=300000` と `deadlineMet=true`（`evidenceToClickMs` 5297--10033ms、平均7165ms）。自己河の `own_discard_mismatch`／`own_discard_reconciliation_failed` はともに0、副露手牌ジオメトリ17件、鳴き牌と河の `called_river_reconciled` 1件を確認した。残り山・局点数・供託もログで更新された。
+- 東2局で立直ボタンを送信した後、打牌前のキャプチャ年齢が10590msとなり、`force_auto_click_budget_expired` と `action_aborted` が各1件発生した。古いフレームの打牌は送信されず、後にゲーム側の時計で局面が進行した。この安全中止と一時的な自動進行が混入するため、最新修正のクリーンな300+0秒機能回帰合格とは扱わない。根拠は画像だけでなく同ログのクリック、期限、自己河、副露・河照合イベントである。5+20練習と銅の間は、この鮮度超過の原因をログから再現・修正し、改めて300+0秒をクリーンに完走してから実施する。
