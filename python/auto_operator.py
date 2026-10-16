@@ -2870,12 +2870,22 @@ class PythonAutoOperator:
             # its visual transition cannot be mistaken for confirmation of
             # the following tile click.
             post_riichi_full = page.screenshot(animations="disabled")
+            post_riichi_captured_at = time.monotonic()
             post_riichi_hand = crop_screenshot(post_riichi_full, self.hand_clip)
             post_riichi_state, _ = classify_screen(
                 post_riichi_full, getattr(self, "screen_references", {}),
             )
             if post_riichi_state != "match" or not riichi_selection_is_visible(post_riichi_hand):
                 raise RetryableSafetyAbort("riichi selection state disappeared before discard click")
+            # The declaration was confirmed and this full viewport was then
+            # captured specifically to verify the dimmed discard-selection
+            # UI.  That observation is the safety boundary for the second
+            # (tile) click: retaining the pre-declaration evaluator receipt
+            # would reject an otherwise current selection after its own
+            # confirmation/classification work.  Do not do this for an
+            # unconfirmed declaration or any other action path.
+            if force_auto:
+                evaluated_captured_at = post_riichi_captured_at
             hand_before = post_riichi_hand
             river_before = crop_screenshot(post_riichi_full, self.river_clip)
 

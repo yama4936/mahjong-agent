@@ -1657,6 +1657,79 @@ class AwayDialogDetectionTest(unittest.TestCase):
         self.assertTrue(receipt["clicked"])
         page.mouse.click.assert_called_once_with(60, 40)
 
+    def test_riichi_discard_uses_confirmed_selection_ui_as_ranked_budget_baseline(self) -> None:
+        """A confirmed Riichi selection can outlive its original evaluation."""
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(
+            mode="force-auto", allow_local_discard=False, stability_pixel_delta=1.5,
+            force_auto_click_budget_ms=2600,
+        )
+        operator.layout = {
+            "viewport": {"width": 1920, "height": 1080},
+            "clickPoints": [],
+            "publicTileRegions": {},
+        }
+        operator.hand_clip = {"x": 0, "y": 0, "width": 10, "height": 10}
+        operator.river_clip = {"x": 10, "y": 0, "width": 10, "height": 10}
+        frame_buffer = io.BytesIO()
+        Image.new("RGB", (1920, 1080), "navy").save(frame_buffer, format="JPEG")
+        frame = frame_buffer.getvalue()
+        operator.screencast_session = Mock()
+        operator.latest_screencast_frame = frame
+        operator.screencast_draw_generation = 4
+        operator.cached_open_melds = 0
+        operator.confirm_action_button = Mock(return_value={"confirmation": "riichi_selection_hand_changed"})
+        operator.confirm_discard = Mock(return_value={"confirmation": "hand_and_own_river_changed"})
+        operator.refresh_discard_reconciliation_before_click = Mock(return_value=False)
+        operator.require_action_deadline = Mock()
+        operator.log = Mock()
+        page = Mock()
+        button_buffer = io.BytesIO()
+        Image.new("RGB", (100, 40), "orange").save(button_buffer, format="PNG")
+        page.screenshot.return_value = button_buffer.getvalue()
+        evaluation = {
+            "decision": {"selectedAction": {"action": "riichi", "tile": "2p"}},
+            "recognition": {"tiles": ["2p"] * 14, "safe": False},
+            "clickIndex": 0,
+            "clickPoint": {"x": 100, "y": 100},
+            "actionButton": {
+                "action": "riichi", "x": 1087, "y": 788, "width": 352, "height": 57,
+                "center": {"x": 1263, "y": 816.5},
+            },
+        }
+        clock = {"now": 12.5}
+
+        def classify_confirmed_selection(*_args):
+            # Classification consumes the remaining time from the original
+            # evaluated frame, but the verified selection screenshot itself
+            # was captured at 12.5 and remains inside the 2600ms budget.
+            clock["now"] = 15.0
+            return "match", 1.0
+
+        with patch("auto_operator.time.monotonic", side_effect=lambda: clock["now"]), \
+                patch("auto_operator.stable_hand_delta", return_value=0.0), \
+                patch("auto_operator.classify_screen", side_effect=classify_confirmed_selection), \
+                patch("auto_operator.riichi_selection_is_visible", return_value=True), \
+                patch("auto_operator.is_away_resume_dialog", return_value=False), \
+                patch("auto_operator.discard_point_in_hand_geometry", return_value=True):
+            receipt = operator.execute(
+                page, evaluation,
+                evaluated_hand=crop_screenshot(frame, operator.hand_clip),
+                evaluated_full=frame,
+                evaluated_draw_generation=4,
+                evaluated_captured_at=10.0,
+            )
+
+        self.assertTrue(receipt["clicked"])
+        # send_discard_click may issue its normal focus/click sequence after
+        # the declaration; both phases reached the mouse without a budget
+        # abort.
+        self.assertGreaterEqual(page.mouse.click.call_count, 2)
+        self.assertFalse(any(
+            call.args and call.args[0] == "force_auto_click_budget_expired"
+            for call in operator.log.call_args_list
+        ))
+
     def test_reaction_call_never_clicks_a_stale_ranked_capture(self) -> None:
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
         operator.args = argparse.Namespace(
