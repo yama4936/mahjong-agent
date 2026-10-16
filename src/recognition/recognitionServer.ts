@@ -1,4 +1,5 @@
 import { readFile, stat } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
 import { createInterface } from "node:readline";
 import { decideForceAutoWithJevDeadline } from "../agent/decision.js";
 import { cachedPublicStatePatch, type CachedPublicObservation } from "../agent/publicCache.js";
@@ -45,6 +46,24 @@ const options: MatcherOptions = {
 await warmTemplateCache(templateDirectory, options);
 process.stdout.write(`${JSON.stringify({ ready: true })}\n`);
 
+// A staged result is deliberately retained only inside this process.  The
+// evaluation request cannot supply tiles itself: it can only refer to a
+// completed recognition whose digest still matches the exact screenshot it
+// names.  This lets the operator overlap board OCR with hand recognition
+// without joining observations from different frames.
+const stagedRecognitions = new Map<string, {
+  digest: string;
+  recognition: Awaited<ReturnType<typeof recognizeHand>> | Awaited<ReturnType<typeof recognizeTileSlots>>;
+  activeLayout: typeof layout;
+  dynamicLayout: boolean;
+  openMelds: number | undefined;
+}>();
+const maximumStagedRecognitions = 8;
+
+async function screenshotDigest(path: string): Promise<string> {
+  return createHash("sha256").update(await readFile(path)).digest("hex");
+}
+
 const lines = createInterface({ input: process.stdin, crlfDelay: Infinity });
 for await (const line of lines) {
   if (!line.trim()) continue;
@@ -63,15 +82,37 @@ for await (const line of lines) {
       publicState?: unknown;
       forceAutoActionButtons?: Array<{ x: number; y: number; width: number; height: number; center: { x: number; y: number } }>;
       actionDeadlineRemainingMs?: number;
+      stageForceAutoRecognition?: boolean;
+      forceAutoRecognitionId?: string;
     };
     id = request.id;
+    if (request.stageForceAutoRecognition && (request.drawOnly || request.concealedTiles || request.evaluateForceAuto)) {
+      throw new Error("force-auto recognition staging requires the entire physical hand row only");
+    }
     if (request.evaluateForceAuto && (request.drawOnly || request.concealedTiles)) {
       throw new Error("force-auto evaluation requires fresh recognition of the entire physical hand row");
+    }
+    if (request.forceAutoRecognitionId && !request.evaluateForceAuto) {
+      throw new Error("staged force-auto recognition requires evaluation");
     }
     const processingStartedAt = performance.now();
     const frameCapturedAtMs = (await stat(request.screenshot)).mtimeMs;
     let proposal;
-    if (request.dynamicLayout) {
+    let activeLayout: typeof layout;
+    let recognition: Awaited<ReturnType<typeof recognizeHand>> | Awaited<ReturnType<typeof recognizeTileSlots>>;
+    if (request.forceAutoRecognitionId) {
+      const staged = stagedRecognitions.get(request.forceAutoRecognitionId);
+      if (!staged) throw new Error("unknown or expired staged force-auto recognition");
+      const digest = await screenshotDigest(request.screenshot);
+      if (digest !== staged.digest) throw new Error("staged force-auto recognition screenshot digest mismatch");
+      if (staged.dynamicLayout !== Boolean(request.dynamicLayout) || staged.openMelds !== request.openMelds) {
+        throw new Error("staged force-auto recognition layout context mismatch");
+      }
+      stagedRecognitions.delete(request.forceAutoRecognitionId);
+      activeLayout = staged.activeLayout;
+      recognition = staged.recognition;
+    } else {
+      if (request.dynamicLayout) {
       if (request.openMelds !== undefined && request.openMelds > 0) {
         // A confirmed call gives us a stronger signal than bright-component
         // localization.  The detector trims the ivory top border (and thus
@@ -80,8 +121,8 @@ for await (const line of lines) {
         // rectangles; geometric verification is performed by the operator.
         proposal = calibratedOpenHandProposal(layout, request.openMelds);
       } else proposal = await proposeLiveHandLayout(request.screenshot);
-    }
-    const activeLayout = request.dynamicLayout
+      }
+      activeLayout = request.dynamicLayout
       ? {
           ...layout,
           ...proposal!,
@@ -90,18 +131,31 @@ for await (const line of lines) {
           minimumTilePresence: layout.minimumTilePresence,
         }
       : layout;
-    let recognition = request.drawOnly
+      recognition = request.drawOnly
       ? activeLayout.drawSlot
         ? await recognizeTileSlots(request.screenshot, [activeLayout.drawSlot], activeLayout, templateDirectory)
         : (() => { throw new Error("layout has no draw slot"); })()
       : request.concealedOnly
         ? await recognizeTileSlots(request.screenshot, activeLayout.handSlots, activeLayout, templateDirectory)
         : await recognizeHand(request.screenshot, activeLayout, templateDirectory);
+    }
     if (request.concealedTiles && recognition.tiles.length === 1) {
       recognition = {
         ...recognition,
         tiles: [...request.concealedTiles.map(parseGameTile), recognition.tiles[0]!],
       };
+    }
+    if (request.stageForceAutoRecognition) {
+      const recognitionId = randomUUID();
+      stagedRecognitions.set(recognitionId, {
+        digest: await screenshotDigest(request.screenshot), recognition, activeLayout,
+        dynamicLayout: Boolean(request.dynamicLayout), openMelds: request.openMelds,
+      });
+      while (stagedRecognitions.size > maximumStagedRecognitions) {
+        stagedRecognitions.delete(stagedRecognitions.keys().next().value!);
+      }
+      process.stdout.write(`${JSON.stringify({ id, result: { recognitionId } })}\n`);
+      continue;
     }
     let result: unknown = recognition;
     if (request.evaluateForceAuto) {

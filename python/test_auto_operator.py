@@ -3780,6 +3780,32 @@ class AwayDialogDetectionTest(unittest.TestCase):
 
         self.assertEqual(classify_screen(output.getvalue(), {}), ("round_result", 1.0))
 
+    def test_force_auto_parallel_recognition_binds_staged_hand_to_metadata_frame(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        screenshot = Path("same-frame.png")
+        observation = {"capturedAt": "2026-10-16T00:00:00+00:00"}
+        state = {"remainingTiles": 42}
+        operator.frame_metadata_state = Mock(return_value=(state, observation, None))
+        operator.recognize_resident = Mock(side_effect=[
+            {"recognitionId": "same-frame-token"}, {"status": "decision"},
+        ])
+
+        result = operator.recognize_force_auto_parallel(
+            screenshot, dynamic_layout=True, open_melds=1,
+            public_observation=None, force_auto_action_buttons=[{"x": 1}],
+        )
+
+        self.assertEqual(result, {"status": "decision"})
+        operator.frame_metadata_state.assert_called_once_with(
+            screenshot, None, refresh_public_cache=True,
+        )
+        stage, evaluate = operator.recognize_resident.call_args_list
+        self.assertTrue(stage.kwargs["stage_force_auto_recognition"])
+        self.assertFalse(stage.kwargs.get("evaluate_force_auto", False))
+        self.assertEqual(evaluate.kwargs["force_auto_recognition_id"], "same-frame-token")
+        self.assertEqual(evaluate.kwargs["frame_public_state"], state)
+        self.assertEqual(evaluate.kwargs["public_observation"], observation)
+
 
 if __name__ == "__main__":
     unittest.main()

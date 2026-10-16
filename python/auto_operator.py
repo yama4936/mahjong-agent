@@ -1473,6 +1473,9 @@ class PythonAutoOperator:
         dynamic_layout: bool = False, open_melds: int | None = None,
         public_observation: dict[str, Any] | None = None,
         force_auto_action_buttons: list[dict[str, Any]] | None = None,
+        stage_force_auto_recognition: bool = False,
+        force_auto_recognition_id: str | None = None,
+        frame_public_state: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         if self.recognition_server.poll() is not None:
             raise RuntimeError("resident recognition server is not running")
@@ -1480,8 +1483,7 @@ class PythonAutoOperator:
             raise RuntimeError("resident recognition server pipes are unavailable")
         self.recognition_request_id += 1
         request_id = self.recognition_request_id
-        frame_public_state = None
-        if evaluate_force_auto and getattr(self.args, "board_metadata", False):
+        if frame_public_state is None and evaluate_force_auto and getattr(self.args, "board_metadata", False):
             frame_public_state, public_observation, _ = self.frame_metadata_state(
                 screenshot, public_observation, refresh_public_cache=True,
             )
@@ -1492,6 +1494,8 @@ class PythonAutoOperator:
             "drawOnly": draw_only,
             "concealedTiles": concealed_tiles,
             "evaluateForceAuto": evaluate_force_auto,
+            "stageForceAutoRecognition": stage_force_auto_recognition,
+            "forceAutoRecognitionId": force_auto_recognition_id,
             "dynamicLayout": dynamic_layout,
             "openMelds": open_melds,
             "publicObservation": public_observation,
@@ -1509,6 +1513,49 @@ class PythonAutoOperator:
         if response.get("error"):
             raise RuntimeError(f"resident recognition failed: {response['error']}")
         return response["result"]
+
+    def recognize_force_auto_parallel(
+        self, screenshot: Path, *, dynamic_layout: bool, open_melds: int | None,
+        public_observation: dict[str, Any] | None,
+        force_auto_action_buttons: list[dict[str, Any]] | None,
+    ) -> dict[str, Any]:
+        """Overlap hand recognition and board OCR for one immutable screenshot.
+
+        The resident evaluator binds its staged hand result to SHA-256 of the
+        screenshot.  The second request will fail closed if either side was
+        produced from another frame or with another compact-row layout.
+        """
+        staged: dict[str, Any] = {}
+        failure: list[BaseException] = []
+
+        def stage_hand() -> None:
+            try:
+                staged.update(self.recognize_resident(
+                    screenshot, dynamic_layout=dynamic_layout, open_melds=open_melds,
+                    stage_force_auto_recognition=True,
+                ))
+            except BaseException as error:
+                failure.append(error)
+
+        worker = threading.Thread(target=stage_hand, daemon=True)
+        worker.start()
+        try:
+            frame_public_state, public_observation, _ = self.frame_metadata_state(
+                screenshot, public_observation, refresh_public_cache=True,
+            )
+        finally:
+            worker.join()
+        if failure:
+            raise failure[0]
+        recognition_id = staged.get("recognitionId")
+        if not isinstance(recognition_id, str):
+            raise RuntimeError("resident recognition staging returned no recognition id")
+        return self.recognize_resident(
+            screenshot, evaluate_force_auto=True, dynamic_layout=dynamic_layout,
+            open_melds=open_melds, public_observation=public_observation,
+            force_auto_action_buttons=force_auto_action_buttons,
+            force_auto_recognition_id=recognition_id, frame_public_state=frame_public_state,
+        )
 
     def defer_missing_public_context(self, evaluation: dict[str, Any], frame: bytes) -> bool:
         if self.args.mode != "force-auto" or not getattr(self.args, "public_cache", False):
@@ -3866,18 +3913,20 @@ class PythonAutoOperator:
                     )
                     dynamic_layout_was_required = self.dynamic_layout_required
                     try:
-                        evaluation = self.recognize_resident(
-                            screenshot_path,
-                            # Cached tiles are not guaranteed to match the
-                            # newly sorted physical row after the last discard.
-                            # Recognize every tile before choosing a click index.
-                            draw_only=False,
-                            concealed_tiles=None,
-                            evaluate_force_auto=True,
-                            dynamic_layout=self.dynamic_layout_required,
-                            open_melds=self.cached_open_melds if self.cached_open_melds > 0 else None,
-                            public_observation=public_observation,
-                            force_auto_action_buttons=self_action_buttons,
+                        recognition_kwargs = {
+                            "dynamic_layout": self.dynamic_layout_required,
+                            "open_melds": self.cached_open_melds if self.cached_open_melds > 0 else None,
+                            "public_observation": public_observation,
+                            "force_auto_action_buttons": self_action_buttons,
+                        }
+                        # Cached tiles are not guaranteed to match the newly
+                        # sorted physical row after the last discard.  With
+                        # board metadata enabled, recognize that complete row
+                        # concurrently with OCR from this exact screenshot.
+                        evaluation = self.recognize_force_auto_parallel(
+                            screenshot_path, **recognition_kwargs,
+                        ) if getattr(self.args, "board_metadata", False) else self.recognize_resident(
+                            screenshot_path, evaluate_force_auto=True, **recognition_kwargs,
                         )
                     except RuntimeError as initial_error:
                         self.cached_concealed_tiles = None

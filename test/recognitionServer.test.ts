@@ -71,3 +71,37 @@ test("resident force-auto evaluation preserves complete own pon and rejects mism
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("staged force-auto recognition is bound to its screenshot digest", { timeout: 60_000 }, async () => {
+  const directory = await mkdtemp(join(tmpdir(), "resident-staged-frame-"));
+  const screenshot = join(directory, "frame.jpg");
+  await writeFile(screenshot, await readFile("artifacts/live/cached-hand-drift-20260928.jpg"));
+  const child = spawn(process.execPath, ["--import", "tsx", "src/recognition/recognitionServer.ts",
+    "config/layout.json", "templates/bootstrap", "examples/public-unknown.json"], {
+    stdio: ["pipe", "pipe", "pipe"], env: { ...process.env, TYPESAFE_API_KEY: "" },
+  });
+  const lines = createInterface({ input: child.stdout })[Symbol.asyncIterator]();
+  const read = async () => JSON.parse((await lines.next()).value!);
+  try {
+    assert.equal((await read()).ready, true);
+    child.stdin.write(JSON.stringify({ id: 1, screenshot, stageForceAutoRecognition: true }) + "\n");
+    const staged = await read();
+    assert.equal(typeof staged.result.recognitionId, "string");
+    child.stdin.write(JSON.stringify({ id: 2, screenshot, evaluateForceAuto: true,
+      forceAutoRecognitionId: staged.result.recognitionId }) + "\n");
+    const evaluated = await read();
+    assert.equal(evaluated.error, undefined);
+    assert.equal(evaluated.result.status, "decision");
+
+    child.stdin.write(JSON.stringify({ id: 3, screenshot, stageForceAutoRecognition: true }) + "\n");
+    const stale = await read();
+    await writeFile(screenshot, Buffer.concat([await readFile(screenshot), Buffer.from("changed")]));
+    child.stdin.write(JSON.stringify({ id: 4, screenshot, evaluateForceAuto: true,
+      forceAutoRecognitionId: stale.result.recognitionId }) + "\n");
+    assert.match((await read()).error, /screenshot digest mismatch/);
+  } finally {
+    child.stdin.end();
+    child.kill();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
