@@ -13,7 +13,7 @@ import threading
 from datetime import datetime, timezone
 from unittest.mock import Mock, call, patch
 
-from auto_operator import PythonAutoOperator, RetryableSafetyAbort, action_deadline_timing, ambiguous_open_draw_fallback, away_resume_geometry, closed_concealed_row_visible, confirmed_call_meld, crop_screenshot, discard_point_in_hand_geometry, force_auto_call_buttons, force_auto_chi_choice_points, force_auto_reaction_win_button, force_auto_self_action_buttons, geometric_open_meld_count, is_away_resume_dialog, is_contextual_reaction_pass, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, mean_pixel_delta, merge_public_observations, open_hand_draw_slot, own_meld_surface_visible, post_call_transition, retreat_pointer_from_hand, riichi_selection_is_visible, round_result_conflicts_with_live_table, selected_chi_choice_point, selected_open_draw_is_ambiguous, selected_tile_comparison_region, send_discard_click, should_guard_tenpai_reaction, should_process_reaction_prompt, should_retry_call_policy, stable_hand_comparison_region, stable_hand_delta, tile_face_structure_delta
+from auto_operator import PythonAutoOperator, RetryableSafetyAbort, action_deadline_timing, ambiguous_open_draw_fallback, away_resume_geometry, closed_concealed_row_visible, closed_hand_face_mismatches, confirmed_call_meld, crop_screenshot, discard_point_in_hand_geometry, force_auto_call_buttons, force_auto_chi_choice_points, force_auto_reaction_win_button, force_auto_self_action_buttons, geometric_open_meld_count, is_away_resume_dialog, is_contextual_reaction_pass, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, mean_pixel_delta, merge_public_observations, open_hand_draw_slot, own_meld_surface_visible, post_call_transition, retreat_pointer_from_hand, riichi_selection_is_visible, round_result_conflicts_with_live_table, selected_chi_choice_point, selected_open_draw_is_ambiguous, selected_tile_comparison_region, send_discard_click, should_guard_tenpai_reaction, should_process_reaction_prompt, should_retry_call_policy, stable_hand_comparison_region, stable_hand_delta, tile_face_structure_delta
 from screen_state import classify_screen, load_references
 from auto_operator import geometric_reaction_open_meld_count
 from auto_operator import configure_evaluator_click_budget
@@ -415,58 +415,42 @@ class ActionDeadlineTest(unittest.TestCase):
             if not same_generation:
                 operator.verify_closed_hand_identity.assert_not_called()
 
-    def test_closed_hand_identity_requires_safe_ordered_red_aware_consensus(self) -> None:
+    def test_closed_hand_identity_uses_per_slot_glyphs_not_hybrid_recognition(self) -> None:
         expected = ["3m", "3m", "0m", "7m", "3p", "4p", "5p", "6p", "8p", "8p", "2s", "3s", "4s", "6p"]
+        project = Path(__file__).resolve().parents[1]
+        frames = project / "artifacts" / "friend-300-aa5dfd4-room53493-20261016" / "frames"
+        evaluated = (frames / "2026-10-16T02-23-40.550363+00-00.jpg").read_bytes()
+        changed = (frames / "2026-10-16T02-23-42.719303+00-00.identity.jpg").read_bytes()
+        # The live artifact is crucial: the hybrid fallback hallucinated more
+        # labels, but per-slot glyph comparison isolates the actual 2s -> 5s
+        # face replacement at index 9 and must refuse the click.
+        layout = load_json(project / "config" / "layout-300-regression.json")
+        self.assertEqual(closed_hand_face_mismatches(evaluated, changed, layout, 1.5), [
+            {"index": 9, "faceStructureDelta": 41.096},
+        ])
         with tempfile.TemporaryDirectory() as directory:
             operator = PythonAutoOperator.__new__(PythonAutoOperator)
-            operator.args = argparse.Namespace(evaluation_timeout=20)
+            operator.args = argparse.Namespace(stability_pixel_delta=1.5)
             operator.frames = Path(directory)
-            operator.root = Path.cwd()
-            operator.layout_path = Path("layout.json")
-            operator.templates = Path("templates")
-            operator.evaluator_env = {}
+            operator.layout = layout
             operator.screencast_draw_generation = 5
             operator.screencast_draw_occupied = True
             operator.cached_open_melds = 0
-            operator.action_deadline_remaining_ms = Mock(return_value=300000)
+            operator.latest_screencast_frame = changed
             operator.log = Mock()
-            for tiles, safe, accepted in [(expected, True, True), (expected, False, False),
-                    (["5m" if t == "0m" else t for t in expected], True, False),
-                    ([expected[3], *expected[1:3], expected[0], *expected[4:]], True, False),
-                    (expected[:-1], True, False)]:
-                with patch("auto_operator.subprocess.run", return_value=argparse.Namespace(
-                        returncode=0, stdout=json.dumps({"safe": safe, "tiles": tiles}))) as run:
-                    self.assertEqual(operator.verify_closed_hand_identity(Mock(), expected, b"frame", 5), accepted)
-                    self.assertIn("--backend=hybrid", run.call_args.args[0])
-                    detail = operator.log.call_args.kwargs
-                    self.assertEqual(detail["observedCount"], len(tiles))
-                    self.assertEqual(detail["recognitionSafe"], safe)
-                    if tiles == expected:
-                        self.assertEqual(detail["mismatches"], [])
-                    else:
-                        self.assertTrue(detail["mismatches"])
-            seven_pin_hand = [*expected[:8], "7p", *expected[9:]]
-            misread_hand = [*seven_pin_hand[:8], "6p", *seven_pin_hand[9:]]
-            with patch("auto_operator.subprocess.run", return_value=argparse.Namespace(
-                    returncode=0, stdout=json.dumps({"safe": True, "tiles": misread_hand, "confidence": 0.699727}))):
-                self.assertFalse(operator.verify_closed_hand_identity(Mock(), seven_pin_hand, b"frame", 5))
-                self.assertEqual(operator.log.call_args.kwargs["mismatches"],
-                                 [{"index": 8, "expected": "7p", "observed": "6p"}])
+            with patch("auto_operator.subprocess.run") as run:
+                self.assertFalse(operator.verify_closed_hand_identity(Mock(), expected, evaluated, changed, 5))
+                run.assert_not_called()
+            detail = operator.log.call_args.kwargs
+            self.assertEqual(detail["verification"], "per_slot_glyph_structure")
+            self.assertEqual(detail["mismatches"], [{"index": 9, "faceStructureDelta": 41.096}])
             page = Mock()
             page.wait_for_timeout.side_effect = lambda _: setattr(operator, "screencast_draw_generation", 6)
-            with patch("auto_operator.subprocess.run", return_value=argparse.Namespace(
-                    returncode=0, stdout=json.dumps({"safe": True, "tiles": expected}))):
-                self.assertFalse(operator.verify_closed_hand_identity(page, expected, b"frame", 5))
-            with patch("auto_operator.subprocess.run") as run:
-                self.assertFalse(operator.verify_closed_hand_identity(Mock(), expected, b"frame", 5))
-                run.assert_not_called()
+            self.assertFalse(operator.verify_closed_hand_identity(page, expected, changed, changed, 5))
             operator.screencast_draw_generation = 5
-            operator.latest_screencast_frame = b"frame"
-            operator.layout = {"viewport": {"width": 1920, "height": 1080}}
-            with patch("auto_operator.subprocess.run", return_value=argparse.Namespace(
-                    returncode=0, stdout=json.dumps({"safe": True, "tiles": expected}))), \
-                    patch("auto_operator.is_away_resume_dialog", return_value=True):
-                self.assertFalse(operator.verify_closed_hand_identity(Mock(), expected, b"frame", 5))
+            operator.screencast_draw_occupied = True
+            operator.latest_screencast_frame = changed
+            self.assertTrue(operator.verify_closed_hand_identity(Mock(), expected, changed, changed, 5))
 
     def test_missing_public_context_requests_refresh_without_resetting_deadline(self) -> None:
         for reason in ("stale", "invalid_capture_time", None):

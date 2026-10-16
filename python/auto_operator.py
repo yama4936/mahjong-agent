@@ -154,6 +154,47 @@ def stable_hand_delta(first: bytes, second: bytes, open_melds: int) -> float:
     return tile_face_structure_delta(first, second)
 
 
+def closed_hand_face_mismatches(
+    evaluated_full: bytes, current_full: bytes, layout: dict[str, Any], threshold: float,
+) -> list[dict[str, float | int | None]]:
+    """Return changed physical faces for a closed 14-tile row.
+
+    This is deliberately an image identity check, not a second tile-label
+    recognition.  A later screencast JPEG may be encoded differently, but its
+    per-slot dark/light glyph mask remains stable.  Checking every slot also
+    prevents an average over the whole hand from hiding one replaced tile.
+    """
+    slots = [*layout.get("handSlots", [])]
+    draw_slot = layout.get("drawSlot")
+    if draw_slot is None:
+        return [{"index": -1, "faceStructureDelta": None}]
+    slots.append(draw_slot)
+    if len(slots) != 14:
+        return [{"index": -1, "faceStructureDelta": None}]
+    mismatches: list[dict[str, float | int | None]] = []
+    try:
+        for index, slot in enumerate(slots):
+            # Match stable_hand_comparison_region: omit border/shadow and the
+            # bottom interaction effect, retaining only the tile glyph.
+            face = {
+                "x": float(slot["x"]) + 10,
+                "y": float(slot["y"]) + 10,
+                "width": float(slot["width"]) - 20,
+                "height": float(slot["height"]) - 38,
+            }
+            if face["width"] <= 0 or face["height"] <= 0:
+                return [{"index": -1, "faceStructureDelta": None}]
+            delta = tile_face_structure_delta(
+                crop_screenshot(evaluated_full, face), crop_screenshot(current_full, face),
+            )
+            if delta > threshold:
+                mismatches.append({"index": index, "faceStructureDelta": round(delta, 3)})
+    except Exception:
+        # An unreadable or incorrectly sized frame cannot prove identity.
+        return [{"index": -1, "faceStructureDelta": None}]
+    return mismatches
+
+
 def crop_screenshot(screenshot: bytes, clip: dict[str, float]) -> bytes:
     """Crop a PNG in memory so one CDP capture can serve several checks."""
     with Image.open(io.BytesIO(screenshot)) as image:
@@ -2673,46 +2714,38 @@ class PythonAutoOperator:
             raise RuntimeError(f"{action} template set does not match its calibration certificate")
         return observed
 
-    def verify_closed_hand_identity(self, page: Page, expected: list[str], frame: bytes, generation: int) -> bool:
-        if not getattr(self.args, "evaluation_timeout", None):
-            return False
+    def verify_closed_hand_identity(
+        self, page: Page, expected: list[str], evaluated_full: bytes, frame: bytes, generation: int,
+    ) -> bool:
+        """Prove a closed row still has the evaluated physical tile faces.
+
+        Do not launch a new hybrid recognizer here.  It is a separate process
+        operating on lossy screencast JPEG pixels and can disagree with the
+        resident evaluation even when a glyph is unchanged.  Exact per-slot
+        glyph structure is both cheaper and a more direct stale-frame guard.
+        """
         if len(expected) != 14 or getattr(self, "cached_open_melds", 0) != 0:
             return False
         if self.screencast_draw_generation != generation:
             return False
-        path = self.frames / f"{utc_stamp()}.identity.jpg"
-        path.write_bytes(frame)
-        remaining = self.action_deadline_remaining_ms()
-        timeout = min(self.args.evaluation_timeout, remaining / 1000) if remaining is not None else self.args.evaluation_timeout
-        if timeout <= 0:
-            return False
-        try:
-            result = subprocess.run(
-                ["node", "dist/src/cli.js", "recognize", str(path), str(self.layout_path),
-                 str(self.templates), "--backend=hybrid"],
-                cwd=self.root, env=self.evaluator_env, text=True, encoding="utf-8",
-                capture_output=True, timeout=timeout, check=False,
-            )
-            fresh = json.loads(result.stdout) if result.returncode == 0 else {}
-        except (subprocess.TimeoutExpired, ValueError):
-            return False
+        # Let queued screencast frames arrive, then prove identity against the
+        # newest calibrated frame rather than an already superseded JPEG.
         page.wait_for_timeout(1)
-        verified = fresh.get("safe") is True and fresh.get("tiles") == expected \
-            and self.screencast_draw_generation == generation \
+        latest = getattr(self, "latest_screencast_frame", None) or frame
+        path = self.frames / f"{utc_stamp()}.identity.jpg"
+        path.write_bytes(latest)
+        if is_away_resume_dialog(latest, self.layout["viewport"]):
+            return False
+        mismatches = closed_hand_face_mismatches(
+            evaluated_full, latest, self.layout, self.args.stability_pixel_delta,
+        )
+        verified = not mismatches and self.screencast_draw_generation == generation \
             and self.screencast_draw_occupied is True
-        latest = getattr(self, "latest_screencast_frame", None)
-        if latest is not None and is_away_resume_dialog(latest, self.layout["viewport"]):
-            verified = False
-        observed = fresh.get("tiles")
-        mismatches = [
-            {"index": index, "expected": tile, "observed": observed[index] if index < len(observed) else None}
-            for index, tile in enumerate(expected)
-            if index >= len(observed) or observed[index] != tile
-        ] if isinstance(observed, list) else []
+        if not verified and not mismatches:
+            mismatches = [{"index": -1, "faceStructureDelta": None}]
         self.log("hand_identity_checked", screenshot=str(path), verified=verified,
-                 confidence=fresh.get("confidence"), ambiguityMargin=fresh.get("ambiguityMargin"),
-                 recognitionSafe=fresh.get("safe") is True, expectedCount=len(expected),
-                 observedCount=len(observed) if isinstance(observed, list) else None,
+                 verification="per_slot_glyph_structure",
+                 expectedCount=len(expected), observedCount=len(expected),
                  mismatches=mismatches)
         return verified
 
@@ -2863,7 +2896,8 @@ class PythonAutoOperator:
                     identity_verified = same_draw_generation and trusted_open_melds == 0 \
                         and selected_action in {"discard", "riichi"} \
                         and self.verify_closed_hand_identity(
-                            page, recognition.get("tiles", []), pre_click_full, evaluated_draw_generation,
+                            page, recognition.get("tiles", []), evaluated_full, pre_click_full,
+                            evaluated_draw_generation,
                         )
                     if not identity_verified:
                         raise RetryableSafetyAbort(
