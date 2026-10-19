@@ -13,7 +13,7 @@ import threading
 from datetime import datetime, timezone
 from unittest.mock import Mock, call, patch
 
-from auto_operator import PythonAutoOperator, RetryableSafetyAbort, action_deadline_timing, ambiguous_open_draw_fallback, away_resume_geometry, closed_concealed_row_visible, closed_hand_face_mismatches, confirmed_call_meld, crop_screenshot, discard_point_in_hand_geometry, force_auto_call_buttons, force_auto_chi_choice_points, force_auto_reaction_win_button, force_auto_self_action_buttons, geometric_open_meld_count, is_away_resume_dialog, is_contextual_reaction_pass, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, mean_pixel_delta, merge_public_observations, open_hand_draw_slot, own_meld_surface_visible, post_call_transition, retreat_pointer_from_hand, riichi_selection_is_visible, round_result_conflicts_with_live_table, selected_chi_choice_point, selected_open_draw_is_ambiguous, selected_tile_comparison_region, send_discard_click, should_guard_tenpai_reaction, should_process_reaction_prompt, should_retry_call_policy, stable_hand_comparison_region, stable_hand_delta, tile_face_structure_delta
+from auto_operator import PythonAutoOperator, RetryableSafetyAbort, action_deadline_timing, ambiguous_open_draw_fallback, away_resume_geometry, closed_concealed_row_visible, closed_hand_face_mismatches, confirmed_call_meld, crop_screenshot, crop_screenshot_regions, discard_point_in_hand_geometry, force_auto_call_buttons, force_auto_chi_choice_points, force_auto_reaction_win_button, force_auto_self_action_buttons, geometric_open_meld_count, is_away_resume_dialog, is_contextual_reaction_pass, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, mean_pixel_delta, merge_public_observations, open_hand_draw_slot, own_meld_surface_visible, post_call_transition, retreat_pointer_from_hand, screencast_frame_follows_pointer_retreat, riichi_selection_is_visible, round_result_conflicts_with_live_table, selected_chi_choice_point, selected_open_draw_is_ambiguous, selected_tile_comparison_region, send_discard_click, should_guard_tenpai_reaction, should_process_reaction_prompt, should_retry_call_policy, stable_hand_comparison_region, stable_hand_delta, tile_face_structure_delta
 from screen_state import classify_screen, load_references
 from auto_operator import geometric_reaction_open_meld_count
 from auto_operator import configure_evaluator_click_budget
@@ -21,6 +21,30 @@ from auto_operator import board_state_signature, board_state_signature_matches
 
 
 class EvaluatorClickBudgetTest(unittest.TestCase):
+    def test_crop_screenshot_regions_decodes_source_once_and_matches_individual_crops(self):
+        image = Image.new("RGB", (40, 30), "black")
+        ImageDraw.Draw(image).rectangle((10, 5, 29, 24), fill="white")
+        encoded = io.BytesIO()
+        image.save(encoded, format="PNG")
+        screenshot = encoded.getvalue()
+        clips = {
+            "hand": {"x": 0, "y": 0, "width": 20, "height": 20},
+            "river": {"x": 10, "y": 5, "width": 20, "height": 20},
+        }
+
+        with patch("auto_operator.Image.open", wraps=Image.open) as opened:
+            actual = crop_screenshot_regions(screenshot, clips)
+
+        self.assertEqual(opened.call_count, 1)
+        self.assertEqual(actual["hand"], crop_screenshot(screenshot, clips["hand"]))
+        self.assertEqual(actual["river"], crop_screenshot(screenshot, clips["river"]))
+
+    def test_only_a_screencast_frame_after_pointer_retreat_can_skip_fresh_capture(self):
+        self.assertTrue(screencast_frame_follows_pointer_retreat(18, 17))
+        self.assertFalse(screencast_frame_follows_pointer_retreat(17, 17))
+        self.assertFalse(screencast_frame_follows_pointer_retreat(None, 17))
+        self.assertFalse(screencast_frame_follows_pointer_retreat(18, None))
+
     def test_live_open_hand_vetoes_round_result_transition(self):
         project = Path(__file__).resolve().parents[1]
         frame = (project / "artifacts/friend-300-eaacede-room73637-20261011/frames/2026-10-11T08-17-50.273158+00-00.round_result.png").read_bytes()

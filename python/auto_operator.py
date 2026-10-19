@@ -207,6 +207,30 @@ def crop_screenshot(screenshot: bytes, clip: dict[str, float]) -> bytes:
         return output.getvalue()
 
 
+def crop_screenshot_regions(
+    screenshot: bytes, clips: dict[str, dict[str, float]],
+) -> dict[str, bytes]:
+    """Crop several regions from one decoded screenshot.
+
+    The force-auto pre-click guard needs the hand, stable tile faces and own
+    river from the exact same screencast receipt.  Decoding that JPEG once per
+    region delays a short-clock click without adding any independent evidence.
+    Keeping the crops in this helper preserves the existing pixel checks while
+    binding every result to the one immutable source frame.
+    """
+    result: dict[str, bytes] = {}
+    with Image.open(io.BytesIO(screenshot)) as image:
+        for name, clip in clips.items():
+            cropped = image.crop((
+                int(clip["x"]), int(clip["y"]),
+                int(clip["x"] + clip["width"]), int(clip["y"] + clip["height"]),
+            ))
+            output = io.BytesIO()
+            cropped.save(output, format="PNG")
+            result[name] = output.getvalue()
+    return result
+
+
 def riichi_selection_is_visible(hand: bytes) -> bool:
     """Recognize the dimmed concealed row shown after pressing Riichi.
 
@@ -837,6 +861,19 @@ def retreat_pointer_from_hand(mouse: Any, viewport: dict[str, int]) -> None:
     mouse.move(viewport["width"] / 2, viewport["height"] * 0.72)
 
 
+def screencast_frame_follows_pointer_retreat(
+    gate_sequence: int | None, pointer_retreat_sequence: int | None,
+) -> bool:
+    """Whether a gate frame was observed after this operator cleared hover.
+
+    A reused frame is safe only when its screencast receipt is newer than the
+    input event that moved the pointer to table felt.  Otherwise a lifted tile
+    can enter the recognition crop, so retain the conservative fresh capture.
+    """
+    return isinstance(gate_sequence, int) and isinstance(pointer_retreat_sequence, int) \
+        and gate_sequence > pointer_retreat_sequence
+
+
 def merge_public_observations(
     previous: dict[str, Any] | None, current: dict[str, Any],
     confirmed_open_melds: int | None = None,
@@ -1025,6 +1062,10 @@ class PythonAutoOperator:
         # be clicked just because the table has not changed yet.
         self.latest_screencast_captured_at: float | None = None
         self.screencast_sequence = 0
+        # Sequence of the last frame that could still precede this
+        # operator's explicit pointer retreat.  A later frame is required
+        # before force-auto may reuse it for hand recognition.
+        self.pointer_retreat_screencast_sequence: int | None = None
         self.screencast_draw_occupied: bool | None = None
         self.screencast_draw_generation = 0
         self.rejected_screencast_size: tuple[int, int] | None = None
@@ -2846,23 +2887,21 @@ class PythonAutoOperator:
             page.wait_for_timeout(1)
         current_streamed_full = getattr(self, "latest_screencast_frame", None) \
             if force_auto and screencast_session is not None else None
-        current_streamed_hand = crop_screenshot(current_streamed_full, self.hand_clip) \
-            if current_streamed_full is not None else None
+        # Compare every pre-click region against the same immutable frame.
+        # Decoding a 1920x1080 screencast separately for the hand, stable
+        # faces and river costs several hundred milliseconds on the ranked
+        # path but produces no extra state evidence.
+        pre_click_full = current_streamed_full or page.screenshot(animations="disabled")
+        if is_away_resume_dialog(pre_click_full, self.layout["viewport"]):
+            self.resume_if_away(page, pre_click_full)
+            raise RetryableSafetyAbort("decision canceled because away dialog appeared during evaluation")
         trusted_open_melds = getattr(self, "cached_open_melds", 0)
         stable_region = stable_hand_comparison_region(self.layout, trusted_open_melds)
-        focused_evaluated_hand = crop_screenshot(evaluated_full, stable_region) \
-            if evaluated_full is not None and stable_region is not None else evaluated_hand
-        focused_streamed_hand = crop_screenshot(current_streamed_full, stable_region) \
-            if current_streamed_full is not None and stable_region is not None else current_streamed_hand
-        streamed_delta = stable_hand_delta(
-            focused_evaluated_hand, focused_streamed_hand, trusted_open_melds,
-        ) \
-            if focused_evaluated_hand is not None and focused_streamed_hand is not None else None
+        selected_region = None
         same_draw_generation = bool(
             evaluated_draw_generation is not None
             and getattr(self, "screencast_draw_generation", None) == evaluated_draw_generation
         )
-        selected_tile_delta = None
         if (
             same_draw_generation
             and getattr(self, "pending_post_call_discard", False)
@@ -2873,12 +2912,37 @@ class PythonAutoOperator:
             selected_region = selected_tile_comparison_region(
                 self.layout, dynamic_click_point, trusted_open_melds,
             )
+        pre_click_regions = {"hand": self.hand_clip}
+        # Some focused safety tests construct only the hand guard because
+        # they must abort before discard confirmation.  Production operators
+        # always have ``river_clip`` from their calibrated layout.
+        if hasattr(self, "river_clip"):
+            pre_click_regions["river"] = self.river_clip
+        if stable_region is not None:
+            pre_click_regions["stable"] = stable_region
+        if selected_region is not None:
+            pre_click_regions["selected"] = selected_region
+        pre_click_crops = crop_screenshot_regions(pre_click_full, pre_click_regions)
+        current_streamed_hand = pre_click_crops["hand"] if current_streamed_full is not None else None
+        if evaluated_full is not None and stable_region is not None:
+            evaluated_regions = {"stable": stable_region}
             if selected_region is not None:
-                selected_tile_delta = stable_hand_delta(
-                    crop_screenshot(evaluated_full, selected_region),
-                    crop_screenshot(current_streamed_full, selected_region),
-                    trusted_open_melds,
-                )
+                evaluated_regions["selected"] = selected_region
+            evaluated_crops = crop_screenshot_regions(evaluated_full, evaluated_regions)
+            focused_evaluated_hand = evaluated_crops["stable"]
+        else:
+            evaluated_crops = {}
+            focused_evaluated_hand = evaluated_hand
+        focused_streamed_hand = pre_click_crops.get("stable", current_streamed_hand)
+        streamed_delta = stable_hand_delta(
+            focused_evaluated_hand, focused_streamed_hand, trusted_open_melds,
+        ) \
+            if focused_evaluated_hand is not None and focused_streamed_hand is not None else None
+        selected_tile_delta = None
+        if selected_region is not None:
+            selected_tile_delta = stable_hand_delta(
+                evaluated_crops["selected"], pre_click_crops["selected"], trusted_open_melds,
+            )
         streamed_turn_is_current = bool(
             same_draw_generation
             and streamed_delta is not None
@@ -2888,18 +2952,10 @@ class PythonAutoOperator:
                 and selected_tile_delta <= self.args.stability_pixel_delta
             )
         )
-        # Compare screencast JPEG to the newest screencast JPEG. A fresh PNG
-        # has a stable ~4-point codec/background delta on the live compact
-        # hand and is not a valid stale-frame comparison.
-        pre_click_full = current_streamed_full or page.screenshot(animations="disabled")
-        if is_away_resume_dialog(pre_click_full, self.layout["viewport"]):
-            self.resume_if_away(page, pre_click_full)
-            raise RetryableSafetyAbort("decision canceled because away dialog appeared during evaluation")
-
         if force_auto and needs_tile_click and self.refresh_discard_reconciliation_before_click():
             raise RetryableSafetyAbort("own discard reconciliation candidate arrived during evaluation")
 
-        hand_before = current_streamed_hand or crop_screenshot(pre_click_full, self.hand_clip)
+        hand_before = current_streamed_hand or pre_click_crops["hand"]
         if force_auto:
             if evaluated_hand is None:
                 raise RuntimeError("force-auto requires the stable evaluated hand image")
@@ -2920,7 +2976,7 @@ class PythonAutoOperator:
                         raise RetryableSafetyAbort(
                             f"hand changed since evaluation (pixel delta={evaluated_delta:.3f})"
                         )
-        river_before = crop_screenshot(pre_click_full, self.river_clip)
+        river_before = pre_click_crops.get("river") or crop_screenshot(pre_click_full, self.river_clip)
         if not (force_auto and screencast_session is not None):
             page.wait_for_timeout(120)
             stability_delta = mean_pixel_delta(hand_before, page.screenshot(clip=self.hand_clip, animations="disabled"))
@@ -3041,6 +3097,11 @@ class PythonAutoOperator:
             self.layout["viewport"],
             lambda milliseconds: page.wait_for_timeout(milliseconds),
         )
+        if force_auto:
+            # ``send_discard_click`` ends by moving onto inert table felt.
+            # Do not reuse an already queued screencast frame: only a later
+            # receipt can prove the next recognition crop has no raised tile.
+            self.pointer_retreat_screencast_sequence = getattr(self, "screencast_sequence", None)
         receipt = self.confirm_discard(page, hand_before, river_before, recognition["tiles"], click_index)
         return {
             "clicked": True,
@@ -3235,6 +3296,7 @@ class PythonAutoOperator:
             # Clear hover before starting the stream, so its first frame cannot
             # inherit a raised tile from the room screen.
             retreat_pointer_from_hand(page.mouse, self.layout["viewport"])
+            self.pointer_retreat_screencast_sequence = getattr(self, "screencast_sequence", None)
             page.wait_for_timeout(100)
         self.start_screencast_gate(page)
         if self.args.mode == "force-auto":
@@ -3483,10 +3545,21 @@ class PythonAutoOperator:
                     # the fixed recognition crop. Retreat before the first
                     # full hand image, including when the room was started
                     # after this operator attached.
-                    retreat_pointer_from_hand(page.mouse, self.layout["viewport"])
-                    page.wait_for_timeout(100)
-                    full_screen = page.screenshot(animations="disabled")
-                    full_screen_captured_at = time.monotonic()
+                    if screencast_frame_follows_pointer_retreat(
+                        getattr(self, "screencast_sequence", None),
+                        getattr(self, "pointer_retreat_screencast_sequence", None),
+                    ):
+                        # This gate receipt is after our own inert-table move;
+                        # its two-frame gate has already supplied the same
+                        # hover-free evidence as a fresh PNG capture.
+                        full_screen = gate_frame
+                        full_screen_captured_at = gate_captured_at
+                    else:
+                        retreat_pointer_from_hand(page.mouse, self.layout["viewport"])
+                        self.pointer_retreat_screencast_sequence = getattr(self, "screencast_sequence", None)
+                        page.wait_for_timeout(100)
+                        full_screen = page.screenshot(animations="disabled")
+                        full_screen_captured_at = time.monotonic()
                 else:
                     full_screen = gate_frame or page.screenshot(animations="disabled")
                     # A missing stream frame falls back to a synchronous
