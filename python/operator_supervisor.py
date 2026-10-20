@@ -13,6 +13,7 @@ import signal
 import subprocess
 import time
 import urllib.request
+import urllib.parse
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -31,10 +32,19 @@ def option(args, name):
     return None
 
 
-def processes(root=ROOT):
-    """Scope launchers/operators by exact script path or repository cwd."""
+def cdp_endpoint(value):
+    parsed = urllib.parse.urlsplit(value)
+    host = parsed.hostname
+    if host in {"localhost", "127.0.0.1", "::1"}:
+        host = "loopback"
+    return host, parsed.port or (443 if parsed.scheme in {"https", "wss"} else 80)
+
+
+def processes(root=ROOT, port=9222):
+    """Adopt operators targeting this browser, including frozen checkouts."""
     found = {"operator": [], "launcher": [], "browser": [], "profile": []}
     profile = Path(os.environ.get("JANTAMA_BROWSER_PROFILE", root / ".runtime/browser-profile")).resolve()
+    target = cdp_endpoint(f"http://127.0.0.1:{port}")
     for entry in Path("/proc").iterdir():
         if not entry.name.isdigit():
             continue
@@ -45,12 +55,16 @@ def processes(root=ROOT):
             for kind, script in (("operator", "python/auto_operator.py"),
                                  ("launcher", "scripts/run-operator.mjs"),
                                  ("browser", "scripts/launch-browser.mjs")):
-                if any(arg == str(root / script) or
-                       (cwd == root and arg == script) for arg in args[1:]):
+                exact = any(arg == str(root / script) or
+                            (cwd == root and arg == script) for arg in args[1:])
+                same_browser = False
+                if kind in {"operator", "launcher"} and any(Path(arg).name == Path(script).name for arg in args[1:]):
+                    same_browser = cdp_endpoint(option(args, "--cdp") or "http://127.0.0.1:9222") == target
+                if exact or same_browser:
                     found[kind].append({"pid": int(entry.name), "args": args, "cwd": str(cwd)})
             if any(arg == f"--user-data-dir={profile}" for arg in args):
                 found["profile"].append({"pid": int(entry.name)})
-        except (OSError, UnicodeError):
+        except (OSError, UnicodeError, ValueError):
             continue
     return found
 
@@ -107,7 +121,7 @@ class Supervisor:
         self.layout = layout
         self.port = port
         self.clock = clock
-        self.scan = scan or (lambda: processes(root))
+        self.scan = scan or (lambda: processes(root, port))
         self.ready = ready or (lambda: cdp_ready(port))
         self.launch = launch or self.spawn
         self.last_operator = None

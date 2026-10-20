@@ -173,14 +173,19 @@ class SupervisorTest(unittest.TestCase):
         self.assertIn("Another supervisor holds the repository lock", result.stderr)
         self.assertFalse((self.root / "unused").exists())
 
-    def test_real_process_scan_matches_exact_script_and_repo_cwd(self):
-        # Harmless sleeping process with an operator script argv, no browser.
-        child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)",
-                                  "python/auto_operator.py"], cwd=self.root)
+    def test_real_process_scan_adopts_frozen_checkout_on_same_cdp_only(self):
+        # Actual script argv/cwd like the observed isolated live checkout,
+        # with a harmless sleeping body instead of a real browser connection.
+        script = self.root / "python/auto_operator.py"
+        script.parent.mkdir()
+        script.write_text("import time; time.sleep(30)\n")
+        child = subprocess.Popen([sys.executable, "python/auto_operator.py",
+                                  "--cdp=http://localhost:9222"], cwd=self.root)
         try:
             found = processes(self.root)
             self.assertIn(child.pid, [p["pid"] for p in found["operator"]])
-            self.assertNotIn(child.pid, [p["pid"] for p in processes(self.root / "elsewhere")["operator"]])
+            self.assertIn(child.pid, [p["pid"] for p in processes(self.root / "elsewhere")["operator"]])
+            self.assertNotIn(child.pid, [p["pid"] for p in processes(self.root / "elsewhere", port=9223)["operator"]])
         finally:
             child.terminate()
             child.wait()
