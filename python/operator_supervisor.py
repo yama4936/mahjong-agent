@@ -80,9 +80,14 @@ def terminal_event(log):
         event = row.get("event")
         if event == "started":
             terminal = None
-        if event in {"safety_stop", "ranked_click_budget_safety_stop", "screen_loss_stop",
-                     "match_completed_stop"}:
-            terminal = row
+        # Intentional exits include ranked navigation, login and dialog stops,
+        # not just the original four stop names. Unknown future stop events
+        # must also hold rather than silently becoming crash recovery.
+        if isinstance(event, str) and event.endswith("_stop"):
+            # A browser-close error during cleanup cannot erase an earlier
+            # intentional stop in this same operator run.
+            if terminal is None or restart_allowed(terminal) or not restart_allowed(row):
+                terminal = row
     return terminal
 
 

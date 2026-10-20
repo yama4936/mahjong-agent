@@ -1,0 +1,2 @@
+{"timestamp": "2026-10-20T12:38:24.232859+00:00", "event": "started", "mode": "force-auto", "page": "https://game.mahjongsoul.com/index.html", "turnGate": "cdp_screencast"}
+{"timestamp": "2026-10-20T13:05:43.431005+00:00", "event": "ranked_terminal_transition_stop", "state": "matchmaking", "confidence": 1.0, "gameplayClicks": 0, "reason": "result_transition_missing_verified_ranked_navigation"}

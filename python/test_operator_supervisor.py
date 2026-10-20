@@ -66,7 +66,8 @@ class SupervisorTest(unittest.TestCase):
             self.assertIn(arg, command)
 
     def test_safety_stops_persist_across_supervisor_restart(self):
-        for event in ("ranked_click_budget_safety_stop", "screen_loss_stop", "safety_stop", "match_completed_stop"):
+        for event in ("ranked_click_budget_safety_stop", "screen_loss_stop", "safety_stop", "match_completed_stop",
+                      "ranked_terminal_transition_stop", "login_required_stop", "blocking_dialog_stop", "future_guard_stop"):
             with self.subTest(event=event):
                 log = self.adopt()
                 log.write_text(json.dumps({"event": event, "error": "unknown"}) + "\n")
@@ -130,6 +131,22 @@ class SupervisorTest(unittest.TestCase):
         log.write_text('broken\n{"event":"safety_stop"}\n{"event":"started"}\n')
         self.assertIsNone(terminal_event(log))
         self.assertFalse(restart_allowed({"event": "safety_stop", "error": "other failure"}))
+
+    def test_real_ranked_transition_stop_is_not_an_unknown_crash(self):
+        from operator_supervisor import ROOT
+        log = ROOT / "test/fixtures/ranked-terminal-transition-stop-20261020.jsonl"
+        terminal = terminal_event(log)
+        self.assertEqual(terminal["event"], "ranked_terminal_transition_stop")
+        self.assertFalse(restart_allowed(terminal))
+
+    def test_browser_close_during_cleanup_does_not_override_intentional_stop(self):
+        log = self.root / "log"
+        log.write_text(json.dumps({"event": "login_required_stop"}) + "\n" + json.dumps({
+            "event": "safety_stop", "error": "Target page, context or browser has been closed"}) + "\n")
+        self.assertEqual(terminal_event(log)["event"], "login_required_stop")
+        log.write_text(log.read_text() + '{"event":"started"}\n' + json.dumps({
+            "event": "safety_stop", "error": "Target page, context or browser has been closed"}) + "\n")
+        self.assertTrue(restart_allowed(terminal_event(log)))
 
     def test_exit_while_supervisor_offline_still_holds_safety_stop(self):
         log = self.adopt()
