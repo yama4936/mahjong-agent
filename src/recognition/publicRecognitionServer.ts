@@ -3,6 +3,7 @@ import { createInterface } from "node:readline";
 import { HybridTileRecognizer } from "./hybridTileRecognizer.js";
 import { layoutSchema } from "./layout.js";
 import { recognizeConfiguredPublicTilesWithVit, toPublicTileObservation } from "./publicTileRecognizer.js";
+import { recognizeHighlightedDiscard } from "./highlightedDiscard.js";
 import { JevClient, type JevHandPlan } from "../jev/client.js";
 
 const [layoutPath, ownSeatArgument = "east"] = process.argv.slice(2);
@@ -64,9 +65,15 @@ for await (const line of lines) {
   try {
     const request = JSON.parse(line) as {
       id: unknown; screenshot: string; capturedAt?: string;
+      reactionHighlight?: boolean; observationSeat?: string;
       concealedTiles?: string[]; openMelds?: number; seat?: string; round?: string;
     };
     id = request.id;
+    const observationSeat = request.observationSeat ?? ownSeat;
+    if (!( ["east", "south", "west", "north"] as string[]).includes(observationSeat)) {
+      throw new Error(`Invalid observation seat: ${observationSeat}`);
+    }
+    const requestedSeat = observationSeat as typeof ownSeat;
     const startedAt = performance.now();
     const recognitionPromise = recognizeConfiguredPublicTilesWithVit(
       request.screenshot,
@@ -77,8 +84,11 @@ for await (const line of lines) {
     const recognition = await recognitionPromise;
     const recognitionLatencyMs = Math.max(0, Math.round(performance.now() - startedAt));
     const handPlan = await planPromise;
+    const highlightedDiscard = request.reactionHighlight
+      ? await recognizeHighlightedDiscard(request.screenshot, recognition, requestedSeat) : undefined;
     const observation = {
-      ...toPublicTileObservation(recognition, ownSeat),
+      ...toPublicTileObservation(recognition, requestedSeat),
+      ...(highlightedDiscard ? { highlightedDiscard } : {}),
       capturedAt: request.capturedAt ?? new Date().toISOString(),
       recognizedAt: new Date().toISOString(),
       recognitionLatencyMs,

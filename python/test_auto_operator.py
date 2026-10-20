@@ -20,6 +20,119 @@ from auto_operator import configure_evaluator_click_budget
 from auto_operator import board_state_signature, board_state_signature_matches
 
 
+class ResidentPublicRecognitionTest(unittest.TestCase):
+    def operator(self):
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.public_recognition_io_lock = threading.Lock()
+        operator.public_recognition_request_id = 0
+        operator.public_recognition_server = Mock()
+        operator.public_recognition_server.poll.return_value = None
+        operator.args = argparse.Namespace(mode="force-auto")
+        operator.public_state = {"seat": "north"}
+        operator.log = Mock()
+        return operator
+
+    def test_reaction_uses_exact_prompt_and_seat_without_starting_cli(self):
+        operator = self.operator()
+        result = {"ownDiscards": ["1m"], "highlightedDiscard": {"tile": "3p", "fromSeat": "west"}}
+        operator.public_recognition_server.stdout.readline.return_value = json.dumps({"id": 1, "result": result})
+        with patch("auto_operator.subprocess.run", side_effect=AssertionError("cold CLI")):
+            self.assertEqual(operator.observe_public_board(Path("prompt.png"), reaction_highlight=True), result)
+        sent = json.loads(operator.public_recognition_server.stdin.write.call_args.args[0])
+        self.assertEqual(sent, {"id": 1, "screenshot": "prompt.png", "reactionHighlight": True, "observationSeat": "north"})
+        self.assertNotIn("concealedTiles", sent)  # Prompt requests must not wait for a new hand plan.
+
+    def test_reaction_rejects_wrong_response_instead_of_using_cache(self):
+        operator = self.operator()
+        operator.cached_public_observation = {"ownDiscards": ["9m"]}
+        operator.public_recognition_server.stdout.readline.return_value = json.dumps({"id": 99, "result": {}})
+        self.assertIsNone(operator.observe_public_board(Path("prompt.png"), reaction_highlight=True))
+        self.assertIn("id mismatch", operator.log.call_args.kwargs["error"])
+
+    def test_reaction_context_overlaps_all_three_same_frame_observations(self):
+        operator = self.operator()
+        barrier = threading.Barrier(3, timeout=2)
+        frame = Path("immutable-prompt.png")
+        def observe(path, result):
+            self.assertEqual(path, frame)
+            barrier.wait()
+            return result
+        operator.observe_public_board = Mock(side_effect=lambda path, **kw: observe(path, {"ownDiscards": []}))
+        operator.recognize_reaction_hand = Mock(side_effect=lambda path: observe(path, {"tiles": ["1m"] * 13}))
+        operator.current_board_metadata = Mock(side_effect=lambda path: observe(path, {"verified": True}))
+        self.assertEqual(operator.recognize_reaction_context(frame),
+                         ({"ownDiscards": []}, {"tiles": ["1m"] * 13}, {"verified": True}))
+        operator.recognize_reaction_hand.side_effect = RuntimeError("hand failure")
+        operator.observe_public_board.side_effect = None
+        operator.current_board_metadata.side_effect = None
+        with self.assertRaisesRegex(RuntimeError, "hand failure"):
+            operator.recognize_reaction_context(frame)
+
+    def test_prepared_metadata_does_not_bypass_verification(self):
+        operator = self.operator()
+        operator.current_board_metadata = Mock(side_effect=AssertionError("duplicate OCR"))
+        with self.assertRaisesRegex(RetryableSafetyAbort, "board metadata not verified"):
+            operator.frame_metadata_state(Path("prompt.png"), prepared_metadata={"verified": False, "reason": "uncertain"})
+
+    def test_reaction_cli_decision_budget_ages_original_prompt(self):
+        operator = self.operator()
+        operator.args = argparse.Namespace(mode="force-auto", board_metadata=False,
+                                           action_templates=None, evaluation_timeout=5,
+                                           force_auto_click_budget_ms=2600)
+        operator.state_path = Path("state.json")
+        operator.layout_path = Path("layout.json")
+        operator.templates = Path("templates")
+        operator.root = Path(".")
+        operator.evaluator_env = {"JEV_FORCE_AUTO_DEADLINE_MS": "2300"}
+        with patch("auto_operator.time.monotonic", return_value=11.9), \
+             patch("auto_operator.subprocess.run", return_value=argparse.Namespace(returncode=0, stdout="{}")) as run:
+            operator.evaluate(Path("prompt.png"), captured_at=10.0)
+        self.assertEqual(run.call_args.kwargs["env"]["JEV_FORCE_AUTO_DEADLINE_MS"], "50")
+        self.assertEqual(operator.evaluator_env["JEV_FORCE_AUTO_DEADLINE_MS"], "2300")
+
+    def test_background_and_prompt_exchanges_cannot_steal_responses(self):
+        operator = self.operator()
+        written = []
+        first_read = threading.Event()
+        release = threading.Event()
+        second_started = threading.Event()
+        results = {}
+        failures = []
+        def write(line):
+            written.append(json.loads(line))
+        def read():
+            if len(written) == 1:
+                first_read.set()
+                if not release.wait(2):
+                    raise RuntimeError("test release timeout")
+            request = written[-1]
+            return json.dumps({"id": request["id"], "result": {"frame": request["screenshot"]}})
+        operator.public_recognition_server.stdin.write.side_effect = write
+        operator.public_recognition_server.stdout.readline.side_effect = read
+        def request(i):
+            if i == 2:
+                second_started.set()
+            try:
+                results[i] = operator.request_public_recognition({"id": i, "screenshot": f"frame-{i}.png"})
+            except Exception as error:
+                failures.append(error)
+        first = threading.Thread(target=request, args=(1,))
+        second = threading.Thread(target=request, args=(2,))
+        first.start()
+        self.assertTrue(first_read.wait(2))
+        second.start()
+        self.assertTrue(second_started.wait(2))
+        try:
+            time.sleep(0.02)
+            self.assertEqual(len(written), 1)
+        finally:
+            release.set()
+            first.join(2)
+            second.join(2)
+        self.assertFalse(failures)
+        self.assertEqual(results, {1: {"frame": "frame-1.png"}, 2: {"frame": "frame-2.png"}})
+
+
 class EvaluatorClickBudgetTest(unittest.TestCase):
     def test_crop_screenshot_regions_decodes_source_once_and_matches_individual_crops(self):
         image = Image.new("RGB", (40, 30), "black")

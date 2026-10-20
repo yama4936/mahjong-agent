@@ -1004,6 +1004,7 @@ class PythonAutoOperator:
         self.public_recognition_thread: threading.Thread | None = None
         self.public_recognition_result: dict[str, Any] | None = None
         self.public_recognition_lock = threading.Lock()
+        self.public_recognition_io_lock = threading.Lock()
         self.public_recognition_request_id = 0
         self.board_metadata_thread: threading.Thread | None = None
         self.board_metadata_result: dict[str, Any] | None = None
@@ -1290,6 +1291,25 @@ class PythonAutoOperator:
                 except subprocess.TimeoutExpired:
                     self.public_recognition_server.kill()
 
+    def request_public_recognition(self, request: dict[str, Any]) -> dict[str, Any]:
+        # The background cache and prompt recognition share one resident model.
+        # Serialize each complete exchange so neither consumes the other's reply.
+        with self.public_recognition_io_lock:
+            server = self.public_recognition_server
+            if not server or server.poll() is not None or not server.stdin or not server.stdout:
+                raise RuntimeError("public recognition server pipes are unavailable")
+            server.stdin.write(json.dumps(request) + "\n")
+            server.stdin.flush()
+            line = server.stdout.readline()
+            if not line:
+                raise RuntimeError("public recognition server closed its output")
+            response = json.loads(line)
+            if response.get("id") != request["id"]:
+                raise RuntimeError("public recognition response id mismatch")
+            if response.get("error"):
+                raise RuntimeError(response["error"])
+            return response["result"]
+
     def schedule_public_recognition(
         self, screenshot: bytes, *, force: bool = False, verified_match: bool = False,
     ) -> None:
@@ -1324,25 +1344,14 @@ class PythonAutoOperator:
         def recognize() -> None:
             envelope: dict[str, Any]
             try:
-                if not server.stdin or not server.stdout:
-                    raise RuntimeError("public recognition server pipes are unavailable")
-                server.stdin.write(json.dumps({
+                result = self.request_public_recognition({
                     "id": request_id, "screenshot": str(frame_path), "capturedAt": captured_at,
                     "concealedTiles": self.cached_concealed_tiles,
                     "openMelds": self.cached_open_melds,
                     "seat": self.public_state.get("seat", "east"),
                     "round": self.public_state.get("round", "unknown"),
-                }) + "\n")
-                server.stdin.flush()
-                line = server.stdout.readline()
-                if not line:
-                    raise RuntimeError("public recognition server closed its output")
-                response = json.loads(line)
-                if response.get("id") != request_id:
-                    raise RuntimeError(f"public recognition response id mismatch: {response}")
-                if response.get("error"):
-                    raise RuntimeError(response["error"])
-                envelope = {"generation": generation, "result": response["result"]}
+                })
+                envelope = {"generation": generation, "result": result}
             except Exception as error:
                 envelope = {"generation": generation, "error": str(error)}
             with self.public_recognition_lock:
@@ -1749,9 +1758,9 @@ class PythonAutoOperator:
         with self.board_metadata_ocr_lock:
             return recognize_board(screenshot)
 
-    def frame_metadata_state(self, screenshot: Path, observation=None, pending=None, *, refresh_public_cache=False):
+    def frame_metadata_state(self, screenshot: Path, observation=None, pending=None, *, refresh_public_cache=False, prepared_metadata=None):
         from board_metadata import remap_seats
-        metadata = self.current_board_metadata(screenshot)
+        metadata = prepared_metadata if prepared_metadata is not None else self.current_board_metadata(screenshot)
         if not metadata.get("verified"):
             raise RetryableSafetyAbort(f"board metadata not verified: {metadata.get('reason')}")
         if refresh_public_cache:
@@ -2168,12 +2177,14 @@ class PythonAutoOperator:
     def evaluate(self, screenshot: Path, pending_discard: dict[str, str] | None = None,
                  public_observation: dict[str, Any] | None = None,
                  recognition: dict[str, Any] | None = None,
-                 available_ui_actions: list[str] | None = None) -> dict[str, Any]:
+                 available_ui_actions: list[str] | None = None, *,
+                 prepared_metadata: dict[str, Any] | None = None,
+                 captured_at: float | None = None) -> dict[str, Any]:
         evaluator_mode = "advisor" if self.args.mode == "observer" else self.args.mode
         state_path = self.state_path
         if getattr(self.args, "board_metadata", False):
             state, public_observation, pending_discard = self.frame_metadata_state(
-                screenshot, public_observation, pending_discard,
+                screenshot, public_observation, pending_discard, prepared_metadata=prepared_metadata,
             )
             state_path = self.frames / f"{utc_stamp()}.board-state.json"
             state_path.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
@@ -2196,10 +2207,26 @@ class PythonAutoOperator:
             command.append(f"--recognition-file={recognition_path}")
         if available_ui_actions:
             command.append(f"--available-ui-actions={','.join(available_ui_actions)}")
+        if evaluator_mode == "force-auto" and pending_discard and public_observation and recognition is not None and available_ui_actions:
+            command = [
+                "node", "dist/src/recognition/reactionEvaluator.js", str(state_path),
+                str(observation_path), str(recognition_path), pending_discard["tile"],
+                pending_discard["fromSeat"], ",".join(available_ui_actions),
+            ]
+        evaluation_env = self.evaluator_env
+        if captured_at is not None and self.args.mode == "force-auto":
+            # The CLI has launch/serialization work in addition to the normal
+            # 350ms click guard reserve. Age the original prompt, never reset it.
+            remaining = self.force_auto_click_budget_ms() - round((time.monotonic() - captured_at) * 1000)
+            decision_budget = max(1, min(int(self.evaluator_env.get("JEV_FORCE_AUTO_DEADLINE_MS", "2300")),
+                                         remaining - 650))
+            evaluation_env = {**self.evaluator_env, "JEV_FORCE_AUTO_DEADLINE_MS": str(decision_budget)}
+            self.log("reaction_decision_budget", remainingMs=remaining, decisionBudgetMs=decision_budget,
+                     preClickAndLaunchReserveMs=650)
         result = subprocess.run(
             command,
             cwd=self.root,
-            env=self.evaluator_env,
+            env=evaluation_env,
             text=True,
             encoding="utf-8",
             errors="strict",
@@ -2211,8 +2238,38 @@ class PythonAutoOperator:
             raise RuntimeError((result.stderr or result.stdout or "frame evaluator failed").strip())
         return json.loads(result.stdout)
 
+    def recognize_reaction_context(self, screenshot: Path):
+        """Recognize the same immutable prompt across independent workers."""
+        results = {}
+        failures = []
+        started = time.monotonic()
+        timings = {}
+        def run(name, callback):
+            try:
+                results[name] = callback()
+                timings[name + "Ms"] = round((time.monotonic() - started) * 1000)
+            except Exception as error:
+                failures.append(error)
+        workers = [
+            threading.Thread(target=run, args=("public", lambda: self.observe_public_board(screenshot, reaction_highlight=True))),
+            threading.Thread(target=run, args=("hand", lambda: self.recognize_reaction_hand(screenshot))),
+        ]
+        for worker in workers:
+            worker.start()
+        try:
+            metadata = self.current_board_metadata(screenshot)
+            timings["metadataMs"] = round((time.monotonic() - started) * 1000)
+        finally:
+            for worker in workers:
+                worker.join()
+        if failures:
+            raise failures[0]
+        self.log("reaction_parallel_recognition", screenshot=str(screenshot),
+                 elapsedMs=round((time.monotonic() - started) * 1000), **timings)
+        return results["public"], results["hand"], metadata
+
     def evaluate_force_auto_call_policy(
-        self, screenshot: Path, call_action: str,
+        self, screenshot: Path, call_action: str, *, captured_at: float | None = None,
     ) -> dict[str, Any] | None:
         """Run a visually unambiguous call through the normal legal policy.
 
@@ -2233,7 +2290,12 @@ class PythonAutoOperator:
         # Always recognize this prompt before rejecting stale cache history.
         # Prefer the newest baseline; the older one is useful only if the
         # async cache already contains this prompt's exact single append.
-        fresh_public = self.observe_public_board(screenshot, reaction_highlight=True)
+        recognition = None
+        metadata = None
+        if getattr(getattr(self, "args", None), "board_metadata", False):
+            fresh_public, recognition, metadata = self.recognize_reaction_context(screenshot)
+        else:
+            fresh_public = self.observe_public_board(screenshot, reaction_highlight=True)
         pending = self.infer_pending_discard(public_observation, fresh_public)
         baseline = "cached"
         if not pending:
@@ -2258,7 +2320,8 @@ class PythonAutoOperator:
         self.log("reaction_discard_verified", action=call_action, pendingDiscard=pending,
                  baseline=baseline, screenshot=str(screenshot))
         public_observation = fresh_public
-        recognition = self.recognize_reaction_hand(screenshot)
+        if recognition is None:
+            recognition = self.recognize_reaction_hand(screenshot)
         expected = 13 - getattr(self, "cached_open_melds", 0) * 3
         if len(recognition.get("tiles", [])) != expected:
             self.log("reaction_call_policy_rejected", action=call_action,
@@ -2268,7 +2331,7 @@ class PythonAutoOperator:
         try:
             evaluation = self.evaluate(
                 screenshot, pending, public_observation, recognition,
-                [call_action, "pass"],
+                [call_action, "pass"], prepared_metadata=metadata, captured_at=captured_at,
             )
         except RuntimeError as error:
             # Invalid recognized tile counts must never reach mouse execution.
@@ -2506,6 +2569,24 @@ class PythonAutoOperator:
         return self.recognize_resident(screenshot, concealed_only=True)
 
     def observe_public_board(self, screenshot: Path, *, reaction_highlight: bool = False) -> dict[str, Any] | None:
+        server = getattr(self, "public_recognition_server", None)
+        if self.args.mode == "force-auto" and server and server.poll() is None:
+            self.public_recognition_request_id += 1
+            started_at = time.monotonic()
+            try:
+                result = self.request_public_recognition({
+                    "id": self.public_recognition_request_id,
+                    "screenshot": str(screenshot),
+                    "reactionHighlight": reaction_highlight,
+                    "observationSeat": self.public_state.get("seat", "east"),
+                })
+                self.log("reaction_public_recognition", screenshot=str(screenshot),
+                         latencyMs=round((time.monotonic() - started_at) * 1000),
+                         source="resident", reactionHighlight=reaction_highlight)
+                return result
+            except Exception as error:
+                self.log("public_observation_failed", error=str(error), source="resident")
+                return None
         command = [
             "node", "dist/src/cli.js", "public-observation", str(screenshot),
             str(self.layout_path), str(self.templates), f"--seat={self.public_state.get('seat', 'east')}",
@@ -3790,7 +3871,9 @@ class PythonAutoOperator:
                         if getattr(self.args, "accept_single_call", False) and len(call_buttons) == 1:
                             call_action = call_buttons[0].get("action")
                             try:
-                                policy = self.evaluate_force_auto_call_policy(screenshot_path, call_action)
+                                policy = self.evaluate_force_auto_call_policy(
+                                    screenshot_path, call_action, captured_at=full_screen_captured_at,
+                                )
                             except RetryableSafetyAbort as error:
                                 self.log("reaction_call_policy_deferred", screenshot=str(screenshot_path), error=str(error))
                                 elapsed_ms = self.configured_action_deadline_ms() - self.action_deadline_remaining_ms()
