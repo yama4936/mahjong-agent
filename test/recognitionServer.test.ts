@@ -119,3 +119,27 @@ test("staged force-auto recognition is bound to its screenshot digest", { timeou
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test("resident open draw recognition follows separated and post-call geometry", { timeout: 60_000 }, async () => {
+  const child = spawn(process.execPath, ["--import", "tsx", "src/recognition/recognitionServer.ts",
+    "config/layout-300-regression.json", "templates/bootstrap", "examples/public-unknown.json"], {
+    stdio: ["pipe", "pipe", "pipe"], env: { ...process.env, TYPESAFE_API_KEY: "" },
+  });
+  const lines = createInterface({ input: child.stdout })[Symbol.asyncIterator]();
+  const read = async () => JSON.parse((await lines.next()).value!);
+  try {
+    assert.equal((await read()).ready, true);
+    for (const [id, screenshot, tile] of [
+      [1, "test/fixtures/open-gapped-six-sou-20261020.jpg", "6s"],
+      [2, "test/fixtures/open-post-chi-20261020.jpg", "C"],
+    ] as const) {
+      child.stdin.write(JSON.stringify({ id, screenshot, dynamicLayout: true, openMelds: 1, drawOnly: true }) + "\n");
+      const response = await read();
+      assert.equal(response.error, undefined);
+      assert.deepEqual(response.result.tiles, [tile]);
+    }
+  } finally {
+    child.stdin.end();
+    child.kill();
+  }
+});

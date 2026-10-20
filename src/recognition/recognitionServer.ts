@@ -6,7 +6,7 @@ import { cachedPublicStatePatch, type CachedPublicObservation } from "../agent/p
 import { isHandPlanCompatible, JevClient } from "../jev/client.js";
 import { parseGameState, parsePublicGameState } from "../game/state.js";
 import { parseGameTile } from "../game/tiles.js";
-import { calibratedOpenHandProposal, proposeLiveHandLayout } from "./handLayoutProposal.js";
+import { calibratedOpenHandProposal, resolveOpenDrawGap, proposeLiveHandLayout } from "./handLayoutProposal.js";
 import { layoutSchema } from "./layout.js";
 import { recognizeHand, recognizeTileSlots, warmTemplateCache, type MatcherOptions } from "./templateMatcher.js";
 
@@ -130,6 +130,7 @@ for await (const line of lines) {
         // compact row so recognition and clicking share the exact stable
         // rectangles; geometric verification is performed by the operator.
         proposal = calibratedOpenHandProposal(layout, request.openMelds);
+        if (!request.concealedOnly) proposal = await resolveOpenDrawGap(request.screenshot, layout, proposal);
       } else proposal = await proposeLiveHandLayout(request.screenshot);
       }
       activeLayout = request.dynamicLayout

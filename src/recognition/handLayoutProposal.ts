@@ -1,4 +1,5 @@
 import sharp from "sharp";
+import { measureSlotPresence } from "./templateMatcher.js";
 import { layoutSchema, type Rect, type ScreenLayout } from "./layout.js";
 import { detectBrightTileCandidates, type RegionCandidate } from "./regionDetector.js";
 
@@ -152,6 +153,38 @@ export function calibratedOpenHandProposal(
     },
     confidence: 0.99,
     requiresHoldoutValidation: true,
+  };
+}
+
+/** Choose the observed draw gap without changing any concealed-hand slots. */
+export async function resolveOpenDrawGap(
+  screenshot: string | Buffer, layout: Pick<ScreenLayout, "viewport" | "handSlots" | "drawSlot">,
+  proposal: HandLayoutProposal,
+): Promise<HandLayoutProposal> {
+  if (!layout.drawSlot || layout.handSlots.length < 2) return proposal;
+  const pitch = median(layout.handSlots.slice(1).map((slot, index) => slot.x - layout.handSlots[index]!.x));
+  const gap = Math.round(layout.drawSlot.x - (layout.handSlots.at(-1)!.x + pitch));
+  const slot = proposal.drawSlot;
+  if (gap < 8 || gap > slot.width / 2) return proposal;
+  const inset = Math.max(2, Math.floor(gap / 4));
+  const width = gap - 2 * inset;
+  const y = slot.y + Math.round(slot.height * 0.08);
+  const height = Math.max(2, Math.round(slot.height * 0.08));
+  // Probe the blank top face band, avoiding dark bamboo/pip glyphs.
+  // The left strip is face only for a contiguous post-call row. The right
+  // strip is face only for a later, separated draw. Neither may be inferred
+  // from the glyph identity, which is what the wrong crop corrupted.
+  const [left, right] = await measureSlotPresence(screenshot, [
+    { x: slot.x + inset, y, width, height },
+    { x: slot.x + slot.width + inset, y, width, height },
+  ], 170);
+  if (left! >= 0.2 || right! < 0.6) return proposal;
+  const drawSlot = { ...slot, x: slot.x + gap };
+  if (drawSlot.x + drawSlot.width > layout.viewport.width) return proposal;
+  return { ...proposal, drawSlot,
+    clickPoints: [...proposal.clickPoints.slice(0, -1),
+      { x: drawSlot.x + drawSlot.width / 2, y: drawSlot.y + drawSlot.height / 2 }],
+    evidence: { ...proposal.evidence, drawGap: proposal.evidence.drawGap + gap },
   };
 }
 
