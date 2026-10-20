@@ -5,6 +5,7 @@ import type { PublicTileRegion, PublicTileRegionName, ScreenLayout } from "./lay
 import { classifyTile, loadTemplates } from "./templateMatcher.js";
 import { detectConfiguredPublicRegions, type RegionCandidate, type RegionDetectionOptions } from "./regionDetector.js";
 import type { VitTilePrediction } from "./vitRecognizer.js";
+import { isKnownSixSevenPinConfusion } from "./hybridTileRecognizer.js";
 
 export interface RecognizedPublicTile extends RegionCandidate {
   tile: GameTile;
@@ -374,7 +375,10 @@ export async function recognizeConfiguredPublicTilesWithVit(
       confidence: prediction.confidence,
       runnerUpConfidence: prediction.runnerUpConfidence,
       ambiguityMargin,
-      safe: prediction.confidence >= minimumConfidence && ambiguityMargin >= minimumMargin,
+      // The Hybrid model's measured 6p/7p confusion applies to public tiles
+      // too. A false 6p in an opponent river otherwise becomes genbutsu.
+      safe: !(classifier.backend === "hybrid" && isKnownSixSevenPinConfusion(prediction))
+        && prediction.confidence >= minimumConfidence && ambiguityMargin >= minimumMargin,
     };
     grouped.set(job.name, [...(grouped.get(job.name) ?? []), recognized]);
   });

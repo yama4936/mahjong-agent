@@ -9,6 +9,7 @@ import { layoutSchema } from "../src/recognition/layout.js";
 import { opponentStatesFromObservation } from "../src/recognition/publicTileRecognizer.js";
 import { detectConfiguredPublicRegions } from "../src/recognition/regionDetector.js";
 import { knownTiles, knownTilesOutsideHand, parseGameState, parsePublicGameState } from "../src/game/state.js";
+import { decide } from "../src/agent/decision.js";
 import { assertTemporalPublicObservation, hasSidewaysRiichiTile, recognizeConfiguredPublicTiles, recognizeConfiguredPublicTilesWithVit, recognizeExposedMelds, toPublicTileObservation, type PublicTileObservation, type PublicTileRecognitionRegion } from "../src/recognition/publicTileRecognizer.js";
 
 function publicRegion(tiles: Array<{ tile: any; x: number; y?: number; width?: number; height?: number }>, rotationToUpright: 0 | 90 | 180 | 270 = 0): PublicTileRecognitionRegion {
@@ -123,6 +124,69 @@ test("production opposite river preserves seven-pin face and full river with rea
       assert.equal(after.oppositeDiscards?.classificationSafe, before.oppositeDiscards?.classificationSafe, file);
     }
   } finally { await recognizer.close(); }
+});
+
+test("Hybrid ambiguous six/seven pin in a river cannot become genbutsu", async () => {
+  const screenshot = await sharp({ create: { width: 80, height: 90, channels: 3, background: "#111111" } })
+    .composite([{ input: { create: { width: 30, height: 46, channels: 3, background: "#ffffff" } }, left: 20, top: 20 }])
+    .png().toBuffer();
+  const layout = layoutSchema.parse({ ...JSON.parse(await readFile("config/layout-300-regression.json", "utf8")),
+    publicTileRegions: { oppositeDiscards: { x: 0, y: 0, width: 80, height: 90, rotationToUpright: 0, detectionMode: "discard_grid" } } });
+  for (const confidence of [0.599085, 0.621043, 0.7803, 0.788, 0.99]) {
+    const classifier = { backend: "hybrid" as const, classifyTileImages: async (images: Buffer[]) => images.map(() => ({
+      tile: "6p", confidence, runnerUpTile: "7p", runnerUpConfidence: 1 - confidence,
+    } as const)) };
+    const result = await recognizeConfiguredPublicTilesWithVit(screenshot, layout, classifier);
+    const safe = confidence >= 0.788;
+    assert.equal(result.oppositeDiscards?.classificationSafe, safe, String(confidence));
+    assert.deepEqual(toPublicTileObservation(result, "west").opponentDiscards[1]?.discards,
+      safe ? ["6p"] : [], String(confidence));
+  }
+});
+
+test("production opposite river refines actual seven-pin misread as six", {
+  skip: !existsSync(".runtime/hybrid-vision/cvmaj-pretrained.tar") || !existsSync(".runtime/hybrid-vision/automajsoul-best-model.pt"),
+}, async () => {
+  const base = layoutSchema.parse(JSON.parse(await readFile("config/layout-300-regression.json", "utf8")));
+  const layout = { ...base, publicTileRegions: { oppositeDiscards: base.publicTileRegions!.oppositeDiscards! } };
+  const recognizer = new HybridTileRecognizer();
+  try {
+    const unrefined = await recognizeConfiguredPublicTilesWithVit(
+      "test/fixtures/opposite-river-seven-pin-as-six-20261020.jpg", layout, recognizer,
+      { retryDiscardBoundaries: false });
+    assert.equal(unrefined.oppositeDiscards?.recognized[14]?.tile, "6p");
+    assert.equal(unrefined.oppositeDiscards?.recognized[14]?.safe, false);
+    assert.equal(unrefined.oppositeDiscards?.classificationSafe, false);
+    const result = await recognizeConfiguredPublicTilesWithVit(
+      "test/fixtures/opposite-river-seven-pin-as-six-20261020.jpg", layout, recognizer);
+    // Existing bounded boundary refinement now runs for the rejected face.
+    // It preserves all accepted tiles and recovers the actual seven pin.
+    assert.equal(result.oppositeDiscards?.candidateCount, 15);
+    assert.equal(result.oppositeDiscards?.recognized[13]?.tile, "5m");
+    assert.equal(result.oppositeDiscards?.recognized[13]?.sideways, true);
+    assert.equal(result.oppositeDiscards?.classificationSafe, true);
+    assert.equal(result.oppositeDiscards?.recognized[14]?.tile, "7p");
+    assert.deepEqual(toPublicTileObservation(result, "west").opponentDiscards[1]?.discards,
+      ["N", "1s", "W", "1s", "3p", "W", "1p", "4s", "S", "E", "S", "9m", "4p", "5m", "7p"]);
+  } finally { await recognizer.close(); }
+});
+
+test("correcting the live dealer river removes the losing six pin from Jev choices", async () => {
+  const before = parseGameState(JSON.parse(await readFile(
+    "test/fixtures/opposite-river-seven-pin-deal-in-state-20261020.json", "utf8")));
+  const after = structuredClone(before);
+  after.opponents.find(opponent => opponent.seat === "east")!.discards[14] = "7p";
+  const offered: string[][] = [];
+  const jev = { chooseDiscard: async (_state: unknown, candidates: Array<{ actionId: string; tile: string }>) => {
+    offered.push(candidates.map(candidate => candidate.tile));
+    return { actionId: candidates[0]!.actionId, confidence: 1, probabilities: { [candidates[0]!.actionId]: 1 },
+      model: "first-offered-test", promptVersion: "test", latencyMs: 0 };
+  } };
+  // Capture the real filtering path without making a remote model request.
+  await decide(before, { mode: "force-auto", jev: jev as any });
+  await decide(after, { mode: "force-auto", jev: jev as any });
+  assert.deepEqual(offered[0], ["6p"]);
+  assert.deepEqual(offered[1], ["8s", "2p"]);
 });
 
 test("discard boundary retry is bounded and cannot contradict accepted tiles", async () => {

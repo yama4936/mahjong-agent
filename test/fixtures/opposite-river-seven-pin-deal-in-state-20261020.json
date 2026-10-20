@@ -1,0 +1,130 @@
+{
+  "round": "east_3",
+  "honba": 0,
+  "riichiSticks": 3,
+  "seat": "west",
+  "scores": {
+    "west": 22000,
+    "north": 36000,
+    "east": 22000,
+    "south": 17000
+  },
+  "hand": [
+    "1m",
+    "3m",
+    "8m",
+    "2p",
+    "6p",
+    "6p",
+    "9p",
+    "1s",
+    "2s",
+    "3s",
+    "5s",
+    "6s",
+    "8s"
+  ],
+  "draw": "2p",
+  "doraIndicators": [
+    "3m"
+  ],
+  "ownDiscards": [
+    "N",
+    "8p",
+    "P",
+    "5m",
+    "9s",
+    "9s",
+    "E",
+    "C",
+    "F",
+    "4s",
+    "7s",
+    "9m",
+    "2m",
+    "4p"
+  ],
+  "melds": [],
+  "visibleTiles": [],
+  "openMelds": 0,
+  "turn": 14,
+  "remainingTiles": 11,
+  "phase": "self_turn",
+  "recognitionConfidence": 0.7253013501757121,
+  "publicStateConfidence": 0,
+  "riichiDeclared": false,
+  "availableUiActions": [],
+  "opponents": [
+    {
+      "seat": "north",
+      "discards": [
+        "N",
+        "P",
+        "C",
+        "2m",
+        "7s",
+        "F",
+        "N",
+        "7s",
+        "E",
+        "1p",
+        "9m",
+        "3s",
+        "3p",
+        "6m"
+      ],
+      "riichi": true,
+      "openMelds": 0,
+      "openMeldsObserved": false,
+      "melds": []
+    },
+    {
+      "seat": "east",
+      "discards": [
+        "N",
+        "1s",
+        "W",
+        "1s",
+        "3p",
+        "W",
+        "1p",
+        "4s",
+        "S",
+        "E",
+        "S",
+        "9m",
+        "4p",
+        "5m",
+        "6p"
+      ],
+      "riichi": true,
+      "openMelds": 0,
+      "openMeldsObserved": true,
+      "melds": []
+    },
+    {
+      "seat": "south",
+      "discards": [
+        "1m",
+        "9m",
+        "P",
+        "C",
+        "2p",
+        "E",
+        "8s",
+        "7m",
+        "S",
+        "W",
+        "F",
+        "1m",
+        "3p",
+        "6m",
+        "9p"
+      ],
+      "riichi": true,
+      "openMelds": 0,
+      "openMeldsObserved": true,
+      "melds": []
+    }
+  ]
+}
