@@ -344,23 +344,31 @@ def force_auto_call_buttons(screenshot: bytes, viewport: dict[str, int]) -> list
     bottom = round(viewport["height"] * 0.85)
     with Image.open(io.BytesIO(screenshot)) as image:
         pixels = image.convert("RGB")
+        red, green, blue = pixels.crop((left, top, right, bottom)).split()
+        def above(band, threshold):
+            return band.point([255 if value > threshold else 0 for value in range(256)])
+        def all_masks(*masks):
+            result = masks[0]
+            for mask in masks[1:]:
+                result = ImageChops.multiply(result, mask)
+            return result
+        # Saturating subtraction preserves every positive threshold exactly.
+        # Keep green/cyan separate so touching glows cannot fuse two calls.
+        masks = {
+            "green": all_masks(above(green, 80), above(ImageChops.subtract(green, red), 15),
+                               above(ImageChops.subtract(green, blue), 10)),
+            "cyan": all_masks(above(blue, 140), above(green, 120),
+                              above(ImageChops.subtract(ImageChops.darker(green, blue), red), 35),
+                              above(ImageChops.subtract(blue, green), 0)),
+        }
         groups: list[tuple[str, list[tuple[int, int, int]]]] = []
-        # Scan the two button palettes separately. Their glow regions can
-        # touch, so a combined color mask would fuse adjacent chi and pon
-        # buttons into one apparently unambiguous component.
-        for palette in ("green", "cyan"):
+        for palette, mask in masks.items():
             active_columns: list[tuple[int, int, int]] = []
-            for x in range(left, right):
-                matching_y = []
-                for y in range(top, bottom):
-                    red, green, blue = pixels.getpixel((x, y))
-                    matches = (green > 80 and green - red > 15 and green - blue > 10) \
-                        if palette == "green" \
-                        else (blue > 140 and green > 120 and min(green, blue) - red > 35 and blue > green)
-                    if matches:
-                        matching_y.append(y)
-                if len(matching_y) >= 5:
-                    active_columns.append((x, min(matching_y), max(matching_y)))
+            for x in range(mask.width):
+                column = mask.crop((x, 0, x + 1, mask.height))
+                if column.histogram()[255] >= 5:
+                    bounds = column.getbbox()
+                    active_columns.append((left + x, top + bounds[1], top + bounds[3] - 1))
             palette_groups: list[list[tuple[int, int, int]]] = []
             for column in active_columns:
                 if not palette_groups or column[0] - palette_groups[-1][-1][0] > 10:

@@ -1999,6 +1999,27 @@ class AwayDialogDetectionTest(unittest.TestCase):
         orange.save(output, format="PNG")
         self.assertEqual(force_auto_call_buttons(output.getvalue(), viewport), [])
 
+    def test_call_palette_threshold_boundaries_and_column_extents(self) -> None:
+        viewport = {"width": 1000, "height": 1000}
+        cases = [
+            ((50, 81, 60), "chi"), ((50, 80, 60), None),
+            ((66, 81, 60), None), ((50, 81, 71), None),
+            ((100, 140, 150), "pon"), ((100, 135, 150), None),
+            ((80, 120, 150), None), ((100, 140, 140), None),
+        ]
+        for color, action in cases:
+            with self.subTest(color=color):
+                frame = Image.new("RGB", (1000, 1000), "black")
+                frame.paste(color, (400, 700, 501, 761))
+                output = io.BytesIO()
+                frame.save(output, format="PNG")
+                buttons = force_auto_call_buttons(output.getvalue(), viewport)
+                if action is None:
+                    self.assertEqual(buttons, [])
+                else:
+                    self.assertEqual(buttons, [{"action": action, "x": 400, "y": 700,
+                        "width": 100, "height": 60, "center": {"x": 450.0, "y": 730.0}}])
+
     def test_force_auto_call_buttons_keep_multiple_choices_ambiguous(self) -> None:
         viewport = {"width": 1600, "height": 900}
         image = Image.new("RGB", (1600, 900), (25, 55, 85))
