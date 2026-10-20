@@ -3352,6 +3352,78 @@ class AwayDialogDetectionTest(unittest.TestCase):
         self.assertTrue(operator.round_terminal_latched)
         self.assertFalse(operator.round_terminal_result_observed)
 
+    def test_stream_button_guard_uses_distinct_frames_and_rejects_button_changes(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(mode="force-auto", allow_local_discard=False,
+                                           stability_pixel_delta=1.5)
+        operator.layout = {
+            "viewport": {"width": 1920, "height": 1080},
+            "clickPoints": [],
+            "publicTileRegions": {},
+        }
+        operator.hand_clip = {"x": 0, "y": 0, "width": 10, "height": 10}
+        operator.river_clip = {"x": 10, "y": 0, "width": 10, "height": 10}
+        operator.screencast_session = Mock()
+        frame_buffer = io.BytesIO()
+        Image.new("RGB", (1920, 1080), "navy").save(frame_buffer, format="JPEG")
+        frame = frame_buffer.getvalue()
+        operator.latest_screencast_frame = frame
+        operator.screencast_draw_generation = 4
+        operator.log = Mock()
+        operator.confirm_action_button = Mock(return_value={"confirmation": "action_button_region_changed"})
+        button_buffer = io.BytesIO()
+        Image.new("RGB", (100, 40), "orange").save(button_buffer, format="PNG")
+        page = Mock()
+        page.screenshot.return_value = button_buffer.getvalue()
+        evaluation = {
+            "decision": {"selectedAction": {"action": "tsumo"}},
+            "recognition": {"tiles": ["2p", "2p"], "safe": False},
+            "actionButton": {
+                "action": "tsumo", "x": 1087, "y": 788, "width": 352, "height": 57,
+                "center": {"x": 1263, "y": 816.5},
+            },
+        }
+
+        operator.latest_screencast_captured_at = 10.5
+        operator.require_force_auto_click_budget = Mock()
+        receipt = operator.execute(
+            page, evaluation,
+            evaluated_hand=crop_screenshot(frame, operator.hand_clip),
+            evaluated_full=frame, evaluated_captured_at=10.0,
+            evaluated_draw_generation=4,
+        )
+        self.assertTrue(receipt["clicked"])
+        page.screenshot.assert_not_called()
+        operator.require_force_auto_click_budget.assert_any_call(
+            10.0, phase="before_action_button_click",
+        )
+        changed = Image.open(io.BytesIO(frame)).convert("RGB")
+        changed.paste("orange", (1087, 788, 1439, 845))
+        changed_buffer = io.BytesIO()
+        changed.save(changed_buffer, format="PNG")
+        operator.latest_screencast_frame = changed_buffer.getvalue()
+        page.mouse.click.reset_mock()
+        with self.assertRaisesRegex(RetryableSafetyAbort, "tsumo button changed"):
+            operator.execute(
+                page, evaluation,
+                evaluated_hand=crop_screenshot(frame, operator.hand_clip),
+                evaluated_full=frame, evaluated_captured_at=10.0,
+                evaluated_draw_generation=4,
+            )
+        page.mouse.click.assert_not_called()
+        page.screenshot.assert_not_called()
+        # A frame too close to the evaluated observation must still sample
+        # the button twice, rather than comparing a frame with itself.
+        operator.latest_screencast_frame = frame
+        operator.latest_screencast_captured_at = 10.05
+        operator.execute(
+            page, evaluation,
+            evaluated_hand=crop_screenshot(frame, operator.hand_clip),
+            evaluated_full=frame, evaluated_captured_at=10.0,
+            evaluated_draw_generation=4,
+        )
+        self.assertEqual(page.screenshot.call_count, 2)
+
     def test_riichi_button_change_retries_without_clicking_or_stopping_table(self) -> None:
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
         operator.args = argparse.Namespace(mode="force-auto", allow_local_discard=False,

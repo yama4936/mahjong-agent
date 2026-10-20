@@ -2995,12 +2995,30 @@ class PythonAutoOperator:
                 raise RuntimeError(f"evaluated frame has no {button_action} button candidate")
             region = observed if force_auto else self.layout["actionButtonRegions"][button_action]
             button_clip = {key: region[key] for key in ("x", "y", "width", "height")}
-            button_before = page.screenshot(clip=button_clip, animations="disabled")
+            # Reuse two temporally distinct stream observations only when
+            # their hand/draw guard passed. Undated or reused frames retain
+            # the synchronous 120ms stability check.
+            streamed_captured_at = getattr(self, "latest_screencast_captured_at", None)
+            stream_button_guard = bool(
+                force_auto and streamed_turn_is_current
+                and evaluated_full is not None and current_streamed_full is not None
+                and evaluated_captured_at is not None and streamed_captured_at is not None
+                and streamed_captured_at - evaluated_captured_at >= 0.120
+            )
+            button_before = crop_screenshot(evaluated_full, button_clip) if stream_button_guard \
+                else page.screenshot(clip=button_clip, animations="disabled")
             meld_region = self.layout.get("publicTileRegions", {}).get("ownMelds")
             meld_clip = {key: meld_region[key] for key in ("x", "y", "width", "height")} if meld_region else None
-            meld_before = page.screenshot(clip=meld_clip, animations="disabled") if button_action in {"chi", "pon", "kan"} and meld_clip else None
-            page.wait_for_timeout(120)
-            if mean_pixel_delta(button_before, page.screenshot(clip=button_clip, animations="disabled")) > self.args.stability_pixel_delta:
+            meld_before = None
+            if button_action in {"chi", "pon", "kan"} and meld_clip:
+                meld_before = crop_screenshot(pre_click_full, meld_clip) if stream_button_guard \
+                    else page.screenshot(clip=meld_clip, animations="disabled")
+            if stream_button_guard:
+                button_current = crop_screenshot(pre_click_full, button_clip)
+            else:
+                page.wait_for_timeout(120)
+                button_current = page.screenshot(clip=button_clip, animations="disabled")
+            if mean_pixel_delta(button_before, button_current) > self.args.stability_pixel_delta:
                 # Riichi and tsumo affordances can legitimately disappear
                 # while their turn UI is being animated. Nothing has been
                 # clicked yet, so retry from a fresh self-turn frame rather
