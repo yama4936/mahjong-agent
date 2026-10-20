@@ -17,7 +17,7 @@ export interface TileMatch {
   runnerUpConfidence: number;
 }
 
-interface PreparedImage { data: Int16Array; width: number; height: number; foregroundFraction: number; redUpperGlyph: boolean }
+interface PreparedImage { data: Int16Array; width: number; height: number; foregroundFraction: number; neutralBrightCore: boolean; redUpperGlyph: boolean }
 
 const templateCache = new Map<string, Promise<Map<GameTile, PreparedImage[]>>>();
 
@@ -43,12 +43,23 @@ async function prepare(input: string | Buffer, rect?: Rect, options: MatcherOpti
   const background = [median(0), median(1), median(2)];
   const data = new Int16Array(info.width * info.height * 3);
   let foreground = 0;
+  let corePixels = 0;
+  let neutralBrightCorePixels = 0;
   let upperRed = 0;
   let upperOtherInk = 0;
   for (let y = 0; y < info.height; y += 1) {
     for (let x = 0; x < info.width; x += 1) {
       const index = y * info.width + x;
       const rgbIndex = index * 3;
+      // White dragons can contain broad lighting/shadow edges, which the
+      // background-relative feature map otherwise mistakes for a glyph.
+      if (x >= 7 && x < 37 && y >= 9 && y < 55) {
+        corePixels += 1;
+        const channels = [rgb[rgbIndex]!, rgb[rgbIndex + 1]!, rgb[rgbIndex + 2]!];
+        if (Math.min(...channels) >= 170 && Math.max(...channels) - Math.min(...channels) <= 35) {
+          neutralBrightCorePixels += 1;
+        }
+      }
       // Exclude the red 萬 suit glyph at the bottom: only the upper numeral
       // distinguishes an ordinary five man from a red five man.
       if (x >= 5 && x < 39 && y >= 7 && y < 36) {
@@ -72,6 +83,7 @@ async function prepare(input: string | Buffer, rect?: Rect, options: MatcherOpti
   }
   return { data, width: info.width, height: info.height,
     foregroundFraction: foreground / (info.width * info.height),
+    neutralBrightCore: neutralBrightCorePixels === corePixels,
     redUpperGlyph: upperRed >= 30 && upperRed / (upperRed + upperOtherInk) >= 0.8 };
 }
 
@@ -217,7 +229,7 @@ export async function classifyTile(image: string | Buffer, templates: Map<GameTi
 }
 
 function scorePrepared(sample: PreparedImage, templates: Map<GameTile, PreparedImage[]>, options: MatcherOptions = {}): TileMatch {
-  if (sample.foregroundFraction < 0.005 && templates.has("P")) {
+  if ((sample.foregroundFraction < 0.005 || sample.neutralBrightCore) && templates.has("P")) {
     if (options.rejectBlank !== false) return { tile: "P", confidence: 0, runnerUpConfidence: 0 };
     return { tile: "P", confidence: 1, runnerUpConfidence: 0.5 };
   }
