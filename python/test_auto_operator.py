@@ -720,6 +720,50 @@ class ActionDeadlineTest(unittest.TestCase):
 
 
 class AwayDialogDetectionTest(unittest.TestCase):
+    def test_board_metadata_cache_ignores_turn_rim_but_expires(self) -> None:
+        project = Path(__file__).resolve().parents[1]
+        before = (project / "test/fixtures/board-cache-opponent-turn-20261020.jpg").read_bytes()
+        current = project / "test/fixtures/board-cache-same-scores-own-turn-20261020.png"
+        self.assertTrue(board_state_signature_matches(
+            board_state_signature(before), board_state_signature(current.read_bytes()),
+        ))
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.board_metadata_lock = threading.Lock()
+        operator.board_metadata_ocr_lock = threading.Lock()
+        operator.board_metadata_result = None
+        operator.board_metadata_thread = None
+        metadata = {"verified": True, "seat": "north", "round": "east_2", "honba": 1,
+                    "riichiSticks": 1,
+                    "scores": {"north": 23500, "east": 25500, "south": 22900, "west": 27100}}
+        operator.board_metadata_cache = {
+            "metadata": metadata, "signature": board_state_signature(before),
+            "capturedAt": 10.0, "screenshot": "verified-opponent-turn.jpg",
+        }
+        operator.log = Mock()
+        with patch("auto_operator.time.monotonic", return_value=15.8), \
+                patch("board_metadata.recognize_board", side_effect=AssertionError("unnecessary OCR")):
+            self.assertEqual(operator.current_board_metadata(current), metadata)
+        with patch("auto_operator.time.monotonic", return_value=18.001), \
+                patch("board_metadata.recognize_board", return_value={"verified": False}) as recognize:
+            self.assertEqual(operator.current_board_metadata(current), {"verified": False})
+            recognize.assert_called_once_with(current)
+
+    def test_board_metadata_cache_rejects_single_score_digit_change_alone(self) -> None:
+        project = Path(__file__).resolve().parents[1]
+        first = (project / "test/fixtures/board-cache-score-26400-20261020.jpg").read_bytes()
+        second = (project / "test/fixtures/board-cache-score-25400-20261020.jpg").read_bytes()
+        # Copy only the opposite score: retain the original turn rim, round,
+        # counters and all other pixels. The one changed digit must suffice.
+        with Image.open(io.BytesIO(first)) as source, Image.open(io.BytesIO(second)) as changed:
+            isolated = source.convert("RGB")
+            score_box = (905, 350, 1015, 377)
+            isolated.paste(changed.crop(score_box), score_box)
+            buffer = io.BytesIO()
+            isolated.save(buffer, format="PNG")
+        self.assertFalse(board_state_signature_matches(
+            board_state_signature(first), board_state_signature(buffer.getvalue()),
+        ))
+
     def test_board_metadata_cache_requires_same_recent_scoreboard(self) -> None:
         def frame_with_score(color: tuple[int, int, int]) -> bytes:
             image = Image.new("RGB", (1920, 1080), (20, 30, 50))

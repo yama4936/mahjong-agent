@@ -39,9 +39,12 @@ def utc_stamp() -> str:
 
 
 BOARD_STATE_REGIONS = (
-    (900, 385, 1020, 425), (910, 460, 1010, 505),
-    (1020, 375, 1070, 465), (905, 340, 1010, 380),
-    (848, 375, 905, 470), (80, 120, 310, 190),
+    # Round, then own/right/opposite/left score glyphs, then counters.
+    # Keep each full score inside its plaque, excluding the illuminated rim
+    # that changes on every turn even when the numbers remain unchanged.
+    (900, 385, 1020, 425), (905, 464, 1015, 495),
+    (1035, 370, 1060, 471), (905, 350, 1015, 377),
+    (865, 373, 888, 470), (80, 120, 310, 190),
 )
 
 
