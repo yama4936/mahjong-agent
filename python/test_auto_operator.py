@@ -2120,6 +2120,26 @@ class AwayDialogDetectionTest(unittest.TestCase):
         self.assertEqual(len(buttons), 1)
         self.assertEqual(buttons[0]["center"], {"x": 1012.0, "y": 715.0})
 
+    def test_red_action_button_keeps_inclusive_green_ratio_boundary(self) -> None:
+        viewport = {"width": 1600, "height": 900}
+        for color, expected in [
+            ((210, 80, 100), True),  # red ron, exactly green == blue * 0.8
+            ((210, 79, 100), False),
+            ((210, 81, 101), True),  # fractional blue threshold must round up
+            ((210, 80, 101), False),
+            ((160, 80, 100), False),  # red - blue must exceed 60
+            ((161, 80, 100), True),
+        ]:
+            with self.subTest(color=color):
+                image = Image.new("RGB", (1600, 900), (25, 55, 85))
+                ImageDraw.Draw(image).rectangle((893, 680, 1131, 750), fill=color)
+                output = io.BytesIO()
+                image.save(output, format="PNG")
+                buttons = force_auto_self_action_buttons(output.getvalue(), viewport)
+                self.assertEqual(bool(buttons), expected)
+                if expected:
+                    self.assertEqual(buttons[0]["center"], {"x": 1012.0, "y": 715.0})
+
     def test_force_auto_reaction_win_requires_pass_and_one_orange_button(self) -> None:
         viewport = {"width": 1600, "height": 900}
         pass_region = {"x": 1170, "y": 650, "width": 275, "height": 105}

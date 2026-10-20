@@ -21,6 +21,7 @@ import threading
 import time
 import uuid
 from datetime import datetime, timezone
+from math import ceil
 from pathlib import Path
 from typing import Any, Callable
 
@@ -545,18 +546,29 @@ def force_auto_self_action_buttons(screenshot: bytes, viewport: dict[str, int]) 
     # orange tile borders otherwise look like a huge riichi/ron button.
     bottom = round(viewport["height"] * 0.85)
     with Image.open(io.BytesIO(screenshot)) as image:
-        pixels = image.convert("RGB")
+        red, green, blue = image.convert("RGB").crop((left, top, right, bottom)).split()
+        def above(band, threshold):
+            return band.point([255 if value > threshold else 0 for value in range(256)])
+        def all_masks(*masks):
+            result = masks[0]
+            for mask in masks[1:]:
+                result = ImageChops.multiply(result, mask)
+            return result
+        orange = all_masks(above(red, 120), above(ImageChops.subtract(red, green), 25),
+                           above(green, 55), above(ImageChops.subtract(green, blue), 15))
+        # For integer green, green >= blue * 0.8 is exactly green >= ceil(...).
+        # Saturating subtraction is zero iff that inclusive comparison holds.
+        minimum_green = blue.point([ceil(value * 0.8) for value in range(256)])
+        green_ratio = ImageChops.subtract(minimum_green, green).point([255] + [0] * 255)
+        ron_red = all_masks(above(red, 120), above(ImageChops.subtract(red, green), 60),
+                            above(ImageChops.subtract(red, blue), 60), green_ratio)
+        mask = ImageChops.lighter(orange, ron_red)
         active_columns: list[tuple[int, int, int]] = []
-        for x in range(left, right):
-            matching_y = []
-            for y in range(top, bottom):
-                red, green, blue = pixels.getpixel((x, y))
-                orange = red > 120 and red - green > 25 and green > 55 and green - blue > 15
-                ron_red = red > 120 and red - green > 60 and red - blue > 60 and green >= blue * 0.8
-                if orange or ron_red:
-                    matching_y.append(y)
-            if len(matching_y) >= 5:
-                active_columns.append((x, min(matching_y), max(matching_y)))
+        for x in range(mask.width):
+            column = mask.crop((x, 0, x + 1, mask.height))
+            if column.histogram()[255] >= 5:
+                bounds = column.getbbox()
+                active_columns.append((left + x, top + bounds[1], top + bounds[3] - 1))
 
     groups: list[list[tuple[int, int, int]]] = []
     for column in active_columns:
@@ -3067,8 +3079,7 @@ class PythonAutoOperator:
             if evaluated_hand is None:
                 raise RuntimeError("force-auto requires the stable evaluated hand image")
             if not streamed_turn_is_current:
-                focused_hand_before = crop_screenshot(pre_click_full, stable_region) \
-                    if stable_region is not None else hand_before
+                focused_hand_before = pre_click_crops.get("stable", hand_before)
                 evaluated_delta = stable_hand_delta(
                     focused_evaluated_hand, focused_hand_before, trusted_open_melds,
                 )
