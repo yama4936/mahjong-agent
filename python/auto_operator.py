@@ -26,7 +26,7 @@ from typing import Any, Callable
 
 from playwright.sync_api import Browser, CDPSession, Page, sync_playwright
 from PIL import Image, ImageChops, ImageStat
-from screen_state import classify_screen, load_references
+from screen_state import _rgb_fraction, classify_screen, load_references
 
 
 class RetryableSafetyAbort(RuntimeError):
@@ -280,8 +280,8 @@ def is_away_resume_dialog(screenshot: bytes, viewport: dict[str, int]) -> bool:
     with Image.open(io.BytesIO(screenshot)) as image:
         button_image = image.crop((button["x"], button["y"], button["x"] + button["width"], button["y"] + button["height"]))
         popup_image = image.crop((popup["x"], popup["y"], popup["x"] + popup["width"], popup["y"] + popup["height"]))
-        gold = fraction_matching(button_image, lambda red, green, blue: red > 180 and green > 110 and blue < 130)
-        dark = fraction_matching(popup_image, lambda red, green, blue: red < 70 and green < 90 and blue < 120)
+        gold = _rgb_fraction(button_image.convert("RGB"), ((">", 180), (">", 110), ("<", 130)))
+        dark = _rgb_fraction(popup_image.convert("RGB"), (("<", 70), ("<", 90), ("<", 120)))
     return gold >= 0.65 and dark >= 0.75
 
 

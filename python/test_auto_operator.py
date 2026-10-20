@@ -3788,6 +3788,30 @@ class AwayDialogDetectionTest(unittest.TestCase):
 
         self.assertEqual(classify_screen(output.getvalue(), {}), ("round_result", 1.0))
 
+    def test_away_dialog_native_thresholds_match_scalar_boundary_cases(self) -> None:
+        viewport = {"width": 1920, "height": 1080}
+        button, popup = away_resume_geometry(viewport)
+        # Each strict RGB boundary and the existing gold/dark proportions
+        # must retain the scalar detector's result.
+        from auto_operator import fraction_matching
+        for color in [(181, 111, 129), (180, 111, 129), (181, 110, 129),
+                      (181, 111, 130), (69, 89, 119), (70, 90, 120)]:
+            for coverage in [0.64, 0.65, 0.66, 1.0]:
+                frame = Image.new("RGB", (1920, 1080), (20, 40, 80))
+                draw = ImageDraw.Draw(frame)
+                draw.rectangle((button["x"], button["y"],
+                                button["x"] + int(button["width"] * coverage) - 1,
+                                button["y"] + button["height"] - 1), fill=color)
+                def region(clip):
+                    return frame.crop((clip["x"], clip["y"], clip["x"] + clip["width"],
+                                       clip["y"] + clip["height"]))
+                expected = (fraction_matching(region(button), lambda r,g,b: r>180 and g>110 and b<130) >= .65
+                            and fraction_matching(region(popup), lambda r,g,b: r<70 and g<90 and b<120) >= .75)
+                encoded = io.BytesIO()
+                frame.save(encoded, format="PNG")
+                with self.subTest(color=color, coverage=coverage):
+                    self.assertEqual(is_away_resume_dialog(encoded.getvalue(), viewport), expected)
+
     def test_resident_request_preserves_capture_age_before_file_write(self) -> None:
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
         operator.args = argparse.Namespace(board_metadata=False)
