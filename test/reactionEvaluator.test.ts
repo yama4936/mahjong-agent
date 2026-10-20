@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, writeFile, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -20,11 +20,11 @@ test("reaction entrypoint preserves CLI policy and copy validation, including co
   const write = async (obs = observation, rec = recognition) => {
     await Promise.all([state, obs, rec].map((value, i) => writeFile(paths[i]!, JSON.stringify(value))));
   };
-  const run = async (legacy = false) => {
+  const run = async (legacy = false, entry = "src/recognition/reactionEvaluator.ts") => {
     const args = legacy ? ["src/cli.ts", "evaluate-frame", "unused.png", "config/layout.json", "templates/bootstrap",
       `--state=${paths[0]}`, `--public-observation=${paths[1]}`, `--recognition-file=${paths[2]}`,
       "--pending-discard=E,east", "--available-ui-actions=pon,pass", "--mode=force-auto"]
-      : ["src/recognition/reactionEvaluator.ts", ...paths, "E", "east", "pon,pass"];
+      : [entry, ...paths, "E", "east", "pon,pass"];
     const { stdout } = await exec(process.execPath, ["--import", "tsx", ...args], { env });
     return JSON.parse(stdout);
   };
@@ -36,6 +36,16 @@ test("reaction entrypoint preserves CLI policy and copy validation, including co
     assert.deepEqual(current.decision.selectedAction, legacy.decision.selectedAction);
     assert.deepEqual(current.decision.legalActions, legacy.decision.legalActions);
     assert.ok(current.decision.legalActions.some((action: { action: string }) => action.action === "pon"));
+    if (process.platform !== "win32") {
+      const linkedEntry = join(dir, "reaction-entry.ts");
+      await symlink(join(process.cwd(), "src/recognition/reactionEvaluator.ts"), linkedEntry);
+      // Previously exited0 with empty stdout, causing Python JSON decoding
+      // to stop every live reaction in a symlinked frozen checkout.
+      const linked = await run(false, linkedEntry);
+      assert.deepEqual(linked.state, current.state);
+      assert.deepEqual(linked.decision.selectedAction, current.decision.selectedAction);
+      await assert.rejects(exec(process.execPath, ["--import", "tsx", linkedEntry], { env }), /Usage: reactionEvaluator/);
+    }
     await write({ ...observation, ownDiscards: ["E", "E"] });
     await assert.rejects(run(), /More than four copies of E/);
     await assert.rejects(run(true), /More than four copies of E/);

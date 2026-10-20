@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
-import { pathToFileURL } from "node:url";
+import { realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { parseGameState, parsePublicGameState, type PublicGameState } from "../game/state.js";
 import { decideForceAutoWithJevDeadline } from "../agent/decision.js";
 import { JevClient } from "../jev/client.js";
@@ -42,7 +43,18 @@ export async function evaluateRecognizedReaction(
     recognition: { backend: "template", ...recognition }, decision };
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+function isEntrypoint(): boolean {
+  if (!process.argv[1]) return false;
+  try {
+    // Frozen checkouts may share dist through a symlink. Node resolves the
+    // module URL but preserves the invoked path in argv, so compare files.
+    return realpathSync(fileURLToPath(import.meta.url)) === realpathSync(process.argv[1]);
+  } catch {
+    return false;
+  }
+}
+
+if (isEntrypoint()) {
   const [statePath, observationPath, recognitionPath, tile, seat, actions] = process.argv.slice(2);
   try {
     if (!statePath || !observationPath || !recognitionPath || !tile || !seat || !actions) {
