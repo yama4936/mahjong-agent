@@ -254,7 +254,10 @@ def riichi_selection_is_visible(hand: bytes) -> bool:
         1 for red, green, blue in pixels
         if min(red, green, blue) > 180 and max(red, green, blue) - min(red, green, blue) < 60
     ) / total
-    return muted >= 0.45 and bright_tile_faces <= 0.20
+    # Multiple legal discards remain bright in this UI.  A fixed bright-face
+    # ceiling rejects real selections with two candidates; require the muted
+    # unavailable faces to dominate the bright selectable faces instead.
+    return muted >= 0.45 and muted > bright_tile_faces
 
 
 def perceptual_hash(data: bytes) -> str:

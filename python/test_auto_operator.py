@@ -524,6 +524,24 @@ class RecordingMouse:
 
 
 class ActionDeadlineTest(unittest.TestCase):
+    def test_riichi_selection_accepts_two_bright_candidates_but_not_ordinary_hand(self) -> None:
+        project = Path(__file__).resolve().parents[1]
+        hand_clip = {"x": 223, "y": 926, "width": 1355, "height": 146}
+        for name, expected in (
+            ("riichi-before-selection-20261020.jpg", False),
+            ("riichi-two-candidates-selection-20261020.jpg", True),
+        ):
+            with self.subTest(frame=name):
+                frame = (project / "test/fixtures" / name).read_bytes()
+                self.assertEqual(riichi_selection_is_visible(crop_screenshot(frame, hand_clip)), expected)
+
+        # Enough neutral shading alone must not admit a bright-majority hand.
+        image = Image.new("RGB", (100, 1), (230, 230, 230))
+        ImageDraw.Draw(image).rectangle((0, 0, 44, 0), fill=(110, 110, 110))
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG")
+        self.assertFalse(riichi_selection_is_visible(buffer.getvalue()))
+
     def test_riichi_selection_signature_requires_dimmed_hand(self) -> None:
         project = Path(__file__).resolve().parents[1]
         selection = (project / "artifacts/live/riichi-selection-dimmed-20260928.png").read_bytes()
@@ -1906,6 +1924,7 @@ class AwayDialogDetectionTest(unittest.TestCase):
 
     def test_riichi_discard_uses_confirmed_selection_ui_as_ranked_budget_baseline(self) -> None:
         """A confirmed Riichi selection can outlive its original evaluation."""
+        project = Path(__file__).resolve().parents[1]
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
         operator.args = argparse.Namespace(
             mode="force-auto", allow_local_discard=False, stability_pixel_delta=1.5,
@@ -1916,11 +1935,10 @@ class AwayDialogDetectionTest(unittest.TestCase):
             "clickPoints": [],
             "publicTileRegions": {},
         }
-        operator.hand_clip = {"x": 0, "y": 0, "width": 10, "height": 10}
+        operator.hand_clip = {"x": 223, "y": 926, "width": 1355, "height": 146}
         operator.river_clip = {"x": 10, "y": 0, "width": 10, "height": 10}
-        frame_buffer = io.BytesIO()
-        Image.new("RGB", (1920, 1080), "navy").save(frame_buffer, format="JPEG")
-        frame = frame_buffer.getvalue()
+        frame = (project / "test/fixtures/riichi-before-selection-20261020.jpg").read_bytes()
+        selection = (project / "test/fixtures/riichi-two-candidates-selection-20261020.jpg").read_bytes()
         operator.screencast_session = Mock()
         operator.latest_screencast_frame = frame
         operator.screencast_draw_generation = 4
@@ -1933,12 +1951,12 @@ class AwayDialogDetectionTest(unittest.TestCase):
         page = Mock()
         button_buffer = io.BytesIO()
         Image.new("RGB", (100, 40), "orange").save(button_buffer, format="PNG")
-        page.screenshot.return_value = button_buffer.getvalue()
+        page.screenshot.side_effect = lambda **kwargs: button_buffer.getvalue() if "clip" in kwargs else selection
         evaluation = {
-            "decision": {"selectedAction": {"action": "riichi", "tile": "2p"}},
-            "recognition": {"tiles": ["2p"] * 14, "safe": False},
+            "decision": {"selectedAction": {"action": "riichi", "tile": "1m"}},
+            "recognition": {"tiles": ["1m", "3m", "0m", "6m", "7m", "3p", "4p", "1s", "1s", "1s", "5s", "6s", "7s", "2p"], "safe": False},
             "clickIndex": 0,
-            "clickPoint": {"x": 100, "y": 100},
+            "clickPoint": {"x": 269, "y": 999},
             "actionButton": {
                 "action": "riichi", "x": 1087, "y": 788, "width": 352, "height": 57,
                 "center": {"x": 1263, "y": 816.5},
@@ -1956,7 +1974,6 @@ class AwayDialogDetectionTest(unittest.TestCase):
         with patch("auto_operator.time.monotonic", side_effect=lambda: clock["now"]), \
                 patch("auto_operator.stable_hand_delta", return_value=0.0), \
                 patch("auto_operator.classify_screen", side_effect=classify_confirmed_selection), \
-                patch("auto_operator.riichi_selection_is_visible", return_value=True), \
                 patch("auto_operator.is_away_resume_dialog", return_value=False), \
                 patch("auto_operator.discard_point_in_hand_geometry", return_value=True):
             receipt = operator.execute(
