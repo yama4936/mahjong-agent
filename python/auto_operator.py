@@ -1427,6 +1427,7 @@ class PythonAutoOperator:
             prior_own = prior.get("ownDiscards", [])
             merged_own = merged.get("ownDiscards", [])
             if merged_own != prior_own:
+                pending_discard.pop("riverWithdrawalCapturedAt", None)
                 confirmed = getattr(self, "pending_own_river_confirmation", None)
                 if confirmed == merged_own:
                     self.pending_own_river_confirmation = None
@@ -1439,6 +1440,32 @@ class PythonAutoOperator:
                     merged["ownDiscards"] = list(prior_own)
                     self.log("public_own_river_append_pending", expected=pending_discard.get("tile"),
                              observed=merged_own, capturedAt=merged.get("capturedAt"))
+            elif (getattr(self, "pending_own_river_confirmation", None) is not None
+                  and current.get("ownDiscards") == prior_own == pending_discard.get("before")
+                  and current.get("capturedAt")):
+                # A briefly visible discard can be called before a second
+                # scan confirms it. Do not wait through the next turn for a
+                # river tile that is gone. Two later baseline observations
+                # retire the unconfirmed click and force fresh hand recognition;
+                # they do not certify either a call or the requested discard.
+                captured_at = current["capturedAt"]
+                withdrawn_at = pending_discard.get("riverWithdrawalCapturedAt")
+                if withdrawn_at and captured_at > withdrawn_at:
+                    self.log(
+                        "own_discard_reconciliation_unresolved",
+                        reason="river_candidate_disappeared",
+                        expected=pending_discard.get("tile"), before=prior_own,
+                        confirmationCandidate=self.pending_own_river_confirmation,
+                        baselineObservedAt=[withdrawn_at, captured_at],
+                        concealedCacheInvalidated=True,
+                    )
+                    self.cached_concealed_tiles = None
+                    self.pending_own_discard = None
+                    self.pending_own_river_confirmation = None
+                elif not withdrawn_at:
+                    pending_discard["riverWithdrawalCapturedAt"] = captured_at
+            else:
+                pending_discard.pop("riverWithdrawalCapturedAt", None)
         def river_signature(observation: dict[str, Any]) -> tuple[Any, ...]:
             return (tuple(observation.get("ownDiscards", [])), tuple(sorted(
                 (item["seat"], tuple(item.get("discards", [])))

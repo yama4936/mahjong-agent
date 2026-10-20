@@ -1,0 +1,488 @@
+{
+  "sourceRun": "ranked-copper-e7b9784-20261020",
+  "note": "Replayed immutable live frames through the unchanged hybrid public recognizer after match exit. A visible 3m append is removed by a chi before confirmation.",
+  "scans": [
+    {
+      "sourceFrame": "2026-10-20T08-31-41.935110+00-00.public-cache.jpg",
+      "response": {
+        "id": 0,
+        "result": {
+          "doraIndicators": [
+            "9p"
+          ],
+          "ownDiscards": [
+            "3m",
+            "1s",
+            "4s",
+            "6p",
+            "2m",
+            "N",
+            "9p",
+            "4p",
+            "1p",
+            "3m"
+          ],
+          "ownRiichiDeclared": false,
+          "ownMelds": [
+            {
+              "type": "pon",
+              "tiles": [
+                "E",
+                "E",
+                "E"
+              ],
+              "confidence": 0.9997747540473938
+            }
+          ],
+          "ownMeldsObserved": true,
+          "opponentDiscards": [
+            {
+              "seat": "south",
+              "discards": [
+                "P",
+                "9p",
+                "7s",
+                "1m",
+                "1p",
+                "1p",
+                "1m"
+              ],
+              "riichiDeclared": false,
+              "melds": [],
+              "meldsObserved": false
+            },
+            {
+              "seat": "west",
+              "discards": [
+                "3m",
+                "C",
+                "9s",
+                "5p",
+                "6p",
+                "N",
+                "1p",
+                "E"
+              ],
+              "riichiDeclared": false,
+              "melds": [
+                {
+                  "type": "chi",
+                  "tiles": [
+                    "6p",
+                    "7p",
+                    "8p"
+                  ],
+                  "confidence": 0.9535244107246399
+                }
+              ],
+              "meldsObserved": true
+            },
+            {
+              "seat": "north",
+              "discards": [
+                "W",
+                "S",
+                "S",
+                "2s",
+                "F",
+                "6m",
+                "N",
+                "P"
+              ],
+              "riichiDeclared": false,
+              "melds": [],
+              "meldsObserved": true
+            }
+          ],
+          "ownMeldTiles": [
+            "E",
+            "E",
+            "E"
+          ],
+          "allMeldTiles": [
+            "E",
+            "E",
+            "E",
+            "6p",
+            "7p",
+            "8p"
+          ],
+          "otherVisibleTiles": [
+            "P",
+            "9p",
+            "7s",
+            "1m",
+            "1p",
+            "1p",
+            "1m",
+            "3m",
+            "C",
+            "9s",
+            "5p",
+            "6p",
+            "N",
+            "1p",
+            "E",
+            "W",
+            "S",
+            "S",
+            "2s",
+            "F",
+            "6m",
+            "N",
+            "P",
+            "E",
+            "E",
+            "E",
+            "6p",
+            "7p",
+            "8p"
+          ],
+          "acceptedTiles": 40,
+          "detectedCandidates": 42,
+          "complete": false,
+          "capturedAt": "2026-10-20T08:31:41.935110+00:00",
+          "recognizedAt": "2026-10-20T08:50:11.204Z",
+          "recognitionLatencyMs": 1856,
+          "configuredRegions": [
+            "doraIndicators",
+            "ownDiscards",
+            "rightDiscards",
+            "oppositeDiscards",
+            "leftDiscards",
+            "ownMelds",
+            "rightMelds",
+            "oppositeMelds",
+            "leftMelds"
+          ]
+        }
+      }
+    },
+    {
+      "sourceFrame": "2026-10-20T08-31-44.526640+00-00.public-cache.jpg",
+      "response": {
+        "id": 1,
+        "result": {
+          "doraIndicators": [
+            "9p"
+          ],
+          "ownDiscards": [
+            "3m",
+            "1s",
+            "4s",
+            "6p",
+            "2m",
+            "N",
+            "9p",
+            "4p",
+            "1p"
+          ],
+          "ownRiichiDeclared": false,
+          "ownMelds": [
+            {
+              "type": "pon",
+              "tiles": [
+                "E",
+                "E",
+                "E"
+              ],
+              "confidence": 0.9997747540473938
+            }
+          ],
+          "ownMeldsObserved": true,
+          "opponentDiscards": [
+            {
+              "seat": "south",
+              "discards": [
+                "P",
+                "9p",
+                "7s",
+                "1m",
+                "1p",
+                "1p",
+                "1m"
+              ],
+              "riichiDeclared": false,
+              "melds": [],
+              "meldsObserved": false
+            },
+            {
+              "seat": "west",
+              "discards": [
+                "3m",
+                "C",
+                "9s",
+                "5p",
+                "7p",
+                "N",
+                "1p",
+                "E"
+              ],
+              "riichiDeclared": false,
+              "melds": [
+                {
+                  "type": "chi",
+                  "tiles": [
+                    "6p",
+                    "7p",
+                    "8p"
+                  ],
+                  "confidence": 0.9514992833137512
+                }
+              ],
+              "meldsObserved": true
+            },
+            {
+              "seat": "north",
+              "discards": [
+                "W",
+                "S",
+                "S",
+                "2s",
+                "F",
+                "6m",
+                "N",
+                "P"
+              ],
+              "riichiDeclared": false,
+              "melds": [],
+              "meldsObserved": true
+            }
+          ],
+          "ownMeldTiles": [
+            "E",
+            "E",
+            "E"
+          ],
+          "allMeldTiles": [
+            "E",
+            "E",
+            "E",
+            "6p",
+            "7p",
+            "8p"
+          ],
+          "otherVisibleTiles": [
+            "P",
+            "9p",
+            "7s",
+            "1m",
+            "1p",
+            "1p",
+            "1m",
+            "3m",
+            "C",
+            "9s",
+            "5p",
+            "7p",
+            "N",
+            "1p",
+            "E",
+            "W",
+            "S",
+            "S",
+            "2s",
+            "F",
+            "6m",
+            "N",
+            "P",
+            "E",
+            "E",
+            "E",
+            "6p",
+            "7p",
+            "8p"
+          ],
+          "acceptedTiles": 39,
+          "detectedCandidates": 44,
+          "complete": false,
+          "capturedAt": "2026-10-20T08:31:44.526640+00:00",
+          "recognizedAt": "2026-10-20T08:50:11.548Z",
+          "recognitionLatencyMs": 343,
+          "configuredRegions": [
+            "doraIndicators",
+            "ownDiscards",
+            "rightDiscards",
+            "oppositeDiscards",
+            "leftDiscards",
+            "ownMelds",
+            "rightMelds",
+            "oppositeMelds",
+            "leftMelds"
+          ]
+        }
+      }
+    },
+    {
+      "sourceFrame": "2026-10-20T08-31-46.665739+00-00.public-cache.jpg",
+      "response": {
+        "id": 2,
+        "result": {
+          "doraIndicators": [
+            "9p"
+          ],
+          "ownDiscards": [
+            "3m",
+            "1s",
+            "4s",
+            "6p",
+            "2m",
+            "N",
+            "9p",
+            "4p",
+            "1p"
+          ],
+          "ownRiichiDeclared": false,
+          "ownMelds": [
+            {
+              "type": "pon",
+              "tiles": [
+                "E",
+                "E",
+                "E"
+              ],
+              "confidence": 0.9997747540473938
+            }
+          ],
+          "ownMeldsObserved": true,
+          "opponentDiscards": [
+            {
+              "seat": "south",
+              "discards": [
+                "P",
+                "9p",
+                "7s",
+                "1m",
+                "1p",
+                "1p",
+                "1m"
+              ],
+              "riichiDeclared": false,
+              "melds": [
+                {
+                  "type": "chi",
+                  "tiles": [
+                    "4m",
+                    "2m",
+                    "3m"
+                  ],
+                  "confidence": 0.7848402261734009
+                }
+              ],
+              "meldsObserved": true
+            },
+            {
+              "seat": "west",
+              "discards": [
+                "3m",
+                "C",
+                "9s",
+                "5p",
+                "7p",
+                "N",
+                "1p",
+                "E"
+              ],
+              "riichiDeclared": false,
+              "melds": [
+                {
+                  "type": "chi",
+                  "tiles": [
+                    "6p",
+                    "7p",
+                    "8p"
+                  ],
+                  "confidence": 0.9520325064659119
+                }
+              ],
+              "meldsObserved": true
+            },
+            {
+              "seat": "north",
+              "discards": [
+                "W",
+                "S",
+                "S",
+                "2s",
+                "F",
+                "6m",
+                "N",
+                "P"
+              ],
+              "riichiDeclared": false,
+              "melds": [],
+              "meldsObserved": true
+            }
+          ],
+          "ownMeldTiles": [
+            "E",
+            "E",
+            "E"
+          ],
+          "allMeldTiles": [
+            "E",
+            "E",
+            "E",
+            "4m",
+            "2m",
+            "3m",
+            "6p",
+            "7p",
+            "8p"
+          ],
+          "otherVisibleTiles": [
+            "P",
+            "9p",
+            "7s",
+            "1m",
+            "1p",
+            "1p",
+            "1m",
+            "3m",
+            "C",
+            "9s",
+            "5p",
+            "7p",
+            "N",
+            "1p",
+            "E",
+            "W",
+            "S",
+            "S",
+            "2s",
+            "F",
+            "6m",
+            "N",
+            "P",
+            "E",
+            "E",
+            "E",
+            "4m",
+            "2m",
+            "3m",
+            "6p",
+            "7p",
+            "8p"
+          ],
+          "acceptedTiles": 42,
+          "detectedCandidates": 42,
+          "complete": false,
+          "capturedAt": "2026-10-20T08:31:46.665739+00:00",
+          "recognizedAt": "2026-10-20T08:50:11.780Z",
+          "recognitionLatencyMs": 231,
+          "configuredRegions": [
+            "doraIndicators",
+            "ownDiscards",
+            "rightDiscards",
+            "oppositeDiscards",
+            "leftDiscards",
+            "ownMelds",
+            "rightMelds",
+            "oppositeMelds",
+            "leftMelds"
+          ]
+        }
+      }
+    }
+  ]
+}

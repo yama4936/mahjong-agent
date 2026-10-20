@@ -1245,6 +1245,80 @@ class AwayDialogDetectionTest(unittest.TestCase):
         operator.reconcile_own_discard()
         self.assertFalse(operator.own_discard_reconciliation_pending())
 
+    def test_called_own_discard_retires_unconfirmed_candidate_from_actual_scans(self) -> None:
+        project = Path(__file__).resolve().parents[1]
+        fixture = load_json(project / "test/fixtures/called-own-discard-public-scans-20261020.json")
+        scans = [item["response"]["result"] for item in fixture["scans"]]
+        baseline = scans[1]["ownDiscards"]
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.public_recognition_lock = threading.Lock()
+        operator.public_cache_generation = 3
+        operator.cached_open_melds = 1
+        operator.cached_public_observation = {"ownDiscards": baseline}
+        operator.previous_public_observation = None
+        operator.pending_own_discard = {"tile": "3m", "before": baseline}
+        operator.cached_concealed_tiles = ["2p"] * 10
+        operator.pending_own_river_confirmation = None
+        operator.log = Mock()
+
+        for index, scan in enumerate(scans):
+            operator.public_recognition_result = {"generation": 3, "result": scan}
+            operator.poll_public_recognition()
+            self.assertEqual(operator.own_discard_reconciliation_pending(), index < 2)
+            self.assertEqual(operator.cached_public_observation["ownDiscards"], baseline)
+        self.assertIsNone(operator.cached_concealed_tiles)
+        self.assertIsNone(operator.pending_own_discard)
+        self.assertTrue(any(c.args[0] == "own_discard_reconciliation_unresolved"
+                            for c in operator.log.call_args_list))
+        self.assertFalse(any(c.args[0] == "own_discard_reconciled" for c in operator.log.call_args_list))
+
+        # A later real discard belongs to its own receipt, never to the called
+        # 3m. Independent matching scans are still required to confirm it.
+        operator.pending_own_discard = {"tile": "8m", "before": baseline}
+        for stamp in ("2026-10-20T08:32:25+00:00", "2026-10-20T08:32:26+00:00"):
+            operator.public_recognition_result = {"generation": 3, "result": {
+                "ownDiscards": [*baseline, "8m"], "capturedAt": stamp,
+            }}
+            operator.poll_public_recognition()
+        operator.reconcile_own_discard()
+        self.assertIsNone(operator.pending_own_discard)
+        self.assertFalse(any(c.args[0] == "own_discard_mismatch" for c in operator.log.call_args_list))
+
+    def test_withdrawn_river_candidate_requires_two_distinct_exact_baseline_scans(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.public_recognition_lock = threading.Lock()
+        operator.public_cache_generation = 3
+        operator.cached_open_melds = 0
+        operator.cached_public_observation = {"ownDiscards": ["1m", "2p"]}
+        operator.previous_public_observation = None
+        operator.pending_own_discard = {"tile": "3m", "before": ["1m", "2p"]}
+        operator.pending_own_river_confirmation = ["1m", "2p", "3m"]
+        operator.cached_concealed_tiles = ["1p"] * 13
+        operator.log = Mock()
+
+        def scan(tiles, stamp):
+            operator.public_recognition_result = {"generation": 3, "result": {
+                "ownDiscards": tiles, "capturedAt": stamp,
+            }}
+            operator.poll_public_recognition()
+
+        scan(["1m", "2p"], "10")
+        scan(["1m", "2p"], "10")  # Repeated capture is not independent.
+        scan(["1m", "2p"], "09")  # Nor is an older capture.
+        self.assertTrue(operator.own_discard_reconciliation_pending())
+        scan(["1m"], "11")  # Partial/missing/misread rivers cannot retire it.
+        scan([], "12")
+        scan(["9m", "2p"], "13")
+        scan(["1m", "2p"], None)
+        scan(["1m", "2p"], "14")
+        self.assertTrue(operator.own_discard_reconciliation_pending())
+        scan(["1m", "2p", "4m"], "15")  # A new candidate resets withdrawal evidence.
+        scan(["1m", "2p"], "16")
+        self.assertTrue(operator.own_discard_reconciliation_pending())
+        scan(["1m", "2p"], "17")
+        self.assertFalse(operator.own_discard_reconciliation_pending())
+        self.assertIsNone(operator.cached_concealed_tiles)
+
     def test_public_cache_only_grows_rivers_and_preserves_riichi(self) -> None:
         previous = {
             "doraIndicators": ["4m"], "ownDiscards": ["1p"], "ownRiichiDeclared": True,
