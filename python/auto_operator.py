@@ -3242,9 +3242,37 @@ class PythonAutoOperator:
             raise RuntimeError("evaluated frame has no pass button candidate")
         region = self.layout["actionButtonRegions"]["pass"]
         button_clip = {key: region[key] for key in ("x", "y", "width", "height")}
-        before = page.screenshot(clip=button_clip, animations="disabled")
-        page.wait_for_timeout(120)
-        confirmed = page.screenshot(clip=button_clip, animations="disabled")
+        reaction_frame = evaluation.get("reactionFrame")
+        evaluated_full = Path(reaction_frame).read_bytes() if reaction_frame else None
+        if self.args.mode == "force-auto" and getattr(self, "screencast_session", None) is not None:
+            page.wait_for_timeout(1)  # Drain queued screencast events after recognition.
+        current_full = getattr(self, "latest_screencast_frame", None)
+        current_at = getattr(self, "latest_screencast_captured_at", None)
+        stream_guard = bool(
+            self.args.mode == "force-auto"
+            and getattr(self, "screencast_session", None) is not None
+            and evaluated_full is not None and current_full is not None
+            and evaluated_captured_at is not None and current_at is not None
+            and current_at - evaluated_captured_at >= 0.120
+            and 0 <= time.monotonic() - current_at <= 0.250
+        )
+        if stream_guard:
+            before = crop_screenshot(evaluated_full, button_clip)
+            confirmed = crop_screenshot(current_full, button_clip)
+            def verified_pass(frame, clip):
+                if is_force_auto_pass_clip(clip):
+                    return True
+                viewport = self.layout.get("viewport")
+                return bool(viewport and is_contextual_reaction_pass(
+                    frame, region, len(force_auto_call_buttons(frame, viewport)),
+                ))
+            # Verify the affordance in both frames, including the stylized
+            # skip variant only when a green call button is independently found.
+            stream_guard = verified_pass(evaluated_full, before) and verified_pass(current_full, confirmed)
+        if not stream_guard:
+            before = page.screenshot(clip=button_clip, animations="disabled")
+            page.wait_for_timeout(120)
+            confirmed = page.screenshot(clip=button_clip, animations="disabled")
         if mean_pixel_delta(before, confirmed) > self.args.stability_pixel_delta:
             # A reaction prompt can be withdrawn while its button is being
             # animated (for example when another player has already acted).
@@ -3262,7 +3290,7 @@ class PythonAutoOperator:
         # independent, current UI confirmation rather than to the stale
         # evaluator frame.  Calls and ron deliberately retain their strict
         # evaluated-frame budget checks.
-        pass_confirmed_at = time.monotonic()
+        pass_confirmed_at = current_at if stream_guard else time.monotonic()
         point = observed["center"]
         if self.args.mode == "force-auto":
             self.require_force_auto_click_budget(

@@ -3423,6 +3423,52 @@ class AwayDialogDetectionTest(unittest.TestCase):
         page.mouse.click.assert_not_called()
         operator.confirm_action_button.assert_not_called()
 
+    def test_reaction_pass_stream_guard_keeps_age_stability_and_fallbacks(self) -> None:
+        def frame(offset=0, contextual=False):
+            image = Image.new("RGB", (120, 80), "black")
+            for x in range(20 + offset, 50 + offset):
+                for y in range(25, 45):
+                    image.putpixel((x, y), (120, 120, 120) if contextual else (150, 140, 50))
+            output = io.BytesIO()
+            image.save(output, format="PNG")
+            return output.getvalue()
+
+        for case in ("fresh", "changed", "same_timestamp", "stale", "missing_time", "contextual", "missing_call"):
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as directory:
+                operator = PythonAutoOperator.__new__(PythonAutoOperator)
+                operator.args = argparse.Namespace(mode="force-auto", stability_pixel_delta=1.5)
+                operator.layout = {"actionButtonRegions": {
+                    "pass": {"x": 10, "y": 20, "width": 100, "height": 40}}}
+                operator.layout["viewport"] = {"width": 120, "height": 80}
+                contextual = case in ("contextual", "missing_call")
+                operator.screencast_session = object()
+                operator.latest_screencast_frame = frame(20 if case == "changed" else 0, contextual)
+                operator.latest_screencast_captured_at = {
+                    "same_timestamp": 10.0, "stale": 10.2, "missing_time": None,
+                }.get(case, 10.9)
+                operator.log = Mock()
+                operator.require_action_deadline = Mock()
+                operator.require_force_auto_click_budget = Mock()
+                operator.confirm_action_button = Mock(return_value={"confirmation": "action_button_region_changed"})
+                original = Path(directory) / "prompt.png"
+                original.write_bytes(frame(contextual=contextual))
+                evaluation = {"reactionFrame": str(original), "actionButton": {
+                    "action": "pass", "center": {"x": 60, "y": 40}}}
+                page = Mock()
+                page.screenshot.return_value = crop_screenshot(frame(), operator.layout["actionButtonRegions"]["pass"])
+                with patch("auto_operator.time.monotonic", return_value=11.0), \
+                        patch("auto_operator.force_auto_call_buttons", return_value=[] if case == "missing_call" else [{"action": "pon"}]):
+                    if case == "changed":
+                        with self.assertRaisesRegex(RetryableSafetyAbort, "pass button changed"):
+                            operator.execute_reaction_pass(page, evaluation, evaluated_captured_at=10.0)
+                        page.mouse.click.assert_not_called()
+                    else:
+                        operator.execute_reaction_pass(page, evaluation, evaluated_captured_at=10.0)
+                        page.mouse.click.assert_called_once_with(60, 40)
+                        operator.require_force_auto_click_budget.assert_called_once_with(
+                            10.9 if case in ("fresh", "contextual") else 11.0, phase="before_reaction_pass_click")
+                self.assertEqual(page.screenshot.call_count, 0 if case in ("fresh", "changed", "contextual") else 2)
+
     def test_successful_tsumo_arms_round_terminal_latch(self) -> None:
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
         operator.args = argparse.Namespace(mode="force-auto", allow_local_discard=False,
