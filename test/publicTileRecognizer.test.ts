@@ -558,3 +558,46 @@ test("adjacent exposed melds split by unique legal composition without a large g
   region.recognized[4]!.tile = "W";
   assert.equal(toPublicTileObservation({ oppositeMelds: region }).opponentDiscards[1]?.meldsObserved, false);
 });
+
+test("production river normalizes sideways riichi two pin before classification", {
+  skip: !existsSync(".runtime/hybrid-vision/cvmaj-pretrained.tar") || !existsSync(".runtime/hybrid-vision/automajsoul-best-model.pt"),
+}, async () => {
+  const base = layoutSchema.parse(JSON.parse(await readFile("config/layout-300-regression.json", "utf8")));
+  const layout = { ...base, publicTileRegions: { ownDiscards: base.publicTileRegions!.ownDiscards! } };
+  const recognizer = new HybridTileRecognizer();
+  try {
+    const result = await recognizeConfiguredPublicTilesWithVit(
+      "test/fixtures/riichi-two-pin-river-20261020.jpg", layout, recognizer,
+    );
+    assert.equal(result.ownDiscards?.classificationSafe, true);
+    assert.deepEqual(result.ownDiscards?.recognized.map(tile => tile.tile),
+      ["2p", "7m", "8s", "6p", "4m", "5m", "8p", "P", "6m"]);
+    assert.equal(result.ownDiscards!.recognized[0]!.sideways, true);
+    assert.ok(result.ownDiscards!.recognized[0]!.confidence > 0.95);
+    assert.equal(toPublicTileObservation(result).ownRiichiDeclared, true);
+  } finally { await recognizer.close(); }
+});
+
+test("sideways river padding retry preserves the normalized orientation", async () => {
+  const base = layoutSchema.parse(JSON.parse(await readFile("config/layout-300-regression.json", "utf8")));
+  const layout = { ...base, publicTileRegions: { ownDiscards: base.publicTileRegions!.ownDiscards! } };
+  const batches: Array<Array<{width: number; height: number}>> = [];
+  const classifier = {
+    async classifyTileImages(images: Buffer[]) {
+      batches.push(await Promise.all(images.map(async image => {
+        const metadata = await sharp(image).metadata();
+        return { width: metadata.width!, height: metadata.height! };
+      })));
+      return images.map(() => ({ tile: "2p" as const, confidence: batches.length === 1 ? 0.6 : 0.99,
+        runnerUpTile: "1p" as const, runnerUpConfidence: 0.1 }));
+    },
+  };
+  await recognizeConfiguredPublicTilesWithVit("test/fixtures/riichi-two-pin-river-20261020.jpg",
+    layout, classifier, { retryDiscardBoundaries: false });
+  assert.equal(batches.length, 2);
+  // The first river tile is sideways; both base and padded crops must be upright.
+  assert.ok(batches[0]![0]!.height > batches[0]![0]!.width);
+  assert.ok(batches[1]![0]!.height > batches[1]![0]!.width);
+  assert.equal(batches[1]![0]!.height, batches[0]![0]!.height + 8);
+  assert.equal(batches[1]![0]!.width, batches[0]![0]!.width + 8);
+});

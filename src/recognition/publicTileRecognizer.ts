@@ -256,7 +256,7 @@ async function normalizedCandidateImage(
 ): Promise<Buffer> {
   return sharp(screenshot)
     .extract({ left: candidate.x, top: candidate.y, width: candidate.width, height: candidate.height })
-    .rotate((region.rotationToUpright + (region.sidewaysAspectRatio !== undefined && candidate.sideways ? 90 : 0)) % 360)
+    .rotate((region.rotationToUpright + (candidate.sideways ? 90 : 0)) % 360)
     .png()
     .toBuffer();
 }
@@ -352,7 +352,7 @@ export async function recognizeConfiguredPublicTilesWithVit(
       const right = Math.min(width, candidate.x + candidate.width + 4);
       const bottom = Math.min(height, candidate.y + candidate.height + 4);
       return sharp(screenshot).extract({ left, top, width: right - left, height: bottom - top })
-        .rotate(region.rotationToUpright).png().toBuffer();
+        .rotate((region.rotationToUpright + (candidate.sideways ? 90 : 0)) % 360).png().toBuffer();
     }));
     const paddedPredictions = await classifier.classifyTileImages(paddedImages);
     if (paddedPredictions.length !== weakOwnRiver.length) throw new Error("Model public retry returned the wrong prediction count");
