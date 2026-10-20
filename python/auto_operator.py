@@ -1558,6 +1558,7 @@ class PythonAutoOperator:
         stage_force_auto_recognition: bool = False,
         force_auto_recognition_id: str | None = None,
         frame_public_state: dict[str, Any] | None = None,
+        captured_at: float | None = None,
     ) -> dict[str, Any]:
         if self.recognition_server.poll() is not None:
             raise RuntimeError("resident recognition server is not running")
@@ -1572,6 +1573,9 @@ class PythonAutoOperator:
         self.recognition_server.stdin.write(json.dumps({
             "id": request_id,
             "screenshot": str(screenshot),
+            # Preserve time spent in the stream gate before writing the file.
+            **({"frameCapturedAtMs": (time.time() - max(0.0, time.monotonic() - captured_at)) * 1000}
+               if captured_at is not None else {}),
             "concealedOnly": concealed_only,
             "drawOnly": draw_only,
             "concealedTiles": concealed_tiles,
@@ -1600,6 +1604,7 @@ class PythonAutoOperator:
         self, screenshot: Path, *, dynamic_layout: bool, open_melds: int | None,
         public_observation: dict[str, Any] | None,
         force_auto_action_buttons: list[dict[str, Any]] | None,
+        captured_at: float | None = None,
     ) -> dict[str, Any]:
         """Overlap hand recognition and board OCR for one immutable screenshot.
 
@@ -1642,6 +1647,7 @@ class PythonAutoOperator:
             open_melds=open_melds, public_observation=public_observation,
             force_auto_action_buttons=force_auto_action_buttons,
             force_auto_recognition_id=recognition_id, frame_public_state=frame_public_state,
+            captured_at=captured_at,
         )
         completed_at = time.monotonic()
         # Keep profiling attached to the evaluation rather than the wall-clock
@@ -4042,6 +4048,7 @@ class PythonAutoOperator:
                             "open_melds": self.cached_open_melds if self.cached_open_melds > 0 else None,
                             "public_observation": public_observation,
                             "force_auto_action_buttons": self_action_buttons,
+                            "captured_at": evaluation_captured_at,
                         }
                         # Cached tiles are not guaranteed to match the newly
                         # sorted physical row after the last discard.  With
@@ -4085,6 +4092,7 @@ class PythonAutoOperator:
                                 open_melds=self.cached_open_melds if self.cached_open_melds > 0 else None,
                                 public_observation=public_observation,
                                 force_auto_action_buttons=self_action_buttons,
+                                captured_at=evaluation_captured_at,
                             )
                         except RuntimeError as retry_error:
                             # Deal animations can briefly place 15-20 bright

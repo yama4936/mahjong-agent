@@ -88,10 +88,13 @@ test("staged force-auto recognition is bound to its screenshot digest", { timeou
     const staged = await read();
     assert.equal(typeof staged.result.recognitionId, "string");
     child.stdin.write(JSON.stringify({ id: 2, screenshot, evaluateForceAuto: true,
-      forceAutoRecognitionId: staged.result.recognitionId }) + "\n");
+      forceAutoRecognitionId: staged.result.recognitionId,
+      frameCapturedAtMs: Date.now() - 5000 }) + "\n");
     const evaluated = await read();
     assert.equal(evaluated.error, undefined);
     assert.equal(evaluated.result.status, "decision");
+    assert.ok(evaluated.result.turnTiming.captureAgeBeforeDecisionMs >= 5000);
+    assert.equal(evaluated.result.turnTiming.decisionBudgetMs, 1);
 
     child.stdin.write(JSON.stringify({ id: 3, screenshot, stageForceAutoRecognition: true }) + "\n");
     const stale = await read();

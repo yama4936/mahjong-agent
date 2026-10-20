@@ -72,6 +72,7 @@ for await (const line of lines) {
     const request = JSON.parse(line) as {
       id: unknown;
       screenshot: string;
+      frameCapturedAtMs?: number;
       concealedOnly?: boolean;
       drawOnly?: boolean;
       concealedTiles?: string[];
@@ -96,7 +97,14 @@ for await (const line of lines) {
       throw new Error("staged force-auto recognition requires evaluation");
     }
     const processingStartedAt = performance.now();
-    const frameCapturedAtMs = (await stat(request.screenshot)).mtimeMs;
+    const fileWrittenAtMs = (await stat(request.screenshot)).mtimeMs;
+    if (request.frameCapturedAtMs !== undefined &&
+        (!Number.isFinite(request.frameCapturedAtMs) || request.frameCapturedAtMs < 0)) {
+      throw new Error("invalid frame capture timestamp");
+    }
+    // File mtime omits the gate/classification time before image persistence.
+    // A supplied timestamp can only age the frame, never rejuvenate it.
+    const frameCapturedAtMs = Math.min(fileWrittenAtMs, request.frameCapturedAtMs ?? fileWrittenAtMs);
     let proposal;
     let activeLayout: typeof layout;
     let recognition: Awaited<ReturnType<typeof recognizeHand>> | Awaited<ReturnType<typeof recognizeTileSlots>>;

@@ -3788,6 +3788,22 @@ class AwayDialogDetectionTest(unittest.TestCase):
 
         self.assertEqual(classify_screen(output.getvalue(), {}), ("round_result", 1.0))
 
+    def test_resident_request_preserves_capture_age_before_file_write(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(board_metadata=False)
+        operator.recognition_request_id = 0
+        operator.recognition_server = Mock()
+        operator.recognition_server.poll.return_value = None
+        operator.recognition_server.stdout.readline.return_value = '{"id":1,"result":{}}'
+        operator.action_deadline_remaining_ms = Mock(return_value=300000)
+        with patch("auto_operator.time.time", return_value=1000), patch(
+            "auto_operator.time.monotonic", return_value=20,
+        ):
+            operator.recognize_resident(Path("freshly-written.jpg"),
+                                        evaluate_force_auto=True, captured_at=18.5)
+        request = json.loads(operator.recognition_server.stdin.write.call_args.args[0])
+        self.assertEqual(request["frameCapturedAtMs"], 998500)
+
     def test_force_auto_parallel_recognition_binds_staged_hand_to_metadata_frame(self) -> None:
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
         screenshot = Path("same-frame.png")
@@ -3800,7 +3816,7 @@ class AwayDialogDetectionTest(unittest.TestCase):
 
         result = operator.recognize_force_auto_parallel(
             screenshot, dynamic_layout=True, open_melds=1,
-            public_observation=None, force_auto_action_buttons=[{"x": 1}],
+            public_observation=None, force_auto_action_buttons=[{"x": 1}], captured_at=12.5,
         )
 
         self.assertEqual(result["status"], "decision")
@@ -3821,6 +3837,7 @@ class AwayDialogDetectionTest(unittest.TestCase):
         self.assertTrue(stage.kwargs["stage_force_auto_recognition"])
         self.assertFalse(stage.kwargs.get("evaluate_force_auto", False))
         self.assertEqual(evaluate.kwargs["force_auto_recognition_id"], "same-frame-token")
+        self.assertEqual(evaluate.kwargs["captured_at"], 12.5)
         self.assertEqual(evaluate.kwargs["frame_public_state"], state)
         self.assertEqual(evaluate.kwargs["public_observation"], observation)
 
