@@ -2428,6 +2428,18 @@ class PythonAutoOperator:
         after = observation.get("ownDiscards", [])
         if len(after) <= len(before):
             return
+        # After a confirmed riichi declaration the game can tsumogiri several
+        # times before two independent public scans agree. Verify the exact
+        # declaration position, never merely search for the tile in the tail.
+        if (pending.get("riichiDeclaration") and observation.get("ownRiichiDeclared")
+                and after[:len(before)] == before and len(after) > len(before) + 1
+                and same_physical_tile(after[len(before)], pending["tile"])):
+            self.cached_concealed_tiles = None
+            self.pending_own_discard = None
+            self.log("own_discard_reconciled", tile=after[len(before)],
+                     followingAutomaticDiscards=len(after) - len(before) - 1,
+                     concealedCacheInvalidated=True)
+            return
         if after[:len(before)] != before or len(after) != len(before) + 1:
             self.cached_concealed_tiles = None
             self.pending_own_discard = None
@@ -4412,6 +4424,7 @@ class PythonAutoOperator:
                     if discarded_tile:
                         self.pending_own_discard = {
                             "tile": discarded_tile,
+                            "riichiDeclaration": selected_action == "riichi" and bool(receipt.get("declaration")),
                             "before": self.own_discard_baseline(evaluation),
                             "evidenceToClickMs": receipt.get("actionTiming", {}).get("evidenceToClickMs"),
                             "clickIndex": click_index,

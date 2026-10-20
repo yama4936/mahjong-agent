@@ -404,6 +404,55 @@ class EvaluatorClickBudgetTest(unittest.TestCase):
         self.assertIsNone(operator.pending_own_discard)
         operator.log.assert_called_once_with("own_discard_reconciled", tile="W")
 
+    def test_riichi_discard_reconciles_exact_prefix_after_automatic_discards(self):
+        for case in ("valid", "ordinary", "unverified_riichi", "wrong_first", "changed_prefix"):
+            with self.subTest(case=case):
+                operator = PythonAutoOperator.__new__(PythonAutoOperator)
+                operator.pending_own_discard = {"tile": "F", "before": ["8s"],
+                    "riichiDeclaration": case != "ordinary"}
+                after = ["8s", "F", "4m", "5p"]
+                if case == "wrong_first":
+                    after = ["8s", "4m", "F", "5p"]
+                if case == "changed_prefix":
+                    after = ["7s", "F", "4m", "5p"]
+                operator.cached_public_observation = {"ownDiscards": after,
+                    "ownRiichiDeclared": case != "unverified_riichi"}
+                operator.cached_concealed_tiles = ["1p"] * 13
+                operator.log = Mock()
+                operator.reconcile_own_discard()
+                self.assertIsNone(operator.cached_concealed_tiles)
+                self.assertIsNone(operator.pending_own_discard)
+                if case == "valid":
+                    operator.log.assert_called_once_with("own_discard_reconciled", tile="F",
+                        followingAutomaticDiscards=2, concealedCacheInvalidated=True)
+                else:
+                    self.assertEqual(operator.log.call_args.args[0], "own_discard_reconciliation_failed")
+
+    def test_riichi_multi_append_still_needs_two_public_scans(self):
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.public_recognition_lock = threading.Lock()
+        operator.public_cache_generation = 1
+        operator.cached_open_melds = 0
+        operator.cached_public_observation = {"ownDiscards": ["8s"]}
+        operator.previous_public_observation = None
+        operator.pending_own_discard = {"tile": "F", "before": ["8s"], "riichiDeclaration": True}
+        operator.pending_own_river_confirmation = None
+        operator.cached_concealed_tiles = ["1p"] * 13
+        operator.log = Mock()
+        observed = {"ownDiscards": ["8s", "F", "4m", "5p"], "ownRiichiDeclared": True}
+        operator.public_recognition_result = {"generation": 1, "result": observed}
+        operator.poll_public_recognition()
+        operator.reconcile_own_discard()
+        self.assertIsNotNone(operator.pending_own_discard)
+        self.assertEqual(operator.cached_public_observation["ownDiscards"], ["8s"])
+        operator.public_recognition_result = {"generation": 1, "result": observed}
+        operator.poll_public_recognition()
+        operator.reconcile_own_discard()
+        self.assertIsNone(operator.pending_own_discard)
+        self.assertIsNone(operator.cached_concealed_tiles)
+        operator.log.assert_any_call("own_discard_reconciled", tile="F",
+            followingAutomaticDiscards=2, concealedCacheInvalidated=True)
+
     def test_pending_discard_uses_public_cache_not_stale_evaluation_river(self):
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
         operator.cached_public_observation = {"ownDiscards": ["W", "4p", "P"]}
