@@ -32,7 +32,9 @@ const forceAutoClickBudgetMs = Number(process.env.FORCE_AUTO_CLICK_BUDGET_MS ?? 
 if (!Number.isFinite(forceAutoClickBudgetMs) || forceAutoClickBudgetMs <= 0) {
   throw new Error(`Invalid force-auto click budget: ${process.env.FORCE_AUTO_CLICK_BUDGET_MS}`);
 }
-const preClickReserveMs = 150;
+// Live 2600ms trials need ~200–270ms after decision for IPC and pixel guards.
+// Reserve 350ms so Jev yields to the local decision before those checks.
+const preClickReserveMs = 350;
 const maximumPublicCacheAgeMs = Number(process.env.FORCE_AUTO_PUBLIC_CACHE_MAX_AGE_MS ?? 15_000);
 if (!Number.isFinite(maximumPublicCacheAgeMs) || maximumPublicCacheAgeMs <= 0) {
   throw new Error(`Invalid force-auto public cache age: ${process.env.FORCE_AUTO_PUBLIC_CACHE_MAX_AGE_MS}`);

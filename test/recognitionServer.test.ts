@@ -96,6 +96,17 @@ test("staged force-auto recognition is bound to its screenshot digest", { timeou
     assert.ok(evaluated.result.turnTiming.captureAgeBeforeDecisionMs >= 5000);
     assert.equal(evaluated.result.turnTiming.decisionBudgetMs, 1);
 
+    child.stdin.write(JSON.stringify({ id: 20, screenshot, stageForceAutoRecognition: true }) + "\n");
+    const shortClock = await read();
+    child.stdin.write(JSON.stringify({ id: 21, screenshot, evaluateForceAuto: true,
+      forceAutoRecognitionId: shortClock.result.recognitionId,
+      frameCapturedAtMs: Date.now() - 2000 }) + "\n");
+    const budgeted = await read();
+    assert.equal(budgeted.error, undefined);
+    // A two-second-old frame must leave >=350ms for Python's click guards.
+    assert.ok(budgeted.result.turnTiming.captureAgeBeforeDecisionMs >= 2000);
+    assert.ok(budgeted.result.turnTiming.decisionBudgetMs <= 250);
+
     child.stdin.write(JSON.stringify({ id: 3, screenshot, stageForceAutoRecognition: true }) + "\n");
     const stale = await read();
     await writeFile(screenshot, Buffer.concat([await readFile(screenshot), Buffer.from("changed")]));
