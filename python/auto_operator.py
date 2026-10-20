@@ -612,27 +612,32 @@ def is_draw_slot_occupied(screenshot: bytes, region: dict[str, float]) -> bool:
     The calibrated draw slot is blue felt while empty and mostly ivory when a
     tile is present.  This guard runs before the expensive tile recognizer.
     """
+    return draw_slots_occupied(screenshot, [region])[0]
+
+
+def draw_slots_occupied(screenshot: bytes, regions: list[dict[str, float]]) -> list[bool]:
+    """Apply the same ivory predicate to several ROIs from one decoded frame."""
     with Image.open(io.BytesIO(screenshot)) as image:
-        slot = image.convert("RGB").crop((
-            region["x"], region["y"],
-            region["x"] + region["width"], region["y"] + region["height"],
-        ))
-        light = fraction_matching(slot, lambda red, green, blue: red > 145 and green > 145 and blue > 135)
-    return light >= 0.20
+        pixels = image.convert("RGB")
+        return [
+            _rgb_fraction(pixels.crop((
+                region["x"], region["y"],
+                region["x"] + region["width"], region["y"] + region["height"],
+            )), ((">", 145), (">", 145), (">", 135))) >= 0.20
+            for region in regions
+        ]
 
 
 def is_draw_slot_clip_occupied(screenshot: bytes) -> bool:
     with Image.open(io.BytesIO(screenshot)) as image:
-        light = fraction_matching(
-            image.convert("RGB"), lambda red, green, blue: red > 145 and green > 145 and blue > 135,
-        )
+        light = _rgb_fraction(image.convert("RGB"), ((">", 145), (">", 145), (">", 135)))
     return light >= 0.20
 
 
 def closed_concealed_row_visible(screenshot: bytes, layout: dict[str, Any]) -> bool:
     """Require the complete calibrated 13-tile row before leaving a win latch."""
     slots = layout.get("handSlots", [])
-    return len(slots) == 13 and all(is_draw_slot_occupied(screenshot, slot) for slot in slots)
+    return len(slots) == 13 and all(draw_slots_occupied(screenshot, slots))
 
 
 def open_hand_draw_slot(layout: dict[str, Any], open_melds: int) -> dict[str, float] | None:
@@ -678,10 +683,18 @@ def own_meld_surface_visible(screenshot: bytes, layout: dict[str, Any]) -> bool:
             meld_region["x"] + meld_region["width"],
             meld_region["y"] + meld_region["height"],
         ))
-        meld_light = fraction_matching(
-            meld_image, lambda red, green, blue: red > 145 and green > 145 and blue > 135,
-        )
+        meld_light = _rgb_fraction(meld_image, ((">", 145), (">", 145), (">", 135)))
     return meld_light >= 0.12
+
+
+def compact_hand_occupancy(
+    screenshot: bytes, layout: dict[str, Any],
+) -> tuple[list[bool], dict[int, bool]]:
+    slots = layout.get("handSlots", [])
+    draws = {melds: slot for melds in range(1, 5)
+             if (slot := open_hand_draw_slot(layout, melds)) is not None}
+    occupied = draw_slots_occupied(screenshot, [*slots, *draws.values()])
+    return occupied[:len(slots)], dict(zip(draws, occupied[len(slots):]))
 
 
 def geometric_open_meld_count(screenshot: bytes, layout: dict[str, Any]) -> int | None:
@@ -692,14 +705,13 @@ def geometric_open_meld_count(screenshot: bytes, layout: dict[str, Any]) -> int 
         return None
     if not own_meld_surface_visible(screenshot, layout):
         return None
-    occupied = [is_draw_slot_occupied(screenshot, slot) for slot in hand_slots]
+    occupied, draw_occupied = compact_hand_occupancy(screenshot, layout)
     # Prefer the smallest count: a longer one-meld row is also a prefix of
     # shorter multi-meld layouts. Closed 13-tile rows are rejected by the
     # required empty final calibrated slot.
     for open_melds in range(1, 5):
         concealed_before_draw = 13 - open_melds * 3
-        dynamic_slot = open_hand_draw_slot(layout, open_melds)
-        if concealed_before_draw < 1 or dynamic_slot is None:
+        if concealed_before_draw < 1 or open_melds not in draw_occupied:
             continue
         # Exposed tiles can overlap every slot after the compact draw slot.
         # In particular a one-meld self draw fills slots 0..10 while the
@@ -707,7 +719,7 @@ def geometric_open_meld_count(screenshot: bytes, layout: dict[str, Any]) -> int 
         # ivory.  The compact prefix plus its calibrated draw slot are the
         # stable evidence; the slots to their right must not veto it.
         if all(occupied[:concealed_before_draw]) \
-                and is_draw_slot_occupied(screenshot, dynamic_slot):
+                and draw_occupied[open_melds]:
             return open_melds
     return None
 
@@ -717,12 +729,11 @@ def geometric_reaction_open_meld_count(screenshot: bytes, layout: dict[str, Any]
     slots = layout.get("handSlots", [])
     if len(slots) < 13 or not own_meld_surface_visible(screenshot, layout):
         return None
-    occupied = [is_draw_slot_occupied(screenshot, slot) for slot in slots]
+    occupied, draw_occupied = compact_hand_occupancy(screenshot, layout)
     for melds in range(1, 5):
         count = 13 - 3 * melds
-        draw = open_hand_draw_slot(layout, melds)
-        if draw and all(occupied[:count]) and not occupied[count] \
-                and not is_draw_slot_occupied(screenshot, draw):
+        if melds in draw_occupied and all(occupied[:count]) and not occupied[count] \
+                and not draw_occupied[melds]:
             return melds
     return None
 

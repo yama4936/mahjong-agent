@@ -15,7 +15,7 @@ from unittest.mock import Mock, call, patch
 
 from auto_operator import PythonAutoOperator, RetryableSafetyAbort, action_deadline_timing, ambiguous_open_draw_fallback, away_resume_geometry, closed_concealed_row_visible, closed_hand_face_mismatches, confirmed_call_meld, crop_screenshot, crop_screenshot_regions, discard_point_in_hand_geometry, force_auto_call_buttons, force_auto_chi_choice_points, force_auto_reaction_win_button, force_auto_self_action_buttons, geometric_open_meld_count, is_away_resume_dialog, is_contextual_reaction_pass, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, mean_pixel_delta, merge_public_observations, open_hand_draw_slot, own_meld_surface_visible, post_call_transition, retreat_pointer_from_hand, screencast_frame_follows_pointer_retreat, riichi_selection_is_visible, round_result_conflicts_with_live_table, selected_chi_choice_point, selected_open_draw_is_ambiguous, selected_tile_comparison_region, send_discard_click, should_guard_tenpai_reaction, should_process_reaction_prompt, should_retry_call_policy, stable_hand_comparison_region, stable_hand_delta, tile_face_structure_delta
 from screen_state import classify_screen, load_references
-from auto_operator import geometric_reaction_open_meld_count
+from auto_operator import geometric_reaction_open_meld_count, draw_slots_occupied
 from auto_operator import configure_evaluator_click_budget
 from auto_operator import board_state_signature, board_state_signature_matches
 
@@ -1367,6 +1367,22 @@ class AwayDialogDetectionTest(unittest.TestCase):
                     operator.schedule_public_recognition(screenshot, verified_match=True)
                     worker.assert_called_once()
             self.assertEqual(operator.public_recognition_request_id, 1)
+
+    def test_batched_draw_presence_keeps_exact_color_and_twenty_percent_boundaries(self) -> None:
+        image = Image.new("RGB", (60, 10), (25, 55, 85))
+        # Only the first two colors satisfy all three strict channel limits.
+        for index, (color, qualifying_pixels) in enumerate([
+            ((146, 146, 136), 20), ((255, 255, 255), 19),
+            ((145, 146, 136), 100), ((146, 145, 136), 100),
+            ((146, 146, 135), 100), ((146, 146, 136), 100),
+        ]):
+            for pixel in range(qualifying_pixels):
+                image.putpixel((index * 10 + pixel % 10, pixel // 10), color)
+        output = io.BytesIO()
+        image.save(output, format="PNG")
+        regions = [{"x": index * 10, "y": 0, "width": 10, "height": 10} for index in range(6)]
+        self.assertEqual(draw_slots_occupied(output.getvalue(), regions),
+                         [True, False, False, False, False, True])
 
     def test_draw_slot_presence_distinguishes_own_and_opponent_turns(self) -> None:
         region = {"x": 100, "y": 50, "width": 100, "height": 100}
