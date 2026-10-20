@@ -1515,7 +1515,10 @@ class PythonAutoOperator:
         self.rejected_viewport_frame_streak = 0
         self.latest_screencast_frame = frame
         self.latest_screencast_captured_at = time.monotonic()
-        draw_slot = self.layout.get("drawSlot")
+        # A confirmed open hand draws next to its compact row. The closed-row
+        # slot can be covered by exposed tiles throughout opponents' turns.
+        draw_slot = open_hand_draw_slot(self.layout, getattr(self, "cached_open_melds", 0)) \
+            or self.layout.get("drawSlot")
         if draw_slot:
             occupied = is_draw_slot_clip_occupied(crop_screenshot(frame, draw_slot))
             if occupied and self.screencast_draw_occupied is not True:
@@ -3607,7 +3610,9 @@ class PythonAutoOperator:
                     gate_open_melds = self.stable_open_meld_count(
                         candidate_open_melds, gate_frame,
                     ) if gate_frame else None
-                    dynamic_draw_slot = open_hand_draw_slot(self.layout, gate_open_melds or 0)
+                    dynamic_draw_slot = open_hand_draw_slot(
+                        self.layout, gate_open_melds or self.cached_open_melds,
+                    )
                     dynamic_draw_occupied = bool(
                         gate_frame and dynamic_draw_slot
                         and is_draw_slot_occupied(gate_frame, dynamic_draw_slot)
@@ -4102,7 +4107,12 @@ class PythonAutoOperator:
                             exact_open_melds = None
                     if gate_open_melds is not None and exact_open_melds != gate_open_melds:
                         exact_open_melds = None
-                    exact_draw_slot = open_hand_draw_slot(self.layout, exact_open_melds or 0) \
+                    # Use the confirmed count to locate an empty compact draw
+                    # even when no *self-turn* geometry can be established.
+                    # Falling back to the closed slot would read our melds.
+                    exact_draw_slot = open_hand_draw_slot(
+                        self.layout, exact_open_melds or self.cached_open_melds,
+                    ) \
                         or self.layout["drawSlot"]
                     exact_draw_occupied = is_draw_slot_occupied(evaluation_frame, exact_draw_slot)
                     self.supersede_reaction_on_verified_draw(
@@ -4125,7 +4135,11 @@ class PythonAutoOperator:
                             },
                         )
                     if not exact_draw_occupied and not self.pending_post_call_discard:
-                        concealed = self.recognize_resident(screenshot_path, concealed_only=True)
+                        concealed = self.recognize_resident(
+                            screenshot_path, concealed_only=True,
+                            dynamic_layout=self.cached_open_melds > 0,
+                            open_melds=self.cached_open_melds if self.cached_open_melds > 0 else None,
+                        )
                         concealed_tiles = concealed.get("tiles", [])
                         recovered_open_melds = self.restart_open_discard_meld_count(
                             len(concealed_tiles), public_observation,

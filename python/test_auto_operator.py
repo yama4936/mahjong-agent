@@ -1536,6 +1536,65 @@ class AwayDialogDetectionTest(unittest.TestCase):
         self.assertTrue(discard_point_in_hand_geometry({"x": 838, "y": 996.5}, layout, 2))
         self.assertLess(time.monotonic() - started, 5.0)
 
+    def test_two_meld_stream_tracks_compact_draw_and_skips_opponent_recognition(self) -> None:
+        project = Path(__file__).resolve().parents[1]
+        layout = load_json(project / "config/layout-300-regression.json")
+        opponent = (project / "test/fixtures/two-meld-opponent-turn-20261020.jpg").read_bytes()
+        own = (project / "test/fixtures/two-meld-own-draw-20261020.jpg").read_bytes()
+        # The old closed draw ROI contains our exposed white pon on both frames.
+        self.assertTrue(is_draw_slot_occupied(opponent, layout["drawSlot"]))
+        self.assertTrue(is_draw_slot_occupied(own, layout["drawSlot"]))
+        with tempfile.TemporaryDirectory() as directory:
+            operator = PythonAutoOperator.__new__(PythonAutoOperator)
+            operator.args = argparse.Namespace(mode="force-auto", max_iterations=2, poll=0.001)
+            operator.layout = layout
+            operator.hand_clip = {"x": 223, "y": 926, "width": 1355, "height": 146}
+            operator.action_clip = None
+            operator.frames = Path(directory)
+            operator.screen_references = {}
+            operator.screencast_session = Mock()
+            operator.screencast_sequence = 0
+            operator.screencast_draw_occupied = None
+            operator.screencast_draw_generation = 0
+            operator.cached_public_observation = None
+            operator.cached_concealed_tiles = None
+            operator.cached_open_melds = 2
+            operator.dynamic_layout_required = True
+            operator.pending_post_call_discard = False
+            operator.pending_post_call_started_at = None
+            operator.restart_open_hand_probe_hash = None
+            operator.last_processed_hand = None
+            operator.armed = True
+            operator.previous_public_observation = None
+            operator.last_shanten = None
+            operator.poll_public_recognition = Mock()
+            operator.ensure_viewport = Mock()
+            operator.start_screencast_gate = Mock()
+            operator.schedule_periodic_public_recognition = Mock()
+            operator.resume_if_away = Mock(return_value=False)
+            operator.advance_ranked_loop = Mock(return_value=False)
+            operator.recognize_resident = Mock()
+            operator.force_auto_reaction_fallback = Mock(return_value=None)
+            operator.log = Mock()
+            self.assertTrue(operator.accept_screencast_frame(opponent))
+            self.assertFalse(operator.screencast_draw_occupied)
+            self.assertEqual(operator.screencast_draw_generation, 0)
+            self.assertTrue(operator.accept_screencast_frame(own))
+            self.assertTrue(operator.screencast_draw_occupied)
+            self.assertEqual(operator.screencast_draw_generation, 1)
+            operator.accept_screencast_frame(own)
+            self.assertEqual(operator.screencast_draw_generation, 1)
+            operator.accept_screencast_frame(opponent)
+            self.assertFalse(operator.screencast_draw_occupied)
+            page = Mock()
+            page.url = "https://mahjongsoul.game.yo-star.com/"
+            with patch("auto_operator.classify_screen", return_value=("match", 1.0)):
+                operator.run(page)
+            operator.recognize_resident.assert_not_called()
+            operator.accept_screencast_frame(own)
+            self.assertTrue(operator.screencast_draw_occupied)
+            self.assertEqual(operator.screencast_draw_generation, 2)
+
     def test_run_loop_reaches_post_pon_next_draw_with_trusted_open_meld_count(self) -> None:
         project = Path(__file__).resolve().parents[1]
         layout = load_json(project / "config" / "layout.json")
