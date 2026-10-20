@@ -4209,6 +4209,61 @@ class AwayDialogDetectionTest(unittest.TestCase):
         self.assertFalse(operator.ranked_terminal_transition_requires_stop("match_result"))
         self.assertIsNone(operator.ranked_terminal_matchmaking_seen_at)
 
+    def test_real_reward_branch_resets_matchmaking_guard_without_verifying_reentry(self) -> None:
+        project = Path(__file__).resolve().parents[1]
+        frame = (project / "test/fixtures/ranked-progress-before-lobby-loading-20261020.png").read_bytes()
+        state, confidence = classify_screen(frame, {})
+        self.assertEqual(state, "post_match_reward")
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(ranked_loop=True, advance_screens=False)
+        operator.layout = {"viewport": {"width": 1920, "height": 1080}}
+        operator.result_screen_advanced = "match_result"
+        operator.ranked_terminal_transition_pending = True
+        operator.ranked_terminal_transition_stop_requested = False
+        operator.ranked_terminal_matchmaking_seen_at = 38.231
+        operator.log = Mock()
+        page = Mock()
+        # Actual first-run times: reward at40.924 interrupted the interval
+        # that otherwise caused a premature stop at43.431.
+        with patch("auto_operator.time.monotonic", return_value=40.924):
+            self.assertTrue(operator.handle_early_non_gameplay_screen(page, state, confidence))
+        self.assertIsNone(operator.ranked_terminal_matchmaking_seen_at)
+        self.assertTrue(operator.ranked_terminal_transition_pending)
+        with patch("auto_operator.time.monotonic", return_value=43.431):
+            self.assertFalse(operator.ranked_terminal_transition_requires_stop("matchmaking"))
+        with patch("auto_operator.time.monotonic", return_value=48.432):
+            self.assertTrue(operator.ranked_terminal_transition_requires_stop("matchmaking"))
+        page.mouse.click.assert_called_once_with(1747.2, 993.6)
+
+    def test_real_lobby_loading_bypasses_clicks_and_retains_ranked_guard(self) -> None:
+        project = Path(__file__).resolve().parents[1]
+        state, confidence = classify_screen(project / "test/fixtures/lobby-loading-after-ranked-result-20261020.png", {})
+        self.assertEqual(state, "loading")
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(ranked_loop=True)
+        operator.layout = {"viewport": {"width": 1920, "height": 1080}}
+        operator.ranked_terminal_transition_pending = True
+        operator.ranked_terminal_matchmaking_seen_at = time.monotonic() - 60
+        operator.ranked_terminal_transition_stop_requested = False
+        operator.log = Mock()
+        page = Mock()
+        self.assertTrue(operator.handle_early_non_gameplay_screen(page, state, confidence))
+        self.assertIsNone(operator.ranked_terminal_matchmaking_seen_at)
+        self.assertTrue(operator.ranked_terminal_transition_pending)
+        self.assertFalse(operator.ranked_terminal_transition_stop_requested)
+        page.mouse.click.assert_not_called()
+
+    def test_ranked_transition_stop_records_actual_frame(self) -> None:
+        frame = (Path(__file__).resolve().parents[1] / "test/fixtures/lobby-loading-after-ranked-result-20261020.png").read_bytes()
+        with tempfile.TemporaryDirectory() as directory:
+            operator = PythonAutoOperator.__new__(PythonAutoOperator)
+            operator.frames = Path(directory)
+            operator.log = Mock()
+            operator.log_ranked_terminal_transition_stop("matchmaking", 1.0, frame)
+            evidence = operator.log.call_args.kwargs
+            self.assertEqual(Path(evidence["screenshot"]).read_bytes(), frame)
+            self.assertEqual(evidence["gameplayClicks"], 0)
+
     def test_ranked_round_result_does_not_arm_terminal_stop_in_later_hand(self) -> None:
         """A normal hand result must not poison the following in-match screen."""
         operator = PythonAutoOperator.__new__(PythonAutoOperator)

@@ -8,6 +8,16 @@ from screen_state import _matches_blocking_dialog, _rgb_fraction, classify_scree
 
 
 class RiichiSelectionScreenTest(unittest.TestCase):
+    def test_live_lobby_loading_is_not_a_ranked_reservation(self):
+        root = Path(__file__).resolve().parents[1] / "test/fixtures"
+        self.assertEqual(classify_screen(root / "lobby-loading-after-ranked-result-20261020.png", {}), ("loading", 1.0))
+        self.assertEqual(classify_screen(root / "ranked-reservation-20261020.png", {}), ("matchmaking", 1.0))
+        # Black backgrounds alone must not turn into loading evidence.
+        image = Image.new("RGB", (1920, 1080), "black")
+        output = io.BytesIO()
+        image.save(output, format="PNG")
+        self.assertNotEqual(classify_screen(output.getvalue(), {})[0], "loading")
+
     def test_native_rgb_fraction_preserves_exact_color_thresholds(self):
         image = Image.new("RGB", (4, 2))
         pixels = [

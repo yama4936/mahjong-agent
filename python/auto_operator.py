@@ -2070,6 +2070,16 @@ class PythonAutoOperator:
             return False
         return now - first_seen >= 5.0
 
+    def log_ranked_terminal_transition_stop(self, state, confidence, screenshot=None):
+        evidence = {}
+        if screenshot is not None:
+            snapshot = self.frames / f"{utc_stamp()}.ranked-terminal-transition.png"
+            snapshot.write_bytes(screenshot)
+            evidence["screenshot"] = str(snapshot)
+        self.log("ranked_terminal_transition_stop", state=state,
+                 confidence=confidence, gameplayClicks=0,
+                 reason="result_transition_missing_verified_ranked_navigation", **evidence)
+
     def handle_early_non_gameplay_screen(self, page: Page, state: str, confidence: float,
                                        screenshot: bytes | None = None) -> bool:
         """Handle verified non-gameplay screens before latency quick gates."""
@@ -2077,6 +2087,9 @@ class PythonAutoOperator:
             self.log("blocking_dialog_stop", state=state, confidence=confidence, gameplayClicks=0)
             raise RuntimeError(f"Mahjong Soul {state} dialog blocks the table; operator stopped without confirming it")
         if state in {"round_result", "match_result", "rank_progress", "post_match_reward"}:
+            # Only uninterrupted matchmaking observations count toward the
+            # five-second guard. These stages bypass its normal reset path.
+            self.ranked_terminal_matchmaking_seen_at = None
             if screenshot is not None and state in {"round_result", "match_result"}:
                 self.attach_outcome("match" if state == "match_result" else "round",
                                     screenshot, confidence)
@@ -2122,14 +2135,10 @@ class PythonAutoOperator:
             if self.args.advance_screens or self.args.ranked_loop:
                 self.advance_result_screen_once(page, state, confidence)
             return True
-        if state in {"lobby", "ranked_menu", "ranked_room", "matchmaking"}:
+        if state in {"lobby", "ranked_menu", "ranked_room", "matchmaking", "loading"}:
             if self.ranked_terminal_transition_requires_stop(state):
                 self.ranked_terminal_transition_stop_requested = True
-                self.log(
-                    "ranked_terminal_transition_stop", state=state,
-                    confidence=confidence, gameplayClicks=0,
-                    reason="result_transition_missing_verified_ranked_navigation",
-                )
+                self.log_ranked_terminal_transition_stop(state, confidence, screenshot)
                 return True
             # The table-result fade can match the generic lobby reference for
             # several frames (including after a *round*, not a match, result).
@@ -3813,6 +3822,7 @@ class PythonAutoOperator:
                     # The stricter popup/button geometry remains authoritative.
                     screen_state = "match"
                 if screen_state in {"round_result", "match_result", "rank_progress", "post_match_reward"}:
+                    self.ranked_terminal_matchmaking_seen_at = None
                     if getattr(self, "round_terminal_latched", False):
                         self.round_terminal_result_observed = True
                     # A new hand (or a new match) must never inherit tiles or
@@ -3858,12 +3868,13 @@ class PythonAutoOperator:
                 else:
                     self.result_screen_advanced = None
                 if self.ranked_terminal_transition_requires_stop(screen_state):
-                    self.log(
-                        "ranked_terminal_transition_stop", state=screen_state,
-                        confidence=screen_confidence, gameplayClicks=0,
-                        reason="result_transition_missing_verified_ranked_navigation",
-                    )
+                    self.log_ranked_terminal_transition_stop(screen_state, screen_confidence, full_screen)
                     return
+                if screen_state == "loading":
+                    self.log("screen_state_bypassed", state=screen_state,
+                             confidence=screen_confidence, gameplayClicks=0)
+                    time.sleep(self.args.poll)
+                    continue
                 if getattr(self, "round_terminal_latched", False):
                     if getattr(self, "round_terminal_result_observed", False) and screen_state == "match" \
                             and closed_concealed_row_visible(full_screen, self.layout):

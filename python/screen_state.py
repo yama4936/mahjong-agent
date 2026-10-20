@@ -9,7 +9,7 @@ from PIL import Image, ImageChops, ImageStat
 
 ScreenState = Literal[
     "login", "account_modal", "session_conflict", "connection_error", "lobby", "ranked_menu", "ranked_room",
-    "matchmaking", "match", "away", "round_result", "match_result", "rank_progress",
+    "matchmaking", "loading", "match", "away", "round_result", "match_result", "rank_progress",
     "post_match_reward", "exit_confirm", "unknown",
 ]
 
@@ -205,6 +205,21 @@ def _is_cherry_blossom_ranked_menu(image: Image.Image) -> bool:
     return all(fraction >= 0.45 for fraction in dark_fractions)
 
 
+def _is_lobby_loading(image: Image.Image) -> bool:
+    """The black lobby-loading screen is not a ranked reservation card."""
+    width, height = image.size
+    if width < 1200 or height < 700:
+        return False
+    center = image.crop((width * .10, height * .10, width * .90, height * .65)).convert("RGB")
+    if _rgb_fraction(center, (("<", 35),) * 3) < .90:
+        return False
+    bar = image.crop((width * .23, height * .91, width * .78, height * .94)).convert("RGB")
+    blue = sum(1 for r, g, b in bar.getdata() if b > 120 and b > r * 1.2 and b > g * 1.1) / max(1, bar.width * bar.height)
+    caption = image.crop((width * .40, height * .855, width * .60, height * .90)).convert("RGB")
+    cyan = sum(1 for r, g, b in caption.getdata() if g > 150 and b > 150 and r < g * .85) / max(1, caption.width * caption.height)
+    return blue >= .08 and cyan >= .01
+
+
 def _is_cherry_blossom_matchmaking(image: Image.Image) -> bool:
     """Detect the bottom-left reservation card before generic ranked menu."""
     if not _is_cherry_blossom_ranked_menu(image):
@@ -271,6 +286,8 @@ def classify_screen(
         return "connection_error", 1.0
     if _has_bottom_tile_faces(image):
         return "match", 1.0
+    if _is_lobby_loading(image):
+        return "loading", 1.0
     if _is_account_modal(image):
         return "account_modal", 1.0
     if _is_cherry_blossom_login(image):
