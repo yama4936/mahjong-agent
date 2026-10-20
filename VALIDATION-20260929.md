@@ -882,3 +882,9 @@
 - 別作業ツリー `/tmp/jantama-capture-age-fix` に修正を準備した。受信monotonic時刻からwall-clock timestampを算出してresidentへ渡し、serverはmtimeとの早い方を使う。未来のtimestampで鮮度を若返らせない。並列認識後の評価と動的レイアウト再評価にも引き継ぐ。クリック直前の2600ms保護は変更しない。
 - Pythonの時刻変換・並列引き継ぎテストを追加し、176件中33skip、1件のfixture不足を除き成功。不足していた別作業ツリーの `artifacts/live/round-result.png` を接続して当該1件を再実行し成功。recognition serverの3テストは成功し、staged評価へ5秒前の受信時刻を渡すと新しいファイルmtimeでもdecision budgetが1msになることを確認した。build、diff check成功。検証中に同一ホストでテスト負荷が加わった期間は、無負荷での短時間性能標本には扱わない。
 - 修正コミット36c9929と本記録をupstreamへ保存するが、進行中対局のroot作業ツリーは3255330のまま維持する。次の継続では最初にPID971189と成果物を再確認し、終了確認後だけ `git merge --ff-only origin/main` で反映・buildして、300+0秒／action deadline 300000msの回帰を実施する。5+20再評価とranked-loop（2600ms）は未完了。今回の修正だけで短時間性能を達成したとは主張しない。
+
+## 2026-10-20 5+20練習の終局と修正適用
+
+- ルーム33675は00:22:46 UTCに `match_completed_stop` で終了し、PID971189の消失を確認した。終局画像 `artifacts/practice-5plus20-b93e9da-room33675-20261020/frames/2026-10-20T00-22-46.200655+00-00.match_result.png` （正確な保存名は同JSONLのoutcome_observed参照）は自家20000点・4位、CPU30000/27000/23000。manifestとsummaryをcompletedへ更新した。18通常打牌、16反応操作、予算超過137、離席復帰19、自己河不一致3、再照合失敗1。5+20の短時間練習は不合格であり、段位成績・機能回帰合格として扱わない。
+- 終局と操作者終了を確認してからroot作業ツリーを8b64edcまでfast-forwardしpush、build成功。受信時刻の判断サーバー引き継ぎ修正に加え、離席判定の厳密RGB条件を既存Pillowネイティブ色マスクへ置換した。保存フレーム12枚の判定差0、中央値119.46→11.97ms。別の実離席画像でも両実装True、色境界・面積比率の回帰テストを追加。Python操作者・画面分類186件（33skip）成功。速度計測は保存画像の判定部分だけで、対局全体の2600ms達成とは区別する。
+- 最新修正の300+0秒回帰を次に開始する。5+20再評価・ranked-loopの開始継続・勝率改善はまだ未完了。
