@@ -227,7 +227,10 @@ def crop_screenshot_regions(
                 int(clip["x"] + clip["width"]), int(clip["y"] + clip["height"]),
             ))
             output = io.BytesIO()
-            cropped.save(output, format="PNG")
+            # These lossless crops stay in memory for immediate pixel checks.
+            # Deflate compression consumes most of the pre-click crop time
+            # without changing the evidence; store the same pixels directly.
+            cropped.save(output, format="PNG", compress_level=0)
             result[name] = output.getvalue()
     return result
 

@@ -149,8 +149,12 @@ class EvaluatorClickBudgetTest(unittest.TestCase):
             actual = crop_screenshot_regions(screenshot, clips)
 
         self.assertEqual(opened.call_count, 1)
-        self.assertEqual(actual["hand"], crop_screenshot(screenshot, clips["hand"]))
-        self.assertEqual(actual["river"], crop_screenshot(screenshot, clips["river"]))
+        for name, clip in clips.items():
+            with Image.open(io.BytesIO(actual[name])) as batched, \
+                    Image.open(io.BytesIO(crop_screenshot(screenshot, clip))) as individual:
+                self.assertEqual(batched.size, individual.size)
+                self.assertEqual(batched.mode, individual.mode)
+                self.assertEqual(batched.tobytes(), individual.tobytes())
 
     def test_only_a_screencast_frame_after_pointer_retreat_can_skip_fresh_capture(self):
         self.assertTrue(screencast_frame_follows_pointer_retreat(18, 17))
