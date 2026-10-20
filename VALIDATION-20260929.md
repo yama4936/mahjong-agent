@@ -873,3 +873,12 @@
 - 銅の間を実画面の(1393,410)で選択すると今回は入場拒否なく「銅の間／四人東・四人南・三人東」の選択画面を開けた。`artifacts/live/recovery-20261020/ranked-rooms.png` と `copper-entered.png` に初心表示、初心者・雀士という銅の間条件、遷移結果を保存。まだキュー投入・段位対局開始の証拠ではない。
 - 依頼された5+20秒練習用に新規CPUルーム33675を作成。300+0回帰とは別枠で2600msクリック予算の実測を行う。友人戦のoperator action deadlineは指示どおり300000msを維持するが、ゲーム側の5+20時計を延長するものではない。段位戦の勝率評価には含めない。
 - 5+20練習は `b93e9da` で開始。成果物は `artifacts/practice-5plus20-b93e9da-room33675-20261020`、設定画像は `artifacts/live/recovery-20261020/room33675-5plus20.png`。`--action-deadline-ms=300000 --force-auto-click-budget-ms=2600 --board-metadata --advance-screens --no-dashboard`、ranked-loop無効で一系統を起動した。00:05:26 UTC時点で実行中。2通常打牌・1反応操作に対し、予算超過25件・離席復帰4件・自己河不一致1件が発生し、短時間練習の合格とは扱わない。期限超過例はクリック直前2622/2661/2681/2725msであり、2600msの境界を繰り返し超えている。対局中はコード・設定を変更せず、ゲーム側自動打牌との競合を含む時刻／状態照合を後続調査とする。段位戦の開始・継続および勝率改善は未達で、ゴールは継続中。
+
+## 2026-10-20 5+20診断：受信時刻とファイルmtimeの予算基準差
+
+- 前ターンからのCPU練習ルーム33675（5+20秒、実行コード8f195fcを含むb93e9da、action deadline 300000ms、click budget 2600ms）は正常に生存しており、重複起動・途中コード変更は行わなかった。00:17 UTC時点で東4局の進行中。対局結果は未確定であり、離席復帰・自動ツモ切りが混入した診断標本として扱う。
+- 00:04:51.773764の四萬クリックは手番検出から5302ms後。対応する `frames/2026-10-20T00-04-54.097339+00-00.post-discard.png` は四萬が手牌に残り、自己河に八萬が追加された状態を示す。00:04:58.910614の `own_discard_mismatch` もexpected=4m、actual=8m。5秒基本時間を超えた自動ツモ切りとの競合が強く疑われ、単なる河認識誤りとは分類しない。
+- Pythonのクリック鮮度基準はstream受信時刻だが、resident serverは画像ファイルmtimeを予算基準としていた。認識開始までのゲート・分類・保存前処理がJev予算から抜ける。44件の超過標本について、`expired.captureAgeBeforeDecisionMs - (2600 - 150 - arbitration.deadlineMs + arbitration.elapsedMs)` は594--1418ms、中央値958ms。これは保存前時間とクリック前処理などの合計であり、全量をJev遅延と呼ばない。
+- 別作業ツリー `/tmp/jantama-capture-age-fix` に修正を準備した。受信monotonic時刻からwall-clock timestampを算出してresidentへ渡し、serverはmtimeとの早い方を使う。未来のtimestampで鮮度を若返らせない。並列認識後の評価と動的レイアウト再評価にも引き継ぐ。クリック直前の2600ms保護は変更しない。
+- Pythonの時刻変換・並列引き継ぎテストを追加し、176件中33skip、1件のfixture不足を除き成功。不足していた別作業ツリーの `artifacts/live/round-result.png` を接続して当該1件を再実行し成功。recognition serverの3テストは成功し、staged評価へ5秒前の受信時刻を渡すと新しいファイルmtimeでもdecision budgetが1msになることを確認した。build、diff check成功。検証中に同一ホストでテスト負荷が加わった期間は、無負荷での短時間性能標本には扱わない。
+- 修正コミット36c9929と本記録をupstreamへ保存するが、進行中対局のroot作業ツリーは3255330のまま維持する。次の継続では最初にPID971189と成果物を再確認し、終了確認後だけ `git merge --ff-only origin/main` で反映・buildして、300+0秒／action deadline 300000msの回帰を実施する。5+20再評価とranked-loop（2600ms）は未完了。今回の修正だけで短時間性能を達成したとは主張しない。
