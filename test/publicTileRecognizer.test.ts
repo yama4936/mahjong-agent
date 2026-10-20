@@ -601,3 +601,29 @@ test("sideways river padding retry preserves the normalized orientation", async 
   assert.equal(batches[1]![0]!.height, batches[0]![0]!.height + 8);
   assert.equal(batches[1]![0]!.width, batches[0]![0]!.width + 8);
 });
+
+test("production own river preserves third-row three man and an early sideways West", {
+  skip: !existsSync(".runtime/hybrid-vision/cvmaj-pretrained.tar") || !existsSync(".runtime/hybrid-vision/automajsoul-best-model.pt"),
+}, async () => {
+  const base = layoutSchema.parse(JSON.parse(await readFile("config/layout-300-regression.json", "utf8")));
+  const layout = { ...base, publicTileRegions: { ownDiscards: base.publicTileRegions!.ownDiscards! } };
+  const recognizer = new HybridTileRecognizer();
+  try {
+    const thirdRow = await recognizeConfiguredPublicTilesWithVit(
+      "test/fixtures/own-river-third-row-three-man-20261020.jpg", layout, recognizer,
+    );
+    assert.equal(thirdRow.ownDiscards?.classificationSafe, true);
+    assert.deepEqual(thirdRow.ownDiscards?.recognized.map(tile => tile.tile),
+      ["9m", "N", "E", "F", "P", "1p", "F", "4p", "8p", "2p", "1m", "5p", "3m"]);
+    const last = thirdRow.ownDiscards!.recognized.at(-1)!;
+    assert.ok(last.x < 770);
+    assert.ok(last.confidence > 0.9);
+    const early = await recognizeConfiguredPublicTilesWithVit(
+      "test/fixtures/early-riichi-west-river-20261020.jpg", layout, recognizer,
+    );
+    assert.equal(early.ownDiscards?.classificationSafe, true);
+    assert.deepEqual(early.ownDiscards?.recognized.map(tile => tile.tile), ["7m", "W"]);
+    assert.equal(early.ownDiscards!.recognized[1]!.sideways, true);
+    assert.equal(toPublicTileObservation(early).ownRiichiDeclared, true);
+  } finally { await recognizer.close(); }
+});

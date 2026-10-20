@@ -157,3 +157,13 @@ test("infers a partially filled third row when perspective overlap merges its fa
   assert.deepEqual(detection?.gridRows, [6, 6, 5]);
   assert.equal(detection?.gridValid, true);
 });
+
+test("a riichi tile remains sideways in rivers with only one or two discards", () => {
+  const region = { x: 0, y: 0, width: 260, height: 160, rotationToUpright: 0 as const,
+    detectionMode: "discard_grid" as const };
+  const upright = { x: 10, y: 10, width: 59, height: 54, area: 3000, fillRatio: 0.8 };
+  const sideways = { x: 73, y: 13, width: 76, height: 41, area: 2900, fillRatio: 0.8 };
+  assert.deepEqual(orderDiscardGridCandidates([sideways], region).candidates.map(tile => tile.sideways), [true]);
+  assert.deepEqual(orderDiscardGridCandidates([upright, sideways], region).candidates.map(tile => tile.sideways), [false, true]);
+  assert.deepEqual(orderDiscardGridCandidates([upright], region).candidates.map(tile => tile.sideways), [false]);
+});

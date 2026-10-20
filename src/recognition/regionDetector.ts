@@ -281,7 +281,11 @@ export function orderDiscardGridCandidates(
     && gridRows.every((count) => count >= 1 && count <= 6)
     && gridRows.slice(0, -1).every((count) => count === 6)
     && candidates.length <= 18;
-  const medianAspect = median(normalized.map(({ point }) => point.width / Math.max(1, point.height)));
+  // A lone riichi tile (or one of just two discards) must not raise its own
+  // sideways threshold. Estimate perspective from upright candidates only.
+  const uprightAspects = normalized.map(({ point }) => point.width / Math.max(1, point.height))
+    .filter((aspect) => aspect < 1.45);
+  const medianAspect = uprightAspects.length > 0 ? median(uprightAspects) : 1;
   let gridIndex = 0;
   const ordered = selectedRows.flatMap((row) => row.items
     .sort((left, right) => left.point.x - right.point.x)
