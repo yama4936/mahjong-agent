@@ -2200,6 +2200,8 @@ class PythonAutoOperator:
         self.log("black_screen_reload_requested", screenshot=str(snapshot),
                  durationSeconds=round(now - since, 3), windowSeconds=600, gameplayClicks=0)
         page.reload(wait_until="domcontentloaded", timeout=20000)
+        if getattr(self, "screencast_session", None) is not None:
+            self.restart_screencast_gate(page)
         page.wait_for_timeout(250)
         after = page.screenshot(animations="disabled")
         state, confidence = classify_screen(after, {})
