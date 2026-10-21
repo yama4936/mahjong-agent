@@ -28,6 +28,7 @@ from typing import Any, Callable
 from playwright.sync_api import Browser, CDPSession, Page, sync_playwright
 from PIL import Image, ImageChops, ImageStat
 from screen_state import _rgb_fraction, classify_screen, load_references
+from operator_lock import OperatorAlreadyRunning, endpoint_key, operator_lease
 
 
 class RetryableSafetyAbort(RuntimeError):
@@ -4628,15 +4629,31 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    operator = PythonAutoOperator(args)
-    with sync_playwright() as playwright:
-        browser = playwright.chromium.connect_over_cdp(args.cdp)
-        try:
-            operator.run(find_mahjong_page(browser))
-        except KeyboardInterrupt:
-            operator.log("stopped", reason="keyboard_interrupt")
-        finally:
-            operator.close()
+    try:
+        with operator_lease(args.cdp):
+            # Acquire before resident recognizers or any Playwright connection.
+            operator = PythonAutoOperator(args)
+            try:
+                with sync_playwright() as playwright:
+                    browser = playwright.chromium.connect_over_cdp(args.cdp)
+                    operator.run(find_mahjong_page(browser))
+            except KeyboardInterrupt:
+                operator.log("stopped", reason="keyboard_interrupt")
+            finally:
+                operator.close()
+    except OperatorAlreadyRunning as error:
+        evidence = {"timestamp": datetime.now(timezone.utc).isoformat(),
+                    "event": "duplicate_operator_stop", "pid": os.getpid(),
+                    "endpoint": endpoint_key(args.cdp), "error": str(error)}
+        artifacts = Path(args.artifacts)
+        if not artifacts.is_absolute():
+            artifacts = Path(args.project).resolve() / artifacts
+        artifacts.mkdir(parents=True, exist_ok=True)
+        # Keep a rejected startup out of the active operator's game log.
+        with (artifacts / "operator-startup.jsonl").open("a", encoding="utf-8") as log:
+            log.write(json.dumps(evidence) + "\n")
+        print(json.dumps(evidence), flush=True)
+        return 2
     return 0
 
 
