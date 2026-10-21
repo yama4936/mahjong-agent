@@ -3,13 +3,15 @@ import test from "node:test";
 import sharp from "sharp";
 import { HandConsensus, combineTileEvidence } from "../src/recognition/consensus.js";
 import { normalizeTileFace } from "../src/recognition/normalizeTileFace.js";
-import { classifyTile, loadTemplates, matchTile } from "../src/recognition/templateMatcher.js";
+import { classifyTile, loadTemplates, matchTile, recognizeHand } from "../src/recognition/templateMatcher.js";
 import type { GameTile } from "../src/game/tiles.js";
 import { mkdtemp, readdir, copyFile, readFile } from "node:fs/promises";
 import { layoutSchema } from "../src/recognition/layout.js";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { validateTemplateDirectory } from "../src/recognition/templateValidator.js";
+import { parseGameState } from "../src/game/state.js";
+import { decide } from "../src/agent/decision.js";
 
 test("validation detects exact training/holdout leakage and records matcher identity", async () => {
   const directory = await mkdtemp(path.join(tmpdir(), "jantama-leakage-"));
@@ -83,4 +85,38 @@ test("live hand templates distinguish five through eight pin including diagonal 
   // Human-labelled image: seven has three diagonal black pips above four red pips.
   // Do not use the auxiliary classifier's confidence as the ground-truth label.
   assert.deepEqual(matches.map(match => match.tile), ["5p", "6p", "7p", "8p"]);
+});
+
+test("three red bamboo rows prevent the actual nine-sou glare from becoming seven", async () => {
+  const layout = layoutSchema.parse(JSON.parse(await readFile("config/layout-300-regression.json", "utf8")));
+  const fixture = JSON.parse(await readFile("test/fixtures/nine-sou-as-seven-deal-in-20261021.json", "utf8"));
+  const recognition = await recognizeHand("test/fixtures/hand-nine-sou-glare-20261021.jpg", layout, "templates/bootstrap");
+  assert.deepEqual(recognition.tiles, fixture.physicalHand);
+  // Color evidence rejects an impossible label; it does not manufacture
+  // confidence or relax the existing automatic-calibration safety threshold.
+  assert.ok(recognition.matches[12]!.confidence < layout.minimumTileConfidence);
+  assert.equal(recognition.safe, false);
+  const templates = await loadTemplates("templates/bootstrap", file => !/(?:holdout|capture|test)/i.test(file));
+  for (const [name, index, expected] of [
+    ["hand-nine-sou-before-glare-20261021.jpg", 12, "9s"],
+    ["hand-seven-sou-control-a-20261021.jpg", 10, "7s"],
+    ["hand-seven-sou-control-b-20261021.jpg", 11, "7s"],
+  ] as const) {
+    assert.equal((await matchTile(`test/fixtures/${name}`, layout.handSlots[index]!, templates)).tile, expected);
+  }
+});
+
+test("correcting the actual concealed nine sou removes the false genbutsu from Jev choices", async () => {
+  const fixture = JSON.parse(await readFile("test/fixtures/nine-sou-as-seven-deal-in-20261021.json", "utf8"));
+  const before = parseGameState(fixture.state);
+  const after = parseGameState({ ...before, hand: fixture.physicalHand.slice(0, 13), draw: fixture.physicalHand[13] });
+  const offered: string[][] = [];
+  const jev = { chooseDiscard: async (_state: unknown, candidates: Array<{ actionId: string; tile: string }>) => {
+    offered.push(candidates.map(candidate => candidate.tile));
+    return { actionId: candidates[0]!.actionId, confidence: 1, probabilities: { [candidates[0]!.actionId]: 1 },
+      model: "first-offered-test", promptVersion: "test", latencyMs: 0 };
+  } };
+  await decide(before, { mode: "force-auto", jev: jev as any });
+  await decide(after, { mode: "force-auto", jev: jev as any });
+  assert.deepEqual(offered, [["7s"], ["8p"]]);
 });

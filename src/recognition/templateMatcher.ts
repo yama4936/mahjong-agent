@@ -17,7 +17,7 @@ export interface TileMatch {
   runnerUpConfidence: number;
 }
 
-interface PreparedImage { data: Int16Array; width: number; height: number; foregroundFraction: number; neutralBrightCore: boolean; redUpperGlyph: boolean }
+interface PreparedImage { data: Int16Array; width: number; height: number; foregroundFraction: number; neutralBrightCore: boolean; redUpperGlyph: boolean; threeRedBambooMarks: boolean }
 
 const templateCache = new Map<string, Promise<Map<GameTile, PreparedImage[]>>>();
 
@@ -47,10 +47,19 @@ async function prepare(input: string | Buffer, rect?: Rect, options: MatcherOpti
   let neutralBrightCorePixels = 0;
   let upperRed = 0;
   let upperOtherInk = 0;
+  const centralRedRows = [0, 0, 0];
   for (let y = 0; y < info.height; y += 1) {
     for (let x = 0; x < info.width; x += 1) {
       const index = y * info.width + x;
       const rgbIndex = index * 3;
+      // Nine bamboo has a red mark in each of three central rows. Seven
+      // bamboo has only the upper red mark. Require positive color evidence
+      // in all three rows; glare or missing ink alone cannot reject seven.
+      if (x >= 16 && x < 28) {
+        const row = y >= 7 && y < 22 ? 0 : y >= 24 && y < 39 ? 1 : y >= 41 && y < 55 ? 2 : -1;
+        const r = rgb[rgbIndex]!, g = rgb[rgbIndex + 1]!, b = rgb[rgbIndex + 2]!;
+        if (row >= 0 && r > 90 && r - g > 35 && r - b > 35) centralRedRows[row]! += 1;
+      }
       // White dragons can contain broad lighting/shadow edges, which the
       // background-relative feature map otherwise mistakes for a glyph.
       if (x >= 7 && x < 37 && y >= 9 && y < 55) {
@@ -84,6 +93,7 @@ async function prepare(input: string | Buffer, rect?: Rect, options: MatcherOpti
   return { data, width: info.width, height: info.height,
     foregroundFraction: foreground / (info.width * info.height),
     neutralBrightCore: neutralBrightCorePixels === corePixels,
+    threeRedBambooMarks: centralRedRows.every(count => count >= 30),
     redUpperGlyph: upperRed >= 30 && upperRed / (upperRed + upperOtherInk) >= 0.8 };
 }
 
@@ -233,7 +243,9 @@ function scorePrepared(sample: PreparedImage, templates: Map<GameTile, PreparedI
     if (options.rejectBlank !== false) return { tile: "P", confidence: 0, runnerUpConfidence: 0 };
     return { tile: "P", confidence: 1, runnerUpConfidence: 0.5 };
   }
-  const shortlist = [...templates.entries()].map(([tile, variants]) => {
+  const shortlist = [...templates.entries()]
+    .filter(([tile]) => tile !== "7s" || !sample.threeRedBambooMarks)
+    .map(([tile, variants]) => {
     const rankedVariants = variants.map((variant) => ({
       variant,
       coarse: similarityAtOffset(sample, variant, 0, 0),
