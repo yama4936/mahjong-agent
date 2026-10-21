@@ -12,6 +12,24 @@ const state = parseGameState({
   recognitionConfidence: 1,
 });
 
+test("late value ordering cannot hide the actual open-hand tenpai discard from Jev", async () => {
+  const fixture = JSON.parse(await readFile("test/fixtures/late-open-tenpai-candidate-20261021.json", "utf8"));
+  const live = parseGameState(fixture.state);
+  let offered: string[] = [];
+  const jev = { chooseDiscard: async (_state: unknown, candidates: Array<{ actionId: string; tile: string }>) => {
+    offered = candidates.map(candidate => candidate.tile);
+    return { actionId: candidates[0]!.actionId, confidence: 1,
+      probabilities: { [candidates[0]!.actionId]: 1 }, model: "first-offered-test", promptVersion: "test", latencyMs: 0 };
+  } } as unknown as JevClient;
+  const result = await decide(live, { mode: "force-auto", jev });
+  // This exact late-hand ordering prefers a safer one-shanten candidate,
+  // while the physical eight-sou discard reaches tenpai. Both are legal.
+  assert.equal(result.candidates[0]!.shanten, 1);
+  assert.equal(result.candidates.find(candidate => candidate.tile === "8s")!.shanten, 0);
+  assert.deepEqual(offered, ["8s"]);
+  assert.deepEqual(result.selectedAction, { id: "discard_8s", action: "discard", tile: "8s" });
+});
+
 test("declaration comparison can choose dama and invalid/scorer failures retain riichi", async () => {
   const live = parseGameState(JSON.parse(await readFile("artifacts/live/south4-riichi-replay-20260928.json", "utf8")).state);
   const report: ClosedWaitReport = { library: "mahjong==2.0.0", discard: "5m",

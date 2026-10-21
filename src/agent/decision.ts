@@ -180,7 +180,10 @@ export async function decide(state: GameState, options: DecisionOptions): Promis
   if (options.jev) {
     try {
       const underThreat = state.opponents.some((opponent) => opponent.riichi || opponent.openMelds >= 2);
-      const minimumShanten = base.candidates[0]?.shanten;
+      // Late/defensive advice is ranked by value and danger, so its first
+      // candidate can be farther from tenpai than another legal discard.
+      const minimumShanten = base.candidates.length
+        ? Math.min(...base.candidates.map((candidate) => candidate.shanten)) : undefined;
       const defensible = underThreat && minimumShanten !== undefined
         ? base.candidates.filter((candidate) => candidate.shanten <= minimumShanten + 1)
         : [];
