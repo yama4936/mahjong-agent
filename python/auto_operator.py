@@ -1742,6 +1742,24 @@ class PythonAutoOperator:
             raise RuntimeError(f"resident recognition failed: {response['error']}")
         return response["result"]
 
+    def recognize_force_auto_or_defer(self, screenshot: Path, **kwargs) -> dict[str, Any] | None:
+        """Reobserve transient metadata failures without retrying hand geometry.
+
+        RetryableSafetyAbort is a RuntimeError subclass. Letting it reach the
+        dynamic-layout recovery path repeats OCR and hand recognition on the
+        same aging frame even when the hand geometry was never at fault.
+        """
+        try:
+            if getattr(self.args, "board_metadata", False):
+                return self.recognize_force_auto_parallel(screenshot, **kwargs)
+            return self.recognize_resident(screenshot, evaluate_force_auto=True, **kwargs)
+        except RetryableSafetyAbort as error:
+            self.last_processed_hand = None
+            self.armed = True
+            self.log("recognition_deferred", screenshot=str(screenshot), error=str(error),
+                     reason="retryable_safety_abort")
+            return None
+
     def recognize_force_auto_parallel(
         self, screenshot: Path, *, dynamic_layout: bool, open_melds: int | None,
         public_observation: dict[str, Any] | None,
@@ -4544,11 +4562,10 @@ class PythonAutoOperator:
                         # sorted physical row after the last discard.  With
                         # board metadata enabled, recognize that complete row
                         # concurrently with OCR from this exact screenshot.
-                        evaluation = self.recognize_force_auto_parallel(
-                            screenshot_path, **recognition_kwargs,
-                        ) if getattr(self.args, "board_metadata", False) else self.recognize_resident(
-                            screenshot_path, evaluate_force_auto=True, **recognition_kwargs,
-                        )
+                        evaluation = self.recognize_force_auto_or_defer(screenshot_path, **recognition_kwargs)
+                        if evaluation is None:
+                            page.wait_for_timeout(max(20, round(self.args.poll * 1000)))
+                            continue
                     except RuntimeError as initial_error:
                         self.cached_concealed_tiles = None
                         # A prompt can arrive while the resident recognizer is

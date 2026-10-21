@@ -4789,6 +4789,48 @@ class AwayDialogDetectionTest(unittest.TestCase):
         self.assertEqual(evaluate.kwargs["frame_public_state"], state)
         self.assertEqual(evaluate.kwargs["public_observation"], observation)
 
+    def test_metadata_update_abort_reobserves_without_serial_layout_retry(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(board_metadata=True)
+        operator.armed = False
+        operator.last_processed_hand = "old-hand"
+        operator.log = Mock()
+        operator.frame_metadata_state = Mock(side_effect=RetryableSafetyAbort("board metadata refresh in progress"))
+        operator.recognize_resident = Mock(return_value={"recognitionId": "staged-token"})
+        kwargs = dict(dynamic_layout=False, open_melds=None, public_observation=None,
+                      force_auto_action_buttons=[], captured_at=12.5)
+
+        result = operator.recognize_force_auto_or_defer(Path("same-frame.jpg"), **kwargs)
+
+        self.assertIsNone(result)
+        self.assertTrue(operator.armed)
+        self.assertIsNone(operator.last_processed_hand)
+        # The real parallel path stages the hand but must never evaluate it
+        # or reinterpret the metadata abort as a layout recovery request.
+        operator.recognize_resident.assert_called_once_with(
+            Path("same-frame.jpg"), dynamic_layout=False, open_melds=None,
+            stage_force_auto_recognition=True,
+        )
+        operator.log.assert_called_once_with(
+            "recognition_deferred", screenshot="same-frame.jpg",
+            error="board metadata refresh in progress", reason="retryable_safety_abort",
+        )
+        # A later fresh frame can proceed with the same operator. Its state
+        # is rebound by the parallel evaluator, not reused from the abort.
+        operator.frame_metadata_state = Mock(return_value=({"remainingTiles": 11}, None, None))
+        operator.recognize_resident.reset_mock(side_effect=True)
+        operator.recognize_resident.side_effect = [{"recognitionId": "fresh-token"}, {"status": "decision"}]
+        fresh = operator.recognize_force_auto_or_defer(Path("fresh-frame.jpg"), **kwargs)
+        self.assertEqual(fresh["status"], "decision")
+        self.assertEqual(operator.recognize_resident.call_args.kwargs["force_auto_recognition_id"], "fresh-token")
+
+    def test_non_safety_runtime_error_still_reaches_layout_recovery_handler(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(board_metadata=True)
+        operator.recognize_force_auto_parallel = Mock(side_effect=RuntimeError("unresolved hand geometry"))
+        with self.assertRaisesRegex(RuntimeError, "unresolved hand geometry"):
+            operator.recognize_force_auto_or_defer(Path("bad-layout.jpg"))
+
 
 if __name__ == "__main__":
     unittest.main()
