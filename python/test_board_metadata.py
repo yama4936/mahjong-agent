@@ -1,12 +1,65 @@
 import unittest
 import tempfile
 import importlib.util
+import json
 from pathlib import Path
 from PIL import Image
-from board_metadata import parse_board_tokens, recognize_board, recognize_riichi_sticks, remap_seats
+from board_metadata import parse_board_tokens, recognize_board, recognize_riichi_sticks, remap_seats, reconcile_riichi_metadata
 
 
 class BoardMetadataTest(unittest.TestCase):
+    def declaration_fixture(self):
+        return json.loads((Path(__file__).resolve().parents[1]
+                           / "test/fixtures/riichi-declaration-transition-20261021.json").read_text())
+
+    def test_real_occluded_red_stick_has_no_positive_pixel_label(self):
+        frame = Path(__file__).resolve().parents[1] / "test/fixtures/riichi-stick-red-occluded-20261021.jpg"
+        with Image.open(frame) as image:
+            self.assertEqual(recognize_riichi_sticks(image, "north"), [])
+        fixture = self.declaration_fixture()
+        result = reconcile_riichi_metadata(fixture["before"], fixture["after"])
+        self.assertEqual(result["riichiSeats"], ["west"])
+        self.assertEqual(result["riichiScoreDeclarations"], ["west"])
+        repeated = reconcile_riichi_metadata(result, fixture["after"])
+        self.assertEqual(repeated["riichiSeats"], ["west"])
+        self.assertEqual(repeated["riichiScoreDeclarations"], [])
+        self.assertEqual(fixture["after"]["riichiSeats"], [])
+
+    @unittest.skipUnless(importlib.util.find_spec("rapidocr"), "optional OCR dependencies not installed")
+    def test_real_occluded_stick_score_and_counter_are_verified_without_ocr_relaxation(self):
+        frame = Path(__file__).resolve().parents[1] / "test/fixtures/riichi-stick-red-occluded-20261021.jpg"
+        recognized = recognize_board(frame)
+        expected = self.declaration_fixture()["after"]
+        self.assertTrue(recognized["verified"], recognized)
+        for key in ("scores", "seat", "round", "honba", "riichiSticks"):
+            self.assertEqual(recognized[key], expected[key])
+        self.assertEqual(recognized["riichiSeats"], [])
+
+    def test_score_payment_needs_matching_hand_and_verified_conserved_totals(self):
+        fixture = self.declaration_fixture()
+        before, after = fixture["before"], fixture["after"]
+        invalid = [
+            {**after, "seat": "east"}, {**after, "round": "east_2"}, {**after, "honba": 2},
+            {**after, "verified": False}, {**after, "riichiSticks": 0},
+            {**after, "riichiSticks": True}, {**after, "scores": None},
+            {**after, "scores": {**after["scores"], "west": 16300.0}},
+            {**after, "scores": {**after["scores"], "east": 33700, "south": 24000}},
+        ]
+        for current in invalid:
+            with self.subTest(current=current):
+                self.assertEqual(reconcile_riichi_metadata(before, current)["riichiScoreDeclarations"], [])
+        self.assertEqual(reconcile_riichi_metadata({**before, "verified": False}, after)["riichiSeats"], [])
+
+    def test_multiple_conserved_declarations_are_preserved_until_hand_changes(self):
+        before = self.declaration_fixture()["before"]
+        after = {**before, "scores": {**before["scores"], "west": 16300, "south": 24000}, "riichiSticks": 2}
+        confirmed = reconcile_riichi_metadata(before, after)
+        self.assertEqual(confirmed["riichiSeats"], ["south", "west"])
+        self.assertEqual(confirmed["riichiScoreDeclarations"], ["south", "west"])
+        for current in [{**after, "honba": 2}, {**after, "round": "east_2"},
+                        {**before, "scores": {**before["scores"], "west": 16300, "east": 33700}}]:
+            self.assertEqual(reconcile_riichi_metadata(confirmed, current)["riichiSeats"], [])
+
     def test_friend_room_that_contaminated_public_cache_is_not_a_verified_board(self):
         frame = Path(__file__).resolve().parents[1] / "artifacts/live/friend-room-public-cache-contamination-20260929.png"
         result = recognize_board(frame)

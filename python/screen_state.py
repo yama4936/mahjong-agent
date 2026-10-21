@@ -9,7 +9,7 @@ from PIL import Image, ImageChops, ImageStat
 
 ScreenState = Literal[
     "login", "account_modal", "session_conflict", "connection_error", "lobby", "ranked_menu", "ranked_room",
-    "matchmaking", "loading", "match", "away", "round_result", "match_result", "rank_progress",
+    "matchmaking", "loading", "black_screen", "match", "away", "round_result", "match_result", "rank_progress",
     "post_match_reward", "exit_confirm", "unknown",
 ]
 
@@ -272,6 +272,11 @@ def classify_screen(
     maximum_distance: float = 0.16,
 ) -> tuple[ScreenState, float]:
     image = _open(screenshot)
+    # A lost client canvas otherwise satisfies the dark ranked-menu/card
+    # heuristics forever. Require a full-size frame with no visible UI at all;
+    # normal loading artwork, progress bars and darkened dialogs do not qualify.
+    if image.size == (1920, 1080) and all(high <= 8 for _, high in image.getextrema()):
+        return "black_screen", 1.0
     if _is_round_result_summary(image):
         return "round_result", 1.0
     if _is_post_match_reward(image):

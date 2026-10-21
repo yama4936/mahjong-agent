@@ -1099,6 +1099,11 @@ class PythonAutoOperator:
         self.board_metadata_thread: threading.Thread | None = None
         self.board_metadata_result: dict[str, Any] | None = None
         self.board_metadata_cache: dict[str, Any] | None = None
+        self.riichi_metadata_history: dict[str, Any] | None = None
+        self.black_screen_seen_since: float | None = None
+        self.black_screen_reload_attempts: list[float] = []
+        self.black_screen_recovery_pending_outcome = False
+        self.black_screen_navigation_since: float | None = None
         self.board_metadata_lock = threading.Lock()
         self.board_metadata_ocr_lock = threading.Lock()
         self.board_metadata_last_scan_at = 0.0
@@ -1881,10 +1886,25 @@ class PythonAutoOperator:
             return recognize_board(screenshot)
 
     def frame_metadata_state(self, screenshot: Path, observation=None, pending=None, *, refresh_public_cache=False, prepared_metadata=None):
-        from board_metadata import remap_seats
+        from board_metadata import remap_seats, recognize_riichi_sticks, reconcile_riichi_metadata
         metadata = prepared_metadata if prepared_metadata is not None else self.current_board_metadata(screenshot)
         if not metadata.get("verified"):
             raise RetryableSafetyAbort(f"board metadata not verified: {metadata.get('reason')}")
+        # Score-cache signatures intentionally omit animated stick rectangles.
+        # Read positive stick evidence from the exact evaluated frame as well.
+        with Image.open(screenshot) as image:
+            fresh_riichi = recognize_riichi_sticks(image, metadata["seat"])
+        visual_riichi = sorted(set(metadata.get("riichiSeats", [])) | set(fresh_riichi))
+        previous_metadata = getattr(self, "riichi_metadata_history", None)
+        metadata = reconcile_riichi_metadata(previous_metadata, {
+            **metadata, "riichiSeats": visual_riichi,
+        })
+        self.riichi_metadata_history = {**metadata, "scores": dict(metadata.get("scores", {}))}
+        if metadata["riichiScoreDeclarations"]:
+            self.log("riichi_score_transition_verified", screenshot=str(screenshot),
+                     seats=metadata["riichiScoreDeclarations"], beforeScores=previous_metadata["scores"],
+                     afterScores=metadata["scores"], beforeSticks=previous_metadata["riichiSticks"],
+                     afterSticks=metadata["riichiSticks"])
         if refresh_public_cache:
             # OCR can take seconds while the independent public worker finishes.
             # Promote its completed result before freezing the decision request.
@@ -1916,8 +1936,8 @@ class PythonAutoOperator:
                                      if item["seat"] == seat), None)
                     if observed is not None:
                         observed["riichiDeclared"] = True
-        if riichi_seats:
-            self.log("riichi_stick_verified", screenshot=str(screenshot), seats=riichi_seats)
+        if visual_riichi:
+            self.log("riichi_stick_verified", screenshot=str(screenshot), seats=visual_riichi)
         return (state, mapped_observation,
                 remap_seats(pending, source_seat, fields["seat"]))
 
@@ -2132,6 +2152,98 @@ class PythonAutoOperator:
                  confidence=confidence, gameplayClicks=0,
                  reason="result_transition_missing_verified_ranked_navigation", **evidence)
 
+    def recover_black_screen(self, page: Page) -> bool:
+        """Reload a persistently blank client once, using this CDP owner only."""
+        now = time.monotonic()
+        since = getattr(self, "black_screen_seen_since", None)
+        if since is None:
+            self.black_screen_seen_since = now
+            self.log("black_screen_waiting", minimumDurationSeconds=15, gameplayClicks=0)
+            return True
+        if now - since < 15:
+            return True
+        current = page.screenshot(animations="disabled")
+        if classify_screen(current, {})[0] != "black_screen":
+            self.black_screen_seen_since = None
+            self.log("black_screen_stale_frame_ignored", gameplayClicks=0)
+            return True
+        snapshot = self.frames / f"{utc_stamp()}.black-screen.png"
+        snapshot.write_bytes(current)
+        snapshot.chmod(0o600)
+        attempts = [at for at in getattr(self, "black_screen_reload_attempts", []) if now - at < 600]
+        self.black_screen_reload_attempts = attempts
+        if attempts:
+            self.log("black_screen_recovery_limit_stop", screenshot=str(snapshot),
+                     attempts=len(attempts), windowSeconds=600, gameplayClicks=0)
+            raise RuntimeError("black client persisted after one reload in ten minutes")
+        attempts.append(now)
+        self.black_screen_seen_since = None
+        self.black_screen_recovery_pending_outcome = bool(getattr(self, "pending_match_replays", []))
+        self.black_screen_navigation_since = None
+        self.cached_concealed_tiles = None
+        self.cached_open_melds = 0
+        self.dynamic_layout_required = False
+        self.pending_post_call_discard = False
+        self.pending_post_call_started_at = None
+        self.cached_public_observation = None
+        self.previous_public_observation = None
+        self.pending_own_discard = None
+        self.pending_own_river_confirmation = None
+        self.public_cache_generation = getattr(self, "public_cache_generation", 0) + 1
+        self.public_cache_last_frame_hash = None
+        self.last_public_scan_at = 0.0
+        self.board_metadata_cache = None
+        self.board_metadata_last_scan_at = 0.0
+        self.riichi_metadata_history = None
+        self.last_processed_hand = None
+        self.armed = True
+        self.log("black_screen_reload_requested", screenshot=str(snapshot),
+                 durationSeconds=round(now - since, 3), windowSeconds=600, gameplayClicks=0)
+        page.reload(wait_until="domcontentloaded", timeout=20000)
+        page.wait_for_timeout(250)
+        after = page.screenshot(animations="disabled")
+        state, confidence = classify_screen(after, {})
+        evidence = self.frames / f"{utc_stamp()}.black-screen-after-reload.png"
+        evidence.write_bytes(after)
+        evidence.chmod(0o600)
+        self.log("black_screen_recovery_observed", state=state, confidence=confidence,
+                 cleared=state != "black_screen", screenshot=str(evidence), gameplayClicks=0)
+        return True
+
+    def guard_black_recovery_outcome(self, page: Page, state: str) -> bool:
+        """Do not attach an unobserved old match to a new ranked game's result."""
+        if not getattr(self, "black_screen_recovery_pending_outcome", False):
+            return False
+        pending = getattr(self, "pending_match_replays", [])
+        if not pending or state in {"match", "away", "round_result"}:
+            self.black_screen_recovery_pending_outcome = False
+            self.black_screen_navigation_since = None
+            return False
+        if state not in {"lobby", "ranked_menu", "ranked_room"}:
+            self.black_screen_navigation_since = None
+            return False
+        now = time.monotonic()
+        since = getattr(self, "black_screen_navigation_since", None)
+        if since is None:
+            self.black_screen_navigation_since = now
+            return True
+        if now - since < 2:
+            return True
+        current = page.screenshot(animations="disabled")
+        if classify_screen(current, {})[0] != state:
+            self.black_screen_navigation_since = None
+            return True
+        snapshot = self.frames / f"{utc_stamp()}.black-screen-unobserved-result.png"
+        snapshot.write_bytes(current)
+        snapshot.chmod(0o600)
+        ledger = self.frames / f"{utc_stamp()}.black-screen-unobserved-result.json"
+        ledger.write_text(json.dumps({"screenshot": str(snapshot), "pendingMatchReplays": [str(p) for p in pending],
+                                      "reason": "navigation_after_black_recovery_without_match_result"}, indent=2) + "\n")
+        ledger.chmod(0o600)
+        self.log("black_screen_outcome_missing_stop", screenshot=str(snapshot),
+                 ledger=str(ledger), replayCount=len(pending), gameplayClicks=0)
+        raise RuntimeError("black-screen recovery reached lobby without the prior match result; recover history before queuing")
+
     def recover_connection_error(self, page: Page) -> bool:
         """Acknowledge only the verified network message, with bounded retries."""
         # A screencast can still contain the overlay after it was dismissed.
@@ -2169,6 +2281,7 @@ class PythonAutoOperator:
         self.last_public_scan_at = 0.0
         self.board_metadata_cache = None
         self.board_metadata_last_scan_at = 0.0
+        self.riichi_metadata_history = None
         self.last_processed_hand = None
         self.armed = True
         self.log("connection_error_confirmed", screenshot=str(snapshot),
@@ -2186,6 +2299,15 @@ class PythonAutoOperator:
     def handle_early_non_gameplay_screen(self, page: Page, state: str, confidence: float,
                                        screenshot: bytes | None = None) -> bool:
         """Handle verified non-gameplay screens before latency quick gates."""
+        if state == "black_screen":
+            if confidence >= .95 and screenshot is not None \
+                    and getattr(getattr(self, "args", None), "mode", None) == "force-auto":
+                return self.recover_black_screen(page)
+            self.black_screen_seen_since = None
+            return True
+        self.black_screen_seen_since = None
+        if self.guard_black_recovery_outcome(page, state):
+            return True
         if (state == "connection_error" and confidence >= .95 and screenshot is not None
                 and getattr(getattr(self, "args", None), "mode", None) == "force-auto"):
             return self.recover_connection_error(page)
@@ -2212,6 +2334,7 @@ class PythonAutoOperator:
             self.cached_public_observation = None
             self.board_metadata_cache = None
             self.board_metadata_last_scan_at = 0.0
+            self.riichi_metadata_history = None
             self.previous_public_observation = None
             self.pending_own_river_confirmation = None
             self.last_shanten = None
@@ -2295,6 +2418,8 @@ class PythonAutoOperator:
             "executionEvidence": execution_evidence,
             "evidence": {
                 "recognition": evaluation["recognition"],
+                **{key: evaluation[key] for key in ("operatorTiming", "turnTiming", "publicCache")
+                   if key in evaluation},
                 **({"execution": execution} if execution else {}),
                 **({"executionError": execution_error} if execution_error else {}),
             },
@@ -3947,6 +4072,7 @@ class PythonAutoOperator:
                     self.cached_public_observation = None
                     self.previous_public_observation = None
                     self.pending_own_river_confirmation = None
+                    self.riichi_metadata_history = None
                     self.last_shanten = None
                     self.last_processed_hand = None
                     self.armed = True
@@ -3976,6 +4102,18 @@ class PythonAutoOperator:
                 if self.ranked_terminal_transition_requires_stop(screen_state):
                     self.log_ranked_terminal_transition_stop(screen_state, screen_confidence, full_screen)
                     return
+                if screen_state == "black_screen":
+                    if self.args.mode == "force-auto":
+                        self.recover_black_screen(page)
+                    else:
+                        self.log("screen_state_bypassed", state=screen_state,
+                                 confidence=screen_confidence, gameplayClicks=0)
+                    time.sleep(self.args.poll)
+                    continue
+                self.black_screen_seen_since = None
+                if self.guard_black_recovery_outcome(page, screen_state):
+                    time.sleep(self.args.poll)
+                    continue
                 if screen_state == "loading":
                     self.log("screen_state_bypassed", state=screen_state,
                              confidence=screen_confidence, gameplayClicks=0)

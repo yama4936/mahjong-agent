@@ -8,6 +8,13 @@ from screen_state import _matches_blocking_dialog, _rgb_fraction, classify_scree
 
 
 class RiichiSelectionScreenTest(unittest.TestCase):
+    def test_lost_black_canvas_is_distinct_from_loading_and_reservation(self):
+        root = Path(__file__).resolve().parents[1] / "test/fixtures"
+        self.assertEqual(classify_screen(root / "black-client-20261021.png", {}), ("black_screen", 1.0))
+        for filename in ("client-startup-logo-20261021.png", "lobby-loading-after-ranked-result-20261020.png",
+                         "ranked-reservation-20261020.png", "riichi-stick-red-occluded-20261021.jpg"):
+            self.assertNotEqual(classify_screen(root / filename, {})[0], "black_screen", filename)
+
     def test_live_lobby_loading_is_not_a_ranked_reservation(self):
         root = Path(__file__).resolve().parents[1] / "test/fixtures"
         self.assertEqual(classify_screen(root / "lobby-loading-after-ranked-result-20261020.png", {}), ("loading", 1.0))

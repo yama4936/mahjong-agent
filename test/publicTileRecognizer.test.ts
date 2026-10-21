@@ -380,6 +380,26 @@ test("observed four pons expose safe middle instead of the actual losing white t
   assert.deepEqual(offered, [["P"], ["C"]]);
 });
 
+test("actual missed-riichi state changes defensive candidates without guaranteeing a safe discard", async () => {
+  const fixture = JSON.parse(await readFile("test/fixtures/riichi-declaration-transition-20261021.json", "utf8"));
+  const before = parseGameState(fixture.state);
+  const after = parseGameState({ ...before, opponents: before.opponents.map(opponent =>
+    opponent.seat === "west" ? { ...opponent, riichi: true } : opponent) });
+  const offered: string[][] = [];
+  const jev = { chooseDiscard: async (_state: unknown, candidates: Array<{ actionId: string; tile: string }>) => {
+    offered.push(candidates.map(candidate => candidate.tile));
+    return { actionId: candidates[0]!.actionId, confidence: 1, probabilities: { [candidates[0]!.actionId]: 1 },
+      model: "first-offered-test", promptVersion: "test", latencyMs: 0 };
+  } };
+  await decide(before, { mode: "force-auto", jev: jev as any });
+  await decide(after, { mode: "force-auto", jev: jev as any });
+  assert.deepEqual(offered[0], ["1s", "W", "P", "C"]);
+  assert.equal(offered[1]!.includes("3p"), true);
+  // The actual losing 1s is still offered. Do not turn the first-offered stub
+  // into a claim that the remote policy would necessarily avoid this deal-in.
+  assert.equal(offered[1]!.includes("1s"), true);
+});
+
 test("calibrated left melds recover chi and pon without picking up own hand edge", {
   skip: !existsSync(".runtime/hybrid-vision/cvmaj-pretrained.tar") || !existsSync(".runtime/hybrid-vision/automajsoul-best-model.pt"),
 }, async () => {

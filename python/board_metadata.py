@@ -162,6 +162,39 @@ def recognize_board(image_path: Path) -> dict:
             "source": str(image_path), "scope": "seat_round_scores_honba_riichi_remaining"}
 
 
+def reconcile_riichi_metadata(previous: dict | None, current: dict) -> dict:
+    """Preserve declarations and infer only conserved 1000-point stick payments."""
+    result = {**current, "riichiSeats": list(current.get("riichiSeats", [])),
+              "riichiScoreDeclarations": []}
+
+    def valid(snapshot):
+        scores = snapshot.get("scores", {})
+        sticks = snapshot.get("riichiSticks")
+        return (snapshot.get("verified") is True and snapshot.get("seat") in SEATS
+                and snapshot.get("round") is not None and type(snapshot.get("honba")) is int
+                and isinstance(scores, dict) and set(scores) == set(SEATS)
+                and all(type(value) is int for value in scores.values())
+                and type(sticks) is int and 0 <= sticks <= 99
+                and sum(scores.values()) + sticks * 1000 == 100000)
+
+    if previous is None or not valid(previous) or not valid(current) \
+            or any(previous.get(key) != current.get(key) for key in ("seat", "round", "honba")):
+        return result
+    changes = {seat: current["scores"][seat] - previous["scores"][seat] for seat in SEATS}
+    stick_change = current["riichiSticks"] - previous["riichiSticks"]
+    declarations = [seat for seat, change in changes.items() if change == -1000]
+    payment = (stick_change > 0 and len(declarations) == stick_change
+               and all(change in (0, -1000) for change in changes.values()))
+    unchanged = stick_change == 0 and all(change == 0 for change in changes.values())
+    if payment or unchanged:
+        result["riichiSeats"] = [seat for seat in SEATS if seat in {
+            *previous.get("riichiSeats", []), *current.get("riichiSeats", []),
+            *(declarations if payment else []),
+        }]
+        result["riichiScoreDeclarations"] = declarations if payment else []
+    return result
+
+
 def recognize_riichi_sticks(image, own_seat: str) -> list[str]:
     """Positive-only evidence from the calibrated white/red HUD sticks."""
     if image.size != (1920, 1080):

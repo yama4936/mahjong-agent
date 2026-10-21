@@ -19,6 +19,131 @@ from auto_operator import geometric_reaction_open_meld_count, draw_slots_occupie
 from auto_operator import configure_evaluator_click_budget
 from auto_operator import board_state_signature, board_state_signature_matches
 
+FRAME_FIXTURES = Path(__file__).resolve().parents[1] / "test/fixtures"
+
+
+class BlackScreenRecoveryTest(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        self.operator.args = argparse.Namespace(mode="force-auto")
+        self.operator.frames = Path(self.directory.name)
+        self.operator.log = Mock()
+        self.operator.public_cache_generation = 7
+        self.operator.cached_concealed_tiles = ["1m"] * 13
+        self.operator.cached_public_observation = {"ownDiscards": ["9m"]}
+        self.operator.board_metadata_cache = {"scores": {"east": 25000}}
+        self.black = (FRAME_FIXTURES / "black-client-20261021.png").read_bytes()
+        self.visible = (FRAME_FIXTURES / "client-startup-logo-20261021.png").read_bytes()
+        self.page = Mock()
+
+    def handle(self):
+        return self.operator.handle_early_non_gameplay_screen(self.page, "black_screen", 1.0, self.black)
+
+    def test_persistent_black_reloads_only_after_delay_and_fresh_confirmation(self):
+        with patch("auto_operator.time.monotonic", return_value=100):
+            self.assertTrue(self.handle())
+        with patch("auto_operator.time.monotonic", return_value=114.999):
+            self.assertTrue(self.handle())
+        self.page.screenshot.assert_not_called()
+        self.page.reload.assert_not_called()
+        self.page.screenshot.side_effect = [self.black, self.visible]
+        with patch("auto_operator.time.monotonic", return_value=115):
+            self.assertTrue(self.handle())
+        self.page.reload.assert_called_once_with(wait_until="domcontentloaded", timeout=20000)
+        self.page.mouse.click.assert_not_called()
+        self.assertEqual(self.operator.public_cache_generation, 8)
+        for name in ("cached_concealed_tiles", "cached_public_observation", "board_metadata_cache",
+                     "previous_public_observation", "pending_own_discard", "riichi_metadata_history"):
+            self.assertIsNone(getattr(self.operator, name))
+        self.assertEqual(self.operator.cached_open_melds, 0)
+        self.assertTrue(self.operator.armed)
+        observed = next(c.kwargs for c in self.operator.log.call_args_list
+                        if c.args == ("black_screen_recovery_observed",))
+        self.assertTrue(observed["cleared"])
+        self.assertEqual(Path(observed["screenshot"]).read_bytes(), self.visible)
+
+    def test_normal_frames_reset_the_timer_and_stale_black_never_reloads(self):
+        with patch("auto_operator.time.monotonic", return_value=100):
+            self.handle()
+        self.assertFalse(self.operator.handle_early_non_gameplay_screen(self.page, "match", 1.0, self.visible))
+        self.assertIsNone(self.operator.black_screen_seen_since)
+        with patch("auto_operator.time.monotonic", return_value=200):
+            self.handle()
+        self.page.screenshot.return_value = self.visible
+        with patch("auto_operator.time.monotonic", return_value=216):
+            self.handle()
+        self.page.reload.assert_not_called()
+        self.assertEqual(self.operator.public_cache_generation, 7)
+        self.assertIsNone(self.operator.black_screen_seen_since)
+
+    def test_second_reload_is_held_with_evidence_but_window_expires(self):
+        self.operator.black_screen_reload_attempts = [100]
+        self.operator.black_screen_seen_since = 101
+        self.page.screenshot.return_value = self.black
+        with patch("auto_operator.time.monotonic", return_value=116):
+            with self.assertRaisesRegex(RuntimeError, "one reload"):
+                self.handle()
+        stop = next(c.kwargs for c in self.operator.log.call_args_list
+                    if c.args == ("black_screen_recovery_limit_stop",))
+        self.assertEqual(Path(stop["screenshot"]).read_bytes(), self.black)
+        self.page.reload.assert_not_called()
+        self.operator.black_screen_seen_since = 780
+        self.page.screenshot.side_effect = [self.black, self.visible]
+        with patch("auto_operator.time.monotonic", return_value=800):
+            self.handle()
+        self.page.reload.assert_called_once()
+        self.assertEqual(self.operator.black_screen_reload_attempts, [800])
+
+    def test_observer_and_uncertain_frames_are_noninteractive(self):
+        self.operator.black_screen_seen_since = 100
+        for mode, confidence in (("observer", 1.0), ("force-auto", .9)):
+            self.operator.args.mode = mode
+            self.assertTrue(self.operator.handle_early_non_gameplay_screen(
+                self.page, "black_screen", confidence, self.black))
+        self.page.screenshot.assert_not_called()
+        self.page.reload.assert_not_called()
+        self.page.mouse.click.assert_not_called()
+        self.assertIsNone(self.operator.black_screen_seen_since)
+
+    def test_reloaded_lobby_requires_prior_outcome_before_a_new_ranked_queue(self):
+        pending = [Path(self.directory.name) / "old-match-replay.json"]
+        self.operator.pending_match_replays = pending
+        self.operator.black_screen_recovery_pending_outcome = True
+        self.operator.advance_ranked_loop = Mock()
+        lobby = (FRAME_FIXTURES / "black-recovered-lobby-20261021.png").read_bytes()
+        for now in (100, 101.999):
+            with patch("auto_operator.time.monotonic", return_value=now):
+                self.assertTrue(self.operator.handle_early_non_gameplay_screen(self.page, "lobby", 1.0, lobby))
+        self.page.screenshot.assert_not_called()
+        self.page.screenshot.return_value = lobby
+        with patch("auto_operator.time.monotonic", return_value=102):
+            with self.assertRaisesRegex(RuntimeError, "prior match result"):
+                self.operator.handle_early_non_gameplay_screen(self.page, "lobby", 1.0, lobby)
+        self.operator.advance_ranked_loop.assert_not_called()
+        self.assertEqual(self.operator.pending_match_replays, pending)
+        stop = next(c.kwargs for c in self.operator.log.call_args_list
+                    if c.args == ("black_screen_outcome_missing_stop",))
+        self.assertEqual(load_json(Path(stop["ledger"]))["pendingMatchReplays"], [str(pending[0])])
+        self.assertEqual(Path(stop["screenshot"]).read_bytes(), lobby)
+
+    def test_stale_lobby_cannot_stop_rejoining_match_or_already_attached_outcome(self):
+        self.operator.pending_match_replays = [Path("old-match.json")]
+        self.operator.black_screen_recovery_pending_outcome = True
+        with patch("auto_operator.time.monotonic", return_value=100):
+            self.assertTrue(self.operator.guard_black_recovery_outcome(self.page, "lobby"))
+        self.page.screenshot.return_value = self.visible
+        with patch("auto_operator.time.monotonic", return_value=103):
+            self.assertTrue(self.operator.guard_black_recovery_outcome(self.page, "lobby"))
+        self.assertFalse(self.operator.guard_black_recovery_outcome(self.page, "match"))
+        self.assertFalse(self.operator.black_screen_recovery_pending_outcome)
+        self.assertEqual(self.operator.pending_match_replays, [Path("old-match.json")])
+        self.operator.black_screen_recovery_pending_outcome = True
+        self.operator.pending_match_replays = []
+        self.assertFalse(self.operator.guard_black_recovery_outcome(self.page, "lobby"))
+        self.assertFalse(self.operator.black_screen_recovery_pending_outcome)
+
 
 class ConnectionRecoveryTest(unittest.TestCase):
     def setUp(self):
@@ -3172,12 +3297,47 @@ class AwayDialogDetectionTest(unittest.TestCase):
         metadata = {"verified": True, "seat": "west", "round": "east_2", "scores": {},
                     "honba": 0, "riichiSticks": 1, "riichiSeats": ["north"]}
         with patch("board_metadata.recognize_board", return_value=metadata):
-            state, observed, _ = operator.frame_metadata_state(Path("frame.png"), observation)
+            state, observed, _ = operator.frame_metadata_state(FRAME_FIXTURES / "black-client-20261021.png", observation)
         self.assertTrue(state["opponents"][0]["riichi"])
         self.assertEqual(state["opponents"][0]["seat"], "north")
         self.assertTrue(observed["opponentDiscards"][0]["riichiDeclared"])
         self.assertEqual(operator.public_state["opponents"], [])
         self.assertFalse(observation["opponentDiscards"][0]["riichiDeclared"])
+
+    def test_conserved_riichi_payment_survives_occlusion_and_cached_ocr(self) -> None:
+        fixture = load_json(FRAME_FIXTURES / "riichi-declaration-transition-20261021.json")
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.public_state = {"seat": "east", "opponents": []}
+        operator.log = Mock()
+        observation = {"opponentDiscards": [{"seat": "north", "discards": ["F", "9p"], "riichiDeclared": False}]}
+        operator.current_board_metadata = Mock(side_effect=[fixture["before"], fixture["after"], fixture["after"]])
+        frame = FRAME_FIXTURES / "riichi-stick-red-occluded-20261021.jpg"
+        operator.frame_metadata_state(frame, observation)
+        for _ in range(2):
+            state, observed, _ = operator.frame_metadata_state(frame, observation)
+            self.assertTrue(next(o for o in state["opponents"] if o["seat"] == "west")["riichi"])
+            self.assertTrue(observed["opponentDiscards"][0]["riichiDeclared"])
+        self.assertFalse(observation["opponentDiscards"][0]["riichiDeclared"])
+        transitions = [c for c in operator.log.call_args_list if c.args == ("riichi_score_transition_verified",)]
+        self.assertEqual(len(transitions), 1)
+        self.assertEqual(transitions[0].kwargs["seats"], ["west"])
+
+    def test_failed_replay_keeps_parallel_timing_and_capture_budget_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            operator = PythonAutoOperator.__new__(PythonAutoOperator)
+            operator.replays = Path(directory)
+            operator.pending_round_replays = []
+            operator.pending_match_replays = []
+            evaluation = {"state": {}, "recognition": {}, "decision": {"selectedActionId": "discard_1m"},
+                          "operatorTiming": {"parallelHandRecognitionMs": 1800, "parallelBoardMetadataMs": 1300,
+                                             "forceAutoRecognitionAndDecisionMs": 2200},
+                          "turnTiming": {"clickBudgetMs": 2600, "captureAgeBeforeDecisionMs": 2786},
+                          "publicCache": {"ageMs": 900}}
+            path = operator.record_replay(evaluation, Path("frame.jpg"), execution_error="budget expired before click")
+            saved = load_json(path)
+            self.assertEqual(saved["executionEvidence"]["status"], "failed")
+            for key in ("operatorTiming", "turnTiming", "publicCache"):
+                self.assertEqual(saved["evidence"][key], evaluation[key])
 
     def test_public_result_completed_during_ocr_is_promoted_before_seat_remap(self) -> None:
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
@@ -3189,7 +3349,7 @@ class AwayDialogDetectionTest(unittest.TestCase):
         metadata = {"verified": True, "seat": "west", "round": "east_2", "scores": {},
                     "honba": 0, "riichiSticks": 1, "riichiSeats": ["north"]}
         with patch("board_metadata.recognize_board", return_value=metadata):
-            _, observed, _ = operator.frame_metadata_state(Path("frame.png"), refresh_public_cache=True)
+            _, observed, _ = operator.frame_metadata_state(FRAME_FIXTURES / "black-client-20261021.png", refresh_public_cache=True)
         operator.poll_public_recognition.assert_called_once()
         self.assertEqual(observed["opponentDiscards"][0]["seat"], "north")
         self.assertEqual(observed["opponentDiscards"][0]["discards"], ["N"])
@@ -3206,7 +3366,7 @@ class AwayDialogDetectionTest(unittest.TestCase):
         metadata = {"verified": True, "seat": "east", "round": "east_2", "scores": {},
                     "honba": 0, "riichiSticks": 0}
         with patch("board_metadata.recognize_board", return_value=metadata):
-            _, observed, _ = operator.frame_metadata_state(Path("frame.png"), observation)
+            _, observed, _ = operator.frame_metadata_state(FRAME_FIXTURES / "black-client-20261021.png", observation)
         operator.poll_public_recognition.assert_not_called()
         self.assertEqual(observed["ownDiscards"], ["1m", "2m"])
 

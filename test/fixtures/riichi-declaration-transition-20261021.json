@@ -1,0 +1,122 @@
+{
+  "before": {
+    "seat": "north",
+    "round": "east_1",
+    "scores": {
+      "north": 25000,
+      "east": 32700,
+      "south": 25000,
+      "west": 17300
+    },
+    "honba": 1,
+    "riichiSticks": 0,
+    "remainingTiles": 55,
+    "verified": true,
+    "riichiSeats": []
+  },
+  "after": {
+    "seat": "north",
+    "round": "east_1",
+    "scores": {
+      "north": 25000,
+      "east": 32700,
+      "south": 25000,
+      "west": 16300
+    },
+    "honba": 1,
+    "riichiSticks": 1,
+    "remainingTiles": 54,
+    "verified": true,
+    "riichiSeats": []
+  },
+  "beforeTimestamp": "2026-10-21T09:45:55.505919+00:00",
+  "afterTimestamp": "2026-10-21T09:45:59.910066+00:00",
+  "state": {
+    "round": "east_1",
+    "honba": 1,
+    "riichiSticks": 1,
+    "seat": "north",
+    "scores": {
+      "north": 25000,
+      "east": 32700,
+      "south": 25000,
+      "west": 16300
+    },
+    "hand": [
+      "4m",
+      "6m",
+      "7m",
+      "9m",
+      "3p",
+      "3p",
+      "4p",
+      "4p",
+      "7s",
+      "8s",
+      "W",
+      "P",
+      "C"
+    ],
+    "draw": "1s",
+    "doraIndicators": [
+      "6s"
+    ],
+    "ownDiscards": [
+      "1p",
+      "2s",
+      "8p"
+    ],
+    "melds": [],
+    "visibleTiles": [],
+    "openMelds": 0,
+    "turn": 3,
+    "remainingTiles": 54,
+    "phase": "self_turn",
+    "recognitionConfidence": 0,
+    "publicStateConfidence": 0,
+    "riichiDeclared": false,
+    "availableUiActions": [],
+    "opponents": [
+      {
+        "seat": "east",
+        "discards": [
+          "2m",
+          "9s",
+          "9p",
+          "F"
+        ],
+        "riichi": false,
+        "openMelds": 0,
+        "openMeldsObserved": true,
+        "melds": []
+      },
+      {
+        "seat": "south",
+        "discards": [
+          "E",
+          "F",
+          "2s",
+          "6p"
+        ],
+        "riichi": false,
+        "openMelds": 0,
+        "openMeldsObserved": true,
+        "melds": []
+      },
+      {
+        "seat": "west",
+        "discards": [
+          "F",
+          "9p",
+          "5m",
+          "9p"
+        ],
+        "riichi": false,
+        "openMelds": 0,
+        "openMeldsObserved": true,
+        "melds": []
+      }
+    ]
+  },
+  "note": "Actual verified board events around left/West declaration. Exact evaluated screenshot has white body.621/red0 and no stick label;1000-point payment and added stick identify West. Actual1s deal-in8300; correcting flag changes policy candidates but does not remove1s."
+}
