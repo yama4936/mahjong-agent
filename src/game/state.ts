@@ -36,6 +36,8 @@ const gameStateObjectSchema = z.object({
     seat: seatSchema,
     discards: z.array(tileSchema).default([]),
     riichi: z.boolean().default(false),
+    // Historical safety evidence, not additional physically visible tiles.
+    postRiichiSafeTiles: z.array(tileSchema).max(34).optional(),
     openMelds: z.number().int().min(0).max(4).default(0),
     openMeldsObserved: z.boolean().optional(),
     melds: z.array(meldSchema).max(4).optional(),

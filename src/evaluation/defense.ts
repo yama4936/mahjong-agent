@@ -23,6 +23,9 @@ export function evaluateTileDanger(tileInput: string, state: GameState): TileDan
     const discardedTypes = new Set(opponent.discards.map(normalizeTile));
     const reasons: string[] = [];
     if (discardedTypes.has(tile)) return { seat: opponent.seat, probability: 0, reasons: ["genbutsu"] };
+    if (opponent.riichi && opponent.postRiichiSafeTiles?.some((safe) => normalizeTile(safe) === tile)) {
+      return { seat: opponent.seat, probability: 0, reasons: ["post_riichi_passed"] };
+    }
     let probability = opponent.riichi ? 0.12 : opponent.openMelds >= 2 ? 0.07 : opponent.openMelds === 1 ? 0.045 : 0.025;
     if (opponent.riichi) reasons.push("riichi_threat");
     if (opponent.openMelds > 0) reasons.push(`${opponent.openMelds}_open_melds`);

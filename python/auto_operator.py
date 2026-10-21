@@ -1920,6 +1920,97 @@ class PythonAutoOperator:
         with self.board_metadata_ocr_lock:
             return recognize_board(screenshot)
 
+    def reset_post_riichi_safety(self) -> None:
+        self.post_riichi_safety_generation = getattr(self, "post_riichi_safety_generation", 0) + 1
+        self.post_riichi_safety_key = None
+        self.post_riichi_pass_candidates = []
+        self.post_riichi_safe_tiles = {}
+
+    @staticmethod
+    def post_riichi_round_key(state):
+        if not isinstance(state, dict) or not isinstance(state.get("round"), str) \
+                or not re.fullmatch(r"(?:east|south|west|north)_[1-4]", state["round"]):
+            return None
+        if state.get("seat") not in {"east", "south", "west", "north"}:
+            return None
+        honba = state.get("honba")
+        if not isinstance(honba, int) or isinstance(honba, bool) or honba < 0:
+            return None
+        return state["round"], honba, state["seat"]
+
+    def own_discard_riichi_context(self, evaluation):
+        state = evaluation.get("state", {})
+        metadata = getattr(self, "riichi_metadata_history", None)
+        key = self.post_riichi_round_key(state)
+        if not key or not metadata or not metadata.get("verified") \
+                or key != self.post_riichi_round_key(metadata) \
+                or key != getattr(self, "post_riichi_safety_key", None):
+            return None
+        seats = sorted(opponent["seat"] for opponent in state.get("opponents", [])
+                       if opponent.get("riichi") and opponent.get("seat") != state["seat"]
+                       and opponent.get("seat") in metadata.get("riichiSeats", []))
+        return {"key": key, "scopeGeneration": self.post_riichi_safety_generation,
+                "seats": seats} if seats else None
+
+    def record_post_riichi_pass_candidate(self, pending, actual) -> None:
+        context = pending.get("riichiContext")
+        if not context or context.get("scopeGeneration") != getattr(self, "post_riichi_safety_generation", None) \
+                or tuple(context.get("key", [])) != getattr(self, "post_riichi_safety_key", None) \
+                or getattr(self, "screencast_session", None) is None:
+            return
+        generation = getattr(self, "screencast_draw_generation", None)
+        if not isinstance(generation, int):
+            return
+        # River confirmation alone is not a pass: the ron window can still
+        # be open. Require a later observed own draw before using this tile.
+        self.post_riichi_pass_candidates.append({"tile": actual,
+            "seats": list(context["seats"]), "confirmedDrawGeneration": generation,
+            "sourceClickedAt": pending.get("clickedAt"), "sourceRiverIndex": len(pending["before"])})
+        self.log("post_riichi_pass_candidate", tile=actual, seats=context["seats"],
+                 confirmedDrawGeneration=generation, sourceClickedAt=pending.get("clickedAt"),
+                 sourceRiverIndex=len(pending["before"]))
+
+    def apply_post_riichi_safety(self, state, *, self_turn: bool) -> None:
+        # Configured or old remapped markers are not live evidence.
+        state["opponents"] = [{name: value for name, value in opponent.items()
+                              if name != "postRiichiSafeTiles"}
+                             for opponent in state.get("opponents", [])]
+        key = self.post_riichi_round_key(state)
+        if key != getattr(self, "post_riichi_safety_key", None):
+            self.reset_post_riichi_safety()
+            self.post_riichi_safety_key = key
+        if not key:
+            return
+        generation = getattr(self, "screencast_draw_generation", None)
+        new_draw = self_turn and getattr(self, "screencast_session", None) is not None \
+            and getattr(self, "screencast_draw_occupied", None) is True and isinstance(generation, int)
+        riichi_seats = {opponent["seat"] for opponent in state.get("opponents", []) if opponent.get("riichi")}
+        remaining = []
+        for candidate in getattr(self, "post_riichi_pass_candidates", []):
+            if not new_draw or generation <= candidate["confirmedDrawGeneration"]:
+                remaining.append(candidate)
+                continue
+            for seat in candidate["seats"]:
+                if seat not in riichi_seats:
+                    continue
+                tiles = self.post_riichi_safe_tiles.setdefault(seat, set())
+                tile = candidate["tile"]
+                tile = "5" + tile[1:] if tile.startswith("0") else tile
+                if tile not in tiles:
+                    tiles.add(tile)
+                    self.log("post_riichi_pass_verified", seat=seat, tile=tile,
+                             round=state["round"], honba=state["honba"],
+                             sourceClickedAt=candidate["sourceClickedAt"],
+                             sourceRiverIndex=candidate["sourceRiverIndex"],
+                             confirmedDrawGeneration=candidate["confirmedDrawGeneration"],
+                             currentDrawGeneration=generation)
+        self.post_riichi_pass_candidates = remaining
+        # Do not mutate the shared configured state/remapped opponent objects.
+        state["opponents"] = [{**opponent,
+            **({"postRiichiSafeTiles": sorted(self.post_riichi_safe_tiles[opponent["seat"]])}
+               if opponent.get("riichi") and opponent["seat"] in self.post_riichi_safe_tiles else {})}
+            for opponent in state.get("opponents", [])]
+
     def frame_metadata_state(self, screenshot: Path, observation=None, pending=None, *, refresh_public_cache=False, prepared_metadata=None):
         from board_metadata import remap_seats, recognize_riichi_sticks, reconcile_riichi_metadata
         metadata = prepared_metadata if prepared_metadata is not None else self.current_board_metadata(screenshot)
@@ -1973,6 +2064,7 @@ class PythonAutoOperator:
                         observed["riichiDeclared"] = True
         if visual_riichi:
             self.log("riichi_stick_verified", screenshot=str(screenshot), seats=visual_riichi)
+        self.apply_post_riichi_safety(state, self_turn=pending is None)
         return (state, mapped_observation,
                 remap_seats(pending, source_seat, fields["seat"]))
 
@@ -2133,6 +2225,8 @@ class PythonAutoOperator:
             self.ranked_match_in_progress = True
 
     def observe_ranked_outcome(self, kind: str) -> None:
+        if kind in {"round", "match"}:
+            self.reset_post_riichi_safety()
         if kind == "match":
             self.ranked_match_in_progress = False
             self.ranked_match_finished = True
@@ -2176,6 +2270,7 @@ class PythonAutoOperator:
             return True
         page.mouse.click(point["x"], point["y"])
         if state == "ranked_room":
+            self.reset_post_riichi_safety()
             self.ranked_match_finished = False
             self.last_observed_outcome_kind = None
         self.last_ranked_loop_state = state
@@ -2271,6 +2366,7 @@ class PythonAutoOperator:
         self.board_metadata_cache = None
         self.board_metadata_last_scan_at = 0.0
         self.riichi_metadata_history = None
+        self.reset_post_riichi_safety()
         self.last_processed_hand = None
         self.armed = True
         self.log("black_screen_reload_requested", screenshot=str(snapshot),
@@ -2366,6 +2462,7 @@ class PythonAutoOperator:
         self.board_metadata_cache = None
         self.board_metadata_last_scan_at = 0.0
         self.riichi_metadata_history = None
+        self.reset_post_riichi_safety()
         self.last_processed_hand = None
         self.armed = True
         self.log("connection_error_confirmed", screenshot=str(snapshot),
@@ -2420,6 +2517,7 @@ class PythonAutoOperator:
             self.board_metadata_cache = None
             self.board_metadata_last_scan_at = 0.0
             self.riichi_metadata_history = None
+            self.reset_post_riichi_safety()
             self.previous_public_observation = None
             self.pending_own_river_confirmation = None
             self.last_shanten = None
@@ -2873,6 +2971,7 @@ class PythonAutoOperator:
             )
         else:
             self.log("own_discard_reconciled", tile=actual)
+            self.record_post_riichi_pass_candidate(pending, actual)
         self.pending_own_discard = None
 
     def own_discard_baseline(self, evaluation: dict[str, Any]) -> list[str]:
@@ -4167,6 +4266,7 @@ class PythonAutoOperator:
                     self.previous_public_observation = None
                     self.pending_own_river_confirmation = None
                     self.riichi_metadata_history = None
+                    self.reset_post_riichi_safety()
                     self.last_shanten = None
                     self.last_processed_hand = None
                     self.armed = True
@@ -4844,6 +4944,7 @@ class PythonAutoOperator:
                     if discarded_tile:
                         self.pending_own_discard = {
                             "tile": discarded_tile,
+                            "riichiContext": self.own_discard_riichi_context(evaluation),
                             "riichiDeclaration": selected_action == "riichi" and bool(receipt.get("declaration")),
                             "before": self.own_discard_baseline(evaluation),
                             "evidenceToClickMs": receipt.get("actionTiming", {}).get("evidenceToClickMs"),

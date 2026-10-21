@@ -225,6 +225,8 @@ export function opponentStatesFromObservation(
     return {
       seat: opponent.seat, discards: opponent.discards,
       riichi: Boolean(opponent.riichiDeclared || previous?.riichi),
+      ...((opponent.riichiDeclared || previous?.riichi) && previous?.postRiichiSafeTiles
+        ? { postRiichiSafeTiles: previous.postRiichiSafeTiles } : {}),
       openMelds: confirmedEmpty ? 0 : Math.max(observedCount, previousCount),
       openMeldsObserved: confirmedEmpty || nonRegressingObservation,
       melds: confirmedEmpty ? []
