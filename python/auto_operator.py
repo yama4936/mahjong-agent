@@ -1070,6 +1070,9 @@ class PythonAutoOperator:
         self.replays.mkdir(parents=True, exist_ok=True)
         self.pending_round_replays: list[Path] = []
         self.pending_match_replays: list[Path] = []
+        self.ranked_match_in_progress = False
+        self.ranked_match_finished = False
+        self.last_ranked_navigation_deferred_state = None
         self.screen_references = load_references(self.root / "artifacts" / "live")
         self.recognition_request_id = 0
         self.recognition_server = subprocess.Popen(
@@ -2115,17 +2118,58 @@ class PythonAutoOperator:
             return False
         return self.cached_open_melds > 0 and self.stable_closed_new_round(frame)
 
-    def advance_ranked_loop(self, page: Page, state: str, confidence: float) -> bool:
+    def observe_ranked_match_screen(self, state: str) -> None:
+        # Result animations can briefly expose the old table. A completed
+        # match stays completed until an authorized new room selection.
+        if state == "match" and not getattr(self, "ranked_match_finished", False):
+            self.ranked_match_in_progress = True
+
+    def observe_ranked_outcome(self, kind: str) -> None:
+        if kind == "match":
+            self.ranked_match_in_progress = False
+            self.ranked_match_finished = True
+        elif not getattr(self, "ranked_match_finished", False):
+            self.ranked_match_in_progress = True
+
+    def advance_ranked_loop(
+        self, page: Page, state: str, confidence: float, *, screenshot: bytes | None = None,
+    ) -> bool:
         """Enter or re-enter Bronze Room four-player East after every match."""
         if not self.args.ranked_loop or confidence < 0.25:
             return False
         point = self.ranked_loop_click_point(state, self.layout["viewport"])
         if point is None:
+            self.last_ranked_navigation_deferred_state = None
             return False
+        pending = getattr(self, "pending_match_replays", [])
+        if pending or getattr(self, "ranked_match_in_progress", False) \
+                or (getattr(self, "last_observed_outcome_kind", None) == "round"
+                    and not getattr(self, "ranked_match_finished", False)):
+            # A drawn hand hides the bottom tile faces while its overlay fades.
+            # The remaining dark table/rivers can resemble the lobby panels.
+            # Only a native MATCH result releases navigation, never a round
+            # result or the disappearance of hand faces. Consume this frame
+            # and reobserve without clicking into an unfinished match.
+            if getattr(self, "last_ranked_navigation_deferred_state", None) != state:
+                evidence = {}
+                if screenshot is not None:
+                    snapshot = self.frames / f"{utc_stamp()}.ranked-navigation-deferred.png"
+                    snapshot.write_bytes(screenshot)
+                    evidence["screenshot"] = str(snapshot)
+                self.log("ranked_navigation_deferred_active_match", state=state,
+                         confidence=confidence, pendingMatchReplays=len(pending),
+                         lastOutcomeKind=getattr(self, "last_observed_outcome_kind", None),
+                         **evidence)
+            self.last_ranked_navigation_deferred_state = state
+            return True
+        self.last_ranked_navigation_deferred_state = None
         now = time.monotonic()
         if state == self.last_ranked_loop_state and now - self.last_ranked_loop_click_at < 1.5:
             return True
         page.mouse.click(point["x"], point["y"])
+        if state == "ranked_room":
+            self.ranked_match_finished = False
+            self.last_observed_outcome_kind = None
         self.last_ranked_loop_state = state
         self.last_ranked_loop_click_at = now
         self.log("ranked_loop_advanced", state=state, confidence=confidence, clickPoint=point)
@@ -2331,6 +2375,7 @@ class PythonAutoOperator:
     def handle_early_non_gameplay_screen(self, page: Page, state: str, confidence: float,
                                        screenshot: bytes | None = None) -> bool:
         """Handle verified non-gameplay screens before latency quick gates."""
+        self.observe_ranked_match_screen(state)
         if state == "black_screen":
             if confidence >= .95 and screenshot is not None \
                     and getattr(getattr(self, "args", None), "mode", None) == "force-auto":
@@ -2413,7 +2458,7 @@ class PythonAutoOperator:
                 self.ranked_terminal_transition_pending = False
                 self.log("ranked_terminal_reentry_verified", state=state, confidence=confidence)
             self.result_screen_advanced = None
-            if not self.advance_ranked_loop(page, state, confidence):
+            if not self.advance_ranked_loop(page, state, confidence, screenshot=screenshot):
                 self.log("screen_state_bypassed", state=state,
                          confidence=confidence, gameplayClicks=0)
             return True
@@ -2472,6 +2517,7 @@ class PythonAutoOperator:
             raise ValueError(f"unsupported outcome kind: {kind}")
         pending = self.pending_round_replays if kind == "round" else self.pending_match_replays
         if not pending and getattr(self, "last_observed_outcome_kind", None) == kind:
+            self.observe_ranked_outcome(kind)
             return 0
         screen_state = f"{kind}_result"
         screenshot_path = self.frames / f"{utc_stamp()}.{screen_state}.png"
@@ -2485,6 +2531,7 @@ class PythonAutoOperator:
         self.last_observed_outcome_kind = kind
         self.log("outcome_observed", kind=kind, replayCount=len(pending), evidence=evidence)
         if not pending:
+            self.observe_ranked_outcome(kind)
             return 0
         for replay_path in pending:
             record = load_json(replay_path)
@@ -2514,6 +2561,7 @@ class PythonAutoOperator:
             self.pending_match_replays = []
             self.pending_round_replays = []
         self.log("outcome_attached", kind=kind, replayCount=count, evidence=evidence)
+        self.observe_ranked_outcome(kind)
         return count
 
     def evaluate(self, screenshot: Path, pending_discard: dict[str, str] | None = None,
@@ -4084,6 +4132,7 @@ class PythonAutoOperator:
                     # Match and away references share almost the entire table.
                     # The stricter popup/button geometry remains authoritative.
                     screen_state = "match"
+                self.observe_ranked_match_screen(screen_state)
                 if screen_state in {"round_result", "match_result", "rank_progress", "post_match_reward"}:
                     self.ranked_terminal_matchmaking_seen_at = None
                     if getattr(self, "round_terminal_latched", False):
@@ -4201,7 +4250,7 @@ class PythonAutoOperator:
                 if self.args.mode == "force-auto" and screen_state == "account_modal":
                     self.log("login_required_stop", state=screen_state, confidence=screen_confidence)
                     return
-                if self.advance_ranked_loop(page, screen_state, screen_confidence):
+                if self.advance_ranked_loop(page, screen_state, screen_confidence, screenshot=full_screen):
                     page.wait_for_timeout(max(100, round(self.args.poll * 1000)))
                     continue
                 if screen_state != "match" and self.args.mode != "force-auto":

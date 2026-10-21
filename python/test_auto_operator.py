@@ -22,6 +22,77 @@ from auto_operator import board_state_signature, board_state_signature_matches
 FRAME_FIXTURES = Path(__file__).resolve().parents[1] / "test/fixtures"
 
 
+class RankedNavigationScopeTest(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        self.operator.args = argparse.Namespace(ranked_loop=True)
+        self.operator.layout = {"viewport": {"width": 1920, "height": 1080}}
+        self.operator.frames = Path(self.directory.name)
+        self.operator.replays = Path(self.directory.name)
+        self.operator.pending_round_replays = []
+        self.operator.pending_match_replays = []
+        self.operator.last_ranked_loop_state = None
+        self.operator.last_ranked_loop_click_at = 0.0
+        self.operator.log = Mock()
+        self.page = Mock()
+
+    def test_unfinished_match_never_sends_lobby_menu_or_room_clicks(self):
+        # Recorded sequence: East2 draw -> five lobby clicks -> same match,
+        # East2 honba1. A screen label cannot finish pending match evidence.
+        self.operator.pending_match_replays = [Path("pending-match.json")]
+        for state in ("lobby", "ranked_menu", "ranked_room"):
+            with self.subTest(state=state):
+                self.assertTrue(self.operator.advance_ranked_loop(self.page, state, 1.0))
+                self.page.mouse.click.assert_not_called()
+
+    def test_round_with_no_self_decisions_still_blocks_navigation(self):
+        self.operator.attach_outcome("round", b"round-result", 1.0)
+        self.assertTrue(self.operator.advance_ranked_loop(self.page, "lobby", 1.0))
+        self.page.mouse.click.assert_not_called()
+
+    def test_observed_table_before_first_self_decision_blocks_and_saves_frame(self):
+        self.assertFalse(self.operator.handle_early_non_gameplay_screen(self.page, "match", 1.0))
+        for _ in range(2):
+            self.assertTrue(self.operator.handle_early_non_gameplay_screen(
+                self.page, "lobby", 1.0, screenshot=b"observed-transition-frame",
+            ))
+        self.page.mouse.click.assert_not_called()
+        snapshots = list(self.operator.frames.glob("*.ranked-navigation-deferred.png"))
+        self.assertEqual(len(snapshots), 1)
+        self.assertEqual(snapshots[0].read_bytes(), b"observed-transition-frame")
+
+    def test_finished_match_old_table_does_not_block_next_queue_and_new_match(self):
+        self.operator.attach_outcome("match", b"final-result", 1.0)
+        self.operator.observe_ranked_match_screen("match")
+        self.operator.attach_outcome("round", b"old-round-animation", 1.0)
+        self.assertTrue(self.operator.advance_ranked_loop(self.page, "lobby", 1.0))
+        self.assertTrue(self.operator.advance_ranked_loop(self.page, "ranked_menu", 1.0))
+        self.assertTrue(self.operator.advance_ranked_loop(self.page, "ranked_room", 1.0))
+        self.assertEqual(self.page.mouse.click.call_count, 3)
+        # A queue cancellation before a new table must not inherit the old
+        # round label and strand normal re-entry.
+        self.assertTrue(self.operator.advance_ranked_loop(self.page, "lobby", 1.0))
+        self.assertEqual(self.page.mouse.click.call_count, 4)
+        self.operator.observe_ranked_match_screen("match")
+        self.assertTrue(self.operator.advance_ranked_loop(self.page, "lobby", 1.0))
+        self.assertEqual(self.page.mouse.click.call_count, 4)
+
+    def test_native_match_attachment_releases_navigation_after_round(self):
+        replay = self.operator.replays / "pending.json"
+        replay.write_text(json.dumps({"id": "pending"}))
+        self.operator.pending_match_replays = [replay]
+        self.operator.pending_round_replays = [replay]
+        self.operator.attach_outcome("round", b"round-result", 1.0)
+        self.assertTrue(self.operator.advance_ranked_loop(self.page, "lobby", 1.0))
+        self.page.mouse.click.assert_not_called()
+        self.assertEqual(self.operator.attach_outcome("match", b"final-result", 1.0), 1)
+        self.assertIn("match", json.loads(replay.read_text())["actualResult"])
+        self.assertTrue(self.operator.advance_ranked_loop(self.page, "lobby", 1.0))
+        self.page.mouse.click.assert_called_once_with(1390.08, 324.0)
+
+
 class BlackScreenRecoveryTest(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
