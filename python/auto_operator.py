@@ -2081,9 +2081,63 @@ class PythonAutoOperator:
                  confidence=confidence, gameplayClicks=0,
                  reason="result_transition_missing_verified_ranked_navigation", **evidence)
 
+    def recover_connection_error(self, page: Page) -> bool:
+        """Acknowledge only the verified network message, with bounded retries."""
+        # A screencast can still contain the overlay after it was dismissed.
+        # Recheck a fresh screenshot before touching its shared confirm target.
+        current = page.screenshot(animations="disabled")
+        if classify_screen(current, {})[0] != "connection_error":
+            self.log("connection_error_stale_frame_ignored", gameplayClicks=0)
+            return True
+        now = time.monotonic()
+        attempts = [at for at in getattr(self, "connection_error_attempts", []) if now - at < 600]
+        self.connection_error_attempts = attempts
+        if attempts and now - attempts[-1] < 5:
+            page.wait_for_timeout(250)
+            return True
+        snapshot = self.frames / f"{utc_stamp()}.connection-error.png"
+        snapshot.write_bytes(current)
+        snapshot.chmod(0o600)
+        if len(attempts) >= 3:
+            self.log("connection_recovery_limit_stop", screenshot=str(snapshot),
+                     attempts=len(attempts), windowSeconds=600, gameplayClicks=0)
+            raise RuntimeError("Mahjong Soul connection error persisted after three confirmations in ten minutes")
+        with Image.open(io.BytesIO(current)) as image:
+            point = {"x": image.width * .5, "y": image.height * .639}
+        attempts.append(now)
+        page.mouse.click(point["x"], point["y"])
+        # The game can advance behind this message. Discard observations made
+        # before acknowledgement and require current hand/public evidence.
+        self.cached_concealed_tiles = None
+        self.cached_public_observation = None
+        self.previous_public_observation = None
+        self.pending_own_discard = None
+        self.pending_own_river_confirmation = None
+        self.public_cache_generation = getattr(self, "public_cache_generation", 0) + 1
+        self.public_cache_last_frame_hash = None
+        self.last_public_scan_at = 0.0
+        self.board_metadata_cache = None
+        self.board_metadata_last_scan_at = 0.0
+        self.last_processed_hand = None
+        self.armed = True
+        self.log("connection_error_confirmed", screenshot=str(snapshot),
+                 clickPoint=point, attempt=len(attempts), windowSeconds=600, gameplayClicks=0)
+        page.wait_for_timeout(250)
+        after = page.screenshot(animations="disabled")
+        after_state, after_confidence = classify_screen(after, {})
+        evidence = self.frames / f"{utc_stamp()}.connection-after-confirm.png"
+        evidence.write_bytes(after)
+        evidence.chmod(0o600)
+        self.log("connection_recovery_observed", state=after_state, confidence=after_confidence,
+                 cleared=after_state != "connection_error", screenshot=str(evidence), gameplayClicks=0)
+        return True
+
     def handle_early_non_gameplay_screen(self, page: Page, state: str, confidence: float,
                                        screenshot: bytes | None = None) -> bool:
         """Handle verified non-gameplay screens before latency quick gates."""
+        if (state == "connection_error" and confidence >= .95 and screenshot is not None
+                and getattr(getattr(self, "args", None), "mode", None) == "force-auto"):
+            return self.recover_connection_error(page)
         if state in {"session_conflict", "connection_error"}:
             self.log("blocking_dialog_stop", state=state, confidence=confidence, gameplayClicks=0)
             raise RuntimeError(f"Mahjong Soul {state} dialog blocks the table; operator stopped without confirming it")

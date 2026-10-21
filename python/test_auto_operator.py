@@ -20,6 +20,95 @@ from auto_operator import configure_evaluator_click_budget
 from auto_operator import board_state_signature, board_state_signature_matches
 
 
+class ConnectionRecoveryTest(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        self.operator.args = argparse.Namespace(mode="force-auto")
+        self.operator.frames = Path(self.directory.name)
+        self.operator.log = Mock()
+        self.operator.cached_concealed_tiles = ["1m"] * 13
+        self.operator.cached_public_observation = {"ownDiscards": ["9m"]}
+        self.operator.previous_public_observation = {"ownDiscards": []}
+        self.operator.pending_own_discard = {"tile": "9m"}
+        self.operator.pending_own_river_confirmation = ["9m"]
+        self.operator.public_cache_generation = 7
+        self.operator.board_metadata_cache = {"scores": {"east": 25000}}
+        root = Path(__file__).resolve().parents[1] / "artifacts/live"
+        self.error = (root / "connection-error-over-result-20261021.jpg").read_bytes()
+        self.result = (root / "connection-recovered-result-20261021.jpg").read_bytes()
+        self.conflict = (root / "session-conflict.png").read_bytes()
+        self.page = Mock()
+
+    def handle(self):
+        return self.operator.handle_early_non_gameplay_screen(
+            self.page, "connection_error", 1.0, self.error,
+        )
+
+    def test_confirmation_clears_message_and_invalidates_pre_disconnect_evidence(self):
+        self.page.screenshot.side_effect = [self.error, self.result]
+        self.assertTrue(self.handle())
+        self.page.mouse.click.assert_called_once_with(960.0, 690.12)
+        for name in ("cached_concealed_tiles", "cached_public_observation", "previous_public_observation",
+                     "pending_own_discard", "pending_own_river_confirmation", "board_metadata_cache",
+                     "last_processed_hand"):
+            self.assertIsNone(getattr(self.operator, name), name)
+        self.assertEqual(self.operator.public_cache_generation, 8)
+        self.assertTrue(self.operator.armed)
+        observed = next(c.kwargs for c in self.operator.log.call_args_list
+                        if c.args == ("connection_recovery_observed",))
+        self.assertTrue(observed["cleared"])
+        self.assertEqual(observed["state"], "match_result")
+        self.assertEqual(Path(observed["screenshot"]).read_bytes(), self.result)
+        self.assertEqual(len(list(self.operator.frames.glob("*.png"))), 2)
+
+    def test_stale_overlay_cannot_click_result_or_session_conflict(self):
+        for fresh in (self.result, self.conflict):
+            with self.subTest(fresh=fresh[:8]):
+                self.page.screenshot.side_effect = None
+                self.page.screenshot.return_value = fresh
+                self.assertTrue(self.handle())
+        self.page.mouse.click.assert_not_called()
+        self.assertFalse(hasattr(self.operator, "connection_error_attempts"))
+        self.assertEqual(self.operator.public_cache_generation, 7)
+
+    def test_persistent_error_is_bounded_and_held_after_three_attempts(self):
+        self.page.screenshot.return_value = self.error
+        with patch("auto_operator.time.monotonic", side_effect=[100, 106, 112, 118]):
+            for _ in range(3):
+                self.assertTrue(self.handle())
+            with self.assertRaisesRegex(RuntimeError, "three confirmations"):
+                self.handle()
+        self.assertEqual(self.page.mouse.click.call_count, 3)
+        stops = [c for c in self.operator.log.call_args_list if c.args == ("connection_recovery_limit_stop",)]
+        self.assertEqual(len(stops), 1)
+        self.assertEqual(stops[0].kwargs["attempts"], 3)
+        self.assertTrue(Path(stops[0].kwargs["screenshot"]).exists())
+
+    def test_retry_backoff_and_rolling_window(self):
+        self.page.screenshot.return_value = self.error
+        self.operator.connection_error_attempts = [100, 106, 112]
+        with patch("auto_operator.time.monotonic", return_value=114):
+            self.assertTrue(self.handle())
+        self.page.mouse.click.assert_not_called()
+        with patch("auto_operator.time.monotonic", return_value=800):
+            self.assertTrue(self.handle())
+        self.page.mouse.click.assert_called_once()
+        self.assertEqual(self.operator.connection_error_attempts, [800])
+
+    def test_observer_and_uncertain_detection_remain_noninteractive(self):
+        for mode, confidence in (("observer", 1.0), ("force-auto", .9)):
+            with self.subTest(mode=mode, confidence=confidence):
+                self.operator.args.mode = mode
+                with self.assertRaisesRegex(RuntimeError, "connection_error dialog blocks"):
+                    self.operator.handle_early_non_gameplay_screen(
+                        self.page, "connection_error", confidence, self.error,
+                    )
+        self.page.mouse.click.assert_not_called()
+        self.page.screenshot.assert_not_called()
+
+
 class ResidentPublicRecognitionTest(unittest.TestCase):
     def operator(self):
         operator = PythonAutoOperator.__new__(PythonAutoOperator)

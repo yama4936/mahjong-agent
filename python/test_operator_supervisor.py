@@ -67,7 +67,8 @@ class SupervisorTest(unittest.TestCase):
 
     def test_safety_stops_persist_across_supervisor_restart(self):
         for event in ("ranked_click_budget_safety_stop", "screen_loss_stop", "safety_stop", "match_completed_stop",
-                      "ranked_terminal_transition_stop", "login_required_stop", "blocking_dialog_stop", "future_guard_stop"):
+                      "ranked_terminal_transition_stop", "login_required_stop", "blocking_dialog_stop",
+                      "connection_recovery_limit_stop", "future_guard_stop"):
             with self.subTest(event=event):
                 log = self.adopt()
                 log.write_text(json.dumps({"event": event, "error": "unknown"}) + "\n")
