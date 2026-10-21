@@ -10,6 +10,7 @@ import { opponentStatesFromObservation } from "../src/recognition/publicTileReco
 import { detectConfiguredPublicRegions } from "../src/recognition/regionDetector.js";
 import { knownTiles, knownTilesOutsideHand, parseGameState, parsePublicGameState } from "../src/game/state.js";
 import { decide } from "../src/agent/decision.js";
+import { cachedPublicStatePatch } from "../src/agent/publicCache.js";
 import { assertTemporalPublicObservation, hasSidewaysRiichiTile, recognizeConfiguredPublicTiles, recognizeConfiguredPublicTilesWithVit, recognizeExposedMelds, toPublicTileObservation, type PublicTileObservation, type PublicTileRecognitionRegion } from "../src/recognition/publicTileRecognizer.js";
 
 function publicRegion(tiles: Array<{ tile: any; x: number; y?: number; width?: number; height?: number }>, rotationToUpright: 0 | 90 | 180 | 270 = 0): PublicTileRecognitionRegion {
@@ -278,6 +279,62 @@ test("calibrated opposite meld faces recover red chi, adjacent pon and third chi
   } finally {
     await recognizer.close();
   }
+});
+
+test("right meld calibration recovers four pons and two chis without avatar tiles", {
+  skip: !existsSync(".runtime/hybrid-vision/cvmaj-pretrained.tar") || !existsSync(".runtime/hybrid-vision/automajsoul-best-model.pt"),
+}, async () => {
+  const base = layoutSchema.parse(JSON.parse(await readFile("config/layout-300-regression.json", "utf8")));
+  const layout = { ...base, publicTileRegions: { rightMelds: base.publicTileRegions!.rightMelds! } };
+  const recognizer = new HybridTileRecognizer();
+  try {
+    for (const [file, expected] of [
+      ["right-melds-two-chis-20261021.jpg", ["chi:2m,3m,4m", "chi:5m,6m,7m"]],
+      ["right-melds-four-pons-20261021.jpg", ["pon:1m,1m,1m", "pon:8s,8s,8s", "pon:C,C,C", "pon:F,F,F"]],
+      ["right-melds-single-chi-20261021.jpg", ["chi:2s,3s,4s"]],
+      ["right-melds-empty-roster-a-20261021.jpg", []],
+      ["right-melds-empty-roster-b-20261021.jpg", []],
+    ] as const) {
+      const recognition = await recognizeConfiguredPublicTilesWithVit(`test/fixtures/${file}`, layout, recognizer);
+      const opponent = toPublicTileObservation(recognition, "east").opponentDiscards[0]!;
+      assert.equal(recognition.rightMelds?.candidateCount, expected.length * 3, file);
+      assert.equal(opponent.meldsObserved, true, file);
+      assert.deepEqual(opponent.melds!.map(meld => `${meld.type}:${[...meld.tiles].sort().join(",")}`).sort(), [...expected].sort(), file);
+    }
+  } finally { await recognizer.close(); }
+});
+
+test("observed four pons expose safe middle instead of the actual losing white through real cache and Jev filters", async () => {
+  const before = parseGameState(JSON.parse(await readFile("test/fixtures/right-melds-white-deal-in-state-20261021.json", "utf8")));
+  const observation: PublicTileObservation = {
+    doraIndicators: before.doraIndicators, ownDiscards: before.ownDiscards,
+    ownMelds: [], ownMeldTiles: [], otherVisibleTiles: [], acceptedTiles: 0, detectedCandidates: 0, complete: false,
+    opponentDiscards: before.opponents.map(opponent => ({
+      seat: opponent.seat, discards: opponent.discards, riichiDeclared: opponent.riichi,
+      melds: opponent.seat === "south" ? (["F", "1m", "8s", "C"] as const).map(tile => ({
+        type: "pon" as const, tiles: [tile, tile, tile], confidence: .99,
+      })) : (opponent.melds ?? []).flatMap(({ type, tiles }) =>
+        type === "chi" || type === "pon" || type === "minkan" ? [{ type, tiles, confidence: .99 }] : []),
+      meldsObserved: opponent.seat === "south" || Boolean(opponent.openMeldsObserved),
+    })),
+  };
+  const patch = cachedPublicStatePatch({ ...observation,
+    capturedAt: "2026-10-21T08:07:30Z", recognizedAt: "2026-10-21T08:07:31Z",
+    recognitionLatencyMs: 100, configuredRegions: ["rightMelds"],
+  }, [...before.hand, before.draw!], before.opponents);
+  // Old cached rivers contain extra F. Preserve the production copy filter:
+  // reject the conflicting entire F pon, while retaining the actual C pon.
+  assert.equal(patch.rejectedTiles, 3);
+  const after = parseGameState({ ...before, ...patch.patch });
+  const offered: string[][] = [];
+  const jev = { chooseDiscard: async (_state: unknown, candidates: Array<{ actionId: string; tile: string }>) => {
+    offered.push(candidates.map(candidate => candidate.tile));
+    return { actionId: candidates[0]!.actionId, confidence: 1, probabilities: { [candidates[0]!.actionId]: 1 },
+      model: "first-offered-test", promptVersion: "test", latencyMs: 0 };
+  } };
+  await decide(before, { mode: "force-auto", jev: jev as any });
+  await decide(after, { mode: "force-auto", jev: jev as any });
+  assert.deepEqual(offered, [["P"], ["C"]]);
 });
 
 test("calibrated left melds recover chi and pon without picking up own hand edge", {
