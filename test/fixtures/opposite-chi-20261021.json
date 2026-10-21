@@ -1,0 +1,59 @@
+{
+  "scope": "Lossless crops decoded from saved native JPEGs; timestamps and provenance retained. Labels independently read from visible chi, not reconstructed OCR.",
+  "cases": [
+    {
+      "file": "test/fixtures/opposite-chi-source-20261021.png",
+      "source": "artifacts/ranked-supervised-90ebfa3-20261021/operator-20261021T210213669160Z/frames/2026-10-21T21-34-57.471417+00-00.jpg",
+      "crop": {
+        "x": 380,
+        "y": 20,
+        "width": 500,
+        "height": 90
+      },
+      "expectedMelds": [
+        {
+          "type": "chi",
+          "tiles": [
+            "6m",
+            "7m",
+            "8m"
+          ]
+        }
+      ],
+      "labelsVerifiedFromNativeSource": true
+    },
+    {
+      "file": "test/fixtures/opposite-chi-earlier-20261021.png",
+      "source": "artifacts/ranked-supervised-90ebfa3-20261021/operator-20261021T210213669160Z/frames/2026-10-21T21-33-30.007517+00-00.jpg",
+      "crop": {
+        "x": 380,
+        "y": 20,
+        "width": 500,
+        "height": 90
+      },
+      "expectedMelds": [
+        {
+          "type": "chi",
+          "tiles": [
+            "6m",
+            "7m",
+            "8m"
+          ]
+        }
+      ],
+      "labelsVerifiedFromNativeSource": true
+    },
+    {
+      "file": "test/fixtures/opposite-chi-empty-20261021.png",
+      "source": "artifacts/ranked-supervised-90ebfa3-20261021/operator-20261021T210213669160Z/frames/2026-10-21T21-30-42.814227+00-00.jpg",
+      "crop": {
+        "x": 380,
+        "y": 20,
+        "width": 500,
+        "height": 90
+      },
+      "expectedMelds": [],
+      "labelsVerifiedFromNativeSource": true
+    }
+  ]
+}

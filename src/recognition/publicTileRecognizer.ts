@@ -403,6 +403,47 @@ export async function recognizeConfiguredPublicTilesWithVit(
       rotationToUpright: region.rotationToUpright,
     }] as const;
   }));
+  // Two reviewed upside-down chi frames lose the 7m as a weak 6m in a
+  // tight face crop. Padding only the original top edge restores its glyph
+  // without adding the grey 3D side below it. Do not force a legal meld from
+  // the labels: require independent, substantially stronger image evidence.
+  const opposite = result.oppositeMelds;
+  const oppositeRegion = layout.publicTileRegions?.oppositeMelds;
+  if (classifier.backend === "hybrid" && oppositeRegion?.rotationToUpright === 180
+    && opposite?.classificationSafe && opposite.candidateCount === 3
+    && opposite.recognized.length === 3 && recognizeExposedMelds(opposite).length === 0) {
+    const retryIndexes = jobs.flatMap((job, index) => (
+      job.name === "oppositeMelds" && !job.candidate.sideways
+      && job.candidate.y - 4 >= oppositeRegion.y
+      && predictions[index]!.tile === "6m" && predictions[index]!.runnerUpTile === "7m"
+      && predictions[index]!.confidence < 0.9 ? [index] : []
+    ));
+    if (retryIndexes.length > 0) {
+      const images = await Promise.all(retryIndexes.map((index) => {
+        const { candidate } = jobs[index]!;
+        return sharp(screenshot).extract({ left: candidate.x, top: candidate.y - 4,
+          width: candidate.width, height: candidate.height + 4 }).rotate(180).png().toBuffer();
+      }));
+      const retried = await classifier.classifyTileImages(images);
+      if (retried.length !== retryIndexes.length) throw new Error("Model meld retry returned the wrong prediction count");
+      const replacements = new Map<RegionCandidate, RecognizedPublicTile>();
+      retryIndexes.forEach((index, retryIndex) => {
+        const original = predictions[index]!;
+        const retry = retried[retryIndex]!;
+        const margin = retry.confidence - retry.runnerUpConfidence;
+        if (retry.tile === "7m" && retry.confidence >= Math.max(0.95, minimumConfidence)
+          && margin >= Math.max(0.9, minimumMargin) && retry.confidence - original.confidence >= 0.15) {
+          replacements.set(jobs[index]!.candidate, { ...jobs[index]!.candidate, tile: retry.tile,
+            confidence: retry.confidence, runnerUpConfidence: retry.runnerUpConfidence,
+            ambiguityMargin: margin, safe: true });
+        }
+      });
+      const candidates = jobs.filter(job => job.name === "oppositeMelds").map(job => job.candidate);
+      const refined = { ...opposite, recognized: opposite.recognized.map((tile, index) =>
+        replacements.get(candidates[index]!) ?? tile) };
+      if (replacements.size > 0 && recognizeExposedMelds(refined).length === 1) result.oppositeMelds = refined;
+    }
+  }
   if (options.retryDiscardBoundaries !== false) {
     for (const [name, detection] of entries) {
       const region = layout.publicTileRegions?.[name];
