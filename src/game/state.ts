@@ -12,6 +12,7 @@ const meldSchema = z.object({
 
 const gameStateObjectSchema = z.object({
   round: z.string().default("unknown"),
+  matchLength: z.enum(["east", "south"]).optional(),
   honba: z.number().int().nonnegative().default(0),
   riichiSticks: z.number().int().nonnegative().default(0),
   seat: seatSchema.default("east"),
@@ -46,6 +47,7 @@ function normalizeStateInput(value: unknown): unknown {
   const source = value as Record<string, unknown>;
   return {
     ...source,
+    matchLength: source.matchLength ?? source.match_length,
     riichiSticks: source.riichiSticks ?? source.riichi_sticks,
     doraIndicators: source.doraIndicators ?? source.dora_indicators,
     ownDiscards: source.ownDiscards ?? source.own_discards,
@@ -70,6 +72,16 @@ export const publicGameStateSchema = z.preprocess(
 
 export type GameState = z.infer<typeof gameStateSchema>;
 export type PublicGameState = z.infer<typeof publicGameStateSchema>;
+
+/** Scheduled final hand or an extension; dealer continuation can still occur. */
+export function isAllLastRound(state: Pick<PublicGameState, "round" | "matchLength">): boolean {
+  if (state.matchLength === undefined) return /^(south|west|north)_4$/i.test(state.round);
+  const round = /^(east|south|west|north)_([1-4])$/i.exec(state.round);
+  if (!round) return false;
+  const wind = ["east", "south", "west", "north"].indexOf(round[1]!.toLowerCase());
+  const scheduledWind = state.matchLength === "east" ? 0 : 1;
+  return wind > scheduledWind || wind === scheduledWind && round[2] === "4";
+}
 
 function assertHighConfidencePublicState(state: PublicGameState): void {
   if (state.publicStateConfidence < 0.98) return;

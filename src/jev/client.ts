@@ -1,4 +1,4 @@
-import type { GameState } from "../game/state.js";
+import { isAllLastRound, type GameState } from "../game/state.js";
 import type { DiscardEvaluation } from "../game/ukeire.js";
 import type { LegalAction } from "../game/actions.js";
 import { normalizeTile, parseGameTile } from "../game/tiles.js";
@@ -177,6 +177,10 @@ export class JevClient {
   }
 }
 
+function matchPlacementContext(state: GameState) {
+  return state.matchLength === undefined ? {} : { matchLength: state.matchLength, allLast: isAllLastRound(state) };
+}
+
 export function buildJevDeclarationRequest(state: GameState, actions: readonly LegalAction[], report: ClosedWaitReport, model: string): JevRequest {
   if (actions.length !== 2 || !actions.some((action) => action.action === "discard")
     || !actions.some((action) => action.action === "riichi")
@@ -186,6 +190,7 @@ export function buildJevDeclarationRequest(state: GameState, actions: readonly L
   return { model, state: {
     promptVersion: "mahjong-declaration-v1", task: "Compare riichi and dama for the same tenpai discard",
     round: state.round, seat: state.seat, scores: state.scores, honba: state.honba,
+    ...matchPlacementContext(state),
     riichiSticks: state.riichiSticks, remainingTiles: state.remainingTiles, turn: state.turn,
     hand: [...state.hand, ...(state.draw ? [state.draw] : [])], opponents: state.opponents,
     ownDiscards: state.ownDiscards, doraIndicators: state.doraIndicators, scoring: report,
@@ -212,6 +217,7 @@ export function buildJevReactionRequest(state: GameState, actions: readonly Lega
     state: {
       promptVersion: "mahjong-reaction-v1", task: "Choose whether to call in Japanese Mahjong",
       round: state.round, honba: state.honba, riichiSticks: state.riichiSticks, seat: state.seat,
+      ...matchPlacementContext(state),
       scores: state.scores, turn: state.turn, remainingTiles: state.remainingTiles,
       hand: state.hand, doraIndicators: state.doraIndicators, ownDiscards: state.ownDiscards,
       melds: state.melds, opponents: state.opponents, pendingDiscard: state.pendingDiscard,
@@ -237,6 +243,7 @@ export function buildJevRequest(
     promptVersion: version,
     task: "Choose the strongest legal Japanese Mahjong discard",
     round: state.round,
+    ...matchPlacementContext(state),
     honba: state.honba,
     riichiSticks: state.riichiSticks,
     seat: state.seat,

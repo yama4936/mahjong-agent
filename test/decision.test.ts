@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { decide, decideForceAutoWithJevDeadline } from "../src/agent/decision.js";
+import { buildStrategyHandPlan, decide, decideForceAutoWithJevDeadline } from "../src/agent/decision.js";
 import { parseGameState } from "../src/game/state.js";
 import { readFile } from "node:fs/promises";
 import type { ClosedWaitReport } from "../src/evaluation/closedWaitScorer.js";
@@ -10,6 +10,19 @@ const state = parseGameState({
   hand: ["1m", "2m", "3m", "4m", "5m", "6m", "3p", "4p", "5p", "7s", "8s", "9s", "E"],
   draw: "6p",
   recognitionConfidence: 1,
+});
+
+test("verified East-only final round reaches placement strategy without relabeling the round wind", async () => {
+  const fixture = JSON.parse(await readFile("test/fixtures/east-only-final-round-20261021.json", "utf8"));
+  const live = parseGameState({ ...fixture.state, matchLength: "east" });
+  const plan = buildStrategyHandPlan(live);
+  assert.equal(live.round, "east_4");
+  assert.equal(plan.placement.rank, 4);
+  assert.equal(plan.placement.allLast, true);
+  assert.match(plan.changeReason, /オーラス/);
+  const halfGame = parseGameState({ ...fixture.state, matchLength: "south" });
+  assert.equal(buildStrategyHandPlan(halfGame).placement.allLast, false);
+  assert.equal(buildStrategyHandPlan(parseGameState(fixture.state)).placement.allLast, false);
 });
 
 test("late value ordering cannot hide the actual open-hand tenpai discard from Jev", async () => {

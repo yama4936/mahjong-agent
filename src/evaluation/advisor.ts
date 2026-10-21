@@ -1,4 +1,4 @@
-import { knownTilesOutsideHand, type GameState } from "../game/state.js";
+import { isAllLastRound, knownTilesOutsideHand, type GameState } from "../game/state.js";
 import { evaluateDiscards, type DiscardEvaluation } from "../game/ukeire.js";
 import { evaluateTileDanger } from "./defense.js";
 import { evaluateRoundValue } from "./value.js";
@@ -34,7 +34,7 @@ export function deterministicAdvice(state: GameState): AdvisorResult {
   const ownScore = state.scores[state.seat];
   const scores = Object.values(state.scores).sort((a, b) => b - a);
   const rank = ownScore === undefined || scores.length < 4 ? 2 : scores.indexOf(ownScore) + 1;
-  const allLast = /^(south|west|north)_4$/i.test(state.round);
+  const allLast = isAllLastRound(state);
   const phase = state.turn <= 6 ? "early" : state.turn <= 11 ? "middle" : "late";
   const urgentPush = allLast && rank === 4;
   const protectLead = rank === 1;

@@ -1,4 +1,4 @@
-import type { GameState } from "../game/state.js";
+import { isAllLastRound, type GameState } from "../game/state.js";
 import { deterministicAdvice, type AdvisorResult } from "../evaluation/advisor.js";
 import { JevClient, type JevDecision, type JevHandPlan } from "../jev/client.js";
 import { generateLegalActions, type LegalAction } from "../game/actions.js";
@@ -77,7 +77,7 @@ function placementContext(state: GameState): StrategyHandPlan["placement"] {
   return {
     rank,
     ...(own !== undefined && leader !== undefined ? { scoreGapToLeader: leader - own } : {}),
-    allLast: /^(south|west|north)_4$/i.test(state.round),
+    allLast: isAllLastRound(state),
   };
 }
 

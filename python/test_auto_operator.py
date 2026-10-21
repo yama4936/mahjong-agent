@@ -16,10 +16,58 @@ from unittest.mock import Mock, call, patch
 from auto_operator import PythonAutoOperator, RetryableSafetyAbort, action_deadline_timing, ambiguous_open_draw_fallback, away_resume_geometry, closed_concealed_row_visible, closed_hand_face_mismatches, confirmed_call_meld, crop_screenshot, crop_screenshot_regions, discard_point_in_hand_geometry, force_auto_call_buttons, force_auto_chi_choice_points, force_auto_reaction_win_button, force_auto_self_action_buttons, geometric_open_meld_count, is_away_resume_dialog, is_contextual_reaction_pass, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, mean_pixel_delta, merge_public_observations, open_hand_draw_slot, own_meld_surface_visible, post_call_transition, retreat_pointer_from_hand, screencast_frame_follows_pointer_retreat, riichi_selection_is_visible, round_result_conflicts_with_live_table, selected_chi_choice_point, selected_open_draw_is_ambiguous, selected_tile_comparison_region, send_discard_click, should_guard_tenpai_reaction, should_process_reaction_prompt, should_retry_call_policy, stable_hand_comparison_region, stable_hand_delta, tile_face_structure_delta
 from screen_state import classify_screen, load_references
 from auto_operator import geometric_reaction_open_meld_count, draw_slots_occupied
-from auto_operator import configure_evaluator_click_budget
+from auto_operator import configure_evaluator_click_budget, with_match_length
 from auto_operator import board_state_signature, board_state_signature_matches
 
 FRAME_FIXTURES = Path(__file__).resolve().parents[1] / "test/fixtures"
+
+
+class MatchLengthFlowTest(unittest.TestCase):
+    def test_explicit_format_survives_metadata_and_resident_requests(self):
+        raw = {"seat": "north", "round": "unknown", "opponents": []}
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.public_state = with_match_length(raw, "east")
+        operator.log = Mock()
+        metadata = {"verified": True, "seat": "north", "round": "east_4",
+                    "scores": {"north": 13700, "east": 17400, "south": 36100, "west": 32800},
+                    "honba": 1, "riichiSticks": 0, "remainingTiles": 21}
+        state, _, _ = operator.frame_metadata_state(
+            FRAME_FIXTURES / "black-client-20261021.png", prepared_metadata=metadata,
+        )
+        self.assertEqual(state["matchLength"], "east")
+        self.assertEqual(state["round"], "east_4")
+        self.assertNotIn("matchLength", raw)
+        self.assertEqual(with_match_length(raw, None), raw)
+        with self.assertRaises(ValueError):
+            with_match_length(raw, "unknown")
+        for board_metadata, prepared in ((True, state), (False, None)):
+            operator.args = argparse.Namespace(board_metadata=board_metadata, action_deadline_ms=300000)
+            operator.recognition_server = Mock()
+            operator.recognition_server.poll.return_value = None
+            operator.recognition_server.stdin = io.StringIO()
+            operator.recognition_server.stdout = io.StringIO(json.dumps({"id": 1, "result": {}}) + "\n")
+            operator.recognition_request_id = 0
+            operator.recognize_resident(Path("frame.jpg"), evaluate_force_auto=True, frame_public_state=prepared)
+            request = json.loads(operator.recognition_server.stdin.getvalue())
+            self.assertEqual(request["publicState"]["matchLength"], "east")
+
+    def test_subprocess_evaluation_without_ocr_preserves_configured_format(self):
+        with tempfile.TemporaryDirectory() as directory:
+            operator = PythonAutoOperator.__new__(PythonAutoOperator)
+            operator.root = operator.frames = Path(directory)
+            operator.state_path = operator.frames / "original.json"
+            operator.state_path.write_text(json.dumps({"round": "east_4"}))
+            operator.public_state = with_match_length({"round": "east_4"}, "east")
+            operator.args = argparse.Namespace(mode="force-auto", board_metadata=False,
+                                               match_length="east", action_templates="", evaluation_timeout=1)
+            operator.layout_path = Path("layout.json")
+            operator.templates = Path("templates")
+            operator.evaluator_env = {}
+            with patch("auto_operator.subprocess.run", return_value=Mock(returncode=0, stdout='{"status":"not_ready"}')) as run:
+                operator.evaluate(Path("frame.jpg"))
+            argument = next(x for x in run.call_args.args[0] if x.startswith("--state="))
+            self.assertEqual(json.loads(Path(argument.split("=", 1)[1]).read_text())["matchLength"], "east")
+            self.assertNotIn("matchLength", json.loads(operator.state_path.read_text()))
 
 
 class RankedNavigationScopeTest(unittest.TestCase):

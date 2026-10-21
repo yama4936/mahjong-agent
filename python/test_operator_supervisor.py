@@ -23,10 +23,23 @@ class SupervisorTest(unittest.TestCase):
         self.addCleanup(self.commit.stop)
         self.supervisor = self.make_supervisor()
 
-    def make_supervisor(self):
+    def make_supervisor(self, match_length=None):
         return Supervisor(self.root, self.root / "artifacts/supervisor", "layout.json",
                           clock=lambda: self.now, scan=lambda: self.state,
-                          ready=lambda: self.healthy, launch=self.launch)
+                          ready=lambda: self.healthy, launch=self.launch, match_length=match_length)
+
+    def test_verified_format_survives_operator_relaunches(self):
+        self.supervisor = self.make_supervisor(match_length="east")
+        for _ in range(4):
+            self.supervisor.tick()
+            self.now += 11
+        commands = [command for kind, command, _ in self.launches if kind == "operator"]
+        self.assertGreaterEqual(len(commands), 2)
+        for command in commands:
+            self.assertIn("--match-length=east", command)
+            self.assertIn("--force-auto-click-budget-ms=2600", command)
+        for path in (self.root / "artifacts/supervisor").glob("operator-*/run-manifest.json"):
+            self.assertEqual(json.loads(path.read_text())["matchLength"], "east")
 
     def launch(self, kind, command, output):
         self.launches.append((kind, command, output))

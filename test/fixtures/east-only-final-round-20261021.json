@@ -1,0 +1,175 @@
+{
+  "sourceRun": "artifacts/ranked-supervised-4e044cc-20261021/operator-20261021T134625702929Z",
+  "sourceTimestamp": "2026-10-21T14:34:37.314313+00:00",
+  "sourceScreenshot": "/home/yama1/projects/jantama-auto/artifacts/ranked-supervised-4e044cc-20261021/operator-20261021T134625702929Z/frames/2026-10-21T14-34-33.258069+00-00.jpg",
+  "verifiedMatchLength": "east",
+  "state": {
+    "round": "east_4",
+    "honba": 1,
+    "riichiSticks": 0,
+    "seat": "north",
+    "scores": {
+      "north": 13700,
+      "east": 17400,
+      "south": 36100,
+      "west": 32800
+    },
+    "hand": [
+      "2m",
+      "2m",
+      "3m",
+      "4m",
+      "5m",
+      "3p",
+      "3p",
+      "6p",
+      "6p",
+      "2s",
+      "9s",
+      "E",
+      "E"
+    ],
+    "draw": "2s",
+    "doraIndicators": [
+      "F"
+    ],
+    "ownDiscards": [
+      "F",
+      "1p",
+      "N",
+      "6m",
+      "9p",
+      "8p",
+      "P",
+      "7p",
+      "7m",
+      "8s",
+      "2p",
+      "3m"
+    ],
+    "melds": [],
+    "visibleTiles": [],
+    "openMelds": 0,
+    "turn": 12,
+    "remainingTiles": 21,
+    "phase": "self_turn",
+    "recognitionConfidence": 0.833830986221701,
+    "publicStateConfidence": 0,
+    "riichiDeclared": false,
+    "availableUiActions": [],
+    "opponents": [
+      {
+        "seat": "east",
+        "discards": [
+          "4m",
+          "1p",
+          "7m",
+          "6m",
+          "4m",
+          "9m",
+          "P",
+          "3s",
+          "7s",
+          "F",
+          "4s",
+          "2p",
+          "9m",
+          "2p"
+        ],
+        "riichi": false,
+        "openMelds": 2,
+        "openMeldsObserved": true,
+        "melds": [
+          {
+            "type": "pon",
+            "tiles": [
+              "S",
+              "S",
+              "S"
+            ]
+          },
+          {
+            "type": "pon",
+            "tiles": [
+              "C",
+              "C",
+              "C"
+            ]
+          }
+        ]
+      },
+      {
+        "seat": "south",
+        "discards": [
+          "1s",
+          "1s",
+          "W",
+          "9p",
+          "8p",
+          "S"
+        ],
+        "riichi": false,
+        "openMelds": 0,
+        "openMeldsObserved": true,
+        "melds": []
+      },
+      {
+        "seat": "west",
+        "discards": [
+          "8m",
+          "1p",
+          "P",
+          "7p",
+          "4s",
+          "8s",
+          "5p",
+          "9s",
+          "9s",
+          "9m",
+          "9p",
+          "C"
+        ],
+        "riichi": false,
+        "openMelds": 2,
+        "openMeldsObserved": true,
+        "melds": [
+          {
+            "type": "pon",
+            "tiles": [
+              "W",
+              "W",
+              "W"
+            ]
+          },
+          {
+            "type": "pon",
+            "tiles": [
+              "4p",
+              "4p",
+              "4p"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "recordedHandPlan": {
+    "primaryTarget": "yakuhai:E",
+    "secondaryTarget": "chiitoitsu",
+    "callsAllowed": true,
+    "requiredTiles": [
+      "4m",
+      "5m",
+      "9s"
+    ],
+    "estimatedPoints": 2000,
+    "phase": "late_tenpai_defense",
+    "placement": {
+      "rank": 4,
+      "scoreGapToLeader": 22400,
+      "allLast": false
+    },
+    "changeReason": "終盤なのでテンパイ価値と守備を強化"
+  },
+  "limits": "No alternate match outcome is claimed."
+}

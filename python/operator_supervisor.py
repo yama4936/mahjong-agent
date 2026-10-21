@@ -115,10 +115,13 @@ def restart_allowed(terminal):
 
 class Supervisor:
     def __init__(self, root, artifacts, layout, port=9222, clock=time.monotonic,
-                 scan=None, ready=None, launch=None):
+                 scan=None, ready=None, launch=None, match_length=None):
         self.root = root
         self.artifacts = artifacts
         self.layout = layout
+        if match_length not in (None, "east"):
+            raise ValueError("ranked supervisor selects East rooms; match length must be east or unspecified")
+        self.match_length = match_length
         self.port = port
         self.clock = clock
         self.scan = scan or (lambda: processes(root, port))
@@ -241,10 +244,13 @@ class Supervisor:
                 f"--cdp=http://127.0.0.1:{self.port}",
                 "--action-deadline-ms=300000", "--force-auto-click-budget-ms=2600",
                 "--board-metadata", "--advance-screens", "--ranked-loop", "--no-dashboard"]
+        if self.match_length is not None:
+            args.append(f"--match-length={self.match_length}")
         commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=self.root, text=True).strip()
         (run / "run-manifest.json").write_text(json.dumps({"status": "started", "commit": commit,
             "startedAt": utc_now(), "mode": "ranked", "actionDeadlineMs": 300000,
-            "forceAutoClickBudgetMs": 2600, "rankedLoop": True, "command": args}, indent=2) + "\n")
+            "forceAutoClickBudgetMs": 2600, "rankedLoop": True,
+            "matchLength": self.match_length, "command": args}, indent=2) + "\n")
         pid = self.launch("operator", args, run / "operator-stdout.log")
         self.operator_log = run / "operator-stdout.log"
         # Track even a launcher that exits before the next process scan, so
@@ -259,6 +265,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--artifacts", required=True)
     parser.add_argument("--layout", default="config/layout-300-regression.json")
+    parser.add_argument("--match-length", choices=("east",), default=None,
+                        help="verified current/queued East format; retained across operator restarts")
     parser.add_argument("--poll-seconds", type=float, default=5)
     args = parser.parse_args()
     if not Path("/proc/self/cmdline").exists():
@@ -273,7 +281,8 @@ def main():
         except BlockingIOError:
             parser.error("Another supervisor holds the repository lock")
         supervisor = Supervisor(ROOT, (ROOT / args.artifacts).resolve(), args.layout,
-                                port=int(os.environ.get("JANTAMA_CDP_PORT", "9222")))
+                                port=int(os.environ.get("JANTAMA_CDP_PORT", "9222")),
+                                match_length=args.match_length)
         stopping = False
 
         def stop(signum, frame):

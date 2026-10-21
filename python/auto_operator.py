@@ -106,6 +106,12 @@ def load_secret_environment(project: Path, env_file: str | None) -> dict[str, st
     return environment
 
 
+def with_match_length(state: dict[str, Any], match_length: str | None) -> dict[str, Any]:
+    if match_length not in (None, "east", "south"):
+        raise ValueError("match length must be east or south")
+    return {**state, **({"matchLength": match_length} if match_length is not None else {})}
+
+
 def configure_evaluator_click_budget(environment: dict[str, str], budget_ms: int | None,
                                      action_deadline_ms: int) -> dict[str, str]:
     if budget_ms is None:
@@ -1037,7 +1043,7 @@ class PythonAutoOperator:
         self.layout_path = Path(args.layout).resolve()
         self.templates = Path(args.templates).resolve()
         self.state_path = Path(args.state).resolve()
-        self.public_state = load_json(self.state_path)
+        self.public_state = with_match_length(load_json(self.state_path), getattr(args, "match_length", None))
         self.layout = load_json(self.layout_path)
         # Live calibration files focus on tiles and may omit static action
         # buttons. Reuse those fixed screen-space regions from the base layout.
@@ -1715,6 +1721,8 @@ class PythonAutoOperator:
             frame_public_state, public_observation, _ = self.frame_metadata_state(
                 screenshot, public_observation, refresh_public_cache=True,
             )
+        elif frame_public_state is None and evaluate_force_auto:
+            frame_public_state = getattr(self, "public_state", None)
         self.recognition_server.stdin.write(json.dumps({
             "id": request_id,
             "screenshot": str(screenshot),
@@ -2578,6 +2586,9 @@ class PythonAutoOperator:
             )
             state_path = self.frames / f"{utc_stamp()}.board-state.json"
             state_path.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
+        elif getattr(self.args, "match_length", None) is not None:
+            state_path = self.frames / f"{utc_stamp()}.board-state.json"
+            state_path.write_text(json.dumps(self.public_state, ensure_ascii=False), encoding="utf-8")
         command = [
             "node", "dist/src/cli.js", "evaluate-frame", str(screenshot),
             str(self.layout_path), str(self.templates), f"--state={state_path}",
@@ -3840,6 +3851,8 @@ class PythonAutoOperator:
             if self.latest_screencast_frame is None:
                 self.seed_silent_screencast_gate(page)
         self.log("started", mode=self.args.mode, page=page.url,
+                 **({"matchLength": self.public_state["matchLength"]}
+                    if getattr(self, "public_state", {}).get("matchLength") is not None else {}),
                  turnGate="cdp_screencast" if self.screencast_session else "screenshot")
         iterations = 0
         last_gate_sequence = -1
@@ -4895,6 +4908,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--templates", required=True)
     parser.add_argument("--action-templates", default="", help="calibrated riichi/call/win/pass button templates")
     parser.add_argument("--state", required=True)
+    parser.add_argument("--match-length", choices=("east", "south"), default=None,
+                        help="explicit verified room format; omit when unknown (not inferred from the current wind)")
     parser.add_argument("--board-metadata", action="store_true",
                         help="require current-frame OCR metadata for evaluation; install requirements-ocr.txt")
     parser.add_argument("--force-auto-click-budget-ms", type=int, default=None,
@@ -4945,6 +4960,8 @@ def parse_args() -> argparse.Namespace:
         help="explicitly allow confidence-gated deterministic discards in advisor mode; no defense/Jev",
     )
     args = parser.parse_args()
+    if args.ranked_loop and args.match_length == "south":
+        parser.error("--ranked-loop selects East rooms; --match-length=south is incompatible")
     if args.action_deadline_ms <= 0:
         parser.error("--action-deadline-ms must be positive")
     return args
