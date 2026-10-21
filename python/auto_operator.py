@@ -302,6 +302,25 @@ def is_away_resume_dialog(screenshot: bytes, viewport: dict[str, int]) -> bool:
     return gold >= 0.65 and dark >= 0.75
 
 
+def pass_button_color_fractions(button: Image.Image, *, contextual: bool = False) -> tuple[float, float, float]:
+    """Count the existing skip-button predicates with native Pillow masks."""
+    pixels = button.convert("RGB")
+    dark = _rgb_fraction(pixels, (("<", 80), ("<", 90), ("<", 100)))
+    warm = _rgb_fraction(pixels, ((">", 120), (">", 95), ("<", 100)))
+    red, green, blue = pixels.split()
+    tolerance, blue_limit = (30, 125) if contextual else (25, 120)
+    neutral = ImageChops.multiply(
+        ImageChops.multiply(
+            red.point([255 if value > 110 else 0 for value in range(256)]),
+            blue.point([255 if value < blue_limit else 0 for value in range(256)]),
+        ),
+        ImageChops.difference(red, green).point([
+            255 if value < tolerance else 0 for value in range(256)
+        ]),
+    )
+    return dark, warm, neutral.histogram()[255] / max(1, pixels.width * pixels.height)
+
+
 def is_force_auto_pass_prompt(screenshot: bytes, region: dict[str, float]) -> bool:
     """Recognize the fixed Mahjong Soul skip button without a template set.
 
@@ -309,26 +328,17 @@ def is_force_auto_pass_prompt(screenshot: bytes, region: dict[str, float]) -> bo
     independently recognized 13-tile concealed hand before it can click.
     """
     with Image.open(io.BytesIO(screenshot)) as image:
-        button = image.convert("RGB").crop((
+        button = image.crop((
             region["x"], region["y"],
             region["x"] + region["width"], region["y"] + region["height"],
         ))
-        dark = fraction_matching(button, lambda red, green, blue: red < 80 and green < 90 and blue < 100)
-        warm = fraction_matching(button, lambda red, green, blue: red > 120 and green > 95 and blue < 100)
-        neutral = fraction_matching(
-            button, lambda red, green, blue: abs(red - green) < 25 and red > 110 and blue < 120,
-        )
+        dark, warm, neutral = pass_button_color_fractions(button)
     return dark >= 0.25 and warm >= 0.005 and neutral >= 0.02
 
 
 def is_force_auto_pass_clip(screenshot: bytes) -> bool:
     with Image.open(io.BytesIO(screenshot)) as image:
-        button = image.convert("RGB")
-        dark = fraction_matching(button, lambda red, green, blue: red < 80 and green < 90 and blue < 100)
-        warm = fraction_matching(button, lambda red, green, blue: red > 120 and green > 95 and blue < 100)
-        neutral = fraction_matching(
-            button, lambda red, green, blue: abs(red - green) < 25 and red > 110 and blue < 120,
-        )
+        dark, warm, neutral = pass_button_color_fractions(image)
     return dark >= 0.25 and warm >= 0.005 and neutral >= 0.02
 
 
@@ -339,14 +349,11 @@ def is_contextual_reaction_pass(
     if action_button_count <= 0:
         return False
     with Image.open(io.BytesIO(screenshot)) as image:
-        button = image.convert("RGB").crop((
+        button = image.crop((
             region["x"], region["y"],
             region["x"] + region["width"], region["y"] + region["height"],
         ))
-        dark = fraction_matching(button, lambda red, green, blue: red < 80 and green < 90 and blue < 100)
-        neutral = fraction_matching(
-            button, lambda red, green, blue: abs(red - green) < 30 and red > 110 and blue < 125,
-        )
+        dark, _, neutral = pass_button_color_fractions(button, contextual=True)
     return dark >= 0.25 and neutral >= 0.02
 
 
@@ -4120,9 +4127,11 @@ class PythonAutoOperator:
                     if gate_frame and quick_pass and not self.pending_post_call_discard:
                         # Reaction prompts are independent of the draw-slot
                         # gate and must be inspected on every streamed frame.
-                        quick_reaction_win = force_auto_reaction_win_button(
-                            gate_frame, self.layout["viewport"], pass_region,
-                        ) is not None or bool(quick_self_actions)
+                        # The win detector can only return an element of the
+                        # orange buttons already found on this exact frame.
+                        # Its result OR any orange button is therefore exactly
+                        # this predicate; do not decode and scan them again.
+                        quick_reaction_win = bool(quick_self_actions)
                     draw_gate_streak = draw_gate_streak + 1 if quick_draw else 0
                     pass_gate_streak = pass_gate_streak + 1 if quick_pass else 0
                     call_gate_streak = call_gate_streak + 1 if quick_calls else 0
