@@ -120,3 +120,39 @@ test("correcting the actual concealed nine sou removes the false genbutsu from J
   await decide(after, { mode: "force-auto", jev: jev as any });
   assert.deepEqual(offered, [["7s"], ["8p"]]);
 });
+
+test("positive upper red ink keeps the actual red five sou from becoming six under glare", async () => {
+  const layout = layoutSchema.parse(JSON.parse(await readFile("config/layout-300-regression.json", "utf8")));
+  const fixture = JSON.parse(await readFile("test/fixtures/red-five-sou-as-six-20261021.json", "utf8"));
+  const recognition = await recognizeHand("test/fixtures/hand-red-five-sou-glare-20261021.jpg", layout, "templates/bootstrap");
+  assert.deepEqual(recognition.tiles, fixture.physicalHand);
+  assert.ok(recognition.matches[12]!.confidence < layout.minimumTileConfidence);
+  assert.equal(recognition.safe, false);
+  const templates = await loadTemplates("templates/bootstrap", file => !/(?:holdout|capture|test)/i.test(file));
+  // Independently labelled live controls contain green four bamboo and an
+  // ordinary five with a central red mark; neither is an aka five.
+  for (const [index, expected] of [[8, "4s"], [9, "5s"], [10, "7s"]] as const) {
+    assert.equal((await matchTile("test/fixtures/hand-seven-sou-control-a-20261021.jpg",
+      layout.handSlots[index]!, templates)).tile, expected);
+  }
+});
+
+test("correcting the actual red five sou recovers tenpai and preserves it in Jev choices", async () => {
+  const fixture = JSON.parse(await readFile("test/fixtures/red-five-sou-as-six-20261021.json", "utf8"));
+  const before = parseGameState(fixture.state);
+  const after = parseGameState({ ...before, hand: fixture.physicalHand.slice(0, 13), draw: fixture.physicalHand[13] });
+  const offered: string[][] = [];
+  const jev = { chooseDiscard: async (_state: unknown, candidates: Array<{ actionId: string; tile: string }>) => {
+    offered.push(candidates.map(candidate => candidate.tile));
+    return { actionId: candidates[0]!.actionId, confidence: 1, probabilities: { [candidates[0]!.actionId]: 1 },
+      model: "first-offered-test", promptVersion: "test", latencyMs: 0 };
+  } };
+  const original = await decide(before, { mode: "force-auto", jev: jev as any });
+  const corrected = await decide(after, { mode: "force-auto", jev: jev as any });
+  assert.deepEqual(offered, [["3s", "6s", "9p"], ["9p"]]);
+  assert.equal(original.candidates[0]!.shanten, 1);
+  assert.equal(corrected.candidates[0]!.shanten, 0);
+  // The real evaluated screenshot shows the riichi button. This verifies
+  // the action on corrected tiles, not a counterfactual win or point gain.
+  assert.deepEqual(corrected.selectedAction, { id: "riichi_discard_9p", action: "riichi", tile: "9p" });
+});

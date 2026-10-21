@@ -1,0 +1,133 @@
+{
+  "state": {
+    "round": "east_3",
+    "honba": 0,
+    "riichiSticks": 0,
+    "seat": "west",
+    "scores": {
+      "west": 30800,
+      "north": 20200,
+      "east": 23000,
+      "south": 26000
+    },
+    "hand": [
+      "3m",
+      "3m",
+      "3m",
+      "5m",
+      "7m",
+      "8m",
+      "1p",
+      "2p",
+      "3p",
+      "9p",
+      "3s",
+      "4s",
+      "6s"
+    ],
+    "draw": "4m",
+    "doraIndicators": [
+      "S"
+    ],
+    "ownDiscards": [
+      "P",
+      "E",
+      "C",
+      "2p",
+      "E",
+      "6p",
+      "8p",
+      "4s",
+      "E"
+    ],
+    "melds": [],
+    "visibleTiles": [],
+    "openMelds": 0,
+    "turn": 9,
+    "remainingTiles": 33,
+    "phase": "self_turn",
+    "recognitionConfidence": 0.6082618434839319,
+    "publicStateConfidence": 0,
+    "riichiDeclared": false,
+    "availableUiActions": [
+      "riichi",
+      "tsumo",
+      "kan",
+      "kyuushu"
+    ],
+    "opponents": [
+      {
+        "seat": "north",
+        "discards": [
+          "F",
+          "2s",
+          "2s",
+          "2m",
+          "9m",
+          "7p",
+          "8s",
+          "2p",
+          "S"
+        ],
+        "riichi": false,
+        "openMelds": 0,
+        "openMeldsObserved": true,
+        "melds": []
+      },
+      {
+        "seat": "east",
+        "discards": [
+          "F",
+          "6m",
+          "N",
+          "8p",
+          "5s",
+          "3s",
+          "N"
+        ],
+        "riichi": false,
+        "openMelds": 0,
+        "openMeldsObserved": true,
+        "melds": []
+      },
+      {
+        "seat": "south",
+        "discards": [
+          "N",
+          "1p",
+          "P",
+          "C",
+          "6m",
+          "W",
+          "1m",
+          "9m",
+          "8s",
+          "N"
+        ],
+        "riichi": false,
+        "openMelds": 0,
+        "openMeldsObserved": true,
+        "melds": []
+      }
+    ]
+  },
+  "physicalHand": [
+    "3m",
+    "3m",
+    "3m",
+    "5m",
+    "7m",
+    "8m",
+    "1p",
+    "2p",
+    "3p",
+    "9p",
+    "3s",
+    "4s",
+    "0s",
+    "4m"
+  ],
+  "recordedSelectedTile": "6s",
+  "actualDiscard": "0s",
+  "note": "Exact evaluated actualredfivebamboo atslot12 is misread6s. Clickslot12 physicallymatches requestedslot; publicriver later0s confirmsidentitydifference. No deal-in established from this discard."
+}

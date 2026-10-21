@@ -245,6 +245,10 @@ function scorePrepared(sample: PreparedImage, templates: Map<GameTile, PreparedI
   }
   const shortlist = [...templates.entries()]
     .filter(([tile]) => tile !== "7s" || !sample.threeRedBambooMarks)
+    // These bamboo faces contain green ink throughout their upper glyph.
+    // Strong, nearly exclusive red ink is positive contrary evidence, even
+    // when a highlight makes the raw silhouette resemble six bamboo.
+    .filter(([tile]) => !sample.redUpperGlyph || !["2s", "3s", "4s", "6s", "8s"].includes(tile))
     .map(([tile, variants]) => {
     const rankedVariants = variants.map((variant) => ({
       variant,
