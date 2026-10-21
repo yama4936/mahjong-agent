@@ -155,11 +155,29 @@ function publicStateSafetyReasons(state: GameState): string[] {
   return reasons;
 }
 
+/** Request-scoped analysis: local fallback and Jev must use the same inputs. */
+function decisionAnalysis(state: GameState) {
+  let legalActions: LegalAction[] | undefined;
+  let advice: AdvisorResult | undefined;
+  let handPlan: StrategyHandPlan | undefined;
+  return {
+    legalActions: () => legalActions ??= generateLegalActions(state),
+    advice: () => advice ??= deterministicAdvice(state),
+    handPlan: () => handPlan ??= buildStrategyHandPlan(state),
+  };
+}
+
 export async function decide(state: GameState, options: DecisionOptions): Promise<DecisionResult> {
-  const legalActions = generateLegalActions(state);
+  return decideWithAnalysis(state, options, decisionAnalysis(state));
+}
+
+async function decideWithAnalysis(
+  state: GameState, options: DecisionOptions, analysis: ReturnType<typeof decisionAnalysis>,
+): Promise<DecisionResult> {
+  const legalActions = analysis.legalActions();
   if (state.phase === "reaction") return decideReaction(state, legalActions, options);
 
-  const base = deterministicAdvice(state);
+  const base = analysis.advice();
   const immediateWin = legalActions.find((action) => action.action === "tsumo");
   if (immediateWin) return decideImmediateSelfAction(state, base, legalActions, immediateWin, options);
   const kan = legalActions.find((action): action is LegalAction & { action: "ankan" | "kakan"; consumedTiles: string[] } =>
@@ -277,7 +295,7 @@ export async function decide(state: GameState, options: DecisionOptions): Promis
     } : {}),
     ...(jev ? { jev } : {}),
     executable: options.mode === "force-auto" || (options.mode === "auto" && safety.allowed),
-    handPlan: buildStrategyHandPlan(state),
+    handPlan: analysis.handPlan(),
   };
 }
 
@@ -293,7 +311,8 @@ export async function decideForceAutoWithJevDeadline(
   const deadlineMs = options.deadlineMs ?? 2_300;
   if (!Number.isFinite(deadlineMs) || deadlineMs <= 0) throw new Error("Jev deadline must be positive");
   const startedAt = performance.now();
-  const local = await decide(state, { mode: "force-auto" });
+  const analysis = decisionAnalysis(state);
+  const local = await decideWithAnalysis(state, { mode: "force-auto" }, analysis);
   const withArbitration = (
     decision: DecisionResult,
     selectedSource: "jev" | "local",
@@ -322,16 +341,16 @@ export async function decideForceAutoWithJevDeadline(
   const deadline = new Promise<{ kind: "timeout" }>((resolve) => {
     timeout = setTimeout(() => resolve({ kind: "timeout" }), remainingMs);
   });
-  const remote = decide(state, {
+  const remote = decideWithAnalysis(state, {
     mode: "force-auto", jev: options.jev, signal: controller.signal,
     ...(options.handPlan ? { handPlan: options.handPlan } : {}),
-  });
+  }, analysis);
   const outcome = await Promise.race([
     remote.then((decision) => ({ kind: "decision" as const, decision })),
     deadline,
   ]);
   if (timeout) clearTimeout(timeout);
-  if (outcome.kind === "timeout") {
+  if (outcome.kind === "timeout" || performance.now() - startedAt >= deadlineMs) {
     controller.abort();
     return withArbitration(local, "local", "deadline_exceeded");
   }

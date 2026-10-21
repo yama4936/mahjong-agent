@@ -1,0 +1,117 @@
+{
+  "sourceReplay": "artifacts/ranked-supervised-12adb1c-20261021/operator-20261021T155409883159Z/replays/85e48b4f-378d-40cb-9214-e2cde9aea89d.json",
+  "sourceScreenshot": "/home/yama1/projects/jantama-auto/artifacts/ranked-supervised-12adb1c-20261021/operator-20261021T155409883159Z/frames/2026-10-21T16-43-16.910789+00-00.jpg",
+  "observedAt": "2026-10-21T16:43:19.218540+00:00",
+  "state": {
+    "round": "east_3",
+    "matchLength": "east",
+    "honba": 0,
+    "riichiSticks": 0,
+    "seat": "east",
+    "scores": {
+      "east": 19300,
+      "south": 29100,
+      "west": 45200,
+      "north": 6400
+    },
+    "hand": [
+      "1m",
+      "1m",
+      "2m",
+      "3m",
+      "5m",
+      "7m",
+      "1s",
+      "2s",
+      "4s",
+      "0s",
+      "5s",
+      "6s",
+      "7s"
+    ],
+    "draw": "3s",
+    "doraIndicators": [
+      "8s"
+    ],
+    "ownDiscards": [
+      "9p",
+      "W",
+      "E",
+      "P",
+      "F"
+    ],
+    "melds": [],
+    "visibleTiles": [],
+    "openMelds": 0,
+    "turn": 5,
+    "remainingTiles": 49,
+    "phase": "self_turn",
+    "recognitionConfidence": 0.7901937667345464,
+    "publicStateConfidence": 0,
+    "riichiDeclared": false,
+    "availableUiActions": [],
+    "opponents": [
+      {
+        "seat": "south",
+        "discards": [
+          "7p",
+          "E",
+          "3m",
+          "F",
+          "P"
+        ],
+        "riichi": false,
+        "openMelds": 0,
+        "openMeldsObserved": true,
+        "melds": []
+      },
+      {
+        "seat": "west",
+        "discards": [
+          "W",
+          "C",
+          "9p",
+          "9m",
+          "1p"
+        ],
+        "riichi": false,
+        "openMelds": 0,
+        "openMeldsObserved": true,
+        "melds": []
+      },
+      {
+        "seat": "north",
+        "discards": [
+          "5p",
+          "4m",
+          "7p",
+          "8m",
+          "6s"
+        ],
+        "riichi": false,
+        "openMelds": 0,
+        "openMeldsObserved": true,
+        "melds": []
+      }
+    ]
+  },
+  "observedArbitration": {
+    "strategy": "jev_deadline_with_local_fallback",
+    "deadlineMs": 484,
+    "selectedSource": "local",
+    "elapsedMs": 763,
+    "fallbackReason": "deadline_exceeded"
+  },
+  "operatorTiming": {
+    "parallelHandRecognitionMs": 1243,
+    "parallelBoardMetadataMs": 1377,
+    "forceAutoDecisionAfterParallelMs": 766,
+    "forceAutoRecognitionAndDecisionMs": 2144
+  },
+  "turnTiming": {
+    "clickBudgetMs": 2600,
+    "captureAgeBeforeDecisionMs": 1766,
+    "preClickReserveMs": 350,
+    "decisionBudgetMs": 484
+  }
+}

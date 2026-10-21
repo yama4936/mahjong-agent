@@ -287,6 +287,54 @@ test("force-auto falls back locally when Jev fails", async () => {
   assert.equal(result.arbitration?.fallbackReason, "jev_error");
 });
 
+test("force-auto rejects a resolved Jev result that has already consumed its deadline", async (t) => {
+  let elapsed = 0;
+  t.mock.method(performance, "now", () => elapsed);
+  const jev = { chooseDiscard: async (_state: unknown, candidates: any[]) => {
+    // Synchronous work can postpone the timer until after promise microtasks.
+    elapsed = 501;
+    return { actionId: candidates[0].actionId, confidence: 0.9,
+      probabilities: { [candidates[0].actionId]: 1 }, model: "fake", promptVersion: "test", latencyMs: 1 };
+  } } as any;
+
+  const result = await decideForceAutoWithJevDeadline(state, { jev, deadlineMs: 500 });
+  assert.equal(result.arbitration?.selectedSource, "local");
+  assert.equal(result.arbitration?.fallbackReason, "deadline_exceeded");
+  assert.equal(result.source, "deterministic");
+});
+
+test("ranked deadline fixture preserves local advice and remote candidate choices", async () => {
+  const fixture = JSON.parse(await readFile("test/fixtures/ranked-deadline-overrun-20261021.json", "utf8"));
+  const live = parseGameState(fixture.state);
+  const local = await decide(live, { mode: "force-auto" });
+  let offered: any[] = [];
+  const jev = { chooseDiscard: async (_state: unknown, candidates: any[]) => {
+    offered = structuredClone(candidates);
+    const selected = candidates.at(-1)!;
+    return { actionId: selected.actionId, confidence: 0.9,
+      probabilities: { [selected.actionId]: 1 }, model: "fake", promptVersion: "test", latencyMs: 1 };
+  } } as any;
+  const expected = await decide(live, { mode: "force-auto", jev });
+  const expectedOffers = structuredClone(offered);
+  const actual = await decideForceAutoWithJevDeadline(live, { jev, deadlineMs: 10_000 });
+  assert.equal(local.tile, "1m");
+  assert.deepEqual(offered, expectedOffers);
+  assert.deepEqual(actual.candidates, local.candidates);
+  assert.deepEqual(actual.handPlan, expected.handPlan);
+  assert.deepEqual(actual.selectedAction, expected.selectedAction);
+  const fallback = await decideForceAutoWithJevDeadline(live, { deadlineMs: 10_000 });
+  const { arbitration: _arbitration, ...fallbackDecision } = fallback;
+  assert.deepEqual(fallbackDecision, local);
+  // Sharing must end with this request: a later draw needs fresh analysis.
+  const next = parseGameState({ ...live, draw: "E" });
+  const nextExpected = await decide(next, { mode: "force-auto", jev });
+  const nextActual = await decideForceAutoWithJevDeadline(next, { jev, deadlineMs: 10_000 });
+  assert.deepEqual(nextActual.candidates, nextExpected.candidates);
+  assert.deepEqual(nextActual.legalActions, nextExpected.legalActions);
+  assert.deepEqual(nextActual.handPlan, nextExpected.handPlan);
+  assert.deepEqual(nextActual.selectedAction, nextExpected.selectedAction);
+});
+
 test("advisor recommends a non-worsening closed kan outside riichi", async () => {
   const closed = parseGameState({
     hand: ["1m", "2m", "3m", "1p", "2p", "3p", "1s", "2s", "3s", "E", "E", "E", "E"],
