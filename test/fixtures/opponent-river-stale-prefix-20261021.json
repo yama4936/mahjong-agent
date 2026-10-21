@@ -1,0 +1,433 @@
+{
+  "note": "Actual first decision holds West [F], although saved frame freshly recognizes 9m. Later complete frames agree on a longer river. Initial state is recorded decision data; observations are fresh real Hybrid outputs with explicit region completeness.",
+  "initialState": {
+    "round": "east_3",
+    "honba": 1,
+    "riichiSticks": 0,
+    "seat": "north",
+    "scores": {
+      "north": 23000,
+      "east": 34300,
+      "south": 14700,
+      "west": 28000
+    },
+    "hand": [
+      "1m",
+      "4p",
+      "5p",
+      "6p",
+      "9p",
+      "1s",
+      "3s",
+      "5s",
+      "E",
+      "E",
+      "W",
+      "P",
+      "P"
+    ],
+    "draw": "1p",
+    "doraIndicators": [
+      "8s"
+    ],
+    "ownDiscards": [],
+    "melds": [],
+    "visibleTiles": [],
+    "openMelds": 0,
+    "turn": 0,
+    "remainingTiles": 66,
+    "phase": "self_turn",
+    "recognitionConfidence": 0,
+    "publicStateConfidence": 0,
+    "riichiDeclared": false,
+    "availableUiActions": [],
+    "opponents": [
+      {
+        "seat": "east",
+        "discards": [
+          "1p"
+        ],
+        "riichi": false,
+        "openMelds": 0,
+        "openMeldsObserved": true,
+        "melds": []
+      },
+      {
+        "seat": "south",
+        "discards": [
+          "N",
+          "7m"
+        ],
+        "riichi": false,
+        "openMelds": 1,
+        "openMeldsObserved": true,
+        "melds": [
+          {
+            "type": "pon",
+            "tiles": [
+              "F",
+              "F",
+              "F"
+            ]
+          }
+        ]
+      },
+      {
+        "seat": "west",
+        "discards": [
+          "F"
+        ],
+        "riichi": false,
+        "openMelds": 0,
+        "openMeldsObserved": true,
+        "melds": []
+      }
+    ]
+  },
+  "captures": [
+    {
+      "file": "opponent-river-initial-20261021.jpg",
+      "observation": {
+        "doraIndicators": [
+          "8s"
+        ],
+        "ownDiscards": [],
+        "ownRiichiDeclared": false,
+        "ownMelds": [],
+        "ownMeldsObserved": true,
+        "opponentDiscards": [
+          {
+            "seat": "east",
+            "discards": [
+              "1p"
+            ],
+            "riichiDeclared": false,
+            "melds": [],
+            "meldsObserved": true,
+            "discardsObserved": true
+          },
+          {
+            "seat": "south",
+            "discards": [
+              "N",
+              "7m"
+            ],
+            "riichiDeclared": false,
+            "melds": [
+              {
+                "type": "pon",
+                "tiles": [
+                  "F",
+                  "F",
+                  "F"
+                ],
+                "confidence": 0.9996267557144165
+              }
+            ],
+            "meldsObserved": true,
+            "discardsObserved": true
+          },
+          {
+            "seat": "west",
+            "discards": [
+              "9m"
+            ],
+            "riichiDeclared": false,
+            "melds": [],
+            "meldsObserved": true,
+            "discardsObserved": true
+          }
+        ],
+        "ownMeldTiles": [],
+        "allMeldTiles": [
+          "F",
+          "F",
+          "F"
+        ],
+        "otherVisibleTiles": [
+          "1p",
+          "N",
+          "7m",
+          "9m",
+          "F",
+          "F",
+          "F"
+        ],
+        "acceptedTiles": 8,
+        "detectedCandidates": 8,
+        "complete": false,
+        "capturedAt": "2026-10-21T09:13:48.071543+00:00"
+      }
+    },
+    {
+      "file": "opponent-river-growth-a-20261021.jpg",
+      "observation": {
+        "doraIndicators": [
+          "8s"
+        ],
+        "ownDiscards": [
+          "W",
+          "9p"
+        ],
+        "ownRiichiDeclared": false,
+        "ownMelds": [],
+        "ownMeldsObserved": true,
+        "opponentDiscards": [
+          {
+            "seat": "east",
+            "discards": [
+              "1p",
+              "F",
+              "9p"
+            ],
+            "riichiDeclared": false,
+            "melds": [],
+            "meldsObserved": true,
+            "discardsObserved": true
+          },
+          {
+            "seat": "south",
+            "discards": [
+              "N",
+              "7m",
+              "9p",
+              "2p"
+            ],
+            "riichiDeclared": false,
+            "melds": [
+              {
+                "type": "pon",
+                "tiles": [
+                  "F",
+                  "F",
+                  "F"
+                ],
+                "confidence": 0.9996792078018188
+              }
+            ],
+            "meldsObserved": true,
+            "discardsObserved": true
+          },
+          {
+            "seat": "west",
+            "discards": [
+              "9m",
+              "7m",
+              "8m"
+            ],
+            "riichiDeclared": false,
+            "melds": [],
+            "meldsObserved": true,
+            "discardsObserved": true
+          }
+        ],
+        "ownMeldTiles": [],
+        "allMeldTiles": [
+          "F",
+          "F",
+          "F"
+        ],
+        "otherVisibleTiles": [
+          "1p",
+          "F",
+          "9p",
+          "N",
+          "7m",
+          "9p",
+          "2p",
+          "9m",
+          "7m",
+          "8m",
+          "F",
+          "F",
+          "F"
+        ],
+        "acceptedTiles": 16,
+        "detectedCandidates": 16,
+        "complete": false,
+        "capturedAt": "2026-10-21T09:14:14.093869+00:00"
+      }
+    },
+    {
+      "file": "opponent-river-growth-b-20261021.jpg",
+      "observation": {
+        "doraIndicators": [
+          "8s"
+        ],
+        "ownDiscards": [
+          "W",
+          "9p",
+          "1p"
+        ],
+        "ownRiichiDeclared": false,
+        "ownMelds": [],
+        "ownMeldsObserved": true,
+        "opponentDiscards": [
+          {
+            "seat": "east",
+            "discards": [
+              "1p",
+              "F",
+              "9p",
+              "C"
+            ],
+            "riichiDeclared": false,
+            "melds": [],
+            "meldsObserved": true,
+            "discardsObserved": true
+          },
+          {
+            "seat": "south",
+            "discards": [
+              "N",
+              "7m",
+              "9p",
+              "2p",
+              "2p"
+            ],
+            "riichiDeclared": false,
+            "melds": [
+              {
+                "type": "pon",
+                "tiles": [
+                  "F",
+                  "F",
+                  "F"
+                ],
+                "confidence": 0.9993246793746948
+              }
+            ],
+            "meldsObserved": true,
+            "discardsObserved": true
+          },
+          {
+            "seat": "west",
+            "discards": [
+              "9m",
+              "7m",
+              "8m",
+              "5m"
+            ],
+            "riichiDeclared": false,
+            "melds": [],
+            "meldsObserved": true,
+            "discardsObserved": true
+          }
+        ],
+        "ownMeldTiles": [],
+        "allMeldTiles": [
+          "F",
+          "F",
+          "F"
+        ],
+        "otherVisibleTiles": [
+          "1p",
+          "F",
+          "9p",
+          "C",
+          "N",
+          "7m",
+          "9p",
+          "2p",
+          "2p",
+          "9m",
+          "7m",
+          "8m",
+          "5m",
+          "F",
+          "F",
+          "F"
+        ],
+        "acceptedTiles": 20,
+        "detectedCandidates": 20,
+        "complete": false,
+        "capturedAt": "2026-10-21T09:14:26.249238+00:00"
+      }
+    }
+  ],
+  "decisionState": {
+    "round": "east_3",
+    "honba": 1,
+    "riichiSticks": 0,
+    "seat": "north",
+    "scores": {
+      "north": 23000,
+      "east": 34300,
+      "south": 14700,
+      "west": 28000
+    },
+    "hand": [
+      "1m",
+      "4p",
+      "5p",
+      "6p",
+      "1s",
+      "1s",
+      "3s",
+      "5s",
+      "E",
+      "E",
+      "E",
+      "P",
+      "P"
+    ],
+    "draw": "7s",
+    "doraIndicators": [
+      "8s"
+    ],
+    "ownDiscards": [
+      "W",
+      "9p",
+      "1p"
+    ],
+    "melds": [],
+    "visibleTiles": [],
+    "openMelds": 0,
+    "turn": 3,
+    "remainingTiles": 56,
+    "phase": "self_turn",
+    "recognitionConfidence": 0,
+    "publicStateConfidence": 0,
+    "riichiDeclared": false,
+    "availableUiActions": [],
+    "opponents": [
+      {
+        "seat": "east",
+        "discards": [
+          "1p",
+          "F",
+          "9p",
+          "C"
+        ],
+        "riichi": false,
+        "openMelds": 0,
+        "openMeldsObserved": true,
+        "melds": []
+      },
+      {
+        "seat": "south",
+        "discards": [
+          "N",
+          "7m",
+          "9p",
+          "2p",
+          "2p"
+        ],
+        "riichi": false,
+        "openMelds": 1,
+        "openMeldsObserved": false,
+        "melds": []
+      },
+      {
+        "seat": "west",
+        "discards": [
+          "F"
+        ],
+        "riichi": false,
+        "openMelds": 0,
+        "openMeldsObserved": true,
+        "melds": []
+      }
+    ]
+  }
+}

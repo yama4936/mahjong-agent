@@ -27,6 +27,49 @@ function publicRegion(tiles: Array<{ tile: any; x: number; y?: number; width?: n
   };
 }
 
+test("river completeness excludes missing, partial and unsafe regions", () => {
+  const region = publicRegion([{ tile: "9m", x: 0 }]);
+  assert.equal(toPublicTileObservation({ leftDiscards: region }).opponentDiscards[2]!.discardsObserved, true);
+  for (const partial of [undefined, { ...region, candidateCount: 2 }, { ...region, classificationSafe: false },
+    { ...region, recognized: region.recognized.map(tile => ({ ...tile, safe: false })) }]) {
+    assert.equal(toPublicTileObservation(partial ? { leftDiscards: partial } : {}).opponentDiscards[2]!.discardsObserved, false);
+  }
+});
+
+test("real longer river observations recover the visible dragon pon without relaxing copy limits", {
+  skip: !existsSync(".runtime/hybrid-vision/cvmaj-pretrained.tar") || !existsSync(".runtime/hybrid-vision/automajsoul-best-model.pt"),
+}, async () => {
+  const fixture = JSON.parse(await readFile("test/fixtures/opponent-river-stale-prefix-20261021.json", "utf8"));
+  const layout = layoutSchema.parse(JSON.parse(await readFile("config/layout-300-regression.json", "utf8")));
+  const recognizer = new HybridTileRecognizer();
+  try {
+    for (const capture of fixture.captures) {
+      const recognized = await recognizeConfiguredPublicTilesWithVit(`test/fixtures/${capture.file}`, layout, recognizer);
+      const observation = toPublicTileObservation(recognized, "north");
+      assert.deepEqual(observation.opponentDiscards.map(opponent => ({ seat: opponent.seat,
+        discards: opponent.discards, discardsObserved: opponent.discardsObserved,
+        melds: opponent.melds?.map(meld => ({ type: meld.type, tiles: meld.tiles })) })),
+      capture.observation.opponentDiscards.map((opponent: any) => ({ seat: opponent.seat,
+        discards: opponent.discards, discardsObserved: opponent.discardsObserved,
+        melds: opponent.melds?.map((meld: any) => ({ type: meld.type, tiles: meld.tiles })) })), capture.file);
+      assert.equal(observation.opponentDiscards[2]!.discardsObserved, true);
+    }
+  } finally { await recognizer.close(); }
+  const state = parseGameState(fixture.decisionState);
+  const capture = fixture.captures[2];
+  const fresh = { ...capture.observation, recognizedAt: capture.observation.capturedAt,
+    recognitionLatencyMs: 100, configuredRegions: Object.keys(layout.publicTileRegions!) };
+  const stale = { ...fresh, opponentDiscards: fresh.opponentDiscards.map((opponent: any) =>
+    opponent.seat === "west" ? { ...opponent, discards: ["F"] } : opponent) };
+  const before = cachedPublicStatePatch(stale, [...state.hand, state.draw!], state.opponents);
+  const after = cachedPublicStatePatch(fresh, [...state.hand, state.draw!], state.opponents);
+  assert.equal(before.rejectedTiles, 3);
+  assert.equal(after.rejectedTiles, 0);
+  const repaired = parseGameState({ ...state, ...after.patch });
+  assert.deepEqual(repaired.opponents.find(opponent => opponent.seat === "south")!.melds?.map(meld => ({ type: meld.type, tiles: meld.tiles })),
+    [{ type: "pon", tiles: ["F", "F", "F"] }]);
+});
+
 test("production own river reads the last East tile after a discard", {
   skip: !existsSync(".runtime/hybrid-vision/cvmaj-pretrained.tar") || !existsSync(".runtime/hybrid-vision/automajsoul-best-model.pt"),
 }, async () => {

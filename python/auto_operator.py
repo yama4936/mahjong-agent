@@ -919,7 +919,7 @@ def merge_public_observations(
     previous: dict[str, Any] | None, current: dict[str, Any],
     confirmed_open_melds: int | None = None,
 ) -> dict[str, Any]:
-    """Keep only monotonic river/dora growth across asynchronous snapshots."""
+    """Grow rivers/dora; repair a short stale opponent prefix with fresh consensus."""
     if previous is None:
         return current
 
@@ -928,10 +928,57 @@ def merge_public_observations(
 
     own_discards = growing(previous.get("ownDiscards", []), current.get("ownDiscards", []))
     dora = growing(previous.get("doraIndicators", []), current.get("doraIndicators", []))
+    river_candidates: dict[str, Any] = {}
+    river_repairs = []
+
+    def capture_seconds(value: Any) -> float | None:
+        if not isinstance(value, str):
+            return None
+        try:
+            stamp = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            return stamp.timestamp() if stamp.tzinfo is not None else None
+        except ValueError:
+            return None
+
     opponents = []
     for latest in current.get("opponentDiscards", []):
         prior = next((item for item in previous.get("opponentDiscards", [])
                       if item.get("seat") == latest.get("seat")), {})
+        prior_river = prior.get("discards", [])
+        latest_river = latest.get("discards", [])
+        river = growing(prior_river, latest_river)
+        captured_at = current.get("capturedAt")
+        captured_seconds = capture_seconds(captured_at)
+        # A transient early false tile used to pin an opponent's entire river
+        # forever. Only a short initial prefix is eligible for correction.
+        # Require two complete safe observations, at least two more tiles,
+        # ordered independent captures and agreement with subsequent growth.
+        # Own-river reconciliation and established longer histories retain
+        # their existing monotonic rules.
+        if (river != latest_river and 1 <= len(prior_river) <= 2
+                and len(latest_river) >= len(prior_river) + 2
+                and latest.get("discardsObserved") is True and captured_seconds is not None):
+            seat = latest["seat"]
+            candidate = previous.get("_opponentRiverCandidates", {}).get(seat, {})
+            candidate_seconds = capture_seconds(candidate.get("capturedAt"))
+            gap = captured_seconds - candidate_seconds if candidate_seconds is not None else None
+            candidate_river = candidate.get("discards", [])
+            agrees = (candidate.get("before") == prior_river and bool(candidate_river)
+                      and latest_river[:len(candidate_river)] == candidate_river)
+            if agrees and gap is not None and 0.5 <= gap <= 30:
+                river = latest_river
+                river_repairs.append({
+                    "seat": seat, "before": prior_river, "after": latest_river,
+                    "firstCapturedAt": candidate["capturedAt"], "confirmedCapturedAt": captured_at,
+                })
+            elif agrees and gap is not None and gap < 0.5:
+                # Repeated/out-of-order captures cannot corroborate or replace
+                # the first candidate; keep waiting for independent evidence.
+                river_candidates[seat] = candidate
+            else:
+                river_candidates[seat] = {
+                    "before": prior_river, "discards": latest_river, "capturedAt": captured_at,
+                }
         latest_melds = latest.get("melds", [])
         prior_melds = prior.get("melds", [])
         if latest.get("meldsObserved") is True and len(latest_melds) == 0:
@@ -940,7 +987,7 @@ def merge_public_observations(
             merged_melds = latest_melds if len(latest_melds) >= len(prior_melds) else prior_melds
         opponents.append({
             **latest,
-            "discards": growing(prior.get("discards", []), latest.get("discards", [])),
+            "discards": river,
             "riichiDeclared": bool(prior.get("riichiDeclared") or latest.get("riichiDeclared")),
             "melds": merged_melds,
         })
@@ -973,6 +1020,8 @@ def merge_public_observations(
         "ownMelds": own_melds,
         "ownMeldsObserved": current.get("ownMeldsObserved", previous.get("ownMeldsObserved")),
         "opponentDiscards": opponents,
+        "_opponentRiverCandidates": river_candidates,
+        "opponentRiverRepairs": river_repairs,
         "ownMeldTiles": own_meld_tiles,
         "allMeldTiles": all_meld_tiles,
         "otherVisibleTiles": other_visible,
@@ -1429,6 +1478,8 @@ class PythonAutoOperator:
         current = envelope["result"]
         prior = self.cached_public_observation
         merged = merge_public_observations(prior, current, getattr(self, "cached_open_melds", 0))
+        for repair in merged.get("opponentRiverRepairs", []):
+            self.log("opponent_river_prefix_repaired", **repair)
         pending_discard = getattr(self, "pending_own_discard", None)
         if prior is not None and pending_discard:
             prior_own = prior.get("ownDiscards", [])

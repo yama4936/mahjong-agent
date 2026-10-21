@@ -38,6 +38,7 @@ export interface PublicTileObservation {
   opponentDiscards: Array<{
     seat: "east" | "south" | "west" | "north";
     discards: GameTile[];
+    discardsObserved?: boolean;
     riichiDeclared?: boolean;
     melds?: RecognizedMeld[];
     meldsObserved?: boolean;
@@ -160,6 +161,11 @@ export function toPublicTileObservation(
   const doraIndicators = safeTiles("doraIndicators");
   const seats = ["east", "south", "west", "north"] as const;
   const ownIndex = seats.indexOf(ownSeat);
+  const riverObserved = (name: PublicTileRegionName) => {
+    const region = recognition[name];
+    return Boolean(region?.classificationSafe && region.candidateCount === region.recognized.length
+      && region.recognized.every(tile => tile.safe));
+  };
   const meldEvidence = (name: PublicTileRegionName) => {
     const region = recognition[name];
     const melds = recognizeExposedMelds(region);
@@ -171,9 +177,9 @@ export function toPublicTileObservation(
     )) };
   };
   const opponentDiscards = [
-    { seat: seats[(ownIndex + 1) % 4]!, discards: safeTiles("rightDiscards"), riichiDeclared: hasSidewaysRiichiTile(recognition.rightDiscards), ...meldEvidence("rightMelds") },
-    { seat: seats[(ownIndex + 2) % 4]!, discards: safeTiles("oppositeDiscards"), riichiDeclared: hasSidewaysRiichiTile(recognition.oppositeDiscards), ...meldEvidence("oppositeMelds") },
-    { seat: seats[(ownIndex + 3) % 4]!, discards: safeTiles("leftDiscards"), riichiDeclared: hasSidewaysRiichiTile(recognition.leftDiscards), ...meldEvidence("leftMelds") },
+    { seat: seats[(ownIndex + 1) % 4]!, discards: safeTiles("rightDiscards"), discardsObserved: riverObserved("rightDiscards"), riichiDeclared: hasSidewaysRiichiTile(recognition.rightDiscards), ...meldEvidence("rightMelds") },
+    { seat: seats[(ownIndex + 2) % 4]!, discards: safeTiles("oppositeDiscards"), discardsObserved: riverObserved("oppositeDiscards"), riichiDeclared: hasSidewaysRiichiTile(recognition.oppositeDiscards), ...meldEvidence("oppositeMelds") },
+    { seat: seats[(ownIndex + 3) % 4]!, discards: safeTiles("leftDiscards"), discardsObserved: riverObserved("leftDiscards"), riichiDeclared: hasSidewaysRiichiTile(recognition.leftDiscards), ...meldEvidence("leftMelds") },
   ];
   const ownMelds = recognizeExposedMelds(recognition.ownMelds);
   // Do not publish individually plausible crops as known tiles unless every

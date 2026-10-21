@@ -1483,6 +1483,83 @@ class AwayDialogDetectionTest(unittest.TestCase):
         self.assertTrue(merged["ownRiichiDeclared"])
         self.assertEqual(merged["handPlan"]["planId"], "tanyao")
 
+    def test_saved_longer_river_consensus_repairs_stale_initial_dragon(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        fixture = load_json(root / "test/fixtures/opponent-river-stale-prefix-20261021.json")
+        first, second = [item["observation"] for item in fixture["captures"][1:]]
+        previous = {**fixture["captures"][0]["observation"], "opponentDiscards": [
+            {"seat": opponent["seat"], "discards": opponent["discards"],
+             "melds": opponent.get("melds", [])}
+            for opponent in fixture["initialState"]["opponents"]
+        ]}
+        pending = merge_public_observations(previous, first)
+        self.assertEqual(pending["opponentDiscards"][2]["discards"], ["F"])
+        self.assertEqual(pending["opponentRiverRepairs"], [])
+        repaired = merge_public_observations(pending, second)
+        self.assertEqual(repaired["opponentDiscards"][2]["discards"], ["9m", "7m", "8m", "5m"])
+        self.assertEqual(repaired["opponentRiverRepairs"], [{
+            "seat": "west", "before": ["F"], "after": ["9m", "7m", "8m", "5m"],
+            "firstCapturedAt": first["capturedAt"], "confirmedCapturedAt": second["capturedAt"],
+        }])
+        self.assertEqual(repaired["_opponentRiverCandidates"], {})
+        self.assertEqual(repaired["otherVisibleTiles"].count("F"), 4)
+        self.assertEqual(repaired["acceptedTiles"], len(repaired["doraIndicators"])
+                         + len(repaired["ownDiscards"]) + len(repaired["otherVisibleTiles"]))
+
+    def test_river_repair_rejects_incomplete_short_or_disagreeing_evidence(self) -> None:
+        def observation(river, stamp, observed=True):
+            return {"capturedAt": stamp, "opponentDiscards": [
+                {"seat": "south", "discards": river, "discardsObserved": observed},
+            ]}
+        prior = observation(["F"], "2026-10-21T09:00:00+00:00")
+        for invalid in [observation(["9m"], "2026-10-21T09:00:01+00:00"),
+                        observation(["9m", "7m"], "2026-10-21T09:00:01+00:00"),
+                        observation(["9m", "7m", "8m"], "2026-10-21T09:00:01+00:00", False),
+                        observation(["9m", "7m", "8m"], None)]:
+            pending = merge_public_observations(prior, invalid)
+            self.assertEqual(pending["opponentDiscards"][0]["discards"], ["F"])
+            self.assertEqual(pending["_opponentRiverCandidates"], {})
+        first = observation(["9m", "7m", "8m"], "2026-10-21T09:00:01+00:00")
+        pending = merge_public_observations(prior, first)
+        changed = observation(["9m", "7m", "6m"], "2026-10-21T09:00:03+00:00")
+        self.assertEqual(merge_public_observations(pending, changed)["opponentRiverRepairs"], [])
+        # An unsafe intervening scan breaks corroboration instead of allowing
+        # two unrelated safe captures to repair the river around it.
+        interrupted = merge_public_observations(pending, {**first, "capturedAt": None})
+        self.assertEqual(merge_public_observations(interrupted,
+                         {**first, "capturedAt": "2026-10-21T09:00:04+00:00"})["opponentRiverRepairs"], [])
+
+    def test_river_repair_needs_recent_distinct_ordered_captures(self) -> None:
+        prior = {"opponentDiscards": [{"seat": "south", "discards": ["F"]}]}
+        first = {"capturedAt": "2026-10-21T09:00:01+00:00", "opponentDiscards": [
+            {"seat": "south", "discards": ["9m", "7m", "8m"], "discardsObserved": True},
+        ]}
+        pending = merge_public_observations(prior, first)
+        for stamp in [first["capturedAt"], "2026-10-21T09:00:00+00:00",
+                      "2026-10-21T09:00:01.499+00:00", "not-a-date", "2026-10-21T09:00:04",
+                      "2026-10-21T09:00:32+00:00"]:
+            with self.subTest(stamp=stamp):
+                result = merge_public_observations(pending, {**first, "capturedAt": stamp})
+                self.assertEqual(result["opponentRiverRepairs"], [])
+                self.assertEqual(result["opponentDiscards"][0]["discards"], ["F"])
+        result = merge_public_observations(pending, {**first, "capturedAt": "2026-10-21T09:00:03+00:00"})
+        self.assertEqual(result["opponentDiscards"][0]["discards"], ["9m", "7m", "8m"])
+
+    def test_river_consensus_cannot_replace_own_or_established_opponent_history(self) -> None:
+        prior = {"ownDiscards": ["F"], "doraIndicators": ["F"], "opponentDiscards": [
+            {"seat": "south", "discards": ["F", "C", "P"]},
+        ]}
+        current = {"ownDiscards": ["9m", "7m", "8m", "5m", "P"], "doraIndicators": ["9m"],
+                   "capturedAt": "2026-10-21T09:00:01+00:00", "opponentDiscards": [
+                       {"seat": "south", "discards": ["9m", "7m", "8m", "5m", "P"], "discardsObserved": True},
+                   ]}
+        pending = merge_public_observations(prior, current)
+        result = merge_public_observations(pending, {**current, "capturedAt": "2026-10-21T09:00:03+00:00"})
+        self.assertEqual(result["ownDiscards"], ["F"])
+        self.assertEqual(result["doraIndicators"], ["F"])
+        self.assertEqual(result["opponentDiscards"][0]["discards"], ["F", "C", "P"])
+        self.assertEqual(result["opponentRiverRepairs"], [])
+
     def test_closed_hand_clears_phantom_own_kan_from_public_cache(self) -> None:
         previous = {
             "ownMelds": [{"type": "minkan", "tiles": ["P"] * 4, "confidence": 0.7}],
