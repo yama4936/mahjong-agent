@@ -1667,8 +1667,8 @@ class PythonAutoOperator:
         self.log("screencast_gate_refreshed", source="silent_stream_one_shot")
         return True
 
-    def restart_screencast_gate(self, page: Page) -> None:
-        """Re-subscribe after a viewport override invalidates Chrome's stream."""
+    def stop_screencast_gate(self) -> None:
+        """Drop the subscription before navigation or viewport replacement."""
         session = self.screencast_session
         if session is None:
             return
@@ -1683,6 +1683,12 @@ class PythonAutoOperator:
             self.screencast_session = None
             self.latest_screencast_frame = None
             self.screencast_draw_occupied = None
+
+    def restart_screencast_gate(self, page: Page) -> None:
+        """Re-subscribe after a viewport override invalidates Chrome's stream."""
+        if self.screencast_session is None:
+            return
+        self.stop_screencast_gate()
         self.start_screencast_gate(page)
 
     def recognize_resident(
@@ -2199,11 +2205,17 @@ class PythonAutoOperator:
         self.armed = True
         self.log("black_screen_reload_requested", screenshot=str(snapshot),
                  durationSeconds=round(now - since, 3), windowSeconds=600, gameplayClicks=0)
+        resume_stream = getattr(self, "screencast_session", None) is not None
+        if resume_stream:
+            self.stop_screencast_gate()
         page.reload(wait_until="domcontentloaded", timeout=20000)
-        if getattr(self, "screencast_session", None) is not None:
-            self.restart_screencast_gate(page)
-        page.wait_for_timeout(250)
-        after = page.screenshot(animations="disabled")
+        page.wait_for_timeout(2500)
+        # Let the client's startup transitions run before resuming continuous
+        # capture. A still-running pre-navigation stream kept returning the
+        # dark startup logo in the controlled idle recovery check.
+        after = page.screenshot()
+        if resume_stream:
+            self.start_screencast_gate(page)
         state, confidence = classify_screen(after, {})
         evidence = self.frames / f"{utc_stamp()}.black-screen-after-reload.png"
         evidence.write_bytes(after)

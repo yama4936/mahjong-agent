@@ -50,11 +50,16 @@ class BlackScreenRecoveryTest(unittest.TestCase):
         self.page.reload.assert_not_called()
         self.page.screenshot.side_effect = [self.black, self.visible]
         self.operator.screencast_session = object()
-        self.operator.restart_screencast_gate = Mock()
+        lifecycle = Mock()
+        self.operator.stop_screencast_gate = lifecycle.stop
+        self.operator.start_screencast_gate = lifecycle.start
+        lifecycle.attach_mock(self.page.reload, "reload")
         with patch("auto_operator.time.monotonic", return_value=115):
             self.assertTrue(self.handle())
         self.page.reload.assert_called_once_with(wait_until="domcontentloaded", timeout=20000)
-        self.operator.restart_screencast_gate.assert_called_once_with(self.page)
+        self.assertEqual(lifecycle.mock_calls, [call.stop(),
+                         call.reload(wait_until="domcontentloaded", timeout=20000), call.start(self.page)])
+        self.assertEqual(self.page.screenshot.call_args_list[-1], call())
         self.page.mouse.click.assert_not_called()
         self.assertEqual(self.operator.public_cache_generation, 8)
         for name in ("cached_concealed_tiles", "cached_public_observation", "board_metadata_cache",
