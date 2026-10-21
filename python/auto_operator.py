@@ -2052,6 +2052,25 @@ class PythonAutoOperator:
         self.log("board_metadata_verified", screenshot=str(screenshot), **fields)
         mapped_observation = remap_seats(observation, source_seat, fields["seat"])
         riichi_seats = metadata.get("riichiSeats", [])
+        if mapped_observation is not None:
+            # River orientation alone can misclassify an early, incomplete
+            # crop as a sideways declaration and keep that flag even after
+            # its river prefix is repaired. On the verified HUD path, only
+            # positive sticks or conserved payments establish declarations.
+            # Work on the remapped copy: retain the raw cache for diagnostics.
+            ignored = []
+            own_riichi = bool(state.get("riichiDeclared") or fields["seat"] in riichi_seats)
+            if mapped_observation.get("ownRiichiDeclared") and not own_riichi:
+                ignored.append(fields["seat"])
+            mapped_observation["ownRiichiDeclared"] = own_riichi
+            for observed in mapped_observation.get("opponentDiscards", []):
+                declared = observed.get("seat") in riichi_seats
+                if observed.get("riichiDeclared") and not declared:
+                    ignored.append(observed.get("seat"))
+                observed["riichiDeclared"] = declared
+            if ignored:
+                self.log("unverified_river_riichi_ignored", screenshot=str(screenshot),
+                         seats=ignored, verifiedRiichiSeats=riichi_seats)
         for seat in riichi_seats:
             if seat == fields["seat"]:
                 state["riichiDeclared"] = True

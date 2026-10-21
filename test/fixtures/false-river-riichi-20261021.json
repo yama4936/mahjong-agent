@@ -1,0 +1,470 @@
+{
+  "sourceRun": "artifacts/ranked-supervised-6032601-20261021/operator-20261021T191413118741Z",
+  "sourceImplementation": "6032601",
+  "ruleReference": "https://m-league.jp/about/ 第4章第8条1",
+  "observationsAreReconstructed": true,
+  "provenance": "Decision states and execution receipts are copied verbatim from the live log. Observation fields are reconstructed from those states to test the Python-to-TypeScript merge boundary, not claimed as raw OCR outputs. Metadata fields reflect saved board scores/counters and independently inspected positive riichi evidence: no riichi at first false flag; onlyWest at the later decision.",
+  "cases": [
+    {
+      "sourceTimestamp": "2026-10-21T19:15:28.956330+00:00",
+      "sourceScreenshot": "/home/yama1/projects/jantama-auto/artifacts/ranked-supervised-6032601-20261021/operator-20261021T191413118741Z/frames/2026-10-21T19-15-25.298128+00-00.jpg",
+      "state": {
+        "round": "east_1",
+        "matchLength": "east",
+        "honba": 0,
+        "riichiSticks": 0,
+        "seat": "east",
+        "scores": {
+          "east": 25000,
+          "south": 25000,
+          "west": 25000,
+          "north": 25000
+        },
+        "hand": [
+          "2m",
+          "6m",
+          "6m",
+          "8m",
+          "4p",
+          "4p",
+          "6p",
+          "7p",
+          "2s",
+          "4s",
+          "W",
+          "F",
+          "C"
+        ],
+        "draw": "7s",
+        "doraIndicators": [
+          "4p"
+        ],
+        "ownDiscards": [
+          "3p"
+        ],
+        "melds": [],
+        "visibleTiles": [],
+        "openMelds": 0,
+        "turn": 1,
+        "remainingTiles": 66,
+        "phase": "self_turn",
+        "recognitionConfidence": 0.7948336247590732,
+        "publicStateConfidence": 0,
+        "riichiDeclared": false,
+        "availableUiActions": [],
+        "opponents": [
+          {
+            "seat": "south",
+            "discards": [
+              "P"
+            ],
+            "riichi": true,
+            "openMelds": 0,
+            "openMeldsObserved": true,
+            "melds": []
+          },
+          {
+            "seat": "west",
+            "discards": [
+              "8p"
+            ],
+            "riichi": false,
+            "openMelds": 0,
+            "openMeldsObserved": true,
+            "melds": []
+          },
+          {
+            "seat": "north",
+            "discards": [
+              "5m"
+            ],
+            "riichi": false,
+            "openMelds": 0,
+            "openMeldsObserved": true,
+            "melds": []
+          }
+        ]
+      },
+      "execution": {
+        "clicked": true,
+        "policy": "force_auto",
+        "discardedTile": "2m",
+        "clickIndex": 0,
+        "clickPoint": {
+          "x": 269,
+          "y": 999
+        },
+        "clickedAt": "2026-10-21T19:15:26.601095+00:00",
+        "confirmation": "hand_and_own_river_changed",
+        "confirmationLatencyMs": 1859,
+        "handPixelDelta": 29.86912163642184,
+        "riverPixelDelta": 46.575364046973796,
+        "screenshot": "/home/yama1/projects/jantama-auto/artifacts/ranked-supervised-6032601-20261021/operator-20261021T191413118741Z/frames/2026-10-21T19-15-28.950866+00-00.post-discard.png",
+        "actionTiming": {
+          "deadlineMs": 300000,
+          "detectionToDecisionMs": 240,
+          "decisionToClickMs": 1355,
+          "evidenceToClickMs": 1594,
+          "remainingMsAtClick": 298406,
+          "deadlineMet": true,
+          "actionKind": "discard"
+        }
+      },
+      "metadata": {
+        "round": "east_1",
+        "honba": 0,
+        "seat": "east",
+        "scores": {
+          "east": 25000,
+          "south": 25000,
+          "west": 25000,
+          "north": 25000
+        },
+        "riichiSticks": 0,
+        "remainingTiles": 66,
+        "verified": true,
+        "riichiSeats": []
+      },
+      "reconstructedObservation": {
+        "doraIndicators": [
+          "4p"
+        ],
+        "ownDiscards": [
+          "3p"
+        ],
+        "ownRiichiDeclared": false,
+        "ownMelds": [],
+        "ownMeldTiles": [],
+        "opponentDiscards": [
+          {
+            "seat": "south",
+            "discards": [
+              "P"
+            ],
+            "riichiDeclared": true,
+            "melds": [],
+            "meldsObserved": true
+          },
+          {
+            "seat": "west",
+            "discards": [
+              "8p"
+            ],
+            "riichiDeclared": false,
+            "melds": [],
+            "meldsObserved": true
+          },
+          {
+            "seat": "north",
+            "discards": [
+              "5m"
+            ],
+            "riichiDeclared": false,
+            "melds": [],
+            "meldsObserved": true
+          }
+        ],
+        "otherVisibleTiles": [],
+        "acceptedTiles": 0,
+        "detectedCandidates": 0,
+        "complete": false
+      }
+    },
+    {
+      "sourceTimestamp": "2026-10-21T19:20:20.687448+00:00",
+      "sourceScreenshot": "/home/yama1/projects/jantama-auto/artifacts/ranked-supervised-6032601-20261021/operator-20261021T191413118741Z/frames/2026-10-21T19-20-17.083481+00-00.jpg",
+      "state": {
+        "round": "east_1",
+        "matchLength": "east",
+        "honba": 0,
+        "riichiSticks": 1,
+        "seat": "east",
+        "scores": {
+          "east": 25000,
+          "south": 25000,
+          "west": 24000,
+          "north": 25000
+        },
+        "hand": [
+          "1m",
+          "5m",
+          "6m",
+          "4p",
+          "5p",
+          "6p",
+          "7p",
+          "7p",
+          "2s",
+          "3s",
+          "7s",
+          "S",
+          "F"
+        ],
+        "draw": "2p",
+        "doraIndicators": [
+          "4p"
+        ],
+        "ownDiscards": [
+          "3p",
+          "2m",
+          "3m",
+          "6m",
+          "C",
+          "8m",
+          "W",
+          "4s",
+          "N",
+          "8m",
+          "4p",
+          "W",
+          "3m"
+        ],
+        "melds": [],
+        "visibleTiles": [],
+        "openMelds": 0,
+        "turn": 13,
+        "remainingTiles": 18,
+        "phase": "self_turn",
+        "recognitionConfidence": 0.7913587828027662,
+        "publicStateConfidence": 0,
+        "riichiDeclared": false,
+        "availableUiActions": [],
+        "opponents": [
+          {
+            "seat": "south",
+            "discards": [
+              "1p",
+              "3m",
+              "8s",
+              "C",
+              "8m",
+              "2p",
+              "4s",
+              "3p",
+              "9s",
+              "W",
+              "4s",
+              "1p"
+            ],
+            "riichi": true,
+            "openMelds": 1,
+            "openMeldsObserved": false,
+            "melds": [
+              {
+                "type": "pon",
+                "tiles": [
+                  "P",
+                  "P",
+                  "P"
+                ]
+              }
+            ]
+          },
+          {
+            "seat": "west",
+            "discards": [
+              "8p",
+              "6m",
+              "5s",
+              "4m",
+              "P",
+              "6m",
+              "4s",
+              "4m",
+              "2s",
+              "3p",
+              "6p"
+            ],
+            "riichi": true,
+            "postRiichiSafeTiles": [
+              "W"
+            ],
+            "openMelds": 0,
+            "openMeldsObserved": true,
+            "melds": []
+          },
+          {
+            "seat": "north",
+            "discards": [
+              "5m",
+              "E",
+              "7m",
+              "9p",
+              "W",
+              "N",
+              "3s",
+              "7p",
+              "4p",
+              "8p",
+              "6s",
+              "4m",
+              "2m"
+            ],
+            "riichi": false,
+            "openMelds": 2,
+            "openMeldsObserved": false,
+            "melds": [
+              {
+                "type": "pon",
+                "tiles": [
+                  "8s",
+                  "8s",
+                  "8s"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "execution": {
+        "clicked": true,
+        "policy": "force_auto",
+        "discardedTile": "6p",
+        "clickIndex": 5,
+        "clickPoint": {
+          "x": 743,
+          "y": 999
+        },
+        "clickedAt": "2026-10-21T19:20:18.274571+00:00",
+        "confirmation": "hand_and_own_river_changed",
+        "confirmationLatencyMs": 1880,
+        "handPixelDelta": 25.69139328379585,
+        "riverPixelDelta": 5.113286359530262,
+        "screenshot": "/home/yama1/projects/jantama-auto/artifacts/ranked-supervised-6032601-20261021/operator-20261021T191413118741Z/frames/2026-10-21T19-20-20.684755+00-00.post-discard.png",
+        "actionTiming": {
+          "deadlineMs": 300000,
+          "detectionToDecisionMs": 313,
+          "decisionToClickMs": 1248,
+          "evidenceToClickMs": 1561,
+          "remainingMsAtClick": 298439,
+          "deadlineMet": true,
+          "actionKind": "discard"
+        }
+      },
+      "metadata": {
+        "round": "east_1",
+        "honba": 0,
+        "seat": "east",
+        "scores": {
+          "east": 25000,
+          "south": 25000,
+          "west": 24000,
+          "north": 25000
+        },
+        "riichiSticks": 1,
+        "remainingTiles": 18,
+        "verified": true,
+        "riichiSeats": [
+          "west"
+        ]
+      },
+      "reconstructedObservation": {
+        "doraIndicators": [
+          "4p"
+        ],
+        "ownDiscards": [
+          "3p",
+          "2m",
+          "3m",
+          "6m",
+          "C",
+          "8m",
+          "W",
+          "4s",
+          "N",
+          "8m",
+          "4p",
+          "W",
+          "3m"
+        ],
+        "ownRiichiDeclared": false,
+        "ownMelds": [],
+        "ownMeldTiles": [],
+        "opponentDiscards": [
+          {
+            "seat": "south",
+            "discards": [
+              "1p",
+              "3m",
+              "8s",
+              "C",
+              "8m",
+              "2p",
+              "4s",
+              "3p",
+              "9s",
+              "W",
+              "4s",
+              "1p"
+            ],
+            "riichiDeclared": true,
+            "melds": [
+              {
+                "type": "pon",
+                "tiles": [
+                  "P",
+                  "P",
+                  "P"
+                ]
+              }
+            ],
+            "meldsObserved": false
+          },
+          {
+            "seat": "west",
+            "discards": [
+              "8p",
+              "6m",
+              "5s",
+              "4m",
+              "P",
+              "6m",
+              "4s",
+              "4m",
+              "2s",
+              "3p",
+              "6p"
+            ],
+            "riichiDeclared": true,
+            "melds": [],
+            "meldsObserved": true
+          },
+          {
+            "seat": "north",
+            "discards": [
+              "5m",
+              "E",
+              "7m",
+              "9p",
+              "W",
+              "N",
+              "3s",
+              "7p",
+              "4p",
+              "8p",
+              "6s",
+              "4m",
+              "2m"
+            ],
+            "riichiDeclared": false,
+            "melds": [
+              {
+                "type": "pon",
+                "tiles": [
+                  "8s",
+                  "8s",
+                  "8s"
+                ]
+              }
+            ],
+            "meldsObserved": false
+          }
+        ],
+        "otherVisibleTiles": [],
+        "acceptedTiles": 0,
+        "detectedCandidates": 0,
+        "complete": false
+      }
+    }
+  ]
+}
