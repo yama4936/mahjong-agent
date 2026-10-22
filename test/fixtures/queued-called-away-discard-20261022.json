@@ -1,0 +1,92 @@
+{
+  "sourceRun": "artifacts/friend-5plus20-37f8ea2-20261022",
+  "implementationCommit": "37f8ea2",
+  "provenance": "Exact original decision receipts plus independent public pending/confirmed scan events; no receipt tile added to river, no OCR rerun. Native chi viewed independently; runtime cannot attribute absent receipt to a call from river alone.",
+  "sourceLogSha256": "62bea85e58cb5d37a1f7d16c6302d97df0c6322273e44bd7bf1479bcec8cf5d3",
+  "receipts": [
+    {
+      "tile": "5m",
+      "before": [
+        "9s"
+      ],
+      "clickedAt": "2026-10-22T05:44:45.286525+00:00",
+      "confirmation": "hand_and_own_river_changed",
+      "evidenceToClickMs": 2430,
+      "clickIndex": 0,
+      "clickPoint": {
+        "x": 269,
+        "y": 999
+      }
+    },
+    {
+      "tile": "6m",
+      "before": [
+        "9s"
+      ],
+      "clickedAt": "2026-10-22T05:44:53.839557+00:00",
+      "confirmation": "hand_and_own_river_changed",
+      "evidenceToClickMs": 1562,
+      "clickIndex": 13,
+      "clickPoint": {
+        "x": 1532,
+        "y": 999
+      }
+    }
+  ],
+  "scans": [
+    {
+      "ownDiscards": [
+        "9s",
+        "6m"
+      ],
+      "capturedAt": "2026-10-22T05:44:56.868182+00:00"
+    },
+    {
+      "ownDiscards": [
+        "9s",
+        "6m"
+      ],
+      "capturedAt": "2026-10-22T05:45:00.414678+00:00"
+    }
+  ],
+  "nativeFrames": [
+    {
+      "path": "artifacts/friend-5plus20-37f8ea2-20261022/frames/2026-10-22T05-44-52.593373+00-00.jpg",
+      "sha256": "a868af65b400a61cb49b6f15c4ae84be24ab95f73289238aa40484449c4ac4a7"
+    },
+    {
+      "path": "artifacts/friend-5plus20-37f8ea2-20261022/frames/2026-10-22T05-44-56.868205+00-00.public-cache.jpg",
+      "sha256": "6dd61e0d2af4976cf32e0dd2ad85903aa762c95a5443ef30f8589d9da53ad660"
+    },
+    {
+      "path": "artifacts/friend-5plus20-37f8ea2-20261022/frames/2026-10-22T05-45-00.414699+00-00.public-cache.jpg",
+      "sha256": "19a2622838c7dd1d59f32cf08019f5e3fd13420a5463cc87c39d0fc61dcc8712"
+    }
+  ],
+  "originalMismatch": {
+    "timestamp": "2026-10-22T05:45:03.108002+00:00",
+    "event": "own_discard_mismatch",
+    "expected": "5m",
+    "actual": "6m",
+    "before": [
+      "9s"
+    ],
+    "observed": [
+      "9s",
+      "6m"
+    ],
+    "capturedAt": "2026-10-22T05:45:00.414678+00:00",
+    "evidenceToClickMs": 2430,
+    "clickIndex": 0,
+    "clickPoint": {
+      "x": 269,
+      "y": 999
+    },
+    "clickedAt": "2026-10-22T05:44:45.286525+00:00",
+    "confirmation": "hand_and_own_river_changed",
+    "receiptTiles": [
+      "5m",
+      "6m"
+    ]
+  }
+}

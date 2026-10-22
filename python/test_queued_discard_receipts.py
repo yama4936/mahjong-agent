@@ -98,3 +98,73 @@ class QueuedDiscardReceiptTest(unittest.TestCase):
         self.assertNotIn('earlierReceipts', fresh)
         self.assertIsNone(self.op.cached_concealed_tiles)
         self.assertTrue(any(c.args[0] == 'own_discard_reconciliation_unresolved' for c in self.op.log.call_args_list))
+
+    def test_native_called_away_prefix_is_unresolved_without_certifying_a_call(self):
+        fixture = json.loads((Path(__file__).resolve().parents[1]
+            / 'test/fixtures/queued-called-away-discard-20261022.json').read_text())
+        self.baseline = fixture['receipts'][0]['before']
+        self.op.pending_own_discard = None
+        self.op.cached_public_observation = {'ownDiscards': list(self.baseline)}
+        self.op.log.reset_mock()
+        for receipt in fixture['receipts']:
+            self.op.register_pending_own_discard(copy.deepcopy(receipt))
+        self.scan(fixture['scans'][0]['ownDiscards'], fixture['scans'][0]['capturedAt'])
+        self.assertIsNotNone(self.op.pending_own_discard)
+        self.assertFalse(any(c.args[0] == 'own_discard_reconciliation_unresolved'
+                             for c in self.op.log.call_args_list))
+        self.scan(fixture['scans'][1]['ownDiscards'], fixture['scans'][1]['capturedAt'])
+        self.assertIsNone(self.op.pending_own_discard)
+        self.assertIsNone(self.op.cached_concealed_tiles)
+        self.assertEqual(self.op.cached_public_observation['ownDiscards'], self.baseline)
+        unresolved = [c for c in self.op.log.call_args_list
+                      if c.args[0] == 'own_discard_reconciliation_unresolved']
+        self.assertEqual(len(unresolved), 1)
+        self.assertEqual(unresolved[0].kwargs['reason'], 'river_missing_queued_receipt')
+        self.assertEqual(unresolved[0].kwargs['receiptTiles'], ['5m', '6m'])
+        self.assertFalse(any(c.args[0] in {'own_discard_mismatch', 'own_discard_reconciled'}
+                             for c in self.op.log.call_args_list))
+        self.op.record_post_riichi_pass_candidate.assert_not_called()
+        # With the ambiguous queue retired, a later independent scan may
+        # establish the real river without tying it to a requested click.
+        self.scan(fixture['scans'][1]['ownDiscards'], '2026-10-22T05:45:03+00:00')
+        self.assertEqual(self.op.cached_public_observation['ownDiscards'], ['9s', '6m'])
+
+    def test_missing_interior_or_duplicate_receipt_never_certifies_a_sparse_sequence(self):
+        for expected, observed in [(['P', '4m', '8s'], ['P', '8s']),
+                                   (['P', 'P', '8s'], ['P', '8s']),
+                                   (['P', '8s'], ['8s'])]:
+            with self.subTest(expected=expected, observed=observed):
+                self.setUp()
+                self.op.pending_own_discard = None
+                self.op.log.reset_mock()
+                for tile in expected:
+                    self.op.register_pending_own_discard({'tile': tile, 'before': list(self.baseline)})
+                for stamp in ['2026-10-22T04:10:52+00:00', '2026-10-22T04:10:53+00:00']:
+                    self.scan(self.baseline + observed, stamp)
+                self.assertIsNone(self.op.pending_own_discard)
+                self.assertIsNone(self.op.cached_concealed_tiles)
+                self.assertEqual(self.op.cached_public_observation['ownDiscards'], self.baseline)
+                self.assertTrue(any(c.args[0] == 'own_discard_reconciliation_unresolved'
+                                    for c in self.op.log.call_args_list))
+                self.assertFalse(any(c.args[0] in {'own_discard_mismatch', 'own_discard_reconciled'}
+                                     for c in self.op.log.call_args_list))
+                self.op.record_post_riichi_pass_candidate.assert_not_called()
+
+    def test_shorter_wrong_identity_or_reversed_order_still_mismatches(self):
+        for observed in [['F'], ['8s', 'P']]:
+            with self.subTest(observed=observed):
+                self.setUp()
+                self.op.pending_own_discard = None
+                self.op.log.reset_mock()
+                for tile in ['P', '4m', '8s']:
+                    self.op.register_pending_own_discard({'tile': tile, 'before': list(self.baseline)})
+                for stamp in ['2026-10-22T04:10:52+00:00', '2026-10-22T04:10:53+00:00']:
+                    self.scan(self.baseline + observed, stamp)
+                self.assertIsNone(self.op.pending_own_discard)
+                self.assertIsNone(self.op.cached_concealed_tiles)
+                self.assertEqual(self.op.cached_public_observation['ownDiscards'], self.baseline)
+                self.assertTrue(any(c.args[0] == 'own_discard_mismatch'
+                                    for c in self.op.log.call_args_list))
+                self.assertFalse(any(c.args[0] in {'own_discard_reconciliation_unresolved',
+                                                  'own_discard_reconciled'}
+                                     for c in self.op.log.call_args_list))

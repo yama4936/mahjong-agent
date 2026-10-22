@@ -3092,6 +3092,25 @@ class PythonAutoOperator:
         wrong = next((index for index, actual in enumerate(appended)
                       if not same_physical_tile(actual, receipts[index]["tile"])), None)
         if wrong is not None:
+            # A requested discard may disappear into a call before either
+            # independent scan sees it. A sparse ordered sequence cannot tell
+            # that apart from an unverified/ineffective earlier click. Neither
+            # case proves an identity mismatch or certifies any queued click.
+            cursor = 0
+            for receipt in receipts:
+                if cursor < len(appended) and same_physical_tile(appended[cursor], receipt["tile"]):
+                    cursor += 1
+            if len(appended) < len(receipts) and cursor == len(appended):
+                self.cached_concealed_tiles = None
+                self.pending_own_discard = None
+                observation["ownDiscards"] = list(before)
+                self.pending_own_river_confirmation = None
+                self.log("own_discard_reconciliation_unresolved",
+                         reason="river_missing_queued_receipt", before=before, observed=after,
+                         capturedAt=observation.get("capturedAt"),
+                         receiptTiles=[item["tile"] for item in receipts],
+                         concealedCacheInvalidated=True, untrustedAppendQuarantined=True)
+                return
             rejected = receipts[wrong]
             self.cached_concealed_tiles = None
             self.pending_own_discard = None
