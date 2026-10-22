@@ -348,8 +348,18 @@ export async function recognizeConfiguredPublicTilesWithVit(
   // tile. Two reviewed own-river frames classified East as North and 8m as
   // 6m at 0.53-0.56 confidence. Four pixels of surrounding table restored
   // both faces, while padding every crop degraded a correctly read red five.
+  // A reviewed 2m river face also reads as 8m at 0.75, above the generic
+  // padding trigger. Do not publish this measured confusion as safe without
+  // a strong independent padded-face classification (2m or genuine 8m).
+  const ambiguousOwnMan = new Set(jobs.flatMap((job, index) => (
+    classifier.backend === "hybrid" && job.name === "ownDiscards"
+    && job.region.rotationToUpright === 0 && !job.candidate.sideways
+    && predictions[index]!.tile === "8m" && predictions[index]!.runnerUpTile === "2m"
+    && predictions[index]!.confidence < 0.9 ? [index] : []
+  )));
+  const unconfirmedOwnMan = new Set(ambiguousOwnMan);
   const weakOwnRiver = jobs.flatMap((job, index) => (
-    job.name === "ownDiscards" && predictions[index]!.confidence < 0.7 ? [index] : []
+    job.name === "ownDiscards" && (predictions[index]!.confidence < 0.7 || ambiguousOwnMan.has(index)) ? [index] : []
   ));
   if (weakOwnRiver.length > 0) {
     const { width, height } = await sharp(screenshot).metadata();
@@ -368,6 +378,15 @@ export async function recognizeConfiguredPublicTilesWithVit(
     weakOwnRiver.forEach((index, retryIndex) => {
       const original = predictions[index]!;
       const padded = paddedPredictions[retryIndex]!;
+      if (ambiguousOwnMan.has(index)) {
+        if ((padded.tile === "2m" || padded.tile === "8m") && padded.confidence >= Math.max(0.95, minimumConfidence)
+          && padded.confidence - padded.runnerUpConfidence >= Math.max(0.9, minimumMargin)
+          && padded.confidence - original.confidence >= 0.15) {
+          predictions[index] = padded;
+          unconfirmedOwnMan.delete(index);
+        }
+        return;
+      }
       if (padded.confidence >= 0.8 && padded.confidence - original.confidence >= 0.15
         && padded.confidence - padded.runnerUpConfidence >= 0.5) predictions[index] = padded;
     });
@@ -385,7 +404,8 @@ export async function recognizeConfiguredPublicTilesWithVit(
       ambiguityMargin,
       // The Hybrid model's measured 6p/7p confusion applies to public tiles
       // too. A false 6p in an opponent river otherwise becomes genbutsu.
-      safe: !(classifier.backend === "hybrid" && isKnownSixSevenPinConfusion(prediction))
+      safe: !unconfirmedOwnMan.has(index)
+        && !(classifier.backend === "hybrid" && isKnownSixSevenPinConfusion(prediction))
         && prediction.confidence >= minimumConfidence && ambiguityMargin >= minimumMargin,
     };
     grouped.set(job.name, [...(grouped.get(job.name) ?? []), recognized]);

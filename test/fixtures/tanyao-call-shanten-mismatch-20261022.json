@@ -1,0 +1,238 @@
+{
+  "sourceRun": "artifacts/friend-300-1ddaccf-20261022",
+  "callTimestamp": "2026-10-22T01:42:56.597121+00:00",
+  "nativeBefore": "/home/yama1/projects/jantama-auto/artifacts/friend-300-1ddaccf-20261022/frames/2026-10-22T01-42-53.229702+00-00.png",
+  "nativeAfter": "/home/yama1/projects/jantama-auto/artifacts/friend-300-1ddaccf-20261022/frames/2026-10-22T01-42-57.757654+00-00.jpg",
+  "nativeImagesVisuallyVerified": true,
+  "state": {
+    "round": "east_1",
+    "honba": 1,
+    "riichiSticks": 2,
+    "seat": "south",
+    "scores": {
+      "south": 23500,
+      "west": 23500,
+      "north": 25500,
+      "east": 25500
+    },
+    "hand": [
+      "7m",
+      "8m",
+      "9m",
+      "6p",
+      "7p",
+      "8p",
+      "8p",
+      "3s",
+      "4s",
+      "4s",
+      "8s",
+      "8s",
+      "8s"
+    ],
+    "doraIndicators": [
+      "4m"
+    ],
+    "ownDiscards": [
+      "9s",
+      "S",
+      "1m",
+      "P",
+      "4m",
+      "E",
+      "C",
+      "W"
+    ],
+    "melds": [],
+    "visibleTiles": [],
+    "openMelds": 0,
+    "turn": 8,
+    "remainingTiles": 37,
+    "phase": "reaction",
+    "pendingDiscard": {
+      "tile": "4s",
+      "fromSeat": "east",
+      "inRiver": true
+    },
+    "recognitionConfidence": 0.8735006264983232,
+    "publicStateConfidence": 0,
+    "riichiDeclared": false,
+    "availableUiActions": [
+      "pon",
+      "pass"
+    ],
+    "opponents": [
+      {
+        "seat": "west",
+        "discards": [
+          "S",
+          "2m",
+          "C",
+          "W",
+          "1m",
+          "2p",
+          "1p",
+          "9s"
+        ],
+        "riichi": false,
+        "openMelds": 0,
+        "openMeldsObserved": true,
+        "melds": []
+      },
+      {
+        "seat": "north",
+        "discards": [
+          "4m",
+          "2p",
+          "9p",
+          "S",
+          "8p",
+          "7p",
+          "W",
+          "S",
+          "1m"
+        ],
+        "riichi": false,
+        "openMelds": 1,
+        "openMeldsObserved": true,
+        "melds": [
+          {
+            "type": "pon",
+            "tiles": [
+              "F",
+              "F",
+              "F"
+            ]
+          }
+        ]
+      },
+      {
+        "seat": "east",
+        "discards": [
+          "9s",
+          "N",
+          "9p",
+          "0s",
+          "E",
+          "5m",
+          "9m",
+          "E",
+          "4s"
+        ],
+        "riichi": false,
+        "openMelds": 0,
+        "openMeldsObserved": true,
+        "melds": []
+      }
+    ]
+  },
+  "legalActions": [
+    {
+      "id": "pon_4s",
+      "action": "pon",
+      "tile": "4s",
+      "consumedTiles": [
+        "4s",
+        "4s"
+      ]
+    },
+    {
+      "id": "pass",
+      "action": "pass"
+    }
+  ],
+  "originalAssessment": [
+    {
+      "actionId": "pon_4s",
+      "action": "pon",
+      "currentShanten": 1,
+      "resultingShanten": 0,
+      "shantenImprovement": 1,
+      "ukeire": 6,
+      "confirmedYaku": [],
+      "candidateYaku": [
+        "tanyao"
+      ],
+      "estimatedPoints": 1000,
+      "defenseLoss": 0.12,
+      "approved": true,
+      "reasons": []
+    }
+  ],
+  "postCallDiscards": [
+    {
+      "tile": "3s",
+      "shanten": 0
+    },
+    {
+      "tile": "8p",
+      "shanten": 0
+    },
+    {
+      "tile": "9m",
+      "shanten": 1
+    }
+  ],
+  "note": "Both minimum-shanten discards retain9m; sole tanyao path needs discarding9m and remains1-shanten, equal to closed pre-call. No alternate win or placement outcome asserted.",
+  "independentScoring": {
+    "library": "mahjong==2.0.0",
+    "melds": [
+      {
+        "type": "pon",
+        "tiles": [
+          "4s",
+          "4s",
+          "4s"
+        ]
+      }
+    ],
+    "postDiscardConcealed": [
+      "7m",
+      "8m",
+      "9m",
+      "6p",
+      "7p",
+      "8p",
+      "8p",
+      "8s",
+      "8s",
+      "8s"
+    ],
+    "discard": "3s",
+    "rows": [
+      {
+        "wait": "5p",
+        "tsumo": false,
+        "error": "no_yaku",
+        "han": null,
+        "fu": null,
+        "yaku": []
+      },
+      {
+        "wait": "5p",
+        "tsumo": true,
+        "error": "no_yaku",
+        "han": null,
+        "fu": null,
+        "yaku": []
+      },
+      {
+        "wait": "8p",
+        "tsumo": false,
+        "error": "no_yaku",
+        "han": null,
+        "fu": null,
+        "yaku": []
+      },
+      {
+        "wait": "8p",
+        "tsumo": true,
+        "error": "no_yaku",
+        "han": null,
+        "fu": null,
+        "yaku": []
+      }
+    ],
+    "scope": "Ordinary ron/tsumo yaku only; no situational last-tile or other exceptional yaku; not policy counterfactual."
+  }
+}

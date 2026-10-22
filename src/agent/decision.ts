@@ -414,10 +414,16 @@ function callPostDiscard(state: GameState, action: CallAction) {
     remaining.splice(index, 1);
   }
   if (action.action === "minkan") {
-    return { shanten: calculateShanten(remaining, state.openMelds + 1).shanten, ukeire: 0, effectiveTiles: [] as string[] };
+    return { shanten: calculateShanten(remaining, state.openMelds + 1).shanten, ukeire: 0,
+      effectiveTiles: [] as string[], tanyaoShanten: undefined as number | undefined };
   }
-  const best = evaluateDiscards(remaining, [], state.openMelds + 1)[0];
-  return best && { shanten: best.shanten, ukeire: best.ukeire, effectiveTiles: best.effectiveTiles.map(({ tile }) => tile) };
+  const discards = evaluateDiscards(remaining, [], state.openMelds + 1);
+  const best = discards[0];
+  const nonSimples = remaining.filter(tile => isTerminalOrHonor(tileIndex(normalizeTile(tile))));
+  const tanyaoShanten = nonSimples.length === 0 ? best?.shanten : nonSimples.length === 1
+    ? discards.find(discard => normalizeTile(discard.tile) === normalizeTile(nonSimples[0]!))?.shanten : undefined;
+  return best && { shanten: best.shanten, ukeire: best.ukeire,
+    effectiveTiles: best.effectiveTiles.map(({ tile }) => tile), tanyaoShanten };
 }
 
 function yakuForCall(state: GameState, action: CallAction): { confirmed: string[]; candidates: string[] } {
@@ -471,6 +477,15 @@ export function assessReactionCalls(state: GameState, legalActions: readonly Leg
       const reasons: string[] = [];
       if (improvement <= 0) reasons.push("no_strict_shanten_improvement");
       if (!yaku.confirmed.length && !yaku.candidates.length) reasons.push("no_viable_yaku_path");
+      // A lone terminal may be removable for tanyao, but the best structural
+      // discard can instead retain it in a completed sequence. Do not certify
+      // a speed gain using yakuless tenpai when the sole yaku path stays at the
+      // pre-call shanten. Late shape-tenpai play for draw payments is retained.
+      if (plan.phase !== "late_tenpai_defense" && !yaku.confirmed.length
+        && yaku.candidates.length === 1 && yaku.candidates[0] === "tanyao"
+        && post?.tanyaoShanten !== undefined && post.tanyaoShanten >= currentShanten) {
+        reasons.push("no_strict_tanyao_shanten_improvement");
+      }
       if (!yaku.confirmed.length && yaku.candidates.length > 0
         && state.openMelds === 0 && state.round === "unknown") {
         reasons.push("unverified_first_call_yaku");

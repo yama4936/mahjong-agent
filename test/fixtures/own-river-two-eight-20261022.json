@@ -1,0 +1,26 @@
+[
+  {
+    "name": "source",
+    "source": "artifacts/friend-5plus20-1ddaccf-20261022/frames/2026-10-22T01-52-27.920746+00-00.public-cache.jpg",
+    "sourceSha256": "2ee5a396e265fe7c1c8de11647abc569a1e023964a8e6ff06f19973ce9bf00aa",
+    "file": "test/fixtures/own-river-two-eight-source-20261022.png",
+    "crop": {
+      "x": 750,
+      "y": 535,
+      "width": 410,
+      "height": 225
+    }
+  },
+  {
+    "name": "eight-control",
+    "source": "artifacts/friend-300-37e9207-20261021/frames/2026-10-21T22-31-23.026622+00-00.public-cache.jpg",
+    "sourceSha256": "24b79dcbbd89f88cd7441e062ac27a3516b17c784ab73f928128bd08ca0d4c7b",
+    "file": "test/fixtures/own-river-two-eight-eight-control-20261022.png",
+    "crop": {
+      "x": 750,
+      "y": 535,
+      "width": 410,
+      "height": 225
+    }
+  }
+]
