@@ -1,0 +1,100 @@
+{
+  "kind": "synthetic_all_suit_counterexample",
+  "state": {
+    "round": "east_1",
+    "honba": 0,
+    "riichiSticks": 0,
+    "seat": "south",
+    "scores": {},
+    "hand": [
+      "2m",
+      "3m",
+      "4m",
+      "2m",
+      "3m",
+      "4m",
+      "7m",
+      "8m",
+      "9m",
+      "2m",
+      "7m",
+      "2m",
+      "4m"
+    ],
+    "doraIndicators": [],
+    "ownDiscards": [],
+    "melds": [],
+    "visibleTiles": [],
+    "openMelds": 0,
+    "turn": 7,
+    "phase": "reaction",
+    "pendingDiscard": {
+      "tile": "3m",
+      "fromSeat": "east"
+    },
+    "recognitionConfidence": 1,
+    "publicStateConfidence": 0,
+    "riichiDeclared": false,
+    "availableUiActions": [
+      "chi",
+      "pass"
+    ],
+    "opponents": []
+  },
+  "action": {
+    "id": "chi_3m_2m_4m",
+    "action": "chi",
+    "tile": "3m",
+    "consumedTiles": [
+      "2m",
+      "4m"
+    ]
+  },
+  "tanyaoDiscard": {
+    "actionId": "discard_9m",
+    "action": "discard",
+    "tile": "9m",
+    "shanten": 1,
+    "form": "standard",
+    "effectiveTiles": [
+      {
+        "tile": "1m",
+        "remaining": 4
+      },
+      {
+        "tile": "2m",
+        "remaining": 1
+      },
+      {
+        "tile": "3m",
+        "remaining": 2
+      },
+      {
+        "tile": "4m",
+        "remaining": 2
+      },
+      {
+        "tile": "5m",
+        "remaining": 4
+      },
+      {
+        "tile": "6m",
+        "remaining": 4
+      },
+      {
+        "tile": "7m",
+        "remaining": 2
+      },
+      {
+        "tile": "8m",
+        "remaining": 3
+      },
+      {
+        "tile": "9m",
+        "remaining": 3
+      }
+    ],
+    "ukeire": 25
+  },
+  "interpretation": "Structural0 retains9m and has chinitsu. Removing9m for sole heuristic tanyao path stays1-shanten. Ordinary-yaku analysis must preserve another legal yaku instead of assuming tanyao is the only route. All alternative waits independently scored offline; this is not a live performance result."
+}

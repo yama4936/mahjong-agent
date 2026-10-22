@@ -1,0 +1,193 @@
+{
+  "sourceRun": "artifacts/ranked-supervised-822abf8-20261022/operator-20261022T074358565620Z",
+  "nativeCall": {
+    "timestamp": "2026-10-22T08:02:25.706333+00:00",
+    "screenshot": "/home/yama1/projects/jantama-auto/artifacts/ranked-supervised-822abf8-20261022/operator-20261022T074358565620Z/frames/2026-10-22T08-02-20.815081+00-00.png",
+    "sha256": "d9dae530293ee9304e194a6eeb8b47e3e80cb7ee4767e1c49f1e2dd27d429c9b"
+  },
+  "state": {
+    "round": "east_4",
+    "matchLength": "east",
+    "honba": 1,
+    "riichiSticks": 1,
+    "seat": "north",
+    "scores": {
+      "north": 20500,
+      "east": 43700,
+      "south": 14300,
+      "west": 20500
+    },
+    "hand": [
+      "2p",
+      "4p",
+      "5p",
+      "6p",
+      "9p",
+      "9p",
+      "8s",
+      "8s",
+      "C",
+      "C"
+    ],
+    "doraIndicators": [
+      "6s"
+    ],
+    "ownDiscards": [
+      "F",
+      "5s",
+      "2s",
+      "2p",
+      "3s",
+      "4s",
+      "5m",
+      "4s",
+      "8m",
+      "E",
+      "8p",
+      "6p",
+      "F"
+    ],
+    "melds": [
+      {
+        "type": "chi",
+        "tiles": [
+          "9m",
+          "7m",
+          "8m"
+        ]
+      }
+    ],
+    "visibleTiles": [],
+    "openMelds": 1,
+    "turn": 13,
+    "remainingTiles": 19,
+    "phase": "reaction",
+    "pendingDiscard": {
+      "tile": "8s",
+      "fromSeat": "south",
+      "inRiver": true
+    },
+    "recognitionConfidence": 0.7176085464481026,
+    "publicStateConfidence": 0,
+    "riichiDeclared": false,
+    "availableUiActions": [
+      "pon",
+      "pass"
+    ],
+    "opponents": [
+      {
+        "seat": "east",
+        "discards": [
+          "S",
+          "9m",
+          "2s",
+          "E",
+          "1m",
+          "S",
+          "C",
+          "1m",
+          "6p",
+          "9s",
+          "5s",
+          "1m",
+          "P",
+          "1s"
+        ],
+        "riichi": false,
+        "openMelds": 0,
+        "openMeldsObserved": true,
+        "melds": []
+      },
+      {
+        "seat": "south",
+        "discards": [
+          "S",
+          "W",
+          "E",
+          "F",
+          "F",
+          "4p",
+          "9s",
+          "7m",
+          "4s",
+          "8p",
+          "N",
+          "1s",
+          "8s"
+        ],
+        "riichi": false,
+        "openMelds": 0,
+        "openMeldsObserved": true,
+        "melds": []
+      },
+      {
+        "seat": "west",
+        "discards": [
+          "N",
+          "S",
+          "1s",
+          "E",
+          "1s",
+          "P",
+          "1m",
+          "1p",
+          "3s",
+          "8p",
+          "N",
+          "7s"
+        ],
+        "riichi": false,
+        "openMelds": 1,
+        "openMeldsObserved": true,
+        "melds": [
+          {
+            "type": "chi",
+            "tiles": [
+              "7s",
+              "6s",
+              "0s"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "postCallDiscard": "2p",
+  "nativeWin": {
+    "timestamp": "2026-10-22T08:03:16.493765+00:00",
+    "event": "reaction_win",
+    "screenshot": "/home/yama1/projects/jantama-auto/artifacts/ranked-supervised-822abf8-20261022/operator-20261022T074358565620Z/frames/2026-10-22T08-03-14.630351+00-00.png",
+    "execution": {
+      "clicked": true,
+      "policy": "force_auto",
+      "action": "ron",
+      "clickPoint": {
+        "x": 936.0,
+        "y": 801.5
+      },
+      "confirmation": "reaction_win_button_disappeared",
+      "actionTiming": {
+        "deadlineMs": 300000,
+        "detectionToDecisionMs": 789,
+        "decisionToClickMs": 77,
+        "evidenceToClickMs": 866,
+        "remainingMsAtClick": 299134,
+        "deadlineMet": true,
+        "actionKind": "reaction"
+      }
+    }
+  },
+  "nativeFinal": {
+    "timestamp": "2026-10-22T08:03:37.537765+00:00",
+    "event": "outcome_observed",
+    "kind": "match",
+    "replayCount": 63,
+    "evidence": {
+      "observedAt": "2026-10-22T08:03:37.537746+00:00",
+      "screenshot": "/home/yama1/projects/jantama-auto/artifacts/ranked-supervised-822abf8-20261022/operator-20261022T074358565620Z/frames/2026-10-22T08-03-37.537311+00-00.match_result.png",
+      "screenState": "match_result",
+      "screenConfidence": 1.0
+    }
+  },
+  "interpretation": "Native8s pon preserves C yakuhai wait;9p side has no ordinary yaku. Real own C ron after one following3s discard ends sample34 second. Independent per-wait scoring required; preserve legal C wait even when moving this state to an earlier turn."
+}

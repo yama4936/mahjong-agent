@@ -1,0 +1,237 @@
+{
+  "sourceEvidence": "artifacts/friend-300-822abf8-20261022/sole-yakuhai-call-pending-investigation.json",
+  "state": {
+    "round": "east_1",
+    "honba": 0,
+    "riichiSticks": 0,
+    "seat": "south",
+    "scores": {
+      "south": 25000,
+      "west": 25000,
+      "north": 25000,
+      "east": 25000
+    },
+    "hand": [
+      "1m",
+      "2m",
+      "3m",
+      "1p",
+      "1p",
+      "4p",
+      "6p",
+      "7p",
+      "8p",
+      "7s",
+      "8s",
+      "C",
+      "C"
+    ],
+    "doraIndicators": [
+      "8m"
+    ],
+    "ownDiscards": [
+      "P",
+      "F",
+      "2s",
+      "5s",
+      "5m",
+      "P",
+      "S"
+    ],
+    "melds": [],
+    "visibleTiles": [],
+    "openMelds": 0,
+    "turn": 7,
+    "remainingTiles": 43,
+    "phase": "reaction",
+    "pendingDiscard": {
+      "tile": "1p",
+      "fromSeat": "north",
+      "inRiver": true
+    },
+    "recognitionConfidence": 0.7948336247590732,
+    "publicStateConfidence": 0,
+    "riichiDeclared": false,
+    "availableUiActions": [
+      "pon",
+      "pass"
+    ],
+    "opponents": [
+      {
+        "seat": "west",
+        "discards": [
+          "F",
+          "N",
+          "W",
+          "3s",
+          "6p",
+          "E",
+          "9m"
+        ],
+        "riichi": false,
+        "openMelds": 0,
+        "openMeldsObserved": true,
+        "melds": []
+      },
+      {
+        "seat": "north",
+        "discards": [
+          "W",
+          "E",
+          "9s",
+          "P",
+          "C",
+          "N",
+          "1p"
+        ],
+        "riichi": false,
+        "openMelds": 0,
+        "openMeldsObserved": true,
+        "melds": []
+      },
+      {
+        "seat": "east",
+        "discards": [
+          "P",
+          "2s",
+          "9m",
+          "2p",
+          "1s",
+          "N",
+          "S"
+        ],
+        "riichi": false,
+        "openMelds": 0,
+        "openMeldsObserved": true,
+        "melds": []
+      }
+    ]
+  },
+  "independentImmediateScoring": {
+    "library": "mahjong==2.0.0",
+    "scope": "ordinary_open_hand_scoring_not_policy_ev",
+    "assumptions": {
+      "situational_yaku": false,
+      "ura": false,
+      "honba_and_deposits_excluded": true,
+      "future_restructuring_not_scored": true,
+      "alternate_result_not_established": true
+    },
+    "rows": [
+      {
+        "discard": "4p",
+        "wait": "6s",
+        "tsumo": false,
+        "error": "no_yaku",
+        "han": null,
+        "fu": null,
+        "yaku": [],
+        "cost": null
+      },
+      {
+        "discard": "4p",
+        "wait": "6s",
+        "tsumo": true,
+        "error": "no_yaku",
+        "han": null,
+        "fu": null,
+        "yaku": [],
+        "cost": null
+      },
+      {
+        "discard": "4p",
+        "wait": "9s",
+        "tsumo": false,
+        "error": "no_yaku",
+        "han": null,
+        "fu": null,
+        "yaku": [],
+        "cost": null
+      },
+      {
+        "discard": "4p",
+        "wait": "9s",
+        "tsumo": true,
+        "error": "no_yaku",
+        "han": null,
+        "fu": null,
+        "yaku": [],
+        "cost": null
+      }
+    ]
+  },
+  "independentLaterScoring": {
+    "library": "mahjong==2.0.0",
+    "scope": "ordinary_open_hand_scoring_not_policy_ev",
+    "assumptions": {
+      "situational_yaku": false,
+      "ura": false,
+      "honba_and_deposits_excluded": true,
+      "future_restructuring_not_scored": true,
+      "alternate_result_not_established": true
+    },
+    "rows": [
+      {
+        "discard": "6p",
+        "wait": "6s",
+        "tsumo": false,
+        "error": "no_yaku",
+        "han": null,
+        "fu": null,
+        "yaku": [],
+        "cost": null
+      },
+      {
+        "discard": "6p",
+        "wait": "6s",
+        "tsumo": true,
+        "error": "no_yaku",
+        "han": null,
+        "fu": null,
+        "yaku": [],
+        "cost": null
+      },
+      {
+        "discard": "6p",
+        "wait": "9s",
+        "tsumo": false,
+        "error": null,
+        "han": 1,
+        "fu": 30,
+        "yaku": [
+          "Chantai"
+        ],
+        "cost": {
+          "main": 1000,
+          "additional": 0,
+          "main_bonus": 0,
+          "additional_bonus": 0,
+          "kyoutaku_bonus": 0,
+          "total": 1000,
+          "yaku_level": ""
+        }
+      },
+      {
+        "discard": "6p",
+        "wait": "9s",
+        "tsumo": true,
+        "error": null,
+        "han": 1,
+        "fu": 30,
+        "yaku": [
+          "Chantai"
+        ],
+        "cost": {
+          "main": 500,
+          "additional": 300,
+          "main_bonus": 0,
+          "additional_bonus": 0,
+          "kyoutaku_bonus": 0,
+          "total": 1100,
+          "yaku_level": ""
+        }
+      }
+    ]
+  },
+  "interpretation": "Immediate post-call6s and9s have no ordinary yaku. Later9s has chanta; initial all-final-waits-yakuless characterization refuted. All post-call discard choices still require offline verification; no avoided-loss or policy-performance claim."
+}

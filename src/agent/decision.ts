@@ -7,6 +7,7 @@ import { evaluateDiscards } from "../game/ukeire.js";
 import { isTerminalOrHonor, normalizeTile, tileIndex, type GameTile } from "../game/tiles.js";
 import { standardWaitShapes, type WaitShape } from "../game/winningShapes.js";
 import { scoreClosedWaits, type ClosedWaitReport } from "../evaluation/closedWaitScorer.js";
+import { openTenpaiYaku, type OpenTenpaiYaku } from "../evaluation/openTenpaiYaku.js";
 
 export type AgentMode = "observer" | "advisor" | "auto" | "force-auto";
 
@@ -47,6 +48,7 @@ export interface CallAssessment {
   candidateYaku: string[];
   estimatedPoints: number;
   defenseLoss: number;
+  ordinaryTenpai?: Array<{ discard: string; report: OpenTenpaiYaku | undefined }>;
   approved: boolean;
   reasons: string[];
 }
@@ -415,15 +417,25 @@ function callPostDiscard(state: GameState, action: CallAction) {
   }
   if (action.action === "minkan") {
     return { shanten: calculateShanten(remaining, state.openMelds + 1).shanten, ukeire: 0,
-      effectiveTiles: [] as string[], tanyaoShanten: undefined as number | undefined };
+      effectiveTiles: [] as string[], tanyaoShanten: undefined as number | undefined,
+      ordinaryTenpai: undefined as Array<{ discard: string; report: OpenTenpaiYaku | undefined }> | undefined };
   }
   const discards = evaluateDiscards(remaining, [], state.openMelds + 1);
   const best = discards[0];
+  // Analyze every structural-tenpai discard. A single structural ordinary-yaku
+  // alternative is enough to prevent a false no-yaku rejection.
+  const { draw: _draw, pendingDiscard: _pending, ...withoutDraw } = state;
+  const afterCall: GameState = { ...withoutDraw, hand: remaining, phase: "self_turn",
+    openMelds: state.openMelds + 1,
+    melds: [...state.melds, { type: action.action,
+      tiles: [...action.consumedTiles, action.tile].map(normalizeTile) }] };
+  const ordinaryTenpai = discards.filter(candidate => candidate.shanten === 0)
+    .map(candidate => ({ discard: candidate.tile, report: openTenpaiYaku(candidate, afterCall) }));
   const nonSimples = remaining.filter(tile => isTerminalOrHonor(tileIndex(normalizeTile(tile))));
   const tanyaoShanten = nonSimples.length === 0 ? best?.shanten : nonSimples.length === 1
     ? discards.find(discard => normalizeTile(discard.tile) === normalizeTile(nonSimples[0]!))?.shanten : undefined;
   return best && { shanten: best.shanten, ukeire: best.ukeire,
-    effectiveTiles: best.effectiveTiles.map(({ tile }) => tile), tanyaoShanten };
+    effectiveTiles: best.effectiveTiles.map(({ tile }) => tile), tanyaoShanten, ordinaryTenpai };
 }
 
 function yakuForCall(state: GameState, action: CallAction): { confirmed: string[]; candidates: string[] } {
@@ -471,17 +483,34 @@ export function assessReactionCalls(state: GameState, legalActions: readonly Leg
       const resultingShanten = post?.shanten ?? Number.POSITIVE_INFINITY;
       const improvement = currentShanten - resultingShanten;
       const yaku = yakuForCall(state, action);
+      const ordinaryTenpai = post?.ordinaryTenpai;
+      const ordinaryYaku = [...new Set(ordinaryTenpai?.flatMap(({ report }) =>
+        report?.waits.flatMap(wait => [...wait.ronYaku, ...wait.tsumoYaku]) ?? []) ?? [])];
+      // This only relaxes the sole-tanyao veto below. Keep the strict
+      // structural gain and existing viable-yaku-path gates mandatory.
+      // A kuikae-only tenpai discard cannot show strict gain: its consumed
+      // tiles plus the forbidden discard already formed the pre-call group.
+      const knownNoOrdinaryTenpai = Boolean(ordinaryTenpai?.length)
+        && ordinaryTenpai!.every(({ report }) => report && report.waits.length > 0
+          && report.waits.every(wait => !wait.ronYaku.length && !wait.tsumoYaku.length));
       const estimatedPoints = yaku.confirmed.length ? 2000 : yaku.candidates.includes("tanyao") ? 1000 : 0;
       const defenseLoss = Math.min(1, 0.12 + (threat ? 0.35 : 0) + (plan.phase === "late_tenpai_defense" ? 0.2 : 0)
         + (plan.placement.rank === 1 ? 0.18 : 0) - (plan.placement.allLast && plan.placement.rank === 4 ? 0.22 : 0));
       const reasons: string[] = [];
       if (improvement <= 0) reasons.push("no_strict_shanten_improvement");
       if (!yaku.confirmed.length && !yaku.candidates.length) reasons.push("no_viable_yaku_path");
+      // Structural tenpai without ordinary yaku is not evidence of a faster
+      // legal win. Preserve late shape-tenpai/draw payments and last-tile
+      // situational-yaku context; incomplete evidence stays unknown.
+      if (plan.phase !== "late_tenpai_defense" && !yaku.confirmed.length
+        && !(state.remainingTiles !== undefined && state.remainingTiles <= 4)
+        && knownNoOrdinaryTenpai) reasons.push("post_call_tenpai_has_no_ordinary_yaku");
       // A lone terminal may be removable for tanyao, but the best structural
       // discard can instead retain it in a completed sequence. Do not certify
       // a speed gain using yakuless tenpai when the sole yaku path stays at the
       // pre-call shanten. Late shape-tenpai play for draw payments is retained.
       if (plan.phase !== "late_tenpai_defense" && !yaku.confirmed.length
+        && !ordinaryYaku.length
         && yaku.candidates.length === 1 && yaku.candidates[0] === "tanyao"
         && post?.tanyaoShanten !== undefined && post.tanyaoShanten >= currentShanten) {
         reasons.push("no_strict_tanyao_shanten_improvement");
@@ -498,7 +527,7 @@ export function assessReactionCalls(state: GameState, legalActions: readonly Leg
         actionId: action.id, action: action.action, currentShanten, resultingShanten,
         shantenImprovement: improvement, ukeire: post?.ukeire ?? 0,
         confirmedYaku: yaku.confirmed, candidateYaku: yaku.candidates,
-        estimatedPoints, defenseLoss, approved: reasons.length === 0, reasons,
+        estimatedPoints, defenseLoss, ...(ordinaryTenpai ? { ordinaryTenpai } : {}), approved: reasons.length === 0, reasons,
       };
     });
 }
