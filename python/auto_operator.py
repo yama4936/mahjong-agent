@@ -20,6 +20,7 @@ import sys
 import threading
 import time
 import uuid
+from collections import Counter
 from datetime import datetime, timezone
 from math import ceil
 from pathlib import Path
@@ -1021,11 +1022,21 @@ def screencast_frame_follows_pointer_retreat(
         and gate_sequence > pointer_retreat_sequence
 
 
+def public_capture_seconds(value: Any) -> float | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        stamp = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return stamp.timestamp() if stamp.tzinfo is not None else None
+    except ValueError:
+        return None
+
+
 def merge_public_observations(
     previous: dict[str, Any] | None, current: dict[str, Any],
     confirmed_open_melds: int | None = None,
 ) -> dict[str, Any]:
-    """Grow rivers/dora; repair a short stale opponent prefix with fresh consensus."""
+    """Grow public history; corroborate corrections to stale opponent tiles."""
     if previous is None:
         return current
 
@@ -1037,15 +1048,6 @@ def merge_public_observations(
     river_candidates: dict[str, Any] = {}
     river_repairs = []
 
-    def capture_seconds(value: Any) -> float | None:
-        if not isinstance(value, str):
-            return None
-        try:
-            stamp = datetime.fromisoformat(value.replace("Z", "+00:00"))
-            return stamp.timestamp() if stamp.tzinfo is not None else None
-        except ValueError:
-            return None
-
     opponents = []
     for latest in current.get("opponentDiscards", []):
         prior = next((item for item in previous.get("opponentDiscards", [])
@@ -1054,19 +1056,26 @@ def merge_public_observations(
         latest_river = latest.get("discards", [])
         river = growing(prior_river, latest_river)
         captured_at = current.get("capturedAt")
-        captured_seconds = capture_seconds(captured_at)
-        # A transient early false tile used to pin an opponent's entire river
-        # forever. Only a short initial prefix is eligible for correction.
-        # Require two complete safe observations, at least two more tiles,
+        captured_seconds = public_capture_seconds(captured_at)
+        # A transient false tile used to pin an opponent's entire river
+        # forever. Require two complete safe observations, at least two more tiles,
         # ordered independent captures and agreement with subsequent growth.
-        # Own-river reconciliation and established longer histories retain
-        # their existing monotonic rules.
-        if (river != latest_river and 1 <= len(prior_river) <= 2
+        # A single false identity can also freeze a longer prefix. Correct
+        # only that one position, with the other established identities and
+        # the own river/dora still agreeing. Never replace a longer history
+        # wholesale or use evidence from a different own-river baseline.
+        aligned = all(current.get(key, [])[:len(previous.get(key, []))]
+                      == previous.get(key, []) for key in ("ownDiscards", "doraIndicators"))
+        single_error = (len(prior_river) >= 3 and aligned
+                        and len(latest_river) >= len(prior_river)
+                        and sum(before != after for before, after in
+                                zip(prior_river, latest_river)) == 1)
+        if (river != latest_river and (1 <= len(prior_river) <= 2 or single_error)
                 and len(latest_river) >= len(prior_river) + 2
                 and latest.get("discardsObserved") is True and captured_seconds is not None):
             seat = latest["seat"]
             candidate = previous.get("_opponentRiverCandidates", {}).get(seat, {})
-            candidate_seconds = capture_seconds(candidate.get("capturedAt"))
+            candidate_seconds = public_capture_seconds(candidate.get("capturedAt"))
             gap = captured_seconds - candidate_seconds if candidate_seconds is not None else None
             candidate_river = candidate.get("discards", [])
             agrees = (candidate.get("before") == prior_river and bool(candidate_river)
@@ -1110,6 +1119,34 @@ def merge_public_observations(
         own_meld_tiles = growing(previous.get("ownMeldTiles", []), current_own_meld_tiles)
         own_melds = current_own_melds if len(current_own_melds) >= len(previous.get("ownMelds", [])) \
             else previous.get("ownMelds", [])
+    # A fresh complete meld can conflict with a stale river tile while its
+    # correction is still awaiting corroboration. Do not publish a fifth
+    # copy in that intermediate state. Retain the prior meld evidence until
+    # the river is repaired; the inventory limit itself remains unchanged.
+    def normalize(tile):
+        return "5" + tile[1:] if tile.startswith("0") else tile
+    pending_old_tiles = {normalize(before)
+                         for candidate in river_candidates.values()
+                         for before, after in zip(candidate["before"], candidate["discards"])
+                         if before != after}
+    counts = Counter(normalize(tile) for tile in [*dora, *own_discards, *own_meld_tiles, *[
+        tile for opponent in opponents for tile in [
+            *opponent.get("discards", []),
+            *[tile for meld in opponent.get("melds", []) for tile in meld.get("tiles", [])],
+        ]
+    ]])
+    conflicts = {tile for tile in pending_old_tiles if counts[tile] > 4}
+    deferred_melds = []
+    if conflicts:
+        for opponent in opponents:
+            prior = next((item for item in previous.get("opponentDiscards", [])
+                          if item.get("seat") == opponent["seat"]), {})
+            prior_melds = prior.get("melds", [])
+            new_melds = [meld for meld in opponent.get("melds", []) if meld not in prior_melds]
+            if any(normalize(tile) in conflicts for meld in new_melds for tile in meld.get("tiles", [])):
+                opponent["melds"] = prior_melds
+                opponent["meldsObserved"] = False
+                deferred_melds.append({"seat": opponent["seat"], "conflictingTiles": sorted(conflicts)})
     all_meld_tiles = [*own_meld_tiles, *[
         tile for opponent in opponents for meld in opponent.get("melds", []) for tile in meld.get("tiles", [])
     ]]
@@ -1128,6 +1165,7 @@ def merge_public_observations(
         "opponentDiscards": opponents,
         "_opponentRiverCandidates": river_candidates,
         "opponentRiverRepairs": river_repairs,
+        "opponentMeldsDeferred": deferred_melds,
         "ownMeldTiles": own_meld_tiles,
         "allMeldTiles": all_meld_tiles,
         "otherVisibleTiles": other_visible,
@@ -1590,11 +1628,21 @@ class PythonAutoOperator:
         if envelope.get("error"):
             self.log("public_cache_failed", error=envelope["error"])
             return
-        current = envelope["result"]
+        self.accept_public_observation(envelope["result"])
+
+    def accept_public_observation(self, current: dict[str, Any]) -> bool:
+        """Apply one capture through the shared history and receipt guards."""
         prior = self.cached_public_observation
+        captured = public_capture_seconds(current.get("capturedAt"))
+        previous_capture = public_capture_seconds((prior or {}).get("capturedAt"))
+        if captured is not None and previous_capture is not None and captured <= previous_capture:
+            return False
         merged = merge_public_observations(prior, current, getattr(self, "cached_open_melds", 0))
         for repair in merged.get("opponentRiverRepairs", []):
             self.log("opponent_river_prefix_repaired", **repair)
+        for deferred in merged.get("opponentMeldsDeferred", []):
+            self.log("public_meld_evidence_deferred", reason="pending_river_correction_inventory_conflict",
+                     **deferred)
         pending_discard = getattr(self, "pending_own_discard", None)
         if prior is not None and pending_discard:
             prior_own = prior.get("ownDiscards", [])
@@ -1657,6 +1705,18 @@ class PythonAutoOperator:
             handPlan=self.cached_public_observation.get("handPlan", {}).get("planId"),
             handPlanConfidence=self.cached_public_observation.get("handPlan", {}).get("confidence"),
         )
+        return True
+
+    def promote_reaction_public_observation(self, observation: dict[str, Any] | None) -> None:
+        """Retain fresh prompt evidence even when the strategy passes the call."""
+        if not observation or public_capture_seconds(observation.get("capturedAt")) is None:
+            return
+        if self.accept_public_observation(observation):
+            # An in-flight scan predating this prompt must not restore its
+            # old partial melds or contradict the new consensus candidate.
+            self.public_cache_generation = getattr(self, "public_cache_generation", 0) + 1
+            self.public_cache_last_frame_hash = None
+            self.last_public_scan_at = 0.0
 
     def start_screencast_gate(self, page: Page) -> None:
         """Stream low-latency frames for the turn gate without CDP screenshots."""
@@ -3029,6 +3089,10 @@ class PythonAutoOperator:
             baseline = "previous"
         highlighted = self.pending_highlighted_discard(fresh_public, call_action,
                                                        self.public_state.get("seat", "east"))
+        # Infer the call against the old baseline before publishing this
+        # observation. Cache promotion is independent of call approval.
+        if metadata is None or metadata.get("verified"):
+            self.promote_reaction_public_observation(fresh_public)
         if pending and highlighted and pending != highlighted:
             self.log("reaction_call_policy_rejected", action=call_action,
                      reason="river_history_and_highlight_conflict")
@@ -3501,11 +3565,18 @@ class PythonAutoOperator:
             self.public_recognition_request_id += 1
             started_at = time.monotonic()
             try:
+                captured_at = datetime.fromtimestamp(screenshot.stat().st_mtime, timezone.utc).isoformat()
+            except OSError:
+                captured_at = None
+            try:
                 result = self.request_public_recognition({
                     "id": self.public_recognition_request_id,
                     "screenshot": str(screenshot),
                     "reactionHighlight": reaction_highlight,
                     "observationSeat": self.public_state.get("seat", "east"),
+                    # Use the saved frame's time, not completion of an
+                    # exchange that may wait behind an asynchronous scan.
+                    **({"capturedAt": captured_at} if captured_at is not None else {}),
                 })
                 self.log("reaction_public_recognition", screenshot=str(screenshot),
                          latencyMs=round((time.monotonic() - started_at) * 1000),

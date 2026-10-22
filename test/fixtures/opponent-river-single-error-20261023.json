@@ -1,0 +1,490 @@
+{
+  "implementationCommit": "3f5c4d6",
+  "sampleNumber": 50,
+  "round": "east_2",
+  "honba": 1,
+  "seat": "east",
+  "initialStateOriginalDecisionAt": "2026-10-22T19:31:54.170410+00:00",
+  "initialObservation": {
+    "capturedAt": "2026-10-22T19:31:54.170410+00:00",
+    "ownDiscards": [
+      "1s",
+      "2m",
+      "1p",
+      "6s",
+      "4p",
+      "N",
+      "N",
+      "6s",
+      "4p",
+      "F",
+      "4s"
+    ],
+    "doraIndicators": [
+      "0p"
+    ],
+    "opponentDiscards": [
+      {
+        "seat": "south",
+        "discards": [
+          "4m",
+          "2s",
+          "7m",
+          "1s"
+        ],
+        "riichiDeclared": false,
+        "melds": [],
+        "meldsObserved": true
+      },
+      {
+        "seat": "west",
+        "discards": [
+          "8s",
+          "2m",
+          "6s"
+        ],
+        "riichiDeclared": false,
+        "melds": [
+          {
+            "type": "pon",
+            "tiles": [
+              "W",
+              "W",
+              "W"
+            ]
+          }
+        ],
+        "meldsObserved": false
+      },
+      {
+        "seat": "north",
+        "discards": [
+          "7p",
+          "S",
+          "9s",
+          "8p",
+          "E",
+          "4p",
+          "2p",
+          "9m",
+          "4s",
+          "7p"
+        ],
+        "riichiDeclared": false,
+        "melds": [
+          {
+            "type": "pon",
+            "tiles": [
+              "F",
+              "F",
+              "F"
+            ]
+          },
+          {
+            "type": "chi",
+            "tiles": [
+              "3m",
+              "2m",
+              "4m"
+            ]
+          }
+        ],
+        "meldsObserved": true
+      }
+    ]
+  },
+  "captures": [
+    {
+      "native": "opponent-river-single-error-20261023-first.jpg",
+      "nativeSha256": "ca32bd752af105519806bc2f47c9e988dd0f0e9776e1a209568fb32d9f43ba9e",
+      "nativeIndependentlyViewed": true,
+      "originalNative": "artifacts/ranked-supervised-3f5c4d6-20261023/operator-20261022T182236367296Z/frames/2026-10-22T19-32-09.517047+00-00.jpg",
+      "observation": {
+        "doraIndicators": [
+          "0p"
+        ],
+        "ownDiscards": [
+          "1s",
+          "2m",
+          "1p",
+          "6s",
+          "4p",
+          "N",
+          "N",
+          "6s",
+          "4p",
+          "F",
+          "4s",
+          "8p"
+        ],
+        "ownRiichiDeclared": false,
+        "ownMelds": [],
+        "ownMeldsObserved": true,
+        "opponentDiscards": [
+          {
+            "seat": "south",
+            "discards": [
+              "4m",
+              "2s",
+              "7m",
+              "E",
+              "1m",
+              "5m",
+              "8p",
+              "5p",
+              "8s",
+              "6p"
+            ],
+            "discardsObserved": true,
+            "riichiDeclared": false,
+            "melds": [],
+            "meldsObserved": true
+          },
+          {
+            "seat": "west",
+            "discards": [
+              "8s",
+              "8m",
+              "6s",
+              "5s",
+              "6m",
+              "7p",
+              "N",
+              "E",
+              "E",
+              "6m",
+              "S"
+            ],
+            "discardsObserved": true,
+            "riichiDeclared": false,
+            "melds": [
+              {
+                "type": "pon",
+                "tiles": [
+                  "1s",
+                  "1s",
+                  "1s"
+                ],
+                "confidence": 0.9999144077301025
+              },
+              {
+                "type": "pon",
+                "tiles": [
+                  "W",
+                  "W",
+                  "W"
+                ],
+                "confidence": 0.9987666606903076
+              }
+            ],
+            "meldsObserved": true
+          },
+          {
+            "seat": "north",
+            "discards": [
+              "7p",
+              "S",
+              "9s",
+              "8p",
+              "E",
+              "4p",
+              "2p",
+              "9m",
+              "4s",
+              "7p",
+              "4s",
+              "1m"
+            ],
+            "discardsObserved": true,
+            "riichiDeclared": false,
+            "melds": [
+              {
+                "type": "pon",
+                "tiles": [
+                  "F",
+                  "F",
+                  "F"
+                ],
+                "confidence": 0.9994218349456787
+              },
+              {
+                "type": "chi",
+                "tiles": [
+                  "3m",
+                  "2m",
+                  "4m"
+                ],
+                "confidence": 0.7904880046844482
+              }
+            ],
+            "meldsObserved": true
+          }
+        ],
+        "ownMeldTiles": [],
+        "allMeldTiles": [
+          "1s",
+          "1s",
+          "1s",
+          "W",
+          "W",
+          "W",
+          "F",
+          "F",
+          "F",
+          "3m",
+          "2m",
+          "4m"
+        ],
+        "otherVisibleTiles": [
+          "4m",
+          "2s",
+          "7m",
+          "E",
+          "1m",
+          "5m",
+          "8p",
+          "5p",
+          "8s",
+          "6p",
+          "8s",
+          "8m",
+          "6s",
+          "5s",
+          "6m",
+          "7p",
+          "N",
+          "E",
+          "E",
+          "6m",
+          "S",
+          "7p",
+          "S",
+          "9s",
+          "8p",
+          "E",
+          "4p",
+          "2p",
+          "9m",
+          "4s",
+          "7p",
+          "4s",
+          "1m",
+          "1s",
+          "1s",
+          "1s",
+          "W",
+          "W",
+          "W",
+          "F",
+          "F",
+          "F",
+          "3m",
+          "2m",
+          "4m"
+        ],
+        "acceptedTiles": 58,
+        "detectedCandidates": 58,
+        "complete": false,
+        "capturedAt": "2026-10-22T19:32:09.517047+00:00"
+      }
+    },
+    {
+      "native": "opponent-river-single-error-20261023-second.jpg",
+      "nativeSha256": "1db4db73ee02c6e046468a44f4cafda1f7c8fe5c012e5f8f9b138b1e308306ee",
+      "nativeIndependentlyViewed": true,
+      "originalNative": "artifacts/ranked-supervised-3f5c4d6-20261023/operator-20261022T182236367296Z/frames/2026-10-22T19-32-23.714595+00-00.board-cache.jpg",
+      "observation": {
+        "doraIndicators": [
+          "0p"
+        ],
+        "ownDiscards": [
+          "1s",
+          "2m",
+          "1p",
+          "6s",
+          "4p",
+          "N",
+          "N",
+          "6s",
+          "4p",
+          "F",
+          "4s",
+          "8p",
+          "P"
+        ],
+        "ownRiichiDeclared": false,
+        "ownMelds": [],
+        "ownMeldsObserved": true,
+        "opponentDiscards": [
+          {
+            "seat": "south",
+            "discards": [
+              "4m",
+              "2s",
+              "7m",
+              "E",
+              "1m",
+              "5m",
+              "8p",
+              "5p",
+              "8s",
+              "6p",
+              "8p"
+            ],
+            "discardsObserved": true,
+            "riichiDeclared": false,
+            "melds": [],
+            "meldsObserved": true
+          },
+          {
+            "seat": "west",
+            "discards": [
+              "8s",
+              "8m",
+              "6s",
+              "5s",
+              "6m",
+              "7p",
+              "N",
+              "E",
+              "E",
+              "6m",
+              "S"
+            ],
+            "discardsObserved": true,
+            "riichiDeclared": false,
+            "melds": [
+              {
+                "type": "pon",
+                "tiles": [
+                  "1s",
+                  "1s",
+                  "1s"
+                ],
+                "confidence": 0.9998014569282532
+              },
+              {
+                "type": "pon",
+                "tiles": [
+                  "W",
+                  "W",
+                  "W"
+                ],
+                "confidence": 0.9998568296432495
+              }
+            ],
+            "meldsObserved": true
+          },
+          {
+            "seat": "north",
+            "discards": [
+              "7p",
+              "S",
+              "9s",
+              "8p",
+              "E",
+              "4p",
+              "2p",
+              "9m",
+              "4s",
+              "7p",
+              "4s",
+              "1m"
+            ],
+            "discardsObserved": true,
+            "riichiDeclared": false,
+            "melds": [
+              {
+                "type": "pon",
+                "tiles": [
+                  "F",
+                  "F",
+                  "F"
+                ],
+                "confidence": 0.9994218349456787
+              },
+              {
+                "type": "chi",
+                "tiles": [
+                  "3m",
+                  "2m",
+                  "4m"
+                ],
+                "confidence": 0.7904880046844482
+              }
+            ],
+            "meldsObserved": true
+          }
+        ],
+        "ownMeldTiles": [],
+        "allMeldTiles": [
+          "1s",
+          "1s",
+          "1s",
+          "W",
+          "W",
+          "W",
+          "F",
+          "F",
+          "F",
+          "3m",
+          "2m",
+          "4m"
+        ],
+        "otherVisibleTiles": [
+          "4m",
+          "2s",
+          "7m",
+          "E",
+          "1m",
+          "5m",
+          "8p",
+          "5p",
+          "8s",
+          "6p",
+          "8p",
+          "8s",
+          "8m",
+          "6s",
+          "5s",
+          "6m",
+          "7p",
+          "N",
+          "E",
+          "E",
+          "6m",
+          "S",
+          "7p",
+          "S",
+          "9s",
+          "8p",
+          "E",
+          "4p",
+          "2p",
+          "9m",
+          "4s",
+          "7p",
+          "4s",
+          "1m",
+          "1s",
+          "1s",
+          "1s",
+          "W",
+          "W",
+          "W",
+          "F",
+          "F",
+          "F",
+          "3m",
+          "2m",
+          "4m"
+        ],
+        "acceptedTiles": 60,
+        "detectedCandidates": 60,
+        "complete": false,
+        "capturedAt": "2026-10-22T19:32:23.714595+00:00"
+      }
+    }
+  ],
+  "provenance": "Byteexactnativeframes; offlineCLI public-observation --backend=hybrid --seat=east using source3f5c4d6 build/config/templates onlyafterallgamePIDsabsent. capturedAt is originalimagecapturetime, not offline recognitiontime. PriorSouth4/West3 eachhaveonefalseprefixidentity; freshrowsstable/grow andcompleteWest2pon. No APIcalls/strategiccounterfactualclaim."
+}
