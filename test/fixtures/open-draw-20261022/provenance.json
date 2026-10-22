@@ -1,0 +1,50 @@
+{
+  "method": "Lossless crops from original decoded JPEG pixels; native identities independently inspected. Misaligned crop reproduces original layout, not a fabricated tile.",
+  "cases": [
+    {
+      "name": "compact-west",
+      "source": "artifacts/ranked-supervised-6032601-20261021/operator-20261021T191413118741Z/frames/2026-10-21T19-26-06.849485+00-00.jpg",
+      "rect": {
+        "left": 887,
+        "top": 926,
+        "width": 92,
+        "height": 146
+      },
+      "tile": "W"
+    },
+    {
+      "name": "separated-nine-pin",
+      "source": "artifacts/ranked-supervised-6032601-20261021/operator-20261021T191413118741Z/frames/2026-10-21T19-59-38.280599+00-00.jpg",
+      "rect": {
+        "left": 1201,
+        "top": 926,
+        "width": 93,
+        "height": 146
+      },
+      "tile": "9p"
+    },
+    {
+      "name": "misaligned-eight-pin",
+      "source": "artifacts/friend-300-1dd294d-room12817-20261003/frames/2026-10-02T19-54-52.522704+00-00.jpg",
+      "rect": {
+        "left": 1171,
+        "top": 926,
+        "width": 93,
+        "height": 146
+      },
+      "tile": "8p",
+      "originalMisread": "1m"
+    },
+    {
+      "name": "corrected-eight-pin",
+      "source": "artifacts/friend-300-1dd294d-room12817-20261003/frames/2026-10-02T19-54-52.522704+00-00.jpg",
+      "rect": {
+        "left": 1201,
+        "top": 926,
+        "width": 93,
+        "height": 146
+      },
+      "tile": "8p"
+    }
+  ]
+}

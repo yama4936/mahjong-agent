@@ -531,6 +531,37 @@ class EvaluatorClickBudgetTest(unittest.TestCase):
                       ]}}
         self.assertEqual(ambiguous_open_draw_fallback(evaluation), ("8m", 1))
 
+    def test_selected_open_tile_uses_its_own_match_and_strict_consensus(self):
+        evaluation = {"openMelds": 2, "clickIndex": 7,
+                      "recognition": {"tiles": ["2m", "2m", "4m", "0m", "0s", "5s", "5s", "W"],
+                                      "confidence": 0.71578, "ambiguityMargin": 0.14912},
+                      "selectedTileRecognition": {"index": 7, "tile": "W", "confidence": 0.94569,
+                                                  "runnerUpConfidence": 0.58348}}
+        self.assertFalse(selected_open_draw_is_ambiguous(evaluation))
+        evaluation["recognition"]["tiles"][-1] = "9p"
+        selected = {"index": 7, "tile": "9p", "confidence": 0.73133, "runnerUpConfidence": 0.39543}
+        evaluation["selectedTileRecognition"] = selected
+        self.assertTrue(selected_open_draw_is_ambiguous(evaluation))
+        selected["normalizedConsensus"] = {"tile": "9p", "confidence": 0.95984, "runnerUpConfidence": 0.38676}
+        self.assertFalse(selected_open_draw_is_ambiguous(evaluation))
+        for invalid in ({"tile": "8p", "confidence": 0.99, "runnerUpConfidence": 0.3},
+                        {"tile": "9p", "confidence": 0.949, "runnerUpConfidence": 0.3},
+                        {"tile": "9p", "confidence": 0.96, "runnerUpConfidence": 0.82}, {}):
+            selected["normalizedConsensus"] = invalid
+            self.assertTrue(selected_open_draw_is_ambiguous(evaluation))
+
+    def test_original_low_confidence_wrong_draw_cannot_be_promoted(self):
+        evaluation = {"openMelds": 1, "clickIndex": 10,
+                      "recognition": {"tiles": ["7m"] * 10 + ["1m"], "confidence": 0.60364,
+                                      "ambiguityMargin": 0.00283},
+                      "selectedTileRecognition": {"index": 10, "tile": "1m", "confidence": 0.60364,
+                          "runnerUpConfidence": 0.60081, "normalizedConsensus": {
+                              "tile": "1m", "confidence": 0.99, "runnerUpConfidence": 0.1}}}
+        self.assertTrue(selected_open_draw_is_ambiguous(evaluation))
+        evaluation["selectedTileRecognition"] = {"index": 9, "tile": "1m", "confidence": 0.99,
+                                                 "runnerUpConfidence": 0.1}
+        self.assertTrue(selected_open_draw_is_ambiguous(evaluation))
+
     def test_call_tile_count_conflict_retries_and_unexpected_errors_propagate(self):
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
         operator.public_state = {"seat": "north"}

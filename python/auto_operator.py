@@ -848,13 +848,28 @@ def selected_open_draw_is_ambiguous(evaluation: dict[str, Any]) -> bool:
     tiles = evaluation.get("recognition", {}).get("tiles", [])
     click_index = evaluation.get("clickIndex")
     recognition = evaluation.get("recognition", {})
+    selected = evaluation.get("selectedTileRecognition", {})
+    if isinstance(click_index, int) and 0 <= click_index < len(tiles) \
+            and selected.get("index") == click_index and selected.get("tile") == tiles[click_index]:
+        confidence = selected.get("confidence", 0)
+        margin = confidence - selected.get("runnerUpConfidence", confidence)
+        confirmation = selected.get("normalizedConsensus", {})
+        if confidence >= 0.7 and margin >= 0.1 \
+                and confirmation.get("tile") == selected.get("tile") \
+                and confirmation.get("confidence", 0) >= 0.95 \
+                and confirmation.get("confidence", 0) - confirmation.get("runnerUpConfidence", 1) >= 0.15:
+            return False
+    else:
+        # Older evaluators do not provide tile-specific evidence.
+        confidence = recognition.get("confidence", 0)
+        margin = recognition.get("ambiguityMargin", 1)
     return bool(
         open_melds > 0
         and isinstance(click_index, int)
         and click_index == len(tiles) - 1
         and (
-            recognition.get("confidence", 0) < 0.80
-            or recognition.get("ambiguityMargin", 1) < 0.05
+            confidence < 0.80
+            or margin < 0.05
         )
     )
 

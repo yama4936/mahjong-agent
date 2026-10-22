@@ -64,6 +64,9 @@ test("resident force-auto evaluation preserves complete own pon and rejects mism
       assert.deepEqual(result.state.melds, id === 1 ? [{ type: "pon", tiles: ["F", "F", "F"] }] : []);
       assert.deepEqual(result.state.visibleTiles, id === 1 ? [] : ["F", "F", "F"]);
       assert.ok(result.decision);
+      assert.equal(result.selectedTileRecognition.index, result.clickIndex);
+      assert.equal(result.selectedTileRecognition.tile, result.recognition.tiles[result.clickIndex]);
+      assert.equal(result.selectedTileRecognition.tile, result.decision.selectedAction.tile);
     }
   } finally {
     child.stdin.end();

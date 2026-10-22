@@ -9,6 +9,7 @@ import { parseGameTile } from "../game/tiles.js";
 import { calibratedOpenHandProposal, resolveOpenDrawGap, proposeLiveHandLayout } from "./handLayoutProposal.js";
 import { layoutSchema } from "./layout.js";
 import { recognizeHand, recognizeTileSlots, warmTemplateCache, type MatcherOptions } from "./templateMatcher.js";
+import { confirmWeakOpenDraw, createOpenDrawVerifier, selectedTileRecognition } from "./openDrawEvidence.js";
 
 const [layoutPath, templateDirectory, statePath] = process.argv.slice(2);
 if (!layoutPath || !templateDirectory) {
@@ -46,6 +47,8 @@ const options: MatcherOptions = {
   rejectBlank: true,
 };
 await warmTemplateCache(templateDirectory, options);
+// Prepare before ready, never pay reference-bank startup on a live decision.
+const verifyOpenDraw = layout.tileMatcher === "raw" ? await createOpenDrawVerifier(templateDirectory) : undefined;
 process.stdout.write(`${JSON.stringify({ ready: true })}\n`);
 
 // A staged result is deliberately retained only inside this process.  The
@@ -222,6 +225,13 @@ for await (const line of lines) {
           recognitionConfidence: recognition.confidence,
         });
       }
+      let tailRecognition = selectedTileRecognition(recognition, recognition.tiles.length - 1);
+      if (verifyOpenDraw && inferredOpenMelds > 0 && state.phase === "self_turn"
+        && tailRecognition && activeLayout.drawSlot) {
+        tailRecognition = await confirmWeakOpenDraw(tailRecognition,
+          () => verifyOpenDraw(request.screenshot, activeLayout.drawSlot!));
+      }
+      // Include any consensus work in the remaining decision-to-click budget.
       const captureAgeBeforeDecisionMs = Math.max(0, Date.now() - frameCapturedAtMs);
       const availableDecisionMs = Math.max(
         1,
@@ -239,6 +249,8 @@ for await (const line of lines) {
       const clickIndex = decision.selectedAction.action === "discard" || decision.selectedAction.action === "riichi"
         ? [...state.hand, ...(state.draw ? [state.draw] : [])].map(String).lastIndexOf(decision.selectedAction.tile)
         : undefined;
+      const selectedRecognition = clickIndex === recognition.tiles.length - 1 ? tailRecognition
+        : clickIndex === undefined ? undefined : selectedTileRecognition(recognition, clickIndex);
       result = {
         schemaVersion: 1,
         status: "decision",
@@ -251,6 +263,7 @@ for await (const line of lines) {
           safe: recognition.safe,
         },
         decision,
+        ...(selectedRecognition ? { selectedTileRecognition: selectedRecognition } : {}),
         ...(decision.selectedAction.action !== "discard" && request.forceAutoActionButtons?.length === 1 ? {
           actionButton: {
             action: decision.selectedAction.action === "ankan" || decision.selectedAction.action === "kakan"
