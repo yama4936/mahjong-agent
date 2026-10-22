@@ -1,0 +1,48 @@
+[
+  {
+    "name": "source",
+    "source": "artifacts/ranked-supervised-5cce6f4-20261022/operator-20261022T025744345813Z/frames/2026-10-22T03-05-17.082808+00-00.public-cache.jpg",
+    "sourceSha256": "2730060090dd5158f4b4fb767c05e0d932c358676b4ed624d26311be12d7b72f",
+    "file": "test/fixtures/right-red-chi-source-20261022.png",
+    "crop": {
+      "x": 1500,
+      "y": 25,
+      "width": 220,
+      "height": 490
+    },
+    "nativeVisuallyVerified": true,
+    "expectedMelds": [
+      {
+        "type": "chi",
+        "tiles": [
+          "0m",
+          "3m",
+          "4m"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "red-pon-control",
+    "source": "artifacts/ranked-bab985e-copper-east-recovery2-20261011/frames/2026-10-11T10-05-53.997894+00-00.jpg",
+    "sourceSha256": "1353bca416912970767ed4c5cbced02f2493f741486f336da4fd9dd44a433159",
+    "file": "test/fixtures/right-red-chi-red-pon-control-20261022.png",
+    "crop": {
+      "x": 1500,
+      "y": 25,
+      "width": 220,
+      "height": 490
+    },
+    "nativeVisuallyVerified": true,
+    "expectedMelds": [
+      {
+        "type": "pon",
+        "tiles": [
+          "0m",
+          "5m",
+          "5m"
+        ]
+      }
+    ]
+  }
+]

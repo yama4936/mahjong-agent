@@ -6,6 +6,7 @@ import { classifyTile, loadTemplates } from "./templateMatcher.js";
 import { detectConfiguredPublicRegions, type RegionCandidate, type RegionDetectionOptions } from "./regionDetector.js";
 import type { VitTilePrediction } from "./vitRecognizer.js";
 import { isKnownSixSevenPinConfusion } from "./hybridTileRecognizer.js";
+import { normalizeRedManNumeral, type RedManNumeralEvidence } from "./redManNumeral.js";
 
 export interface RecognizedPublicTile extends RegionCandidate {
   tile: GameTile;
@@ -13,6 +14,7 @@ export interface RecognizedPublicTile extends RegionCandidate {
   runnerUpConfidence: number;
   ambiguityMargin: number;
   safe: boolean;
+  redNumeralEvidence?: RedManNumeralEvidence;
 }
 
 export interface PublicTileRecognitionRegion {
@@ -25,6 +27,7 @@ export interface PublicTileRecognitionRegion {
 
 export interface PublicTileRecognitionOptions extends RegionDetectionOptions {
   retryDiscardBoundaries?: boolean;
+  retryRightRedMeld?: boolean;
   minimumConfidence?: number;
   minimumMargin?: number;
 }
@@ -505,6 +508,60 @@ export async function recognizeConfiguredPublicTilesWithVit(
             ambiguityMargin: margin, safe: true } : tile) };
         const melds = recognizeExposedMelds(refined);
         if (melds.reduce((count, meld) => count + meld.tiles.length, 0) === right.candidateCount) result.rightMelds = refined;
+      }
+    }
+  }
+  // Reviewed right red-five faces lose confidence from side/background ink.
+  // Confirm the red numeral separately, then classify the five family with
+  // normalized ink. Any other weak face must independently recover as well.
+  const rightRed = result.rightMelds;
+  const rightJobs = jobs.filter(job => job.name === "rightMelds");
+  if (options.retryRightRedMeld !== false && classifier.backend === "hybrid" && rightRed?.rotationToUpright === 90
+    && !rightRed.classificationSafe && detections.rightMelds?.gridValid !== false
+    && rightRed.candidateCount === 3 && rightRed.recognized.length === 3) {
+    const fiveIndexes = rightRed.recognized.flatMap((tile, i) =>
+      tile.tile === "5m" && !tile.sideways && tile.confidence < 0.7 ? [i] : []);
+    const fiveIndex = fiveIndexes.length === 1 ? fiveIndexes[0]! : -1;
+    const otherWeak = rightRed.recognized.flatMap((tile, i) => !tile.safe && i !== fiveIndex ? [i] : []);
+    const fourIndex = otherWeak.length === 1 ? otherWeak[0]! : -1;
+    const fourTile = fourIndex >= 0 ? rightRed.recognized[fourIndex] : undefined;
+    const supportedWeakFaces = otherWeak.length === 0 || (otherWeak.length === 1 && fourTile?.tile === "4m"
+      && fourTile.sideways && fourTile.confidence < 0.7);
+    const strongAnchor = rightRed.recognized.some(tile => tile.safe && tile.confidence >= 0.95 && tile.ambiguityMargin >= 0.9);
+    if (fiveIndex >= 0 && supportedWeakFaces && strongAnchor) {
+      const five = rightJobs[fiveIndex]!.candidate;
+      const four = fourIndex >= 0 ? rightJobs[fourIndex]!.candidate : undefined;
+      const leftTrim = Math.max(1, Math.round(five.width * 0.03));
+      const bottomTrim = Math.max(1, Math.round(five.height * 0.12));
+      if (five.height >= 20 && five.width > five.height
+        && (!four || (four.height >= 20 && four.width > four.height))) {
+        const fiveImage = await sharp(screenshot).extract({ left: five.x + leftTrim, top: five.y,
+          width: five.width - leftTrim, height: five.height - bottomTrim }).rotate(90).png().toBuffer();
+        const normalized = await normalizeRedManNumeral(fiveImage);
+        if (normalized) {
+          const retryImages = [normalized.image];
+          if (four) {
+            const trim = Math.round(four.width / 5);
+            retryImages.push(await sharp(screenshot).extract({ left: four.x + trim, top: four.y,
+              width: four.width - trim, height: four.height }).rotate(180).png().toBuffer());
+          }
+          const retried = await classifier.classifyTileImages(retryImages);
+          if (retried.length !== retryImages.length) throw new Error("Model right red meld retry returned the wrong prediction count");
+          const accepted = retried.every((prediction, index) => prediction.tile === (index === 0 ? "5m" : "4m")
+            && prediction.confidence >= Math.max(0.95, minimumConfidence)
+            && prediction.confidence - prediction.runnerUpConfidence >= Math.max(0.9, minimumMargin)
+            && prediction.confidence - rightRed.recognized[index === 0 ? fiveIndex : fourIndex]!.confidence >= 0.15);
+          if (accepted) {
+            const refined = { ...rightRed, classificationSafe: true, recognized: rightRed.recognized.map((tile, i) => {
+              const prediction = i === fiveIndex ? retried[0] : i === fourIndex ? retried[1] : undefined;
+              return prediction ? { ...tile, tile: i === fiveIndex ? "0m" as const : "4m" as const,
+                confidence: prediction.confidence, runnerUpConfidence: prediction.runnerUpConfidence,
+                ambiguityMargin: prediction.confidence - prediction.runnerUpConfidence, safe: true,
+                ...(i === fiveIndex ? { redNumeralEvidence: normalized.evidence } : {}) } : tile;
+            }) };
+            if (recognizeExposedMelds(refined).length === 1) result.rightMelds = refined;
+          }
+        }
       }
     }
   }
