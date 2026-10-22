@@ -2249,3 +2249,8 @@
 
 - E2 native18:47:13.744613 independently shows otherWestあずさ28号 tsumo; nextE3 native18:47:27.983548 independently confirms ownEast**24000**/South33500/West31800/North10700. OwnSouth25000→24000/payment1000, **not ownron-dealin**, no ownriichi. PriorotherWest29500→33500/North32800→31800/East12700→10700; detailedwinningtile/han/fu/riichipot composition not certified from transition overlay. `sample48-round03-evidence.json` preserves originalscoretransitions/lastdecision/nativehashes/nextdecision.
 - E2 6operator-discarddecisions/6replays/4reactionprompts/0owncalls/wins/riichi;0budgetexpiry/abort/mismatch/independentreceiptfailure/unresolved/away/blackreload. Samehealthy source3f5c4d6/launch9d917a4/deadline300000/budget2600/rankedloop/east retained. No live code/config/build changes/helperCDP/tests/additionalmodel/OCR replay. Pending48 excluded from47aggregate/source[1]; goalactive.
+
+### 2026-10-23 JST — sample48 E3 called-away C evidence preserved
+
+- E3 original18:48:40.590180 unresolvedC/river_candidate_disappeared, concealedcacheinvalidated, retained without exactreceipt certification. Native18:51:34.509467 independently shows **LEFTactualNorth 北海獅子丸 Cpon**, typedNorth onecompleteCpon agrees; own345schi also visible/matches hand+meldconfirmation. `sample48-called-away-evidence.json` preserves originalevent/nativehash/fulloriginaldecision. Called-away explanation consistent, no wrongclick proof; counter remains1.
+- HealthyE3/own24000 retained; no live source/config/build changes/helperCDP/tests/additionalmodel/OCR replay. Pending48 remains excluded from historical47/source[1], no newbranch/win-rate claim. Goalactive.
