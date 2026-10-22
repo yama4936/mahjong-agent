@@ -3049,6 +3049,23 @@ class PythonAutoOperator:
             self.record_post_riichi_pass_candidate(pending, actual)
         self.pending_own_discard = None
 
+    @staticmethod
+    def own_discard_meld_snapshot(evaluation: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+        """Retain only explicitly observed opponent melds from before a click."""
+        result = {}
+        opponents = evaluation.get("state", {}).get("opponents", [])
+        seats = [opponent.get("seat") for opponent in opponents]
+        if len(set(seats)) != len(seats):
+            return result
+        for opponent in opponents:
+            melds = opponent.get("melds", [])
+            if (opponent.get("openMeldsObserved") is not True
+                    or opponent.get("openMelds") != len(melds)):
+                continue
+            result[opponent["seat"]] = [{"type": meld["type"], "tiles": list(meld["tiles"])}
+                                        for meld in melds]
+        return result
+
     def register_pending_own_discard(self, pending: dict[str, Any]) -> None:
         """Keep earlier unverified receipts when public recognition skips a turn.
 
@@ -3060,11 +3077,34 @@ class PythonAutoOperator:
         if previous:
             if previous["before"] == pending["before"]:
                 earlier = [*previous.get("earlierReceipts", []),
-                           {key: value for key, value in previous.items()
-                            if key != "earlierReceipts"}]
-                pending["earlierReceipts"] = earlier
-                self.log("own_discard_receipts_queued", before=pending["before"],
-                         expected=[item["tile"] for item in earlier] + [pending["tile"]])
+                           {key: value for key, value in previous.items() if key != "earlierReceipts"}]
+                possible_calls = []
+                signature = lambda meld: (meld["type"], tuple(sorted(meld["tiles"])))
+                for receipt in earlier:
+                    for seat, old in receipt.get("opponentMeldsBefore", {}).items():
+                        current = pending.get("opponentMeldsBefore", {}).get(seat)
+                        if current is None or [signature(meld) for meld in current[:len(old)]] \
+                                != [signature(meld) for meld in old]:
+                            continue
+                        for meld in current[len(old):]:
+                            if meld["type"] in {"chi", "pon", "minkan"} and any(
+                                    same_physical_tile(tile, receipt["tile"]) for tile in meld["tiles"]):
+                                possible_calls.append({"seat": seat, "meld": meld,
+                                    "tile": receipt["tile"], "clickedAt": receipt.get("clickedAt")})
+                if possible_calls:
+                    # A later identical tile in the river cannot identify which
+                    # click survived a call. Retire the older queue without
+                    # certifying a call, discard, or post-riichi safe tile.
+                    self.cached_concealed_tiles = None
+                    self.pending_own_river_confirmation = None
+                    self.log("own_discard_reconciliation_unresolved",
+                             reason="new_meld_may_contain_pending_discard", before=pending["before"],
+                             receiptTiles=[item["tile"] for item in earlier],
+                             possibleCalledReceipts=possible_calls, concealedCacheInvalidated=True)
+                else:
+                    pending["earlierReceipts"] = earlier
+                    self.log("own_discard_receipts_queued", before=pending["before"],
+                             expected=[item["tile"] for item in earlier] + [pending["tile"]])
             else:
                 self.cached_concealed_tiles = None
                 self.log("own_discard_reconciliation_unresolved",
@@ -3091,6 +3131,28 @@ class PythonAutoOperator:
             return
         wrong = next((index for index, actual in enumerate(appended)
                       if not same_physical_tile(actual, receipts[index]["tile"])), None)
+        if wrong is None and len(appended) < len(receipts):
+            # Even a matching prefix is ambiguous when a later identical
+            # receipt can explain the same observed river. Unknown/unreadable
+            # melds must not turn this into proof of the older click.
+            latest_positions = []
+            cursor = len(receipts) - 1
+            for actual in reversed(appended):
+                while cursor >= 0 and not same_physical_tile(actual, receipts[cursor]["tile"]):
+                    cursor -= 1
+                latest_positions.append(cursor)
+                cursor -= 1
+            if list(reversed(latest_positions)) != list(range(len(appended))):
+                self.cached_concealed_tiles = None
+                self.pending_own_discard = None
+                observation["ownDiscards"] = list(before)
+                self.pending_own_river_confirmation = None
+                self.log("own_discard_reconciliation_unresolved",
+                         reason="ambiguous_identical_receipt_prefix", before=before, observed=after,
+                         capturedAt=observation.get("capturedAt"),
+                         receiptTiles=[item["tile"] for item in receipts],
+                         concealedCacheInvalidated=True, untrustedAppendQuarantined=True)
+                return
         if wrong is not None:
             # A requested discard may disappear into a call before either
             # independent scan sees it. A sparse ordered sequence cannot tell
@@ -5161,6 +5223,7 @@ class PythonAutoOperator:
                     if discarded_tile:
                         self.register_pending_own_discard({
                             "tile": discarded_tile,
+                            "opponentMeldsBefore": self.own_discard_meld_snapshot(evaluation),
                             "riichiContext": self.own_discard_riichi_context(evaluation),
                             "riichiDeclaration": selected_action == "riichi" and bool(receipt.get("declaration")),
                             "before": self.own_discard_baseline(evaluation),

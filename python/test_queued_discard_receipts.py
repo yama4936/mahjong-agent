@@ -168,3 +168,89 @@ class QueuedDiscardReceiptTest(unittest.TestCase):
                 self.assertFalse(any(c.args[0] in {'own_discard_reconciliation_unresolved',
                                                   'own_discard_reconciled'}
                                      for c in self.op.log.call_args_list))
+
+    def test_native_called_first_copy_cannot_take_credit_for_later_identical_discard(self):
+        fixture = json.loads((Path(__file__).resolve().parents[1]
+            / 'test/fixtures/called-identical-discard-20261022.json').read_text())
+        self.baseline = fixture['receipts'][0]['before']
+        self.op.pending_own_discard = None
+        self.op.cached_public_observation = {'ownDiscards': list(self.baseline)}
+        self.op.log.reset_mock()
+        for original in fixture['receipts']:
+            receipt = copy.deepcopy(original)
+            receipt['opponentMeldsBefore'] = self.op.own_discard_meld_snapshot(
+                {'state': {'opponents': receipt.pop('sourceOpponents')}})
+            self.op.register_pending_own_discard(receipt)
+        self.assertNotIn('earlierReceipts', self.op.pending_own_discard)
+        self.assertIsNone(self.op.cached_concealed_tiles)
+        unresolved = [c for c in self.op.log.call_args_list
+                      if c.args[0] == 'own_discard_reconciliation_unresolved']
+        self.assertEqual(len(unresolved), 1)
+        self.assertEqual(unresolved[0].kwargs['reason'], 'new_meld_may_contain_pending_discard')
+        for scan in fixture['scans']:
+            self.scan(scan['ownDiscards'], scan['capturedAt'])
+        self.assertIsNone(self.op.pending_own_discard)
+        verified = self.op.record_post_riichi_pass_candidate.call_args_list
+        self.assertEqual(len(verified), 1)
+        self.assertEqual(verified[0].args[0]['clickedAt'], fixture['receipts'][1]['clickedAt'])
+        self.assertFalse(any(c.args[0] == 'own_discard_mismatch' for c in self.op.log.call_args_list))
+
+    def test_only_a_new_observed_callable_meld_can_retire_an_older_receipt(self):
+        old = {'east': []}
+        chi = {'type': 'chi', 'tiles': ['3m', '4m', '0m']}
+        for before, after in [(old, {'east': [chi]}),
+                              ({'east': [chi]}, {'east': [chi]}),
+                              ({}, {'east': [chi]}),
+                              (old, {'east': [{'type': 'ankan', 'tiles': ['3m'] * 4}]}),
+                              (old, {'east': [{'type': 'pon', 'tiles': ['5m'] * 3}]})]:
+            with self.subTest(before=before, after=after):
+                self.op.pending_own_discard = None
+                self.op.log.reset_mock()
+                self.op.register_pending_own_discard({'tile': '3m', 'before': self.baseline,
+                    'opponentMeldsBefore': before})
+                self.op.register_pending_own_discard({'tile': '6m', 'before': self.baseline,
+                    'opponentMeldsBefore': after})
+                called = before == old and after == {'east': [chi]}
+                self.assertEqual('earlierReceipts' in self.op.pending_own_discard, not called)
+        snapshot = self.op.own_discard_meld_snapshot({'state': {'opponents': [
+            {'seat': 'east', 'openMelds': 1, 'openMeldsObserved': False, 'melds': [chi]},
+            {'seat': 'south', 'openMelds': 2, 'openMeldsObserved': True, 'melds': [chi]},
+            {'seat': 'west', 'openMelds': 1, 'openMeldsObserved': True, 'melds': [chi]},
+        ]}})
+        self.assertEqual(snapshot, {'west': [chi]})
+
+    def test_partial_identical_receipts_are_ambiguous_even_without_observed_melds(self):
+        for expected, observed in [(['P', 'P', '8s'], ['P']),
+                                   (['P', '8s', 'P'], ['P']),
+                                   (['P', '8s', '8s'], ['P', '8s'])]:
+            with self.subTest(expected=expected, observed=observed):
+                self.setUp()
+                self.op.pending_own_discard = None
+                self.op.log.reset_mock()
+                for tile in expected:
+                    self.op.register_pending_own_discard({'tile': tile, 'before': list(self.baseline)})
+                for stamp in ['2026-10-22T04:10:52+00:00', '2026-10-22T04:10:53+00:00']:
+                    self.scan(self.baseline + observed, stamp)
+                self.assertIsNone(self.op.pending_own_discard)
+                self.assertIsNone(self.op.cached_concealed_tiles)
+                self.assertEqual(self.op.cached_public_observation['ownDiscards'], self.baseline)
+                unresolved = [c for c in self.op.log.call_args_list
+                              if c.args[0] == 'own_discard_reconciliation_unresolved']
+                self.assertEqual(len(unresolved), 1)
+                self.assertEqual(unresolved[0].kwargs['reason'], 'ambiguous_identical_receipt_prefix')
+                self.op.record_post_riichi_pass_candidate.assert_not_called()
+
+    def test_later_duplicate_does_not_make_a_unique_full_prefix_ambiguous(self):
+        self.op.pending_own_discard = None
+        self.op.log.reset_mock()
+        for tile in ['P', '8s', 'P']:
+            self.op.register_pending_own_discard({'tile': tile, 'before': list(self.baseline)})
+        for stamp in ['2026-10-22T04:10:52+00:00', '2026-10-22T04:10:53+00:00']:
+            self.scan(self.baseline + ['P', '8s'], stamp)
+        self.assertIsNotNone(self.op.pending_own_discard)
+        self.assertEqual(self.op.pending_own_discard['before'], self.baseline + ['P', '8s'])
+        verified = [c.kwargs['tile'] for c in self.op.log.call_args_list
+                    if c.args[0] == 'own_discard_reconciled']
+        self.assertEqual(verified, ['P', '8s'])
+        self.assertFalse(any(c.args[0] == 'own_discard_reconciliation_unresolved'
+                             for c in self.op.log.call_args_list))

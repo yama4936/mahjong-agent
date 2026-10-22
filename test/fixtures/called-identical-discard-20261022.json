@@ -1,0 +1,279 @@
+{
+  "sourceRun": "artifacts/ranked-supervised-f1c569e-20261022/operator-20261022T061552379698Z",
+  "sourceImplementation": "f1c569e",
+  "provenance": "Original decision receipts/state opponents and independent river pending/confirmed events. First3m called into right actualEast34red5m chi; second3m remains in river. No OCR rerun.",
+  "sourceLogSha256": "5103b2bf70d6f4747c08818a2e137e82380b8a786ea26bc8cb836bae03036a9f",
+  "receipts": [
+    {
+      "tile": "3m",
+      "before": [
+        "C",
+        "2s",
+        "7m",
+        "8p",
+        "1p",
+        "S",
+        "1s",
+        "P",
+        "9s",
+        "2m",
+        "N",
+        "6m",
+        "2p",
+        "4p"
+      ],
+      "clickedAt": "2026-10-22T06:28:26.475040+00:00",
+      "confirmation": "hand_and_own_river_changed",
+      "sourceOpponents": [
+        {
+          "seat": "east",
+          "discards": [
+            "P",
+            "E",
+            "8p",
+            "F",
+            "1p",
+            "3p",
+            "1p",
+            "4p",
+            "5p",
+            "S",
+            "1m",
+            "1m",
+            "1m",
+            "S",
+            "2m"
+          ],
+          "riichi": false,
+          "openMelds": 0,
+          "openMeldsObserved": true,
+          "melds": []
+        },
+        {
+          "seat": "south",
+          "discards": [
+            "C",
+            "E",
+            "N",
+            "C",
+            "P",
+            "2m",
+            "N",
+            "9s",
+            "S",
+            "2p",
+            "6m",
+            "4p",
+            "4p",
+            "4m",
+            "8m"
+          ],
+          "riichi": true,
+          "postRiichiSafeTiles": [
+            "2m",
+            "2p",
+            "6m",
+            "N"
+          ],
+          "openMelds": 0,
+          "openMeldsObserved": true,
+          "melds": []
+        },
+        {
+          "seat": "west",
+          "discards": [
+            "W",
+            "E",
+            "C",
+            "9s",
+            "P",
+            "1s",
+            "2p",
+            "E",
+            "4m",
+            "5s",
+            "1s",
+            "3m",
+            "F",
+            "3p",
+            "5s"
+          ],
+          "riichi": false,
+          "openMelds": 0,
+          "openMeldsObserved": true,
+          "melds": []
+        }
+      ]
+    },
+    {
+      "tile": "3m",
+      "before": [
+        "C",
+        "2s",
+        "7m",
+        "8p",
+        "1p",
+        "S",
+        "1s",
+        "P",
+        "9s",
+        "2m",
+        "N",
+        "6m",
+        "2p",
+        "4p"
+      ],
+      "clickedAt": "2026-10-22T06:28:49.753049+00:00",
+      "confirmation": "hand_and_own_river_changed",
+      "sourceOpponents": [
+        {
+          "seat": "east",
+          "discards": [
+            "P",
+            "E",
+            "8p",
+            "F",
+            "1p",
+            "3p",
+            "1p",
+            "4p",
+            "5p",
+            "S",
+            "1m",
+            "1m",
+            "1m",
+            "S",
+            "2m",
+            "9s"
+          ],
+          "riichi": false,
+          "openMelds": 1,
+          "openMeldsObserved": true,
+          "melds": [
+            {
+              "type": "chi",
+              "tiles": [
+                "0m",
+                "4m",
+                "3m"
+              ]
+            }
+          ]
+        },
+        {
+          "seat": "south",
+          "discards": [
+            "C",
+            "E",
+            "N",
+            "C",
+            "P",
+            "2m",
+            "N",
+            "9s",
+            "S",
+            "2p",
+            "6m",
+            "4p",
+            "4p",
+            "4m",
+            "8m",
+            "4s"
+          ],
+          "riichi": true,
+          "postRiichiSafeTiles": [
+            "2m",
+            "2p",
+            "4p",
+            "6m",
+            "N"
+          ],
+          "openMelds": 0,
+          "openMeldsObserved": true,
+          "melds": []
+        },
+        {
+          "seat": "west",
+          "discards": [
+            "W",
+            "E",
+            "C",
+            "9s",
+            "P",
+            "1s",
+            "2p",
+            "E",
+            "4m",
+            "5s",
+            "1s",
+            "3m",
+            "F",
+            "3p",
+            "5s",
+            "9p"
+          ],
+          "riichi": true,
+          "openMelds": 0,
+          "openMeldsObserved": true,
+          "melds": []
+        }
+      ]
+    }
+  ],
+  "scans": [
+    {
+      "ownDiscards": [
+        "C",
+        "2s",
+        "7m",
+        "8p",
+        "1p",
+        "S",
+        "1s",
+        "P",
+        "9s",
+        "2m",
+        "N",
+        "6m",
+        "2p",
+        "4p",
+        "3m"
+      ],
+      "capturedAt": "2026-10-22T06:28:55.322099+00:00"
+    },
+    {
+      "ownDiscards": [
+        "C",
+        "2s",
+        "7m",
+        "8p",
+        "1p",
+        "S",
+        "1s",
+        "P",
+        "9s",
+        "2m",
+        "N",
+        "6m",
+        "2p",
+        "4p",
+        "3m"
+      ],
+      "capturedAt": "2026-10-22T06:28:58.561210+00:00"
+    }
+  ],
+  "frames": [
+    {
+      "path": "artifacts/ranked-supervised-f1c569e-20261022/operator-20261022T061552379698Z/frames/2026-10-22T06-28-47.743296+00-00.jpg",
+      "sha256": "95c36991d7e8481b16997c4df18dda84521348df5c919ed9ef16273d10172af4"
+    },
+    {
+      "path": "artifacts/ranked-supervised-f1c569e-20261022/operator-20261022T061552379698Z/frames/2026-10-22T06-28-55.322124+00-00.public-cache.jpg",
+      "sha256": "5c7968dd8ee3fead5ee1d59da3284fefa3ed824672770f7b202728395d4381da"
+    },
+    {
+      "path": "artifacts/ranked-supervised-f1c569e-20261022/operator-20261022T061552379698Z/frames/2026-10-22T06-28-58.561233+00-00.public-cache.jpg",
+      "sha256": "476c2c197bc65c1e3053cff23747e5179c52b254484a227259d2775f57f78ff2"
+    }
+  ]
+}
