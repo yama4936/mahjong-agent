@@ -1249,6 +1249,7 @@ class PythonAutoOperator:
         self.closed_new_round_candidate_frames: set[str] = set()
         self.round_terminal_latched = False
         self.round_terminal_result_observed = False
+        self.round_terminal_recovery: dict[str, Any] | None = None
         # A result overlay may animate into a dark ranked screen that the
         # generic classifier also recognizes as matchmaking.  Do not let a
         # ranked loop treat that ambiguous first transition as proof that a
@@ -2294,6 +2295,100 @@ class PythonAutoOperator:
             return False
         return self.cached_open_melds > 0 and self.stable_closed_new_round(frame)
 
+    @staticmethod
+    def round_advanced_after_recovery(previous: dict[str, Any] | None,
+                                      current: dict[str, Any]) -> bool:
+        """A visible hand alone cannot distinguish a new round from a lost win."""
+        if not isinstance(previous, dict) or current.get("verified") is not True \
+                or not isinstance(current.get("remainingTiles"), int) \
+                or isinstance(current.get("remainingTiles"), bool) \
+                or not 0 < current["remainingTiles"] <= 70:
+            return False
+        winds = ["east", "south", "west", "north"]
+        keys = []
+        for state in (previous, current):
+            match = re.fullmatch(r"(east|south|west|north)_([1-4])", str(state.get("round", "")))
+            honba = state.get("honba")
+            if not match or state.get("seat") not in winds \
+                    or not isinstance(honba, int) or isinstance(honba, bool) or honba < 0:
+                return False
+            keys.append((winds.index(match[1]) * 4 + int(match[2]), honba))
+        rounds = keys[1][0] - keys[0][0]
+        if rounds < 0 or (rounds == 0 and keys[1][1] <= keys[0][1]):
+            return False
+        return winds.index(current["seat"]) == (winds.index(previous["seat"]) - rounds) % 4
+
+    def clear_round_terminal_latch(self, source: str) -> None:
+        self.round_terminal_latched = False
+        self.round_terminal_result_observed = False
+        self.round_terminal_recovery = None
+        self.closed_new_round_candidate_frames = set()
+        self.ranked_terminal_transition_pending = False
+        self.last_observed_outcome_kind = None
+        self.log("round_terminal_latch_cleared", source=source)
+
+    def wait_for_round_terminal(self, page: Page, frame: bytes, state: str) -> bool:
+        """Keep win overlays noninteractive; recover only a verified later hand."""
+        if not getattr(self, "round_terminal_latched", False):
+            return False
+        if getattr(self, "round_terminal_result_observed", False) and state == "match" \
+                and closed_concealed_row_visible(frame, self.layout):
+            self.clear_round_terminal_latch("verified_new_round_closed_row")
+            return False
+        recovery = getattr(self, "round_terminal_recovery", None)
+        if recovery is not None:
+            # This dialog shares most pixels with a live table and can be
+            # classified as match. Its independently checked geometry remains
+            # authoritative even while the missing-result latch is armed.
+            if self.resume_if_away(page, frame):
+                return True
+            now = time.monotonic()
+            if recovery.get("since") is None:
+                recovery["since"] = now
+            if now - recovery["since"] >= 30:
+                snapshot = self.frames / f"{utc_stamp()}.round-terminal-recovery-stop.png"
+                snapshot.write_bytes(frame)
+                snapshot.chmod(0o600)
+                self.log("round_terminal_recovery_stop", screenshot=str(snapshot),
+                         previous=recovery["previous"], gameplayClicks=0,
+                         reason="new_round_not_verified_within_30s")
+                raise RuntimeError("round terminal recovery could not verify a new hand")
+            if state == "match" and self.stable_closed_new_round(frame):
+                snapshot = recovery.get("screenshot")
+                if snapshot is None:
+                    snapshot = self.frames / f"{utc_stamp()}.round-terminal-recovery.png"
+                    recovery["screenshot"] = snapshot
+                snapshot.write_bytes(frame)
+                snapshot.chmod(0o600)
+                try:
+                    metadata = self.current_board_metadata(snapshot)
+                except RetryableSafetyAbort:
+                    metadata = {"verified": False, "reason": "metadata_refresh_in_progress"}
+                if self.round_advanced_after_recovery(recovery["previous"], metadata):
+                    # Do not attach this later hand's result to decisions from
+                    # the hand whose summary was lost during reload. Retain
+                    # their match scope so the eventual native final still
+                    # reaches every replay without restarting the operator.
+                    pending = list(getattr(self, "pending_round_replays", []))
+                    ledger = snapshot.with_suffix(".round-terminal-unobserved-result.json")
+                    ledger.write_text(json.dumps({
+                        "reason": "round_result_lost_during_black_recovery",
+                        "previous": recovery["previous"], "current": metadata,
+                        "screenshot": str(snapshot),
+                        "pendingRoundReplays": [str(p) for p in pending],
+                        "matchScopeRetained": True,
+                    }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+                    ledger.chmod(0o600)
+                    self.pending_round_replays = []
+                    self.log("round_terminal_recovered_without_result", screenshot=str(snapshot),
+                             ledger=str(ledger), retiredRoundReplays=len(pending),
+                             previous=recovery["previous"], current=metadata, gameplayClicks=0)
+                    self.clear_round_terminal_latch("verified_new_round_after_black_reload")
+                    return False
+        self.log("round_terminal_wait", screenState=state,
+                 resultObserved=getattr(self, "round_terminal_result_observed", False))
+        return True
+
     def observe_ranked_match_screen(self, state: str) -> None:
         # Result animations can briefly expose the old table. A completed
         # match stays completed until an authorized new room selection.
@@ -2425,6 +2520,19 @@ class PythonAutoOperator:
             raise RuntimeError("black client persisted after one reload in ten minutes")
         attempts.append(now)
         self.black_screen_seen_since = None
+        if getattr(self, "round_terminal_latched", False) \
+                and not getattr(self, "round_terminal_result_observed", False):
+            previous = None
+            pending = getattr(self, "pending_round_replays", [])
+            if pending:
+                try:
+                    previous = load_json(pending[-1]).get("state")
+                except (OSError, ValueError):
+                    pass
+            if previous is None:
+                previous = (getattr(self, "board_metadata_cache", None) or {}).get("metadata")
+            self.round_terminal_recovery = {"previous": previous, "since": None}
+            self.closed_new_round_candidate_frames = set()
         self.black_screen_recovery_pending_outcome = bool(getattr(self, "pending_match_replays", []))
         self.black_screen_navigation_since = None
         self.cached_concealed_tiles = None
@@ -4595,27 +4703,9 @@ class PythonAutoOperator:
                              confidence=screen_confidence, gameplayClicks=0)
                     time.sleep(self.args.poll)
                     continue
-                if getattr(self, "round_terminal_latched", False):
-                    if getattr(self, "round_terminal_result_observed", False) and screen_state == "match" \
-                            and closed_concealed_row_visible(full_screen, self.layout):
-                        self.round_terminal_latched = False
-                        self.round_terminal_result_observed = False
-                        # Defensive cleanup for runs upgraded while a prior
-                        # version had armed the terminal guard from a round
-                        # result.  A visible closed row independently proves
-                        # that play resumed, so it cannot be a match-end
-                        # navigation transition.
-                        self.ranked_terminal_transition_pending = False
-                        self.last_observed_outcome_kind = None
-                        self.log("round_terminal_latch_cleared", source="verified_new_round_closed_row")
-                    else:
-                        self.log(
-                            "round_terminal_wait",
-                            screenState=screen_state,
-                            resultObserved=getattr(self, "round_terminal_result_observed", False),
-                        )
-                        page.wait_for_timeout(max(20, round(self.args.poll * 1000)))
-                        continue
+                if self.wait_for_round_terminal(page, full_screen, screen_state):
+                    page.wait_for_timeout(max(20, round(self.args.poll * 1000)))
+                    continue
                 if self.args.mode == "force-auto" and screen_state == "login" and screen_confidence >= .95:
                     if self.login_button_clicked_at is None:
                         point = {"x": self.layout["viewport"]["width"] * .779,

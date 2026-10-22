@@ -1,0 +1,114 @@
+{
+  "description": "Observed42 black reload retains resultObserved=false and waits despite resumed match; actual43 native E3→E4 recovery frames provide fresh-board progression controls. Separate cases, not a fabricated continuous42 frame sequence.",
+  "previousState": {
+    "round": "east_3",
+    "seat": "east",
+    "honba": 0,
+    "scores": {
+      "east": 45000,
+      "south": 14000,
+      "west": 19000,
+      "north": 22000
+    }
+  },
+  "freshFrames": [
+    {
+      "file": "round-terminal-recovery-20261023-1.jpg",
+      "original": "/home/yama1/projects/jantama-auto/artifacts/ranked-supervised-065d878-20261022/operator-20261022T145535003994Z/frames/2026-10-22T14-55-59.908678+00-00.jpg",
+      "sha256": "96ad3eb1950284832771eff315ffb5e6c7885d01edc3ce67bdf59070411cebf2",
+      "metadata": {
+        "verified": true,
+        "round": "east_4",
+        "seat": "north",
+        "scores": {
+          "north": 43000,
+          "east": 13000,
+          "south": 23000,
+          "west": 21000
+        },
+        "honba": 0,
+        "riichiSticks": 0,
+        "remainingTiles": 44
+      }
+    },
+    {
+      "file": "round-terminal-recovery-20261023-2.jpg",
+      "original": "/home/yama1/projects/jantama-auto/artifacts/ranked-supervised-065d878-20261022/operator-20261022T145535003994Z/frames/2026-10-22T14-56-15.421094+00-00.jpg",
+      "sha256": "a38abaed85eba860759f46febd65e8d3bc63e492debddd4ef0516d980b1c16a3",
+      "metadata": {
+        "verified": true,
+        "round": "east_4",
+        "seat": "north",
+        "scores": {
+          "north": 43000,
+          "east": 13000,
+          "south": 23000,
+          "west": 21000
+        },
+        "honba": 0,
+        "riichiSticks": 0,
+        "remainingTiles": 39
+      }
+    }
+  ],
+  "awayFrame": {
+    "file": "round-terminal-recovery-away-20261023.png",
+    "original": "artifacts/ranked-supervised-065d878-20261022/operator-20261022T135832538298Z/sample42-away-after-stale-latch.png",
+    "sha256": "a13db21a247fbf04cbdb82e94caa485551635e809137fa34b88b00266f650e41"
+  },
+  "originalFailureTrace": [
+    {
+      "timestamp": "2026-10-22T14:34:55.979536+00:00",
+      "event": "reaction_win",
+      "screenshot": "/home/yama1/projects/jantama-auto/artifacts/ranked-supervised-065d878-20261022/operator-20261022T135832538298Z/frames/2026-10-22T14-34-55.292447+00-00.png",
+      "execution": {
+        "clicked": true,
+        "policy": "force_auto",
+        "action": "ron",
+        "clickPoint": {
+          "x": 1003.5,
+          "y": 825.0
+        },
+        "confirmation": "reaction_win_button_disappeared",
+        "actionTiming": {
+          "deadlineMs": 300000,
+          "detectionToDecisionMs": 286,
+          "decisionToClickMs": 81,
+          "evidenceToClickMs": 366,
+          "remainingMsAtClick": 299634,
+          "deadlineMet": true,
+          "actionKind": "win"
+        }
+      }
+    },
+    {
+      "timestamp": "2026-10-22T14:36:15.483715+00:00",
+      "event": "black_screen_reload_requested",
+      "screenshot": "/home/yama1/projects/jantama-auto/artifacts/ranked-supervised-065d878-20261022/operator-20261022T135832538298Z/frames/2026-10-22T14-36-15.482958+00-00.black-screen.png",
+      "durationSeconds": 15.407,
+      "windowSeconds": 600,
+      "gameplayClicks": 0
+    },
+    {
+      "timestamp": "2026-10-22T14:36:19.745133+00:00",
+      "event": "black_screen_recovery_observed",
+      "state": "matchmaking",
+      "confidence": 1.0,
+      "cleared": true,
+      "screenshot": "/home/yama1/projects/jantama-auto/artifacts/ranked-supervised-065d878-20261022/operator-20261022T135832538298Z/frames/2026-10-22T14-36-19.744444+00-00.black-screen-after-reload.png",
+      "gameplayClicks": 0
+    },
+    {
+      "timestamp": "2026-10-22T14:36:56.671038+00:00",
+      "event": "round_terminal_wait",
+      "screenState": "match",
+      "resultObserved": false
+    },
+    {
+      "timestamp": "2026-10-22T14:38:55.118444+00:00",
+      "event": "round_terminal_wait",
+      "screenState": "match",
+      "resultObserved": false
+    }
+  ]
+}
