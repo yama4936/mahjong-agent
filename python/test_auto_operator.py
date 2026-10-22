@@ -18,6 +18,7 @@ from screen_state import classify_screen, load_references
 from auto_operator import geometric_reaction_open_meld_count, draw_slots_occupied
 from auto_operator import configure_evaluator_click_budget, with_match_length
 from auto_operator import board_state_signature, board_state_signature_matches
+from auto_operator import verified_post_call_white_discard
 
 FRAME_FIXTURES = Path(__file__).resolve().parents[1] / "test/fixtures"
 
@@ -886,6 +887,117 @@ def _open_or_skip_missing_artifact(path, *args, **kwargs):
     if _is_missing_local_artifact(path):
         raise unittest.SkipTest(f"local live fixture is unavailable: {path}")
     return _ORIGINAL_IMAGE_OPEN(path, *args, **kwargs)
+
+
+class PostCallWhiteDiscardTest(unittest.TestCase):
+    def test_native_post_pon_white_discard_keeps_evaluator_tenpai(self):
+        fixture = load_json(FRAME_FIXTURES / "post-pon-white-discard-20261023.json")
+        frame = (FRAME_FIXTURES / "post-pon-white-discard-20261023.jpg").read_bytes()
+        self.assertEqual(hashlib.sha256(frame).hexdigest(), fixture["nativeSha256"])
+        evaluation = fixture["evaluation"]
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(mode="force-auto", allow_local_discard=False,
+                                           stability_pixel_delta=1.5)
+        operator.layout = load_json(FRAME_FIXTURES.parents[1] / "config/layout-300-regression.json")
+        operator.hand_clip = {"x": 223, "y": 926, "width": 1355, "height": 146}
+        operator.river_clip = operator.layout["publicTileRegions"]["ownDiscards"]
+        operator.cached_open_melds = 2
+        operator.pending_post_call_discard = True
+        operator.screencast_session = Mock()
+        operator.latest_screencast_frame = frame
+        operator.screencast_draw_generation = 4
+        operator.log = Mock()
+        operator.require_force_auto_click_budget = Mock()
+        operator.require_action_deadline = Mock()
+        operator.refresh_discard_reconciliation_before_click = Mock(return_value=False)
+        operator.confirm_discard = Mock(return_value={"confirmation": "hand_and_own_river_changed"})
+        page = Mock()
+        receipt = operator.execute(page, evaluation, evaluated_full=frame,
+                                   evaluated_hand=crop_screenshot(frame, operator.hand_clip),
+                                   evaluated_draw_generation=4, evaluated_captured_at=10.0)
+        self.assertEqual(receipt["discardedTile"], "P")
+        self.assertEqual(receipt["clickIndex"], 7)
+        self.assertEqual(page.mouse.click.call_args_list,
+                         [call(933, 999), call(933, 955, delay=80)])
+        self.assertFalse(any(c.args[0] == "ambiguous_open_draw_fallback"
+                             for c in operator.log.call_args_list))
+        operator.require_force_auto_click_budget.assert_any_call(10.0, phase="before_discard_click")
+
+        # A later normal draw retains the existing conservative fallback.
+        operator.pending_post_call_discard = False
+        page.mouse.reset_mock()
+        receipt = operator.execute(page, evaluation, evaluated_full=frame,
+                                   evaluated_hand=crop_screenshot(frame, operator.hand_clip),
+                                   evaluated_draw_generation=4, evaluated_captured_at=10.0)
+        self.assertEqual(receipt["discardedTile"], "9p")
+
+        # The new certificate never bypasses the fresh pre-click hand guard.
+        operator.pending_post_call_discard = True
+        image = Image.open(io.BytesIO(frame)).convert("RGB")
+        slots = operator.layout["handSlots"]
+        first, last = slots[0], slots[7]
+        face = image.crop((first["x"], first["y"], first["x"] + first["width"],
+                           first["y"] + first["height"]))
+        image.paste(face, (last["x"], last["y"]))
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG")
+        operator.latest_screencast_frame = buffer.getvalue()
+        page.mouse.reset_mock()
+        with self.assertRaisesRegex(RetryableSafetyAbort, "hand changed since evaluation"):
+            operator.execute(page, evaluation, evaluated_full=frame,
+                             evaluated_hand=crop_screenshot(frame, operator.hand_clip),
+                             evaluated_draw_generation=4, evaluated_captured_at=10.0)
+        page.mouse.click.assert_not_called()
+
+    def test_white_certificate_requires_post_call_state_and_exact_geometry(self):
+        fixture = load_json(FRAME_FIXTURES / "post-pon-white-discard-20261023.json")
+        frame = (FRAME_FIXTURES / "post-pon-white-discard-20261023.jpg").read_bytes()
+        layout = load_json(FRAME_FIXTURES.parents[1] / "config/layout-300-regression.json")
+        original = fixture["evaluation"]
+        verify = lambda evaluation, image=frame, melds=2, pending=True: verified_post_call_white_discard(
+            evaluation, image, layout, melds, pending)
+        self.assertTrue(verify(original))
+        self.assertFalse(verify(original, pending=False))
+        self.assertFalse(verify(original, image=None))
+        for melds in (0, 1, 3, 4):
+            self.assertFalse(verify(original, melds=melds))
+        for field, value in (("clickIndex", 6), ("clickPoint", {"x": 553.5, "y": 999}),
+                             ("openMelds", 1)):
+            evaluation = json.loads(json.dumps(original))
+            evaluation[field] = value
+            self.assertFalse(verify(evaluation))
+        for field, value in (("draw", "S"), ("melds", []), ("hand", [])):
+            evaluation = json.loads(json.dumps(original))
+            evaluation["state"][field] = value
+            self.assertFalse(verify(evaluation))
+        evaluation = json.loads(json.dumps(original))
+        evaluation["decision"]["selectedAction"]["tile"] = "9p"
+        self.assertFalse(verify(evaluation))
+
+    def test_white_certificate_rejects_ink_empty_slot_and_missing_felt_boundary(self):
+        fixture = load_json(FRAME_FIXTURES / "post-pon-white-discard-20261023.json")
+        frame = (FRAME_FIXTURES / "post-pon-white-discard-20261023.jpg").read_bytes()
+        layout = load_json(FRAME_FIXTURES.parents[1] / "config/layout-300-regression.json")
+        target = layout["handSlots"][7]
+        for source_index in (0, 2, 3, 4, 8):
+            with self.subTest(source_index=source_index):
+                image = Image.open(io.BytesIO(frame)).convert("RGB")
+                source = layout["handSlots"][source_index]
+                patch_image = image.crop((source["x"], source["y"],
+                                          source["x"] + source["width"], source["y"] + source["height"]))
+                image.paste(patch_image, (target["x"], target["y"]))
+                buffer = io.BytesIO()
+                image.save(buffer, format="PNG")
+                self.assertFalse(verified_post_call_white_discard(
+                    fixture["evaluation"], buffer.getvalue(), layout, 2, True))
+        image = Image.open(io.BytesIO(frame)).convert("RGB")
+        right = target["x"] + target["width"]
+        ImageDraw.Draw(image).rectangle((right, target["y"], right + 30,
+                                        target["y"] + target["height"]), fill="white")
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG")
+        self.assertFalse(verified_post_call_white_discard(
+            fixture["evaluation"], buffer.getvalue(), layout, 2, True))
 
 
 class RecordingMouse:

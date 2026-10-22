@@ -877,6 +877,49 @@ def local_discard_allowed(args: argparse.Namespace, evaluation: dict[str, Any]) 
     )
 
 
+def verified_post_call_white_discard(
+    evaluation: dict[str, Any], screenshot: bytes | None, layout: dict[str, Any],
+    open_melds: int, pending_post_call_discard: bool,
+) -> bool:
+    """Certify a physical blank white tile in a complete post-chi/pon row.
+
+    The last tile after a call is not a newly classified independent draw.
+    Blank P has no glyph for template confidence; require the actual ivory
+    face and its felt boundary, not just the evaluator's P label. The normal
+    pre-click generation, hand stability and time guards still apply.
+    """
+    if not pending_post_call_discard or screenshot is None or not 1 <= open_melds <= 4:
+        return False
+    state = evaluation.get("state", {})
+    tiles = evaluation.get("recognition", {}).get("tiles", [])
+    selected = evaluation.get("decision", {}).get("selectedAction", {})
+    count = 14 - 3 * open_melds
+    if (evaluation.get("openMelds") != open_melds or state.get("openMelds") != open_melds
+            or len(state.get("melds", [])) != open_melds or len(tiles) != count
+            or tiles != [*state.get("hand", []), state.get("draw")]
+            or selected.get("action") != "discard" or selected.get("tile") != "P"
+            or tiles[-1] != "P" or evaluation.get("clickIndex") != count - 1):
+        return False
+    slot = open_hand_draw_slot(layout, open_melds)
+    point = evaluation.get("clickPoint", {})
+    if not slot or not (slot["x"] <= point.get("x", -1) <= slot["x"] + slot["width"]
+                        and slot["y"] <= point.get("y", -1) <= slot["y"] + slot["height"]):
+        return False
+    if geometric_open_meld_count(screenshot, layout) != open_melds:
+        return False
+    with Image.open(io.BytesIO(screenshot)) as image:
+        viewport = layout.get("viewport", {})
+        if image.size != (viewport.get("width"), viewport.get("height")):
+            return False
+        pixels = image.convert("RGB")
+        top, bottom = slot["y"] + 12, slot["y"] + slot["height"] - 22
+        face = pixels.crop((slot["x"] + 10, top, slot["x"] + slot["width"] - 10, bottom))
+        gap = pixels.crop((slot["x"] + slot["width"] + 4, top,
+                           slot["x"] + slot["width"] + 24, bottom))
+        ivory = lambda red, green, blue: min(red, green, blue) > 145 and max(red, green, blue) - min(red, green, blue) < 30
+        return fraction_matching(face, ivory) >= 0.995 and fraction_matching(gap, ivory) < 0.05
+
+
 def selected_open_draw_is_ambiguous(evaluation: dict[str, Any]) -> bool:
     """Whether force-auto selected an unreliable independent draw-slot tile."""
     open_melds = evaluation.get("openMelds", 0)
@@ -3830,14 +3873,21 @@ class PythonAutoOperator:
         dynamic_click_point = evaluation.get("clickPoint")
         points = self.layout["clickPoints"]
         if force_auto and selected_action == "discard" and selected_open_draw_is_ambiguous(evaluation):
-            fallback = ambiguous_open_draw_fallback(evaluation)
-            if fallback is None:
-                raise RetryableSafetyAbort("ambiguous independent draw-slot tile has no recognized fallback")
-            fallback_tile, click_index = fallback
-            selected = {"action": "discard", "tile": fallback_tile}
-            dynamic_click_point = points[click_index]
-            self.log("ambiguous_open_draw_fallback", rejectedTile=decision.get("selectedAction", {}).get("tile"),
-                     fallbackTile=fallback_tile, fallbackClickIndex=click_index)
+            if verified_post_call_white_discard(
+                evaluation, evaluated_full, self.layout, getattr(self, "cached_open_melds", 0),
+                getattr(self, "pending_post_call_discard", False),
+            ):
+                self.log("post_call_white_discard_verified", tile="P", clickIndex=click_index,
+                         verification="complete_compact_row_blank_ivory_face_and_felt_boundary")
+            else:
+                fallback = ambiguous_open_draw_fallback(evaluation)
+                if fallback is None:
+                    raise RetryableSafetyAbort("ambiguous independent draw-slot tile has no recognized fallback")
+                fallback_tile, click_index = fallback
+                selected = {"action": "discard", "tile": fallback_tile}
+                dynamic_click_point = points[click_index]
+                self.log("ambiguous_open_draw_fallback", rejectedTile=decision.get("selectedAction", {}).get("tile"),
+                         fallbackTile=fallback_tile, fallbackClickIndex=click_index)
         needs_tile_click = selected_action in {"discard", "riichi"}
         has_dynamic_click_point = (
             isinstance(dynamic_click_point, dict)

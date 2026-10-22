@@ -1,0 +1,508 @@
+{
+  "implementationCommit": "e8caa46",
+  "sampleNumber": 46,
+  "originalScreenshot": "/home/yama1/projects/jantama-auto/artifacts/ranked-supervised-e8caa46-20261023/operator-20261022T171111411404Z/frames/2026-10-22T17-47-36.066897+00-00.jpg",
+  "nativeSha256": "2ae73e5d0b52514afdb3e21b2c2bf34325d6fe108d6a1758b68d59e51c678700",
+  "evaluation": {
+    "schemaVersion": 1,
+    "status": "decision",
+    "state": {
+      "round": "east_3",
+      "matchLength": "east",
+      "honba": 1,
+      "riichiSticks": 0,
+      "seat": "south",
+      "scores": {
+        "south": 27100,
+        "west": 28000,
+        "north": 17500,
+        "east": 27400
+      },
+      "hand": [
+        "4p",
+        "4p",
+        "7p",
+        "9p",
+        "S",
+        "S",
+        "S"
+      ],
+      "draw": "P",
+      "doraIndicators": [
+        "1s"
+      ],
+      "ownDiscards": [
+        "4m",
+        "1s",
+        "7m",
+        "1m"
+      ],
+      "melds": [
+        {
+          "type": "chi",
+          "tiles": [
+            "6m",
+            "7m",
+            "8m"
+          ]
+        },
+        {
+          "type": "pon",
+          "tiles": [
+            "2m",
+            "2m",
+            "2m"
+          ]
+        }
+      ],
+      "visibleTiles": [],
+      "openMelds": 2,
+      "turn": 4,
+      "remainingTiles": 55,
+      "phase": "self_turn",
+      "recognitionConfidence": 0,
+      "publicStateConfidence": 0,
+      "riichiDeclared": false,
+      "availableUiActions": [],
+      "opponents": [
+        {
+          "seat": "west",
+          "discards": [
+            "8p",
+            "C",
+            "5p",
+            "6p"
+          ],
+          "riichi": false,
+          "openMelds": 0,
+          "openMeldsObserved": true,
+          "melds": []
+        },
+        {
+          "seat": "north",
+          "discards": [
+            "9m",
+            "9p",
+            "8s"
+          ],
+          "riichi": false,
+          "openMelds": 0,
+          "openMeldsObserved": true,
+          "melds": []
+        },
+        {
+          "seat": "east",
+          "discards": [
+            "F",
+            "E",
+            "P"
+          ],
+          "riichi": false,
+          "openMelds": 0,
+          "openMeldsObserved": true,
+          "melds": []
+        }
+      ]
+    },
+    "recognition": {
+      "backend": "template",
+      "tiles": [
+        "4p",
+        "4p",
+        "7p",
+        "9p",
+        "S",
+        "S",
+        "S",
+        "P"
+      ],
+      "confidence": 0,
+      "ambiguityMargin": 0,
+      "safe": false
+    },
+    "decision": {
+      "recommendedAction": "discard",
+      "tile": "P",
+      "confidence": 1,
+      "source": "jev",
+      "candidates": [
+        {
+          "actionId": "discard_P",
+          "action": "discard",
+          "tile": "P",
+          "shanten": 0,
+          "form": "standard",
+          "effectiveTiles": [
+            {
+              "tile": "8p",
+              "remaining": 3
+            }
+          ],
+          "ukeire": 3,
+          "danger": 0.022373437499999982,
+          "estimatedValue": 1300,
+          "winProbability": 0.051000000000000004,
+          "tenpaiProbability": 0.3872983346207417,
+          "dealInProbability": 0.022373437499999982,
+          "expectedRoundValue": 62,
+          "evaluationModel": "heuristic-v5",
+          "openTenpaiScore": {
+            "scope": "ordinary_open_hand_without_situational_yaku_honba_or_deposits",
+            "redFivesPerSuit": 1,
+            "knownDiscardFuriten": false,
+            "waits": [
+              {
+                "tile": "8p",
+                "remaining": 3,
+                "ron": {
+                  "han": 1,
+                  "fu": 40,
+                  "yakuman": 0,
+                  "doraHan": 0,
+                  "yaku": [
+                    "yakuhai:S"
+                  ],
+                  "main": 1300,
+                  "additional": 0,
+                  "total": 1300
+                },
+                "tsumo": {
+                  "han": 1,
+                  "fu": 40,
+                  "yakuman": 0,
+                  "doraHan": 0,
+                  "yaku": [
+                    "yakuhai:S"
+                  ],
+                  "main": 700,
+                  "additional": 400,
+                  "total": 1500
+                }
+              }
+            ],
+            "ronUkeire": 3,
+            "tsumoUkeire": 3,
+            "winningUkeire": 3,
+            "conditionalConservativePoints": 1300
+          },
+          "openTenpaiScoreApplied": true
+        },
+        {
+          "actionId": "discard_9p",
+          "action": "discard",
+          "tile": "9p",
+          "shanten": 1,
+          "form": "standard",
+          "effectiveTiles": [
+            {
+              "tile": "4p",
+              "remaining": 2
+            },
+            {
+              "tile": "5p",
+              "remaining": 3
+            },
+            {
+              "tile": "6p",
+              "remaining": 3
+            },
+            {
+              "tile": "7p",
+              "remaining": 3
+            },
+            {
+              "tile": "8p",
+              "remaining": 3
+            },
+            {
+              "tile": "9p",
+              "remaining": 2
+            },
+            {
+              "tile": "P",
+              "remaining": 2
+            }
+          ],
+          "ukeire": 18,
+          "danger": 0.03718749999999993,
+          "estimatedValue": 1000,
+          "winProbability": 0.162,
+          "tenpaiProbability": 0.4553679830642466,
+          "dealInProbability": 0.03718749999999993,
+          "expectedRoundValue": 69,
+          "evaluationModel": "heuristic-v5"
+        },
+        {
+          "actionId": "discard_7p",
+          "action": "discard",
+          "tile": "7p",
+          "shanten": 1,
+          "form": "standard",
+          "effectiveTiles": [
+            {
+              "tile": "4p",
+              "remaining": 2
+            },
+            {
+              "tile": "7p",
+              "remaining": 3
+            },
+            {
+              "tile": "8p",
+              "remaining": 3
+            },
+            {
+              "tile": "9p",
+              "remaining": 2
+            },
+            {
+              "tile": "P",
+              "remaining": 2
+            }
+          ],
+          "ukeire": 12,
+          "danger": 0.07314062500000007,
+          "estimatedValue": 1000,
+          "winProbability": 0.108,
+          "tenpaiProbability": 0.371806401235912,
+          "dealInProbability": 0.07314062500000007,
+          "expectedRoundValue": -310,
+          "evaluationModel": "heuristic-v5"
+        },
+        {
+          "actionId": "discard_4p",
+          "action": "discard",
+          "tile": "4p",
+          "shanten": 1,
+          "form": "standard",
+          "effectiveTiles": [
+            {
+              "tile": "4p",
+              "remaining": 2
+            },
+            {
+              "tile": "8p",
+              "remaining": 3
+            },
+            {
+              "tile": "P",
+              "remaining": 2
+            }
+          ],
+          "ukeire": 7,
+          "danger": 0.07314062500000007,
+          "estimatedValue": 1000,
+          "winProbability": 0.063,
+          "tenpaiProbability": 0.28397182958878153,
+          "dealInProbability": 0.07314062500000007,
+          "expectedRoundValue": -394,
+          "evaluationModel": "heuristic-v5"
+        },
+        {
+          "actionId": "discard_S",
+          "action": "discard",
+          "tile": "S",
+          "shanten": 1,
+          "form": "standard",
+          "effectiveTiles": [
+            {
+              "tile": "4p",
+              "remaining": 2
+            },
+            {
+              "tile": "8p",
+              "remaining": 3
+            },
+            {
+              "tile": "S",
+              "remaining": 1
+            }
+          ],
+          "ukeire": 6,
+          "danger": 0.007481265624999844,
+          "estimatedValue": 1000,
+          "winProbability": 0.054,
+          "tenpaiProbability": 0.2629068276024797,
+          "dealInProbability": 0.007481265624999844,
+          "expectedRoundValue": 112,
+          "evaluationModel": "heuristic-v5"
+        }
+      ],
+      "safety": {
+        "allowed": false,
+        "reasons": [
+          "recognition_confidence_below_threshold"
+        ]
+      },
+      "mode": "force-auto",
+      "selectedActionId": "discard_P",
+      "selectedAction": {
+        "id": "discard_P",
+        "action": "discard",
+        "tile": "P"
+      },
+      "legalActions": [
+        {
+          "id": "discard_P",
+          "action": "discard",
+          "tile": "P"
+        },
+        {
+          "id": "discard_9p",
+          "action": "discard",
+          "tile": "9p"
+        },
+        {
+          "id": "discard_7p",
+          "action": "discard",
+          "tile": "7p"
+        },
+        {
+          "id": "discard_4p",
+          "action": "discard",
+          "tile": "4p"
+        },
+        {
+          "id": "discard_S",
+          "action": "discard",
+          "tile": "S"
+        }
+      ],
+      "jev": {
+        "actionId": "discard_P",
+        "confidence": 1,
+        "probabilities": {
+          "discard_P": 1
+        },
+        "model": "jev-latest",
+        "promptVersion": "mahjong-discard-hierarchical-v3",
+        "latencyMs": 0
+      },
+      "executable": true,
+      "handPlan": {
+        "primaryTarget": "yakuhai:S",
+        "secondaryTarget": "efficient_standard",
+        "callsAllowed": true,
+        "requiredTiles": [
+          "8p"
+        ],
+        "estimatedPoints": 2000,
+        "phase": "early_efficiency",
+        "placement": {
+          "rank": 3,
+          "scoreGapToLeader": 900,
+          "allLast": false
+        },
+        "changeReason": "1-6巡目はシャンテンと受入枚数を優先"
+      },
+      "arbitration": {
+        "strategy": "jev_deadline_with_local_fallback",
+        "deadlineMs": 638,
+        "selectedSource": "jev",
+        "elapsedMs": 14
+      }
+    },
+    "selectedTileRecognition": {
+      "tile": "P",
+      "confidence": 0,
+      "runnerUpConfidence": 0,
+      "index": 7
+    },
+    "clickIndex": 7,
+    "clickPoint": {
+      "x": 933,
+      "y": 999
+    },
+    "concealedCount": 8,
+    "openMelds": 2,
+    "publicCache": {
+      "applied": true,
+      "capturedAt": "2026-10-22T17:47:35.992785+00:00",
+      "recognitionLatencyMs": 144,
+      "acceptedTiles": 21,
+      "detectedCandidates": 18,
+      "configuredRegions": [
+        "doraIndicators",
+        "ownDiscards",
+        "rightDiscards",
+        "oppositeDiscards",
+        "leftDiscards",
+        "ownMelds",
+        "rightMelds",
+        "oppositeMelds",
+        "leftMelds"
+      ],
+      "ageMs": 1379,
+      "rejectedTiles": 0
+    },
+    "processingElapsedMs": 19,
+    "turnTiming": {
+      "clickBudgetMs": 2600,
+      "captureAgeBeforeDecisionMs": 1611,
+      "preClickReserveMs": 350,
+      "decisionBudgetMs": 638
+    },
+    "handPlan": {
+      "applied": false,
+      "selected": "efficient_standard",
+      "confidence": 0.79,
+      "latencyMs": 233,
+      "createdAt": "2026-10-22T17:47:20.356Z",
+      "ignoredReason": "incompatible_with_current_hand"
+    },
+    "operatorTiming": {
+      "parallelHandRecognitionMs": 570,
+      "parallelBoardMetadataMs": 1215,
+      "forceAutoDecisionAfterParallelMs": 22,
+      "forceAutoRecognitionAndDecisionMs": 1237
+    },
+    "actionTiming": {
+      "deadlineMs": 300000,
+      "detectionToDecisionMs": 272,
+      "decisionToClickMs": 1454,
+      "evidenceToClickMs": 1726,
+      "remainingMsAtClick": 298274,
+      "deadlineMet": true,
+      "actionKind": "discard"
+    }
+  },
+  "originalFallback": {
+    "timestamp": "2026-10-22T17:47:37.402049+00:00",
+    "event": "ambiguous_open_draw_fallback",
+    "rejectedTile": "P",
+    "fallbackTile": "9p",
+    "fallbackClickIndex": 3
+  },
+  "originalExecution": {
+    "clicked": true,
+    "policy": "force_auto",
+    "discardedTile": "9p",
+    "clickIndex": 3,
+    "clickPoint": {
+      "x": 553.5,
+      "y": 999
+    },
+    "clickedAt": "2026-10-22T17:47:37.470835+00:00",
+    "confirmation": "hand_and_own_river_changed",
+    "confirmationLatencyMs": 1834,
+    "handPixelDelta": 51.042639303105354,
+    "riverPixelDelta": 73.51620957542909,
+    "screenshot": "/home/yama1/projects/jantama-auto/artifacts/ranked-supervised-e8caa46-20261023/operator-20261022T171111411404Z/frames/2026-10-22T17-47-39.771341+00-00.post-discard.png",
+    "actionTiming": {
+      "deadlineMs": 300000,
+      "detectionToDecisionMs": 272,
+      "decisionToClickMs": 1454,
+      "evidenceToClickMs": 1726,
+      "remainingMsAtClick": 298274,
+      "deadlineMet": true,
+      "actionKind": "discard"
+    }
+  },
+  "expectedDiscard": "P",
+  "actualDiscard": "9p",
+  "expectedShanten": 0,
+  "actualShanten": 1,
+  "expectedWait": "8p",
+  "confirmedYaku": "yakuhai:S",
+  "nativeIndependentlyViewed": true
+}
