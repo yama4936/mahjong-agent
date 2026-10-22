@@ -1,8 +1,9 @@
 import type { GameState } from "../game/state.js";
 import { doraFromIndicator, isRedTile, isTerminalOrHonor, normalizeTile, parseGameTile, tileIndex } from "../game/tiles.js";
 import type { DiscardEvaluation } from "../game/ukeire.js";
+import { scoreOpenTenpai } from "./openTenpaiScore.js";
 
-export const HEURISTIC_EVALUATION_MODEL = "heuristic-v4";
+export const HEURISTIC_EVALUATION_MODEL = "heuristic-v5";
 
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.max(minimum, Math.min(maximum, value));
@@ -45,15 +46,24 @@ export function evaluateRoundValue(candidate: DiscardEvaluation, state: GameStat
   const likelyRiichiHan = state.riichiDeclared || closed ? 1 : 0;
   const sevenPairs = closed && candidate.form === "chiitoitsu";
   const baseHan = sevenPairs ? 2 + (tiles.every(tile => !isTerminalOrHonor(tileIndex(tile))) ? 1 : 0) : 1;
-  const estimatedValue = estimateHeuristicRonPoints(baseHan + likelyRiichiHan + retainedDora, state.seat === "east", sevenPairs);
+  const openTenpaiScore = scoreOpenTenpai(candidate, state);
+  // Ordinary scoring cannot rule out last-tile situational yaku. Retain the
+  // existing fallback there and when meld/wind/physical evidence is unknown.
+  const ordinaryEstimate = openTenpaiScore && !(state.remainingTiles !== undefined && state.remainingTiles <= 4)
+    ? openTenpaiScore : undefined;
+  const estimatedValue = ordinaryEstimate?.conditionalConservativePoints
+    ?? estimateHeuristicRonPoints(baseHan + likelyRiichiHan + retainedDora, state.seat === "east", sevenPairs);
 
   const wallExhausted = state.remainingTiles === 0;
   const turnsLeftFactor = state.remainingTiles === undefined
     ? clamp((18 - state.turn) / 14, 0.15, 1.15)
     : wallExhausted ? 0 : clamp(state.remainingTiles / 55, 0.15, 1.15);
   const ukeireFactor = clamp(candidate.ukeire / 20, 0.12, 1.6);
+  const winningUkeire = ordinaryEstimate?.winningUkeire ?? candidate.ukeire;
+  const winningUkeireFactor = clamp(winningUkeire / 20, 0.12, 1.6);
   const winBase = candidate.shanten <= 0 ? 0.34 : candidate.shanten === 1 ? 0.18 : candidate.shanten === 2 ? 0.075 : 0.025;
-  const winProbability = wallExhausted ? 0 : clamp(winBase * ukeireFactor * turnsLeftFactor, 0.005, 0.72);
+  const winProbability = wallExhausted || ordinaryEstimate && winningUkeire === 0 ? 0
+    : clamp(winBase * winningUkeireFactor * turnsLeftFactor, 0.005, 0.72);
   const tenpaiBase = candidate.shanten <= 0 ? 1 : candidate.shanten === 1 ? 0.48 : candidate.shanten === 2 ? 0.22 : 0.08;
   const tenpaiProbability = wallExhausted
     ? (candidate.shanten <= 0 ? 1 : 0)
@@ -76,5 +86,6 @@ export function evaluateRoundValue(candidate: DiscardEvaluation, state: GameStat
     dealInProbability,
     expectedRoundValue,
     evaluationModel: HEURISTIC_EVALUATION_MODEL,
+    ...(openTenpaiScore ? { openTenpaiScore, openTenpaiScoreApplied: Boolean(ordinaryEstimate) } : {}),
   };
 }

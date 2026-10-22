@@ -1,0 +1,1750 @@
+{
+  "referenceLibrary": "mahjong==2.0.0",
+  "scope": "ordinary_open_hand_scoring_not_policy_ev_or_ui_legality",
+  "options": {
+    "openTanyao": true,
+    "akaDora": true,
+    "doubleYakuman": true,
+    "kazoe": "single",
+    "kiriage": false,
+    "situationalYaku": false,
+    "honba": 0,
+    "deposits": 0
+  },
+  "generatorSeed": "0x20261022 using high16 bits of LCG",
+  "fullOfflineComparisonCases": 244,
+  "fullOfflineComparisons": 488,
+  "cases": [
+    {
+      "name": "native31:9s",
+      "concealed": [
+        "2p",
+        "3p",
+        "1s",
+        "2s",
+        "3s",
+        "7s",
+        "8s",
+        "F",
+        "F",
+        "6s"
+      ],
+      "winner": "1p",
+      "state": {
+        "round": "east_2",
+        "seat": "east",
+        "openMelds": 1,
+        "melds": [
+          {
+            "type": "chi",
+            "tiles": [
+              "2m",
+              "3m",
+              "1m"
+            ]
+          }
+        ],
+        "doraIndicators": [
+          "4p"
+        ]
+      },
+      "expectedRon": {
+        "han": 1,
+        "fu": 30,
+        "main": 1500,
+        "additional": 0,
+        "total": 1500
+      },
+      "expectedTsumo": {
+        "han": 1,
+        "fu": 30,
+        "main": 500,
+        "additional": 500,
+        "total": 1500
+      }
+    },
+    {
+      "name": "native31:9s",
+      "concealed": [
+        "2p",
+        "3p",
+        "1s",
+        "2s",
+        "3s",
+        "7s",
+        "8s",
+        "F",
+        "F",
+        "6s"
+      ],
+      "winner": "4p",
+      "state": {
+        "round": "east_2",
+        "seat": "east",
+        "openMelds": 1,
+        "melds": [
+          {
+            "type": "chi",
+            "tiles": [
+              "2m",
+              "3m",
+              "1m"
+            ]
+          }
+        ],
+        "doraIndicators": [
+          "4p"
+        ]
+      },
+      "expectedRon": null,
+      "expectedTsumo": null
+    },
+    {
+      "name": "native31:6s",
+      "concealed": [
+        "2p",
+        "3p",
+        "1s",
+        "2s",
+        "3s",
+        "7s",
+        "8s",
+        "9s",
+        "F",
+        "F"
+      ],
+      "winner": "1p",
+      "state": {
+        "round": "east_2",
+        "seat": "east",
+        "openMelds": 1,
+        "melds": [
+          {
+            "type": "chi",
+            "tiles": [
+              "2m",
+              "3m",
+              "1m"
+            ]
+          }
+        ],
+        "doraIndicators": [
+          "4p"
+        ]
+      },
+      "expectedRon": {
+        "han": 2,
+        "fu": 30,
+        "main": 2900,
+        "additional": 0,
+        "total": 2900
+      },
+      "expectedTsumo": {
+        "han": 2,
+        "fu": 30,
+        "main": 1000,
+        "additional": 1000,
+        "total": 3000
+      }
+    },
+    {
+      "name": "native31:6s",
+      "concealed": [
+        "2p",
+        "3p",
+        "1s",
+        "2s",
+        "3s",
+        "7s",
+        "8s",
+        "9s",
+        "F",
+        "F"
+      ],
+      "winner": "4p",
+      "state": {
+        "round": "east_2",
+        "seat": "east",
+        "openMelds": 1,
+        "melds": [
+          {
+            "type": "chi",
+            "tiles": [
+              "2m",
+              "3m",
+              "1m"
+            ]
+          }
+        ],
+        "doraIndicators": [
+          "4p"
+        ]
+      },
+      "expectedRon": null,
+      "expectedTsumo": null
+    },
+    {
+      "name": "double-wind-triplet",
+      "concealed": [
+        "1m",
+        "2m",
+        "3m",
+        "4p",
+        "5p",
+        "6p",
+        "7s",
+        "8s",
+        "9s",
+        "P"
+      ],
+      "winner": "P",
+      "state": {
+        "round": "east_2",
+        "seat": "east",
+        "openMelds": 1,
+        "melds": [
+          {
+            "type": "pon",
+            "tiles": [
+              "E",
+              "E",
+              "E"
+            ]
+          }
+        ],
+        "doraIndicators": []
+      },
+      "expectedRon": {
+        "han": 2,
+        "fu": 30,
+        "main": 2900,
+        "additional": 0,
+        "total": 2900
+      },
+      "expectedTsumo": {
+        "han": 2,
+        "fu": 30,
+        "main": 1000,
+        "additional": 1000,
+        "total": 3000
+      }
+    },
+    {
+      "name": "double-wind-pair",
+      "concealed": [
+        "1m",
+        "2m",
+        "3m",
+        "4p",
+        "5p",
+        "6p",
+        "7s",
+        "8s",
+        "9s",
+        "E"
+      ],
+      "winner": "E",
+      "state": {
+        "round": "east_2",
+        "seat": "east",
+        "openMelds": 1,
+        "melds": [
+          {
+            "type": "pon",
+            "tiles": [
+              "P",
+              "P",
+              "P"
+            ]
+          }
+        ],
+        "doraIndicators": []
+      },
+      "expectedRon": {
+        "han": 1,
+        "fu": 30,
+        "main": 1500,
+        "additional": 0,
+        "total": 1500
+      },
+      "expectedTsumo": {
+        "han": 1,
+        "fu": 40,
+        "main": 700,
+        "additional": 700,
+        "total": 2100
+      }
+    },
+    {
+      "name": "winning-assignment-fu",
+      "concealed": [
+        "3p",
+        "4p",
+        "5p",
+        "6m",
+        "7m",
+        "8m",
+        "2s",
+        "2s",
+        "2s",
+        "5p"
+      ],
+      "winner": "5p",
+      "state": {
+        "round": "east_2",
+        "seat": "south",
+        "openMelds": 1,
+        "melds": [
+          {
+            "type": "pon",
+            "tiles": [
+              "P",
+              "P",
+              "P"
+            ]
+          }
+        ],
+        "doraIndicators": []
+      },
+      "expectedRon": {
+        "han": 1,
+        "fu": 30,
+        "main": 1000,
+        "additional": 0,
+        "total": 1000
+      },
+      "expectedTsumo": {
+        "han": 1,
+        "fu": 40,
+        "main": 700,
+        "additional": 400,
+        "total": 1500
+      }
+    },
+    {
+      "name": "winning-assignment-fu",
+      "concealed": [
+        "3p",
+        "4p",
+        "5p",
+        "6m",
+        "7m",
+        "8m",
+        "2s",
+        "2s",
+        "2s",
+        "5p"
+      ],
+      "winner": "0p",
+      "state": {
+        "round": "east_2",
+        "seat": "south",
+        "openMelds": 1,
+        "melds": [
+          {
+            "type": "pon",
+            "tiles": [
+              "P",
+              "P",
+              "P"
+            ]
+          }
+        ],
+        "doraIndicators": []
+      },
+      "expectedRon": {
+        "han": 2,
+        "fu": 30,
+        "main": 2000,
+        "additional": 0,
+        "total": 2000
+      },
+      "expectedTsumo": {
+        "han": 2,
+        "fu": 40,
+        "main": 1300,
+        "additional": 700,
+        "total": 2700
+      }
+    },
+    {
+      "name": "winning-dora-repeat",
+      "concealed": [
+        "3p",
+        "4p",
+        "5p",
+        "6m",
+        "7m",
+        "8m",
+        "2s",
+        "2s",
+        "2s",
+        "5p"
+      ],
+      "winner": "5p",
+      "state": {
+        "round": "east_2",
+        "seat": "south",
+        "openMelds": 1,
+        "melds": [
+          {
+            "type": "pon",
+            "tiles": [
+              "P",
+              "P",
+              "P"
+            ]
+          }
+        ],
+        "doraIndicators": [
+          "4p",
+          "4p"
+        ]
+      },
+      "expectedRon": {
+        "han": 7,
+        "fu": 30,
+        "main": 12000,
+        "additional": 0,
+        "total": 12000
+      },
+      "expectedTsumo": {
+        "han": 7,
+        "fu": 40,
+        "main": 6000,
+        "additional": 3000,
+        "total": 12000
+      }
+    },
+    {
+      "name": "winning-dora-repeat",
+      "concealed": [
+        "3p",
+        "4p",
+        "5p",
+        "6m",
+        "7m",
+        "8m",
+        "2s",
+        "2s",
+        "2s",
+        "5p"
+      ],
+      "winner": "0p",
+      "state": {
+        "round": "east_2",
+        "seat": "south",
+        "openMelds": 1,
+        "melds": [
+          {
+            "type": "pon",
+            "tiles": [
+              "P",
+              "P",
+              "P"
+            ]
+          }
+        ],
+        "doraIndicators": [
+          "4p",
+          "4p"
+        ]
+      },
+      "expectedRon": {
+        "han": 8,
+        "fu": 30,
+        "main": 16000,
+        "additional": 0,
+        "total": 16000
+      },
+      "expectedTsumo": {
+        "han": 8,
+        "fu": 40,
+        "main": 8000,
+        "additional": 4000,
+        "total": 16000
+      }
+    },
+    {
+      "name": "all-honors",
+      "concealed": [
+        "E",
+        "E",
+        "E",
+        "S",
+        "S",
+        "S",
+        "C",
+        "C",
+        "C",
+        "N"
+      ],
+      "winner": "N",
+      "state": {
+        "round": "east_2",
+        "seat": "south",
+        "openMelds": 1,
+        "melds": [
+          {
+            "type": "pon",
+            "tiles": [
+              "P",
+              "P",
+              "P"
+            ]
+          }
+        ],
+        "doraIndicators": [
+          "F"
+        ]
+      },
+      "expectedRon": {
+        "han": 13,
+        "fu": 50,
+        "main": 32000,
+        "additional": 0,
+        "total": 32000
+      },
+      "expectedTsumo": {
+        "han": 13,
+        "fu": 60,
+        "main": 16000,
+        "additional": 8000,
+        "total": 32000
+      }
+    },
+    {
+      "name": "daisangen",
+      "concealed": [
+        "F",
+        "F",
+        "F",
+        "C",
+        "C",
+        "C",
+        "1m",
+        "2m",
+        "3m",
+        "E"
+      ],
+      "winner": "E",
+      "state": {
+        "round": "east_2",
+        "seat": "south",
+        "openMelds": 1,
+        "melds": [
+          {
+            "type": "pon",
+            "tiles": [
+              "P",
+              "P",
+              "P"
+            ]
+          }
+        ],
+        "doraIndicators": []
+      },
+      "expectedRon": {
+        "han": 13,
+        "fu": 50,
+        "main": 32000,
+        "additional": 0,
+        "total": 32000
+      },
+      "expectedTsumo": {
+        "han": 13,
+        "fu": 50,
+        "main": 16000,
+        "additional": 8000,
+        "total": 32000
+      }
+    },
+    {
+      "name": "shousuushi",
+      "concealed": [
+        "S",
+        "S",
+        "S",
+        "W",
+        "W",
+        "W",
+        "N",
+        "N",
+        "N",
+        "E"
+      ],
+      "winner": "E",
+      "state": {
+        "round": "east_2",
+        "seat": "east",
+        "openMelds": 1,
+        "melds": [
+          {
+            "type": "chi",
+            "tiles": [
+              "1m",
+              "2m",
+              "3m"
+            ]
+          }
+        ],
+        "doraIndicators": []
+      },
+      "expectedRon": {
+        "han": 13,
+        "fu": 50,
+        "main": 48000,
+        "additional": 0,
+        "total": 48000
+      },
+      "expectedTsumo": {
+        "han": 13,
+        "fu": 60,
+        "main": 16000,
+        "additional": 16000,
+        "total": 48000
+      }
+    },
+    {
+      "name": "daisuushi-all-honors",
+      "concealed": [
+        "S",
+        "S",
+        "S",
+        "W",
+        "W",
+        "W",
+        "N",
+        "N",
+        "N",
+        "P"
+      ],
+      "winner": "P",
+      "state": {
+        "round": "east_2",
+        "seat": "south",
+        "openMelds": 1,
+        "melds": [
+          {
+            "type": "pon",
+            "tiles": [
+              "E",
+              "E",
+              "E"
+            ]
+          }
+        ],
+        "doraIndicators": []
+      },
+      "expectedRon": {
+        "han": 39,
+        "fu": 60,
+        "main": 96000,
+        "additional": 0,
+        "total": 96000
+      },
+      "expectedTsumo": {
+        "han": 39,
+        "fu": 60,
+        "main": 48000,
+        "additional": 24000,
+        "total": 96000
+      }
+    },
+    {
+      "name": "chinroutou",
+      "concealed": [
+        "9m",
+        "9m",
+        "9m",
+        "1p",
+        "1p",
+        "1p",
+        "9p",
+        "9p",
+        "9p",
+        "1s"
+      ],
+      "winner": "1s",
+      "state": {
+        "round": "east_2",
+        "seat": "south",
+        "openMelds": 1,
+        "melds": [
+          {
+            "type": "pon",
+            "tiles": [
+              "1m",
+              "1m",
+              "1m"
+            ]
+          }
+        ],
+        "doraIndicators": []
+      },
+      "expectedRon": {
+        "han": 13,
+        "fu": 50,
+        "main": 32000,
+        "additional": 0,
+        "total": 32000
+      },
+      "expectedTsumo": {
+        "han": 13,
+        "fu": 60,
+        "main": 16000,
+        "additional": 8000,
+        "total": 32000
+      }
+    },
+    {
+      "name": "suukantsu",
+      "concealed": [
+        "F"
+      ],
+      "winner": "F",
+      "state": {
+        "round": "east_2",
+        "seat": "south",
+        "openMelds": 4,
+        "melds": [
+          {
+            "type": "ankan",
+            "tiles": [
+              "2m",
+              "2m",
+              "2m",
+              "2m"
+            ]
+          },
+          {
+            "type": "minkan",
+            "tiles": [
+              "4p",
+              "4p",
+              "4p",
+              "4p"
+            ]
+          },
+          {
+            "type": "kakan",
+            "tiles": [
+              "6s",
+              "6s",
+              "6s",
+              "6s"
+            ]
+          },
+          {
+            "type": "minkan",
+            "tiles": [
+              "8m",
+              "8m",
+              "8m",
+              "8m"
+            ]
+          }
+        ],
+        "doraIndicators": []
+      },
+      "expectedRon": {
+        "han": 13,
+        "fu": 70,
+        "main": 32000,
+        "additional": 0,
+        "total": 32000
+      },
+      "expectedTsumo": {
+        "han": 13,
+        "fu": 70,
+        "main": 16000,
+        "additional": 8000,
+        "total": 32000
+      }
+    },
+    {
+      "name": "multiple-decompositions",
+      "concealed": [
+        "1m",
+        "1m",
+        "1m",
+        "2m",
+        "2m",
+        "2m",
+        "3m",
+        "3m",
+        "3m",
+        "4m"
+      ],
+      "winner": "4m",
+      "state": {
+        "round": "east_2",
+        "seat": "south",
+        "openMelds": 1,
+        "melds": [
+          {
+            "type": "pon",
+            "tiles": [
+              "8p",
+              "8p",
+              "8p"
+            ]
+          }
+        ],
+        "doraIndicators": []
+      },
+      "expectedRon": {
+        "han": 4,
+        "fu": 40,
+        "main": 8000,
+        "additional": 0,
+        "total": 8000
+      },
+      "expectedTsumo": {
+        "han": 4,
+        "fu": 50,
+        "main": 4000,
+        "additional": 2000,
+        "total": 8000
+      }
+    },
+    {
+      "name": "sanankou-ron-tsumo",
+      "concealed": [
+        "2p",
+        "2p",
+        "2p",
+        "4s",
+        "4s",
+        "4s",
+        "6m",
+        "6m",
+        "F",
+        "F"
+      ],
+      "winner": "6m",
+      "state": {
+        "round": "east_2",
+        "seat": "south",
+        "openMelds": 1,
+        "melds": [
+          {
+            "type": "chi",
+            "tiles": [
+              "1m",
+              "2m",
+              "3m"
+            ]
+          }
+        ],
+        "doraIndicators": []
+      },
+      "expectedRon": null,
+      "expectedTsumo": {
+        "han": 2,
+        "fu": 40,
+        "main": 1300,
+        "additional": 700,
+        "total": 2700
+      }
+    },
+    {
+      "name": "sanankou-ron-tsumo",
+      "concealed": [
+        "2p",
+        "2p",
+        "2p",
+        "4s",
+        "4s",
+        "4s",
+        "6m",
+        "6m",
+        "F",
+        "F"
+      ],
+      "winner": "F",
+      "state": {
+        "round": "east_2",
+        "seat": "south",
+        "openMelds": 1,
+        "melds": [
+          {
+            "type": "chi",
+            "tiles": [
+              "1m",
+              "2m",
+              "3m"
+            ]
+          }
+        ],
+        "doraIndicators": []
+      },
+      "expectedRon": {
+        "han": 1,
+        "fu": 40,
+        "main": 1300,
+        "additional": 0,
+        "total": 1300
+      },
+      "expectedTsumo": {
+        "han": 3,
+        "fu": 40,
+        "main": 2600,
+        "additional": 1300,
+        "total": 5200
+      }
+    },
+    {
+      "name": "sankantsu",
+      "concealed": [
+        "1m",
+        "2m",
+        "F",
+        "F"
+      ],
+      "winner": "3m",
+      "state": {
+        "round": "east_2",
+        "seat": "south",
+        "openMelds": 3,
+        "melds": [
+          {
+            "type": "ankan",
+            "tiles": [
+              "4p",
+              "4p",
+              "4p",
+              "4p"
+            ]
+          },
+          {
+            "type": "minkan",
+            "tiles": [
+              "6s",
+              "6s",
+              "6s",
+              "6s"
+            ]
+          },
+          {
+            "type": "kakan",
+            "tiles": [
+              "8m",
+              "8m",
+              "8m",
+              "8m"
+            ]
+          }
+        ],
+        "doraIndicators": []
+      },
+      "expectedRon": {
+        "han": 2,
+        "fu": 60,
+        "main": 3900,
+        "additional": 0,
+        "total": 3900
+      },
+      "expectedTsumo": {
+        "han": 2,
+        "fu": 60,
+        "main": 2000,
+        "additional": 1000,
+        "total": 4000
+      }
+    },
+    {
+      "name": "generated-0",
+      "concealed": [
+        "E",
+        "E",
+        "E",
+        "S"
+      ],
+      "winner": "S",
+      "state": {
+        "round": "east_2",
+        "seat": "south",
+        "openMelds": 3,
+        "melds": [
+          {
+            "type": "pon",
+            "tiles": [
+              "8m",
+              "8m",
+              "8m"
+            ]
+          },
+          {
+            "type": "chi",
+            "tiles": [
+              "4s",
+              "5s",
+              "6s"
+            ]
+          },
+          {
+            "type": "pon",
+            "tiles": [
+              "5p",
+              "5p",
+              "5p"
+            ]
+          }
+        ],
+        "doraIndicators": []
+      },
+      "expectedRon": {
+        "han": 1,
+        "fu": 40,
+        "main": 1300,
+        "additional": 0,
+        "total": 1300
+      },
+      "expectedTsumo": {
+        "han": 1,
+        "fu": 40,
+        "main": 700,
+        "additional": 400,
+        "total": 1500
+      }
+    },
+    {
+      "name": "generated-1",
+      "concealed": [
+        "5s",
+        "5s",
+        "3m",
+        "3m"
+      ],
+      "winner": "5s",
+      "state": {
+        "round": "south_4",
+        "seat": "south",
+        "openMelds": 3,
+        "melds": [
+          {
+            "type": "pon",
+            "tiles": [
+              "4p",
+              "4p",
+              "4p"
+            ]
+          },
+          {
+            "type": "pon",
+            "tiles": [
+              "6m",
+              "6m",
+              "6m"
+            ]
+          },
+          {
+            "type": "chi",
+            "tiles": [
+              "5m",
+              "6m",
+              "7m"
+            ]
+          }
+        ],
+        "doraIndicators": [
+          "1m"
+        ]
+      },
+      "expectedRon": {
+        "han": 1,
+        "fu": 30,
+        "main": 1000,
+        "additional": 0,
+        "total": 1000
+      },
+      "expectedTsumo": {
+        "han": 1,
+        "fu": 30,
+        "main": 500,
+        "additional": 300,
+        "total": 1100
+      }
+    },
+    {
+      "name": "generated-2",
+      "concealed": [
+        "C",
+        "C",
+        "C",
+        "5m",
+        "6m",
+        "7m",
+        "4p",
+        "5p",
+        "6p",
+        "8p"
+      ],
+      "winner": "8p",
+      "state": {
+        "round": "east_2",
+        "seat": "south",
+        "openMelds": 1,
+        "melds": [
+          {
+            "type": "pon",
+            "tiles": [
+              "S",
+              "S",
+              "S"
+            ]
+          }
+        ],
+        "doraIndicators": []
+      },
+      "expectedRon": {
+        "han": 2,
+        "fu": 40,
+        "main": 2600,
+        "additional": 0,
+        "total": 2600
+      },
+      "expectedTsumo": {
+        "han": 2,
+        "fu": 40,
+        "main": 1300,
+        "additional": 700,
+        "total": 2700
+      }
+    },
+    {
+      "name": "generated-3",
+      "concealed": [
+        "7p",
+        "7p",
+        "7m",
+        "7m"
+      ],
+      "winner": "7p",
+      "state": {
+        "round": "east_4",
+        "seat": "east",
+        "openMelds": 3,
+        "melds": [
+          {
+            "type": "chi",
+            "tiles": [
+              "4s",
+              "0s",
+              "6s"
+            ]
+          },
+          {
+            "type": "chi",
+            "tiles": [
+              "2s",
+              "3s",
+              "4s"
+            ]
+          },
+          {
+            "type": "chi",
+            "tiles": [
+              "4m",
+              "5m",
+              "6m"
+            ]
+          }
+        ],
+        "doraIndicators": [
+          "3s",
+          "8p"
+        ]
+      },
+      "expectedRon": {
+        "han": 4,
+        "fu": 30,
+        "main": 11600,
+        "additional": 0,
+        "total": 11600
+      },
+      "expectedTsumo": {
+        "han": 4,
+        "fu": 30,
+        "main": 3900,
+        "additional": 3900,
+        "total": 11700
+      }
+    },
+    {
+      "name": "generated-4",
+      "concealed": [
+        "P",
+        "P",
+        "E",
+        "E"
+      ],
+      "winner": "P",
+      "state": {
+        "round": "north_4",
+        "seat": "north",
+        "openMelds": 3,
+        "melds": [
+          {
+            "type": "chi",
+            "tiles": [
+              "2p",
+              "3p",
+              "4p"
+            ]
+          },
+          {
+            "type": "chi",
+            "tiles": [
+              "5s",
+              "6s",
+              "7s"
+            ]
+          },
+          {
+            "type": "pon",
+            "tiles": [
+              "1p",
+              "1p",
+              "1p"
+            ]
+          }
+        ],
+        "doraIndicators": [
+          "5s"
+        ]
+      },
+      "expectedRon": {
+        "han": 2,
+        "fu": 30,
+        "main": 2000,
+        "additional": 0,
+        "total": 2000
+      },
+      "expectedTsumo": {
+        "han": 2,
+        "fu": 40,
+        "main": 1300,
+        "additional": 700,
+        "total": 2700
+      }
+    },
+    {
+      "name": "generated-5",
+      "concealed": [
+        "8m",
+        "8m",
+        "3p",
+        "4p",
+        "5p",
+        "5s",
+        "5s",
+        "5s",
+        "7m",
+        "7m"
+      ],
+      "winner": "8m",
+      "state": {
+        "round": "east_2",
+        "seat": "east",
+        "openMelds": 1,
+        "melds": [
+          {
+            "type": "chi",
+            "tiles": [
+              "4m",
+              "5m",
+              "6m"
+            ]
+          }
+        ],
+        "doraIndicators": []
+      },
+      "expectedRon": {
+        "han": 1,
+        "fu": 30,
+        "main": 1500,
+        "additional": 0,
+        "total": 1500
+      },
+      "expectedTsumo": {
+        "han": 1,
+        "fu": 30,
+        "main": 500,
+        "additional": 500,
+        "total": 1500
+      }
+    },
+    {
+      "name": "generated-6",
+      "concealed": [
+        "2p",
+        "3p",
+        "4p",
+        "6m",
+        "7m",
+        "8m",
+        "3s",
+        "4s",
+        "5s",
+        "2s"
+      ],
+      "winner": "2s",
+      "state": {
+        "round": "south_3",
+        "seat": "east",
+        "openMelds": 1,
+        "melds": [
+          {
+            "type": "chi",
+            "tiles": [
+              "1m",
+              "2m",
+              "3m"
+            ]
+          }
+        ],
+        "doraIndicators": [
+          "6m",
+          "1s"
+        ]
+      },
+      "expectedRon": null,
+      "expectedTsumo": null
+    },
+    {
+      "name": "generated-7",
+      "concealed": [
+        "5p",
+        "6p",
+        "3m",
+        "4m",
+        "0m",
+        "9p",
+        "9p",
+        "9p",
+        "3s",
+        "3s"
+      ],
+      "winner": "4p",
+      "state": {
+        "round": "south_1",
+        "seat": "south",
+        "openMelds": 1,
+        "melds": [
+          {
+            "type": "chi",
+            "tiles": [
+              "6s",
+              "7s",
+              "8s"
+            ]
+          }
+        ],
+        "doraIndicators": [
+          "2m",
+          "1s"
+        ]
+      },
+      "expectedRon": null,
+      "expectedTsumo": null
+    },
+    {
+      "name": "generated-8",
+      "concealed": [
+        "3s",
+        "3s",
+        "6p",
+        "6p"
+      ],
+      "winner": "3s",
+      "state": {
+        "round": "south_2",
+        "seat": "east",
+        "openMelds": 3,
+        "melds": [
+          {
+            "type": "pon",
+            "tiles": [
+              "9s",
+              "9s",
+              "9s"
+            ]
+          },
+          {
+            "type": "pon",
+            "tiles": [
+              "P",
+              "P",
+              "P"
+            ]
+          },
+          {
+            "type": "chi",
+            "tiles": [
+              "4m",
+              "5m",
+              "6m"
+            ]
+          }
+        ],
+        "doraIndicators": []
+      },
+      "expectedRon": {
+        "han": 1,
+        "fu": 30,
+        "main": 1500,
+        "additional": 0,
+        "total": 1500
+      },
+      "expectedTsumo": {
+        "han": 1,
+        "fu": 40,
+        "main": 700,
+        "additional": 700,
+        "total": 2100
+      }
+    },
+    {
+      "name": "generated-9",
+      "concealed": [
+        "7s",
+        "8s",
+        "9s",
+        "2s",
+        "2s",
+        "6m",
+        "6m"
+      ],
+      "winner": "2s",
+      "state": {
+        "round": "west_1",
+        "seat": "north",
+        "openMelds": 2,
+        "melds": [
+          {
+            "type": "kakan",
+            "tiles": [
+              "1p",
+              "1p",
+              "1p",
+              "1p"
+            ]
+          },
+          {
+            "type": "pon",
+            "tiles": [
+              "9m",
+              "9m",
+              "9m"
+            ]
+          }
+        ],
+        "doraIndicators": []
+      },
+      "expectedRon": null,
+      "expectedTsumo": null
+    },
+    {
+      "name": "generated-10",
+      "concealed": [
+        "3p",
+        "4p",
+        "E",
+        "E",
+        "E",
+        "2s",
+        "2s"
+      ],
+      "winner": "2p",
+      "state": {
+        "round": "west_4",
+        "seat": "west",
+        "openMelds": 2,
+        "melds": [
+          {
+            "type": "pon",
+            "tiles": [
+              "8s",
+              "8s",
+              "8s"
+            ]
+          },
+          {
+            "type": "chi",
+            "tiles": [
+              "7s",
+              "8s",
+              "9s"
+            ]
+          }
+        ],
+        "doraIndicators": [
+          "1s"
+        ]
+      },
+      "expectedRon": null,
+      "expectedTsumo": null
+    },
+    {
+      "name": "generated-11",
+      "concealed": [
+        "6p",
+        "7p",
+        "8p",
+        "6p",
+        "7p",
+        "8p",
+        "8p"
+      ],
+      "winner": "5p",
+      "state": {
+        "round": "south_2",
+        "seat": "north",
+        "openMelds": 2,
+        "melds": [
+          {
+            "type": "chi",
+            "tiles": [
+              "4s",
+              "5s",
+              "6s"
+            ]
+          },
+          {
+            "type": "chi",
+            "tiles": [
+              "2s",
+              "3s",
+              "4s"
+            ]
+          }
+        ],
+        "doraIndicators": [
+          "N",
+          "P",
+          "6p"
+        ]
+      },
+      "expectedRon": {
+        "han": 3,
+        "fu": 30,
+        "main": 3900,
+        "additional": 0,
+        "total": 3900
+      },
+      "expectedTsumo": {
+        "han": 3,
+        "fu": 30,
+        "main": 2000,
+        "additional": 1000,
+        "total": 4000
+      }
+    },
+    {
+      "name": "generated-12",
+      "concealed": [
+        "3s",
+        "3s",
+        "7p",
+        "7p"
+      ],
+      "winner": "3s",
+      "state": {
+        "round": "south_3",
+        "seat": "east",
+        "openMelds": 3,
+        "melds": [
+          {
+            "type": "chi",
+            "tiles": [
+              "1p",
+              "2p",
+              "3p"
+            ]
+          },
+          {
+            "type": "chi",
+            "tiles": [
+              "1p",
+              "2p",
+              "3p"
+            ]
+          },
+          {
+            "type": "ankan",
+            "tiles": [
+              "E",
+              "E",
+              "E",
+              "E"
+            ]
+          }
+        ],
+        "doraIndicators": [
+          "W",
+          "9m",
+          "1m"
+        ]
+      },
+      "expectedRon": {
+        "han": 1,
+        "fu": 60,
+        "main": 2900,
+        "additional": 0,
+        "total": 2900
+      },
+      "expectedTsumo": {
+        "han": 1,
+        "fu": 60,
+        "main": 1000,
+        "additional": 1000,
+        "total": 3000
+      }
+    },
+    {
+      "name": "generated-13",
+      "concealed": [
+        "3p",
+        "4p",
+        "0p",
+        "F",
+        "F",
+        "F",
+        "1s"
+      ],
+      "winner": "1s",
+      "state": {
+        "round": "south_2",
+        "seat": "north",
+        "openMelds": 2,
+        "melds": [
+          {
+            "type": "chi",
+            "tiles": [
+              "4m",
+              "5m",
+              "6m"
+            ]
+          },
+          {
+            "type": "pon",
+            "tiles": [
+              "8s",
+              "8s",
+              "8s"
+            ]
+          }
+        ],
+        "doraIndicators": []
+      },
+      "expectedRon": {
+        "han": 2,
+        "fu": 40,
+        "main": 2600,
+        "additional": 0,
+        "total": 2600
+      },
+      "expectedTsumo": {
+        "han": 2,
+        "fu": 40,
+        "main": 1300,
+        "additional": 700,
+        "total": 2700
+      }
+    },
+    {
+      "name": "generated-14",
+      "concealed": [
+        "4m",
+        "5m",
+        "N",
+        "N"
+      ],
+      "winner": "3m",
+      "state": {
+        "round": "west_1",
+        "seat": "east",
+        "openMelds": 3,
+        "melds": [
+          {
+            "type": "chi",
+            "tiles": [
+              "2s",
+              "3s",
+              "4s"
+            ]
+          },
+          {
+            "type": "pon",
+            "tiles": [
+              "9m",
+              "9m",
+              "9m"
+            ]
+          },
+          {
+            "type": "chi",
+            "tiles": [
+              "3p",
+              "4p",
+              "5p"
+            ]
+          }
+        ],
+        "doraIndicators": []
+      },
+      "expectedRon": null,
+      "expectedTsumo": null
+    },
+    {
+      "name": "generated-15",
+      "concealed": [
+        "3s",
+        "4s",
+        "N",
+        "N"
+      ],
+      "winner": "5s",
+      "state": {
+        "round": "south_1",
+        "seat": "north",
+        "openMelds": 3,
+        "melds": [
+          {
+            "type": "minkan",
+            "tiles": [
+              "1s",
+              "1s",
+              "1s",
+              "1s"
+            ]
+          },
+          {
+            "type": "chi",
+            "tiles": [
+              "7p",
+              "8p",
+              "9p"
+            ]
+          },
+          {
+            "type": "pon",
+            "tiles": [
+              "E",
+              "E",
+              "E"
+            ]
+          }
+        ],
+        "doraIndicators": [
+          "F",
+          "S"
+        ]
+      },
+      "expectedRon": null,
+      "expectedTsumo": null
+    }
+  ]
+}

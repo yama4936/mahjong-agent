@@ -3,6 +3,7 @@ import type { DiscardEvaluation } from "../game/ukeire.js";
 import type { LegalAction } from "../game/actions.js";
 import { normalizeTile, parseGameTile } from "../game/tiles.js";
 import type { ClosedWaitReport } from "../evaluation/closedWaitScorer.js";
+import type { OpenTenpaiScore } from "../evaluation/openTenpaiScore.js";
 
 export interface JevDecision {
   actionId: string;
@@ -231,6 +232,19 @@ export function buildJevReactionRequest(state: GameState, actions: readonly Lega
   };
 }
 
+function compactOpenScoring(score: OpenTenpaiScore, applied?: boolean) {
+  return {
+    scope: score.scope,
+    used_for_hand_value: Boolean(applied),
+    known_discard_furiten: score.knownDiscardFuriten,
+    ron_ukeire: score.ronUkeire,
+    tsumo_ukeire: score.tsumoUkeire,
+    conditional_conservative_points: score.conditionalConservativePoints,
+    winning_tiles: score.waits.filter(wait => wait.remaining > 0).map(wait => ({ tile: wait.tile,
+      remaining: wait.remaining, ron_scoring_points: wait.ron?.total ?? null, tsumo_scoring_points: wait.tsumo?.total ?? null })),
+  };
+}
+
 export function buildJevRequest(
   state: GameState,
   candidates: readonly DiscardEvaluation[],
@@ -268,7 +282,8 @@ export function buildJevRequest(
       model,
       state: {
         ...commonState,
-        candidates: candidates.map(({ actionId, tile, shanten, ukeire, estimatedValue, winProbability, tenpaiProbability, dealInProbability, expectedRoundValue, evaluationModel, effectiveTiles }) => ({ actionId, tile, shanten, ukeire, estimatedValue, winProbability, tenpaiProbability, dealInProbability, expectedRoundValue, evaluationModel, effectiveTiles })),
+        candidates: candidates.map(({ actionId, tile, shanten, ukeire, estimatedValue, winProbability, tenpaiProbability, dealInProbability, expectedRoundValue, evaluationModel, effectiveTiles, openTenpaiScore, openTenpaiScoreApplied }) => ({ actionId, tile, shanten, ukeire, estimatedValue, winProbability, tenpaiProbability, dealInProbability, expectedRoundValue, evaluationModel, effectiveTiles,
+          ...(openTenpaiScore ? { ordinary_open_waits: compactOpenScoring(openTenpaiScore, openTenpaiScoreApplied) } : {}) })),
       },
       questions: {
         action: {
@@ -299,6 +314,7 @@ export function buildJevRequest(
         deal_in_probability: candidate.dealInProbability ?? candidate.danger ?? "unknown",
         expected_round_points: candidate.expectedRoundValue ?? "unknown",
         estimate_source: candidate.evaluationModel ?? "unknown",
+        ...(candidate.openTenpaiScore ? { ordinary_open_waits: compactOpenScoring(candidate.openTenpaiScore, candidate.openTenpaiScoreApplied) } : {}),
       },
       ...(profile === "hierarchical-v3" ? { comparison_to_best: {
         shanten_gap: candidate.shanten - bestShanten,
@@ -332,6 +348,7 @@ export function buildJevRequest(
             "Use the supplied candidate estimates; do not recompute exact arithmetic or invent missing facts.",
             "Preserve lower shanten unless a supplied expected-round-points or safety difference justifies another option.",
             "Compare ukeire quality, hand value, win chance and tenpai chance for offense.",
+            "Ordinary open waits distinguish scoring wins from structural ukeire; null scoring points mean no ordinary yaku for that mode. Situational yaku and UI win legality are outside that scoring scope.",
             "When an opponent is riichi or pressure is otherwise visible, give deal-in probability substantially more weight.",
             "Use round, scores, seat, honba, riichi sticks, turn and remaining tiles for placement and urgency.",
           ],
@@ -341,6 +358,7 @@ export function buildJevRequest(
           use_evidence: [
             "First preserve minimum shanten; deviate only for a material supplied safety or expected-round-points advantage.",
             "Second compare ukeire quality, hand value, win chance and tenpai chance using the supplied estimates.",
+            "Ordinary open waits distinguish scoring wins from structural ukeire; null scoring points mean no ordinary yaku for that mode. Situational yaku and UI win legality are outside that scoring scope.",
             "Third, when riichi or two-or-more open meld pressure is visible, prioritize avoiding deal-in unless placement urgency clearly warrants pushing.",
             "Treat cached_hand_plan only as a soft tie-breaker among tactically close choices; abandon it when current safety, shanten, ukeire or EV disagrees.",
             "Use placement context only when its fields are known. Never infer scores, round, remaining tiles, danger or yaku that are not supplied.",

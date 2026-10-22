@@ -3,12 +3,13 @@ import { TILE_NAMES, isTerminalOrHonor, normalizeTile, tileIndex, toCounts, type
 import { standardWinningShapes, type WinningShape } from "../game/winningShapes.js";
 import type { DiscardEvaluation } from "../game/ukeire.js";
 
-interface Group {
+export interface OpenGroup {
   type: "sequence" | "triplet";
   tiles: Tile[];
   concealed: boolean;
   kan: boolean;
 }
+type Group = OpenGroup;
 export interface OpenWinningWait {
   tile: Tile;
   // Supplied by the candidate evaluation; not additional tile recognition.
@@ -26,7 +27,7 @@ export interface OpenTenpaiYaku {
   tsumoUkeire: number;
 }
 
-function knownGroups(state: GameState): Group[] | undefined {
+export function knownOpenGroups(state: GameState): Group[] | undefined {
   if (state.openMelds === 0 || state.melds.length !== state.openMelds
     || state.melds.every(meld => meld.type === "ankan") || !/^(east|south|west|north)_[1-4]$/.test(state.round)) return;
   const groups: Group[] = [];
@@ -44,7 +45,8 @@ function knownGroups(state: GameState): Group[] | undefined {
   return groups;
 }
 
-function shapeYaku(shape: WinningShape, exposed: Group[], winner: Tile, state: GameState, tsumo: boolean): string[] {
+export function ordinaryOpenShapeYaku(shape: WinningShape, exposed: Group[], winner: Tile, state: GameState,
+  tsumo: boolean, winningGroupIndex?: number): string[] {
   const groups: Group[] = [...exposed, ...shape.groups.map(group => ({ ...group, concealed: true, kan: false }))];
   const tiles = [shape.pair, shape.pair, ...groups.flatMap(group => group.tiles)];
   const yaku = new Set<string>();
@@ -82,8 +84,9 @@ function shapeYaku(shape: WinningShape, exposed: Group[], winner: Tile, state: G
   // tile can instead be assigned to a sequence/pair in this decomposition,
   // the triplet can remain concealed; all decompositions are considered.
   const alternative = shape.pair === winner || shape.groups.some(group => group.type === "sequence" && group.tiles.includes(winner));
-  const concealedTriplets = trips.filter(group => group.concealed
-    && (group.kan || tsumo || alternative || !group.tiles.includes(winner))).length;
+  const concealedTriplets = groups.filter((group, index) => group.type === "triplet" && group.concealed
+    && (group.kan || tsumo || (winningGroupIndex === undefined
+      ? alternative || !group.tiles.includes(winner) : index !== winningGroupIndex))).length;
   if (concealedTriplets >= 3) yaku.add("sanankou");
   return [...yaku];
 }
@@ -94,7 +97,7 @@ function shapeYaku(shape: WinningShape, exposed: Group[], winner: Tile, state: G
  */
 export function openTenpaiYaku(candidate: DiscardEvaluation, state: GameState): OpenTenpaiYaku | undefined {
   if (candidate.shanten !== 0) return;
-  const exposed = knownGroups(state);
+  const exposed = knownOpenGroups(state);
   if (!exposed) return;
   const concealed = [...state.hand, ...(state.draw ? [state.draw] : [])].map(normalizeTile);
   const discardIndex = concealed.indexOf(normalizeTile(candidate.tile));
@@ -110,8 +113,8 @@ export function openTenpaiYaku(candidate: DiscardEvaluation, state: GameState): 
     const shapes = standardWinningShapes([...concealed, tile], state.openMelds);
     if (!shapes.length) continue;
     waits.push({ tile, remaining: candidate.effectiveTiles.find(wait => wait.tile === tile)?.remaining ?? 0,
-      ronYaku: [...new Set(shapes.flatMap(shape => shapeYaku(shape, exposed, tile, state, false)))],
-      tsumoYaku: [...new Set(shapes.flatMap(shape => shapeYaku(shape, exposed, tile, state, true)))] });
+      ronYaku: [...new Set(shapes.flatMap(shape => ordinaryOpenShapeYaku(shape, exposed, tile, state, false)))],
+      tsumoYaku: [...new Set(shapes.flatMap(shape => ordinaryOpenShapeYaku(shape, exposed, tile, state, true)))] });
   }
   // Only represented own discards establish this flag. Missing called-discard
   // history is not certified unfuriten; UI ron legality remains authoritative.

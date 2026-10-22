@@ -28,7 +28,7 @@ test("limit estimates preserve boundaries and cap counted hands at one yakuman",
 test("advisor attaches bounded heuristic outcome estimates", () => {
   const result = deterministicAdvice(state);
   for (const candidate of result.candidates) {
-    assert.equal(candidate.evaluationModel, "heuristic-v4");
+    assert.equal(candidate.evaluationModel, "heuristic-v5");
     assert.ok(candidate.estimatedValue! >= 1000);
     assert.ok(candidate.winProbability! > 0 && candidate.winProbability! <= 1);
     assert.ok(candidate.tenpaiProbability! > 0 && candidate.tenpaiProbability! <= 1);

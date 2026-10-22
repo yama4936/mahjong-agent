@@ -1,0 +1,291 @@
+{
+  "sourceEvidence": "artifacts/ranked-supervised-206fa2f-20261022/operator-20261022T040419200226Z/sample31-open-tenpai-yaku-evidence.json",
+  "state": {
+    "round": "east_2",
+    "matchLength": "east",
+    "honba": 0,
+    "riichiSticks": 0,
+    "seat": "east",
+    "scores": {
+      "east": 37000,
+      "south": 25000,
+      "west": 13000,
+      "north": 25000
+    },
+    "hand": [
+      "2p",
+      "3p",
+      "1s",
+      "2s",
+      "3s",
+      "7s",
+      "8s",
+      "9s",
+      "F",
+      "F"
+    ],
+    "draw": "6s",
+    "doraIndicators": [
+      "4p"
+    ],
+    "ownDiscards": [
+      "0p",
+      "2s",
+      "3s",
+      "5p",
+      "E"
+    ],
+    "melds": [
+      {
+        "type": "chi",
+        "tiles": [
+          "2m",
+          "3m",
+          "1m"
+        ]
+      }
+    ],
+    "visibleTiles": [],
+    "openMelds": 1,
+    "turn": 5,
+    "remainingTiles": 50,
+    "phase": "self_turn",
+    "recognitionConfidence": 0.8724081573503975,
+    "publicStateConfidence": 0,
+    "riichiDeclared": false,
+    "availableUiActions": [],
+    "opponents": [
+      {
+        "seat": "south",
+        "discards": [
+          "N",
+          "1m",
+          "P",
+          "C",
+          "7p"
+        ],
+        "riichi": false,
+        "openMelds": 0,
+        "openMeldsObserved": true,
+        "melds": []
+      },
+      {
+        "seat": "west",
+        "discards": [
+          "N",
+          "W",
+          "8m",
+          "2m"
+        ],
+        "riichi": false,
+        "openMelds": 0,
+        "openMeldsObserved": true,
+        "melds": []
+      },
+      {
+        "seat": "north",
+        "discards": [
+          "9s",
+          "W",
+          "4m",
+          "6p"
+        ],
+        "riichi": false,
+        "openMelds": 0,
+        "openMeldsObserved": true,
+        "melds": []
+      }
+    ]
+  },
+  "before": [
+    {
+      "actionId": "discard_9s",
+      "action": "discard",
+      "tile": "9s",
+      "shanten": 0,
+      "form": "standard",
+      "effectiveTiles": [
+        {
+          "tile": "1p",
+          "remaining": 4
+        },
+        {
+          "tile": "4p",
+          "remaining": 3
+        }
+      ],
+      "ukeire": 7,
+      "danger": 0.04937500000000006,
+      "estimatedValue": 1500,
+      "winProbability": 0.10818181818181817,
+      "tenpaiProbability": 0.5640760748177662,
+      "dealInProbability": 0.04937500000000006,
+      "expectedRoundValue": -78,
+      "evaluationModel": "heuristic-v4"
+    },
+    {
+      "actionId": "discard_6s",
+      "action": "discard",
+      "tile": "6s",
+      "shanten": 0,
+      "form": "standard",
+      "effectiveTiles": [
+        {
+          "tile": "1p",
+          "remaining": 4
+        },
+        {
+          "tile": "4p",
+          "remaining": 3
+        }
+      ],
+      "ukeire": 7,
+      "danger": 0.0655356250000001,
+      "estimatedValue": 1500,
+      "winProbability": 0.10818181818181817,
+      "tenpaiProbability": 0.5640760748177662,
+      "dealInProbability": 0.0655356250000001,
+      "expectedRoundValue": -239,
+      "evaluationModel": "heuristic-v4"
+    }
+  ],
+  "independentScoring": {
+    "library": "mahjong==2.0.0",
+    "scope": "ordinary_open_hand_scoring_not_policy_ev",
+    "assumptions": {
+      "situational_yaku": false,
+      "ura": false,
+      "honba_and_deposits_excluded": true,
+      "future_restructuring_not_scored": true,
+      "alternate_result_not_established": true
+    },
+    "rows": [
+      {
+        "discard": "9s",
+        "wait": "1p",
+        "tsumo": false,
+        "error": null,
+        "han": 1,
+        "fu": 30,
+        "yaku": [
+          "Sanshoku Doujun"
+        ],
+        "cost": {
+          "main": 1500,
+          "additional": 0,
+          "main_bonus": 0,
+          "additional_bonus": 0,
+          "kyoutaku_bonus": 0,
+          "total": 1500,
+          "yaku_level": ""
+        }
+      },
+      {
+        "discard": "9s",
+        "wait": "1p",
+        "tsumo": true,
+        "error": null,
+        "han": 1,
+        "fu": 30,
+        "yaku": [
+          "Sanshoku Doujun"
+        ],
+        "cost": {
+          "main": 500,
+          "additional": 500,
+          "main_bonus": 0,
+          "additional_bonus": 0,
+          "kyoutaku_bonus": 0,
+          "total": 1500,
+          "yaku_level": ""
+        }
+      },
+      {
+        "discard": "9s",
+        "wait": "4p",
+        "tsumo": false,
+        "error": "no_yaku",
+        "han": null,
+        "fu": null,
+        "yaku": [],
+        "cost": null
+      },
+      {
+        "discard": "9s",
+        "wait": "4p",
+        "tsumo": true,
+        "error": "no_yaku",
+        "han": null,
+        "fu": null,
+        "yaku": [],
+        "cost": null
+      },
+      {
+        "discard": "6s",
+        "wait": "1p",
+        "tsumo": false,
+        "error": null,
+        "han": 2,
+        "fu": 30,
+        "yaku": [
+          "Sanshoku Doujun",
+          "Chantai"
+        ],
+        "cost": {
+          "main": 2900,
+          "additional": 0,
+          "main_bonus": 0,
+          "additional_bonus": 0,
+          "kyoutaku_bonus": 0,
+          "total": 2900,
+          "yaku_level": ""
+        }
+      },
+      {
+        "discard": "6s",
+        "wait": "1p",
+        "tsumo": true,
+        "error": null,
+        "han": 2,
+        "fu": 30,
+        "yaku": [
+          "Sanshoku Doujun",
+          "Chantai"
+        ],
+        "cost": {
+          "main": 1000,
+          "additional": 1000,
+          "main_bonus": 0,
+          "additional_bonus": 0,
+          "kyoutaku_bonus": 0,
+          "total": 3000,
+          "yaku_level": ""
+        }
+      },
+      {
+        "discard": "6s",
+        "wait": "4p",
+        "tsumo": false,
+        "error": "no_yaku",
+        "han": null,
+        "fu": null,
+        "yaku": [],
+        "cost": null
+      },
+      {
+        "discard": "6s",
+        "wait": "4p",
+        "tsumo": true,
+        "error": "no_yaku",
+        "han": null,
+        "fu": null,
+        "yaku": [],
+        "cost": null
+      }
+    ]
+  },
+  "scope": "Native rank31 point/ordinary-yaku comparison, not proof that a different discard avoids later loss or improves ranked performance",
+  "nativeScreenshot": "/home/yama1/projects/jantama-auto/artifacts/ranked-supervised-206fa2f-20261022/operator-20261022T040419200226Z/frames/2026-10-22T04-08-39.590317+00-00.jpg",
+  "nativeScreenshotSha256": "20986d098cfb45b89c78237734fca954ac91ab30fedaf480e2e9ba3cc449d47a",
+  "nativeIndependentlyViewed": true
+}
