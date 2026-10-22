@@ -458,3 +458,29 @@ test("Jev cannot override call certification and late top placement folds", asyn
   assert.equal(result.handPlan.placement.rank, 1);
   assert.ok(result.callAssessments?.[0]?.reasons.includes("hand_plan_disallows_calls"));
 });
+
+test("post-riichi local, remote and deadline fallbacks use only the drawn tile", async () => {
+  const live = parseGameState({ riichiDeclared: true, seat: "south",
+    hand: ["1m", "1m", "1m", "5m", "6m", "7m", "3p", "4p", "4s", "4s", "0s", "5s", "5s"],
+    draw: "6s",
+  });
+  const assertDraw = (result: Awaited<ReturnType<typeof decide>>) => {
+    assert.deepEqual(result.selectedAction, { id: "discard_6s", action: "discard", tile: "6s" });
+    assert.deepEqual(result.candidates.map(c => c.tile), ["6s"]);
+  };
+  assertDraw(await decideForceAutoWithJevDeadline(live, { deadlineMs: 1000 }));
+  for (const returnedId of ["discard_6s", "discard_4p"]) {
+    let offered: string[] | undefined;
+    const jev = { chooseDiscard: async (_state: unknown, candidates: Array<{ tile: string }>) => {
+      offered = candidates.map(c => c.tile);
+      return { actionId: returnedId, confidence: 1, probabilities: { [returnedId]: 1 },
+        model: "test", promptVersion: "test", latencyMs: 0 };
+    } } as unknown as JevClient;
+    const result = await decideForceAutoWithJevDeadline(live, { jev, deadlineMs: 1000 });
+    assertDraw(result);
+    assert.deepEqual(offered, ["6s"]);
+    assert.equal(result.arbitration?.selectedSource, returnedId === "discard_6s" ? "jev" : "local");
+  }
+  const slow = { chooseDiscard: async () => new Promise(() => {}) } as unknown as JevClient;
+  assertDraw(await decideForceAutoWithJevDeadline(live, { jev: slow, deadlineMs: 100 }));
+});

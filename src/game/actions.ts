@@ -43,7 +43,10 @@ export function generateSelfTurnActions(state: GameState): LegalAction[] {
   if (state.phase !== "self_turn") throw new Error("Self-turn actions require phase=self_turn");
   const hand = state.draw ? [...state.hand, state.draw] : state.hand;
   const discards = evaluateDiscards(hand, knownTilesOutsideHand(state), state.openMelds);
-  const actions: LegalAction[] = discards.map((candidate) => ({ id: candidate.actionId, action: "discard", tile: candidate.tile }));
+  // Once riichi is established the concealed hand is locked. Keep the exact
+  // physical draw identity here (a red five is not an interchangeable five).
+  const legalDiscards = state.riichiDeclared ? discards.filter((candidate) => candidate.tile === state.draw) : discards;
+  const actions: LegalAction[] = legalDiscards.map((candidate) => ({ id: candidate.actionId, action: "discard", tile: candidate.tile }));
   const ui = new Set(state.availableUiActions);
 
   if (ui.has("riichi") && state.openMelds === 0 && !state.riichiDeclared && (state.scores[state.seat] ?? 0) >= 1000) {

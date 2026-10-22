@@ -878,6 +878,35 @@ def local_discard_allowed(args: argparse.Namespace, evaluation: dict[str, Any]) 
     )
 
 
+def require_post_riichi_draw_click(
+    evaluation: dict[str, Any], selected: dict[str, Any], layout: dict[str, Any],
+    click_index: Any, point: Any, established_riichi: bool = False,
+) -> None:
+    """Reject a locked-hand discard before any mouse action, including duplicate draws."""
+    state = evaluation.get("state", {})
+    if selected.get("action") not in {"discard", "riichi"}:
+        return
+    if not (state.get("riichiDeclared") or established_riichi):
+        return
+    tiles = evaluation.get("recognition", {}).get("tiles", [])
+    draw = state.get("draw")
+    open_melds = state.get("openMelds", 0)
+    expected_count = 14 - 3 * open_melds
+    slot = open_hand_draw_slot(layout, open_melds) if open_melds > 0 else layout.get("drawSlot")
+    if (selected.get("action") != "discard" or not state.get("riichiDeclared")
+            or state.get("phase") != "self_turn" or not draw
+            or selected.get("tile") != draw
+            or len(tiles) != expected_count
+            or tiles != [*state.get("hand", []), draw]
+            or click_index != expected_count - 1
+            or not slot or not isinstance(point, dict)
+            or not isinstance(point.get("x"), (int, float))
+            or not isinstance(point.get("y"), (int, float))
+            or not (slot["x"] <= point["x"] < slot["x"] + slot["width"]
+                    and slot["y"] <= point["y"] < slot["y"] + slot["height"])):
+        raise RetryableSafetyAbort("post-riichi discard must target the verified physical draw slot")
+
+
 def verified_post_call_white_discard(
     evaluation: dict[str, Any], screenshot: bytes | None, layout: dict[str, Any],
     open_melds: int, pending_post_call_discard: bool,
@@ -4047,6 +4076,15 @@ class PythonAutoOperator:
         local_auto = local_discard_allowed(self.args, evaluation)
         if not force_auto and not certified_auto and not local_auto:
             return {"clicked": False, "reason": "advisor_or_safety_stop"}
+        established_riichi = bool((getattr(self, "cached_public_observation", None) or {}).get("riichiDeclared"))
+        if selected_action in {"discard", "riichi"} and (evaluation.get("state", {}).get("riichiDeclared") or established_riichi):
+            proposed_index = evaluation.get("clickIndex")
+            proposed_point = evaluation.get("clickPoint")
+            points = self.layout.get("clickPoints", [])
+            if proposed_point is None and isinstance(proposed_index, int) and 0 <= proposed_index < len(points):
+                proposed_point = points[proposed_index]
+            require_post_riichi_draw_click(evaluation, selected, self.layout,
+                                          proposed_index, proposed_point, established_riichi)
         if force_auto:
             self.require_force_auto_click_budget(
                 evaluated_captured_at, phase="before_pre_click_validation",
@@ -4299,6 +4337,8 @@ class PythonAutoOperator:
             river_before = crop_screenshot(post_riichi_full, self.river_clip)
 
         point = dynamic_click_point if has_dynamic_click_point else points[click_index]
+        require_post_riichi_draw_click(evaluation, selected, self.layout,
+                                      click_index, point, established_riichi)
         if force_auto and needs_tile_click:
             trusted_open_melds = getattr(self, "cached_open_melds", 0)
             evaluated_open_melds = evaluation.get("openMelds", 0)

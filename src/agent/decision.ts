@@ -179,12 +179,15 @@ async function decideWithAnalysis(
   const legalActions = analysis.legalActions();
   if (state.phase === "reaction") return decideReaction(state, legalActions, options);
 
-  const base = analysis.advice();
+  const advice = analysis.advice();
+  const legalDiscardIds = new Set(legalActions.filter(action => action.action === "discard").map(action => action.id));
+  const base = { ...advice, candidates: advice.candidates.filter(candidate => legalDiscardIds.has(candidate.actionId)) };
   const immediateWin = legalActions.find((action) => action.action === "tsumo");
   if (immediateWin) return decideImmediateSelfAction(state, base, legalActions, immediateWin, options);
   const kan = legalActions.find((action): action is LegalAction & { action: "ankan" | "kakan"; consumedTiles: string[] } =>
     action.action === "ankan" || action.action === "kakan");
   if (kan && shouldRecommendKan(state, kan)) return decideImmediateSelfAction(state, base, legalActions, kan, options);
+  if (!base.candidates.length) throw new Error("No legal discard candidate for this self-turn state");
   const minJevConfidence = options.minJevConfidence ?? 0.55;
   let selected = base.candidates[0]!;
   let confidence = base.confidence;
@@ -227,8 +230,7 @@ async function decideWithAnalysis(
     safetyReasons.push("jev_required_for_auto_mode");
   }
 
-  let selectedAction: LegalAction = legalActions.find((action) => action.id === selected.actionId)
-    ?? { id: selected.actionId, action: "discard", tile: selected.tile };
+  let selectedAction: LegalAction = legalActions.find((action) => action.id === selected.actionId)!;
   const winAction = legalActions.find((action) => action.action === "tsumo");
   if (winAction) {
     selectedAction = winAction;
