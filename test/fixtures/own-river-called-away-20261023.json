@@ -1,0 +1,565 @@
+{
+  "sourceCommit": "3a7b2c1",
+  "case": "ranked52 E3h2 confirmedown7m called into nextWest567mchi; oldownhistoryfreezes",
+  "initialObservation": {
+    "doraIndicators": [
+      "4p"
+    ],
+    "ownDiscards": [
+      "7m"
+    ],
+    "ownRiichiDeclared": false,
+    "ownMelds": [],
+    "ownMeldsObserved": true,
+    "ownMeldTiles": [],
+    "opponentDiscards": [
+      {
+        "seat": "west",
+        "discards": [],
+        "discardsObserved": true,
+        "melds": [],
+        "meldsObserved": true,
+        "riichiDeclared": false
+      },
+      {
+        "seat": "north",
+        "discards": [],
+        "discardsObserved": true,
+        "melds": [],
+        "meldsObserved": true,
+        "riichiDeclared": false
+      },
+      {
+        "seat": "east",
+        "discards": [
+          "N"
+        ],
+        "discardsObserved": true,
+        "melds": [],
+        "meldsObserved": true,
+        "riichiDeclared": false
+      }
+    ],
+    "capturedAt": "2026-10-22T21:20:28.605655+00:00"
+  },
+  "captures": [
+    {
+      "image": "own-river-called-away-20261023-first.png",
+      "sha256": "e00f54a13e04ce59076b4903cedffe2376ceb1eff7ed013b99aea7c788678e93",
+      "observation": {
+        "doraIndicators": [
+          "4p"
+        ],
+        "ownDiscards": [
+          "1p"
+        ],
+        "ownRiichiDeclared": false,
+        "ownMelds": [],
+        "ownMeldsObserved": true,
+        "opponentDiscards": [
+          {
+            "seat": "west",
+            "discards": [
+              "P",
+              "9m"
+            ],
+            "discardsObserved": true,
+            "riichiDeclared": false,
+            "melds": [
+              {
+                "type": "chi",
+                "tiles": [
+                  "6m",
+                  "5m",
+                  "7m"
+                ],
+                "confidence": 0.5201528668403625
+              }
+            ],
+            "meldsObserved": true
+          },
+          {
+            "seat": "north",
+            "discards": [
+              "1m",
+              "4m"
+            ],
+            "discardsObserved": true,
+            "riichiDeclared": false,
+            "melds": [],
+            "meldsObserved": true
+          },
+          {
+            "seat": "east",
+            "discards": [
+              "N",
+              "3s",
+              "8m"
+            ],
+            "discardsObserved": true,
+            "riichiDeclared": false,
+            "melds": [],
+            "meldsObserved": true
+          }
+        ],
+        "ownMeldTiles": [],
+        "allMeldTiles": [
+          "6m",
+          "5m",
+          "7m"
+        ],
+        "otherVisibleTiles": [
+          "P",
+          "9m",
+          "1m",
+          "4m",
+          "N",
+          "3s",
+          "8m",
+          "6m",
+          "5m",
+          "7m"
+        ],
+        "acceptedTiles": 12,
+        "detectedCandidates": 12,
+        "complete": false,
+        "capturedAt": "2026-10-22T21:21:04.706481+00:00",
+        "ownDiscardsObserved": true
+      },
+      "ownRegionEvidence": {
+        "backend": "hybrid",
+        "candidateCount": 1,
+        "recognized": [
+          {
+            "x": 768,
+            "y": 545,
+            "width": 62,
+            "height": 54,
+            "area": 1701,
+            "fillRatio": 0.5080645161290323,
+            "gridIndex": 0,
+            "sideways": false,
+            "tile": "1p",
+            "confidence": 0.9999954700469971,
+            "runnerUpConfidence": 4.3256459321128204e-06,
+            "ambiguityMargin": 0.999991144401065,
+            "safe": true
+          }
+        ],
+        "classificationSafe": true,
+        "rotationToUpright": 0
+      }
+    },
+    {
+      "image": "own-river-called-away-20261023-second.jpg",
+      "sha256": "3f0663b30496f216aa4f835a1502b0a56a7e810bd52a7a4e9d264c93535b6147",
+      "observation": {
+        "doraIndicators": [
+          "4p"
+        ],
+        "ownDiscards": [
+          "1p"
+        ],
+        "ownRiichiDeclared": false,
+        "ownMelds": [],
+        "ownMeldsObserved": true,
+        "opponentDiscards": [
+          {
+            "seat": "west",
+            "discards": [
+              "P",
+              "9m"
+            ],
+            "discardsObserved": true,
+            "riichiDeclared": false,
+            "melds": [
+              {
+                "type": "chi",
+                "tiles": [
+                  "6m",
+                  "5m",
+                  "7m"
+                ],
+                "confidence": 0.5201528668403625
+              }
+            ],
+            "meldsObserved": true
+          },
+          {
+            "seat": "north",
+            "discards": [
+              "1m",
+              "4m"
+            ],
+            "discardsObserved": true,
+            "riichiDeclared": false,
+            "melds": [],
+            "meldsObserved": true
+          },
+          {
+            "seat": "east",
+            "discards": [
+              "N",
+              "3s",
+              "8m"
+            ],
+            "discardsObserved": true,
+            "riichiDeclared": false,
+            "melds": [],
+            "meldsObserved": true
+          }
+        ],
+        "ownMeldTiles": [],
+        "allMeldTiles": [
+          "6m",
+          "5m",
+          "7m"
+        ],
+        "otherVisibleTiles": [
+          "P",
+          "9m",
+          "1m",
+          "4m",
+          "N",
+          "3s",
+          "8m",
+          "6m",
+          "5m",
+          "7m"
+        ],
+        "acceptedTiles": 12,
+        "detectedCandidates": 12,
+        "complete": false,
+        "capturedAt": "2026-10-22T21:21:08.883911+00:00",
+        "ownDiscardsObserved": true
+      },
+      "ownRegionEvidence": {
+        "backend": "hybrid",
+        "candidateCount": 1,
+        "recognized": [
+          {
+            "x": 768,
+            "y": 545,
+            "width": 62,
+            "height": 54,
+            "area": 1696,
+            "fillRatio": 0.5065710872162486,
+            "gridIndex": 0,
+            "sideways": false,
+            "tile": "1p",
+            "confidence": 0.9999957084655762,
+            "runnerUpConfidence": 4.109623205295065e-06,
+            "ambiguityMargin": 0.9999915988423709,
+            "safe": true
+          }
+        ],
+        "classificationSafe": true,
+        "rotationToUpright": 0
+      }
+    },
+    {
+      "image": "own-river-called-away-20261023-late.jpg",
+      "sha256": "139c6f35fc159169f025aa6d72778f387ecad2fe05c625fbc2d09977643928bb",
+      "observation": {
+        "doraIndicators": [
+          "4p"
+        ],
+        "ownDiscards": [
+          "1p",
+          "1s",
+          "8m",
+          "N",
+          "7p",
+          "W",
+          "S",
+          "F",
+          "6m"
+        ],
+        "ownRiichiDeclared": false,
+        "ownMelds": [],
+        "ownMeldsObserved": true,
+        "opponentDiscards": [
+          {
+            "seat": "west",
+            "discards": [
+              "P",
+              "9m",
+              "9p",
+              "9s",
+              "7p",
+              "W",
+              "9p",
+              "S",
+              "3s",
+              "N",
+              "2m"
+            ],
+            "discardsObserved": true,
+            "riichiDeclared": false,
+            "melds": [
+              {
+                "type": "chi",
+                "tiles": [
+                  "6m",
+                  "5m",
+                  "7m"
+                ],
+                "confidence": 0.5490714907646179
+              },
+              {
+                "type": "pon",
+                "tiles": [
+                  "C",
+                  "C",
+                  "C"
+                ],
+                "confidence": 0.9998888969421387
+              }
+            ],
+            "meldsObserved": true
+          },
+          {
+            "seat": "north",
+            "discards": [
+              "1m",
+              "4m",
+              "9s",
+              "W",
+              "P",
+              "9s",
+              "2p",
+              "4m",
+              "W",
+              "F",
+              "0s"
+            ],
+            "discardsObserved": true,
+            "riichiDeclared": false,
+            "melds": [],
+            "meldsObserved": true
+          },
+          {
+            "seat": "east",
+            "discards": [
+              "N",
+              "3s",
+              "8m",
+              "P",
+              "N",
+              "F",
+              "9p",
+              "8p",
+              "1m",
+              "2p",
+              "3m",
+              "2p"
+            ],
+            "discardsObserved": true,
+            "riichiDeclared": false,
+            "melds": [],
+            "meldsObserved": true
+          }
+        ],
+        "ownMeldTiles": [],
+        "allMeldTiles": [
+          "6m",
+          "5m",
+          "7m",
+          "C",
+          "C",
+          "C"
+        ],
+        "otherVisibleTiles": [
+          "P",
+          "9m",
+          "9p",
+          "9s",
+          "7p",
+          "W",
+          "9p",
+          "S",
+          "3s",
+          "N",
+          "2m",
+          "1m",
+          "4m",
+          "9s",
+          "W",
+          "P",
+          "9s",
+          "2p",
+          "4m",
+          "W",
+          "F",
+          "0s",
+          "N",
+          "3s",
+          "8m",
+          "P",
+          "N",
+          "F",
+          "9p",
+          "8p",
+          "1m",
+          "2p",
+          "3m",
+          "2p",
+          "6m",
+          "5m",
+          "7m",
+          "C",
+          "C",
+          "C"
+        ],
+        "acceptedTiles": 50,
+        "detectedCandidates": 50,
+        "complete": false,
+        "capturedAt": "2026-10-22T21:24:21.434723+00:00",
+        "ownDiscardsObserved": true
+      },
+      "ownRegionEvidence": {
+        "backend": "hybrid",
+        "candidateCount": 9,
+        "recognized": [
+          {
+            "x": 768,
+            "y": 545,
+            "width": 62,
+            "height": 54,
+            "area": 1698,
+            "fillRatio": 0.507168458781362,
+            "gridIndex": 0,
+            "sideways": false,
+            "tile": "1p",
+            "confidence": 0.9999959468841553,
+            "runnerUpConfidence": 3.81184509024024e-06,
+            "ambiguityMargin": 0.999992135039065,
+            "safe": true
+          },
+          {
+            "x": 832,
+            "y": 543,
+            "width": 58,
+            "height": 56,
+            "area": 1669,
+            "fillRatio": 0.5138546798029556,
+            "gridIndex": 1,
+            "sideways": false,
+            "tile": "1s",
+            "confidence": 0.9999616146087646,
+            "runnerUpConfidence": 2.838237924152054e-05,
+            "ambiguityMargin": 0.9999332322295231,
+            "safe": true
+          },
+          {
+            "x": 894,
+            "y": 545,
+            "width": 58,
+            "height": 54,
+            "area": 2118,
+            "fillRatio": 0.6762452107279694,
+            "gridIndex": 2,
+            "sideways": false,
+            "tile": "8m",
+            "confidence": 0.9998354911804199,
+            "runnerUpConfidence": 0.0001468977570766583,
+            "ambiguityMargin": 0.9996885934233433,
+            "safe": true
+          },
+          {
+            "x": 956,
+            "y": 545,
+            "width": 57,
+            "height": 55,
+            "area": 2309,
+            "fillRatio": 0.7365231259968102,
+            "gridIndex": 3,
+            "sideways": false,
+            "tile": "N",
+            "confidence": 1,
+            "runnerUpConfidence": 3.038491680484867e-10,
+            "ambiguityMargin": 0.9999999996961508,
+            "safe": true
+          },
+          {
+            "x": 1017,
+            "y": 546,
+            "width": 59,
+            "height": 54,
+            "area": 1570,
+            "fillRatio": 0.49278091650973005,
+            "gridIndex": 4,
+            "sideways": false,
+            "tile": "7p",
+            "confidence": 0.9627350568771362,
+            "runnerUpConfidence": 0.031946610659360886,
+            "ambiguityMargin": 0.9307884462177753,
+            "safe": true
+          },
+          {
+            "x": 1078,
+            "y": 545,
+            "width": 59,
+            "height": 54,
+            "area": 2218,
+            "fillRatio": 0.6961707470182047,
+            "gridIndex": 5,
+            "sideways": false,
+            "tile": "W",
+            "confidence": 1,
+            "runnerUpConfidence": 3.5083597138552136e-10,
+            "ambiguityMargin": 0.999999999649164,
+            "safe": true
+          },
+          {
+            "x": 764,
+            "y": 605,
+            "width": 61,
+            "height": 57,
+            "area": 2317,
+            "fillRatio": 0.6663790624101237,
+            "gridIndex": 6,
+            "sideways": false,
+            "tile": "S",
+            "confidence": 0.9999996423721313,
+            "runnerUpConfidence": 3.0910280202078866e-07,
+            "ambiguityMargin": 0.9999993332693293,
+            "safe": true
+          },
+          {
+            "x": 828,
+            "y": 606,
+            "width": 62,
+            "height": 58,
+            "area": 2372,
+            "fillRatio": 0.6596218020022246,
+            "gridIndex": 7,
+            "sideways": false,
+            "tile": "F",
+            "confidence": 0.9999948740005493,
+            "runnerUpConfidence": 2.075290240100003e-06,
+            "ambiguityMargin": 0.9999927987103092,
+            "safe": true
+          },
+          {
+            "x": 893,
+            "y": 605,
+            "width": 60,
+            "height": 58,
+            "area": 2140,
+            "fillRatio": 0.6149425287356322,
+            "gridIndex": 8,
+            "sideways": false,
+            "tile": "6m",
+            "confidence": 0.9019023180007935,
+            "runnerUpConfidence": 0.09449128806591034,
+            "ambiguityMargin": 0.8074110299348831,
+            "safe": true
+          }
+        ],
+        "classificationSafe": true,
+        "rotationToUpright": 0
+      }
+    }
+  ]
+}

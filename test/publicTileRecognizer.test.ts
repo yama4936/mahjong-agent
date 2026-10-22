@@ -30,9 +30,11 @@ function publicRegion(tiles: Array<{ tile: any; x: number; y?: number; width?: n
 test("river completeness excludes missing, partial and unsafe regions", () => {
   const region = publicRegion([{ tile: "9m", x: 0 }]);
   assert.equal(toPublicTileObservation({ leftDiscards: region }).opponentDiscards[2]!.discardsObserved, true);
+  assert.equal(toPublicTileObservation({ ownDiscards: region }).ownDiscardsObserved, true);
   for (const partial of [undefined, { ...region, candidateCount: 2 }, { ...region, classificationSafe: false },
     { ...region, recognized: region.recognized.map(tile => ({ ...tile, safe: false })) }]) {
     assert.equal(toPublicTileObservation(partial ? { leftDiscards: partial } : {}).opponentDiscards[2]!.discardsObserved, false);
+    assert.equal(toPublicTileObservation(partial ? { ownDiscards: partial } : {}).ownDiscardsObserved, false);
   }
 });
 

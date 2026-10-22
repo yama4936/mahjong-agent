@@ -1032,6 +1032,116 @@ def public_capture_seconds(value: Any) -> float | None:
         return None
 
 
+def corroborate_own_river_withdrawal(previous: dict[str, Any], current: dict[str, Any]) -> dict[str, Any]:
+    """Withdraw one called own tile, never infer a call from a vanished crop alone."""
+    before = previous.get("ownDiscards", [])
+    latest = current.get("ownDiscards", [])
+    now = public_capture_seconds(current.get("capturedAt"))
+    old_time = public_capture_seconds(previous.get("capturedAt"))
+    result = {"witnesses": [], "candidate": None, "repairs": []}
+    if not before or now is None or old_time is None or now <= old_time:
+        return result
+
+    def signature(meld):
+        return (meld.get("type"), tuple(sorted(meld.get("tiles", []))))
+
+    seats = ("east", "south", "west", "north")
+    rows = current.get("opponentDiscards", [])
+    missing = set(seats) - {row.get("seat") for row in rows}
+    if len(rows) != 3 or len(missing) != 1:
+        return result
+    next_seat = seats[(seats.index(next(iter(missing))) + 1) % 4]
+
+    def legal_call(meld, seat):
+        tiles = meld.get("tiles", [])
+        kind = meld.get("type")
+        if any(not (t in {"E", "S", "W", "N", "P", "F", "C"}
+                    or len(t) == 2 and t[0] in "0123456789" and t[1] in "mps") for t in tiles):
+            return False
+        if kind == "chi":
+            if seat != next_seat or len(tiles) != 3:
+                return False
+            if any(len(t) != 2 or t[1] not in "mps" or t[0] not in "0123456789" for t in tiles):
+                return False
+            ranks = sorted(5 if t[0] == "0" else int(t[0]) for t in tiles)
+            return len({t[1] for t in tiles}) == 1 and ranks == list(range(ranks[0], ranks[0] + 3))
+        return (kind in {"pon", "minkan"} and len(tiles) == (4 if kind == "minkan" else 3)
+                and bool(tiles) and all(same_physical_tile(tiles[0], t) for t in tiles))
+
+    witnesses = []
+    for row in rows:
+        seat = row.get("seat")
+        prior = next((r for r in previous.get("opponentDiscards", []) if r.get("seat") == seat), {})
+        old, new = prior.get("melds", []), row.get("melds", [])
+        if row.get("meldsObserved") is not True:
+            continue
+        for witness in previous.get("_ownRiverCallWitnesses", []):
+            captured = public_capture_seconds(witness.get("capturedAt"))
+            if (witness.get("before") == before and witness.get("seat") == seat
+                    and captured is not None and 0 <= now - captured <= 120
+                    and any(signature(m) == signature(witness["meld"]) for m in new)):
+                witnesses.append(witness)
+        if (prior.get("meldsObserved") is True and len(new) > len(old)
+                and [signature(m) for m in new[:len(old)]] == [signature(m) for m in old]):
+            for meld in new[len(old):]:
+                if legal_call(meld, seat) and any(t in meld.get("tiles", []) for t in before):
+                    witness = {"before": list(before), "seat": seat, "meld": meld,
+                               "capturedAt": current["capturedAt"]}
+                    if not any(w["seat"] == seat and signature(w["meld"]) == signature(meld)
+                               for w in witnesses):
+                        witnesses.append(witness)
+    result["witnesses"] = witnesses
+    aligned = (current.get("doraIndicators", [])[:len(previous.get("doraIndicators", []))]
+               == previous.get("doraIndicators", [])
+               and current.get("ownMeldsObserved") is True
+               and current.get("ownMeldTiles", []) == previous.get("ownMeldTiles", []))
+    if not aligned or current.get("ownDiscardsObserved") is not True or not latest:
+        return result
+    if latest[:len(before)] == before:
+        return result
+    # Exactly one deletion must explain the retained prefix. Physical red-five
+    # identity must occur in the new meld; base-five equivalence is insufficient.
+    choices = []
+    for index, tile in enumerate(before):
+        retained = before[:index] + before[index + 1:]
+        if latest[:len(retained)] == retained:
+            for witness in witnesses:
+                if tile in witness["meld"].get("tiles", []):
+                    choices.append((index, retained, witness))
+    if len(choices) != 1:
+        return result
+    # A newly called discard was the last own river tile before that call.
+    # An older missing tile cannot be explained by a newly introduced meld.
+    if choices[0][0] != len(before) - 1:
+        return result
+    known = [*current.get("doraIndicators", []), *latest, *current.get("ownMeldTiles", []),
+             *[t for row in rows for t in [*row.get("discards", []),
+                *[t for m in row.get("melds", []) for t in m.get("tiles", [])]]]]
+    counts = Counter("5" + t[1:] if t.startswith("0") else t for t in known)
+    if any(count > 4 for count in counts.values()):
+        return result
+    index, retained, witness = choices[0]
+    candidate = previous.get("_ownRiverWithdrawalCandidate") or {}
+    first_time = public_capture_seconds(candidate.get("capturedAt"))
+    gap = now - first_time if first_time is not None else None
+    agrees = (candidate.get("before") == before and candidate.get("index") == index
+              and candidate.get("seat") == witness["seat"]
+              and signature(candidate.get("meld", {})) == signature(witness["meld"])
+              and bool(candidate.get("discards"))
+              and latest[:len(candidate["discards"])] == candidate["discards"])
+    if agrees and gap is not None and 0.5 <= gap <= 30:
+        result["repairs"] = [{"before": list(before), "retained": retained, "after": list(latest),
+            "index": index, "tile": before[index], "seat": witness["seat"], "meld": witness["meld"],
+            "firstCapturedAt": candidate["capturedAt"], "confirmedCapturedAt": current["capturedAt"]}]
+        result["witnesses"] = []
+    elif agrees and gap is not None and 0 <= gap < 0.5:
+        result["candidate"] = candidate
+    else:
+        result["candidate"] = {"before": list(before), "index": index, "seat": witness["seat"],
+            "meld": witness["meld"], "discards": list(latest), "capturedAt": current["capturedAt"]}
+    return result
+
+
 def merge_public_observations(
     previous: dict[str, Any] | None, current: dict[str, Any],
     confirmed_open_melds: int | None = None,
@@ -1044,6 +1154,9 @@ def merge_public_observations(
         return latest if len(latest) >= len(prior) and latest[:len(prior)] == prior else prior
 
     own_discards = growing(previous.get("ownDiscards", []), current.get("ownDiscards", []))
+    withdrawal = corroborate_own_river_withdrawal(previous, current)
+    if withdrawal["repairs"]:
+        own_discards = withdrawal["repairs"][0]["after"]
     dora = growing(previous.get("doraIndicators", []), current.get("doraIndicators", []))
     river_candidates: dict[str, Any] = {}
     river_repairs = []
@@ -1159,6 +1272,9 @@ def merge_public_observations(
         **current,
         "doraIndicators": dora,
         "ownDiscards": own_discards,
+        "_ownRiverCallWitnesses": withdrawal["witnesses"],
+        "_ownRiverWithdrawalCandidate": withdrawal["candidate"],
+        "ownRiverWithdrawals": withdrawal["repairs"],
         "ownRiichiDeclared": bool(previous.get("ownRiichiDeclared") or current.get("ownRiichiDeclared")),
         "ownMelds": own_melds,
         "ownMeldsObserved": current.get("ownMeldsObserved", previous.get("ownMeldsObserved")),
@@ -1644,8 +1760,33 @@ class PythonAutoOperator:
             self.log("public_meld_evidence_deferred", reason="pending_river_correction_inventory_conflict",
                      **deferred)
         pending_discard = getattr(self, "pending_own_discard", None)
+        receipt_prior = prior
+        for withdrawal in merged.get("ownRiverWithdrawals", []):
+            # The river change invalidates any concealed-cache inference. A
+            # pending click must still get two fresh append observations after
+            # its baseline is rebased; a call is not an own-discard receipt.
+            self.cached_concealed_tiles = None
+            self.pending_own_river_confirmation = None
+            if pending_discard:
+                receipts = [pending_discard, *pending_discard.get("earlierReceipts", [])]
+                old = withdrawal["before"]
+                if all(receipt.get("before", [])[:len(old)] == old for receipt in receipts):
+                    for receipt in receipts:
+                        before = receipt["before"]
+                        i = withdrawal["index"]
+                        receipt["before"] = before[:i] + before[i + 1:]
+                        receipt.pop("riverWithdrawalCapturedAt", None)
+                else:
+                    self.log("own_discard_reconciliation_unresolved",
+                             reason="called_discard_withdrawal_baseline_incompatible",
+                             expected=pending_discard.get("tile"), before=pending_discard.get("before"),
+                             concealedCacheInvalidated=True)
+                    self.pending_own_discard = pending_discard = None
+                receipt_prior = {**prior, "ownDiscards": list(withdrawal["retained"])}
+            self.log("own_called_discard_withdrawal_verified", **withdrawal,
+                     concealedCacheInvalidated=True)
         if prior is not None and pending_discard:
-            prior_own = prior.get("ownDiscards", [])
+            prior_own = receipt_prior.get("ownDiscards", [])
             merged_own = merged.get("ownDiscards", [])
             if merged_own != prior_own:
                 pending_discard.pop("riverWithdrawalCapturedAt", None)

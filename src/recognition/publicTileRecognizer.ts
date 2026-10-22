@@ -36,6 +36,7 @@ export interface PublicTileRecognitionOptions extends RegionDetectionOptions {
 export interface PublicTileObservation {
   doraIndicators: GameTile[];
   ownDiscards: GameTile[];
+  ownDiscardsObserved?: boolean;
   ownRiichiDeclared?: boolean;
   ownMelds?: RecognizedMeld[];
   ownMeldsObserved?: boolean;
@@ -202,6 +203,7 @@ export function toPublicTileObservation(
   return {
     doraIndicators,
     ownDiscards,
+    ownDiscardsObserved: riverObserved("ownDiscards"),
     ownRiichiDeclared: hasSidewaysRiichiTile(recognition.ownDiscards),
     ownMelds,
     ownMeldsObserved,
