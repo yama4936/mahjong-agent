@@ -1,0 +1,138 @@
+{
+  "sourceRun": "artifacts/ranked-supervised-206fa2f-20261022/operator-20261022T040419200226Z",
+  "extraction": "Receipt fields from original full decisions; river observations extracted from original pending/confirmed events, not reconstructed OCR responses",
+  "receipts": [
+    {
+      "tile": "P",
+      "before": [
+        "0p",
+        "2s",
+        "3s",
+        "5p",
+        "E",
+        "9s",
+        "7p",
+        "F",
+        "F",
+        "S",
+        "8m",
+        "6s"
+      ],
+      "clickedAt": "2026-10-22T04:10:36.121144+00:00",
+      "clickIndex": 9,
+      "clickPoint": {
+        "x": 1122.5,
+        "y": 999
+      },
+      "confirmation": "hand_and_own_river_changed"
+    },
+    {
+      "tile": "8s",
+      "before": [
+        "0p",
+        "2s",
+        "3s",
+        "5p",
+        "E",
+        "9s",
+        "7p",
+        "F",
+        "F",
+        "S",
+        "8m",
+        "6s"
+      ],
+      "clickedAt": "2026-10-22T04:10:45.406384+00:00",
+      "clickIndex": 9,
+      "clickPoint": {
+        "x": 1122.5,
+        "y": 999
+      },
+      "confirmation": "hand_and_own_river_changed"
+    }
+  ],
+  "scans": [
+    {
+      "ownDiscards": [
+        "0p",
+        "2s",
+        "3s",
+        "5p",
+        "E",
+        "9s",
+        "7p",
+        "F",
+        "F",
+        "S",
+        "8m",
+        "6s",
+        "P",
+        "8s"
+      ],
+      "capturedAt": "2026-10-22T04:10:50.244466+00:00"
+    },
+    {
+      "ownDiscards": [
+        "0p",
+        "2s",
+        "3s",
+        "5p",
+        "E",
+        "9s",
+        "7p",
+        "F",
+        "F",
+        "S",
+        "8m",
+        "6s",
+        "P",
+        "8s"
+      ],
+      "capturedAt": "2026-10-22T04:10:53.052807+00:00"
+    }
+  ],
+  "originalFailure": {
+    "timestamp": "2026-10-22T04:10:53.748838+00:00",
+    "event": "own_discard_reconciliation_failed",
+    "expected": "8s",
+    "before": [
+      "0p",
+      "2s",
+      "3s",
+      "5p",
+      "E",
+      "9s",
+      "7p",
+      "F",
+      "F",
+      "S",
+      "8m",
+      "6s"
+    ],
+    "observed": [
+      "0p",
+      "2s",
+      "3s",
+      "5p",
+      "E",
+      "9s",
+      "7p",
+      "F",
+      "F",
+      "S",
+      "8m",
+      "6s",
+      "P",
+      "8s"
+    ],
+    "reason": "river_history_not_single_append",
+    "clickIndex": 9,
+    "clickPoint": {
+      "x": 1122.5,
+      "y": 999
+    },
+    "clickedAt": "2026-10-22T04:10:45.406384+00:00",
+    "confirmation": "hand_and_own_river_changed"
+  },
+  "sourceEvidenceSha256": "fe0e1901ba46c0710a65b2c2517355ca18ce74948b8a310ea4e68c53af4f58f0"
+}

@@ -2960,6 +2960,9 @@ class PythonAutoOperator:
         after = observation.get("ownDiscards", [])
         if len(after) <= len(before):
             return
+        if pending.get("earlierReceipts"):
+            self.reconcile_own_discard_receipts(pending, observation)
+            return
         # After a confirmed riichi declaration the game can tsumogiri several
         # times before two independent public scans agree. Verify the exact
         # declaration position, never merely search for the tile in the tail.
@@ -3014,6 +3017,79 @@ class PythonAutoOperator:
             self.log("own_discard_reconciled", tile=actual)
             self.record_post_riichi_pass_candidate(pending, actual)
         self.pending_own_discard = None
+
+    def register_pending_own_discard(self, pending: dict[str, Any]) -> None:
+        """Keep earlier unverified receipts when public recognition skips a turn.
+
+        No requested tile is added to the public river here. A later independent
+        river observation must match every receipt in order before any of these
+        identities can certify the concealed cache.
+        """
+        previous = getattr(self, "pending_own_discard", None)
+        if previous:
+            if previous["before"] == pending["before"]:
+                earlier = [*previous.get("earlierReceipts", []),
+                           {key: value for key, value in previous.items()
+                            if key != "earlierReceipts"}]
+                pending["earlierReceipts"] = earlier
+                self.log("own_discard_receipts_queued", before=pending["before"],
+                         expected=[item["tile"] for item in earlier] + [pending["tile"]])
+            else:
+                self.cached_concealed_tiles = None
+                self.log("own_discard_reconciliation_unresolved",
+                         reason="receipt_replaced_with_different_river_baseline",
+                         expected=previous["tile"], before=previous["before"],
+                         earlierReceipts=previous.get("earlierReceipts", []),
+                         nextBaseline=pending["before"], concealedCacheInvalidated=True)
+        self.pending_own_discard = pending
+
+    def reconcile_own_discard_receipts(self, pending: dict[str, Any], observation: dict[str, Any]) -> None:
+        """Verify a strict prefix of queued receipts against independent scans."""
+        before = pending["before"]
+        after = observation.get("ownDiscards", [])
+        receipts = [*pending["earlierReceipts"], pending]
+        appended = after[len(before):]
+        if after[:len(before)] != before or len(appended) > len(receipts):
+            self.cached_concealed_tiles = None
+            self.pending_own_discard = None
+            self.log("own_discard_reconciliation_failed", expected=pending["tile"],
+                     before=before, observed=after, reason="river_history_not_receipt_sequence",
+                     receiptTiles=[item["tile"] for item in receipts],
+                     clickIndex=pending.get("clickIndex"), clickPoint=pending.get("clickPoint"),
+                     clickedAt=pending.get("clickedAt"), confirmation=pending.get("confirmation"))
+            return
+        wrong = next((index for index, actual in enumerate(appended)
+                      if not same_physical_tile(actual, receipts[index]["tile"])), None)
+        if wrong is not None:
+            rejected = receipts[wrong]
+            self.cached_concealed_tiles = None
+            self.pending_own_discard = None
+            observation["ownDiscards"] = list(before)
+            self.pending_own_river_confirmation = None
+            self.log("own_discard_mismatch", expected=rejected["tile"], actual=appended[wrong],
+                     before=before, observed=after, capturedAt=observation.get("capturedAt"),
+                     evidenceToClickMs=rejected.get("evidenceToClickMs"),
+                     clickIndex=rejected.get("clickIndex"), clickPoint=rejected.get("clickPoint"),
+                     clickedAt=rejected.get("clickedAt"), confirmation=rejected.get("confirmation"),
+                     receiptTiles=[item["tile"] for item in receipts])
+            self.log("own_discard_mismatch_cache_quarantined", expected=rejected["tile"],
+                     rejected=appended[wrong], retainedOwnDiscards=list(before))
+            return
+        # Partial observations certify only their exact prefix. Later receipts
+        # remain pending and continue to prevent reuse of the concealed cache.
+        for index, (receipt, actual) in enumerate(zip(receipts, appended)):
+            self.log("own_discard_reconciled", tile=actual,
+                     receiptSequenceLength=len(receipts), clickedAt=receipt.get("clickedAt"))
+            self.record_post_riichi_pass_candidate({**receipt,
+                "before": [*before, *appended[:index]]}, actual)
+        remaining = receipts[len(appended):]
+        if remaining:
+            pending["before"] = list(after)
+            pending["earlierReceipts"] = remaining[:-1]
+            if not pending["earlierReceipts"]:
+                pending.pop("earlierReceipts")
+        else:
+            self.pending_own_discard = None
 
     def own_discard_baseline(self, evaluation: dict[str, Any]) -> list[str]:
         """Return the river snapshot that the asynchronous verifier will extend.
@@ -4985,7 +5061,7 @@ class PythonAutoOperator:
                     click_index = receipt.get("clickIndex", evaluation.get("clickIndex"))
                     discarded_tile = receipt.get("discardedTile") or evaluation.get("decision", {}).get("selectedAction", {}).get("tile")
                     if discarded_tile:
-                        self.pending_own_discard = {
+                        self.register_pending_own_discard({
                             "tile": discarded_tile,
                             "riichiContext": self.own_discard_riichi_context(evaluation),
                             "riichiDeclaration": selected_action == "riichi" and bool(receipt.get("declaration")),
@@ -4995,7 +5071,7 @@ class PythonAutoOperator:
                             "clickPoint": receipt.get("clickPoint"),
                             "clickedAt": receipt.get("clickedAt"),
                             "confirmation": receipt.get("confirmation"),
-                        }
+                        })
                     if isinstance(click_index, int) and len(recognized_tiles) == 14:
                         self.cached_concealed_tiles = [
                             tile for index, tile in enumerate(recognized_tiles) if index != click_index
