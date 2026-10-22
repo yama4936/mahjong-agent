@@ -1,0 +1,38 @@
+{
+  "source": "artifacts/ranked-supervised-cfe87c7-20261022/operator-20261022T004236125518Z/frames/2026-10-22T01-00-24.176827+00-00.public-cache.jpg",
+  "sourceSha256": "f0b8f8f02c12a6d27107a7f7b0500214edf3603728c859803e0b4b8ac2ed2110",
+  "crop": {
+    "x": 1500,
+    "y": 25,
+    "width": 220,
+    "height": 490
+  },
+  "file": "test/fixtures/right-pons-sideways-eight-20261022.png",
+  "expectedMelds": [
+    {
+      "type": "pon",
+      "tiles": [
+        "2p",
+        "2p",
+        "2p"
+      ]
+    },
+    {
+      "type": "pon",
+      "tiles": [
+        "8m",
+        "8m",
+        "8m"
+      ]
+    },
+    {
+      "type": "pon",
+      "tiles": [
+        "C",
+        "C",
+        "C"
+      ]
+    }
+  ],
+  "review": "Native cache image visually reviewed; middle sideways eight-man face includes grey left 3D side. Source replay labels it six-man; other two eight-man faces exceed .999 confidence. Reaction and decision frames have identical region geometry, not independent held-out samples."
+}

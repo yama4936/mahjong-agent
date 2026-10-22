@@ -444,6 +444,50 @@ export async function recognizeConfiguredPublicTilesWithVit(
       if (replacements.size > 0 && recognizeExposedMelds(refined).length === 1) result.oppositeMelds = refined;
     }
   }
+  // The grey 3D side of a right player's sideways 8m can dominate its
+  // bright-component crop. Retry only a weak 6m beside two independently
+  // strong 8m faces in an otherwise unreadable meld region. Removing the
+  // left fifth restores the face; acceptance still requires strong model
+  // evidence and a complete legal partition, without changing tile bounds.
+  const right = result.rightMelds;
+  if (classifier.backend === "hybrid" && right?.rotationToUpright === 90
+    && right.classificationSafe && right.candidateCount === right.recognized.length
+    && recognizeExposedMelds(right).length === 0) {
+    const ordered = [...right.recognized].sort((a, b) => a.y - b.y);
+    const retryIndexes = jobs.flatMap((job, index) => {
+      const original = predictions[index]!;
+      if (job.name !== "rightMelds" || !job.candidate.sideways
+        || job.candidate.width <= job.candidate.height || job.candidate.height < 20
+        || original.tile !== "6m" || original.runnerUpTile !== "8m" || original.confidence >= 0.9) return [];
+      const position = ordered.findIndex(tile => tile.x === job.candidate.x && tile.y === job.candidate.y);
+      const anchored = [position - 2, position - 1, position].some(start => {
+        const group = ordered.slice(Math.max(0, start), start + 3);
+        return start >= 0 && group.length === 3 && group.filter(tile => tile.tile === "8m"
+          && !tile.sideways && tile.confidence >= 0.95 && tile.ambiguityMargin >= 0.9).length === 2;
+      });
+      return anchored ? [index] : [];
+    });
+    if (retryIndexes.length === 1) {
+      const index = retryIndexes[0]!;
+      const { candidate } = jobs[index]!;
+      const trim = Math.round(candidate.width / 5);
+      const image = await sharp(screenshot).extract({ left: candidate.x + trim, top: candidate.y,
+        width: candidate.width - trim, height: candidate.height }).rotate(180).png().toBuffer();
+      const retried = await classifier.classifyTileImages([image]);
+      if (retried.length !== 1) throw new Error("Model right meld retry returned the wrong prediction count");
+      const retry = retried[0]!;
+      const margin = retry.confidence - retry.runnerUpConfidence;
+      if (retry.tile === "8m" && retry.confidence >= Math.max(0.95, minimumConfidence)
+        && margin >= Math.max(0.9, minimumMargin) && retry.confidence - predictions[index]!.confidence >= 0.15) {
+        const regionIndex = jobs.filter(job => job.name === "rightMelds").findIndex(job => job.candidate === candidate);
+        const refined = { ...right, recognized: right.recognized.map((tile, i) => i === regionIndex
+          ? { ...tile, tile: retry.tile, confidence: retry.confidence, runnerUpConfidence: retry.runnerUpConfidence,
+            ambiguityMargin: margin, safe: true } : tile) };
+        const melds = recognizeExposedMelds(refined);
+        if (melds.reduce((count, meld) => count + meld.tiles.length, 0) === right.candidateCount) result.rightMelds = refined;
+      }
+    }
+  }
   if (options.retryDiscardBoundaries !== false) {
     for (const [name, detection] of entries) {
       const region = layout.publicTileRegions?.[name];
