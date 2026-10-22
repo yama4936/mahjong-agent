@@ -1,0 +1,804 @@
+{
+  "sourceImplementationCommit": "eacd4b9",
+  "sampleNumber": 44,
+  "originalDecisionTimestamp": "2026-10-22T16:08:28.075462+00:00",
+  "nativeDecisionScreenshot": "/home/yama1/projects/jantama-auto/artifacts/ranked-supervised-eacd4b9-20261023/operator-20261022T155821372985Z/frames/2026-10-22T16-08-24.409752+00-00.jpg",
+  "nativeDecisionSha256": "163e14c6aaa574746600f4fc412abd3075d643c088c367af1ae62a9b60f64f04",
+  "nativeOutcomeScreenshot": "/home/yama1/projects/jantama-auto/artifacts/ranked-supervised-eacd4b9-20261023/operator-20261022T155821372985Z/frames/2026-10-22T16-08-35.200048+00-00.round_result.png",
+  "nativeOutcomeSha256": "236bef154e71747d0305cdf0e81f6f2a90b570fb4142d6ab6310a8bc447a86e7",
+  "nativeIndependentlyViewed": true,
+  "state": {
+    "round": "east_2",
+    "matchLength": "east",
+    "honba": 1,
+    "riichiSticks": 0,
+    "seat": "south",
+    "scores": {
+      "south": 25000,
+      "west": 29500,
+      "north": 13700,
+      "east": 31800
+    },
+    "hand": [
+      "1m",
+      "5m",
+      "5m",
+      "7m",
+      "1p",
+      "2p",
+      "3p",
+      "8p",
+      "8p",
+      "8p",
+      "7s",
+      "7s",
+      "P"
+    ],
+    "draw": "8p",
+    "doraIndicators": [
+      "6m"
+    ],
+    "ownDiscards": [
+      "9p",
+      "1s",
+      "N",
+      "5m",
+      "6p",
+      "E",
+      "8m",
+      "4m",
+      "9s",
+      "8s",
+      "4p"
+    ],
+    "melds": [],
+    "visibleTiles": [],
+    "openMelds": 0,
+    "turn": 11,
+    "remainingTiles": 32,
+    "phase": "self_turn",
+    "recognitionConfidence": 0,
+    "publicStateConfidence": 0,
+    "riichiDeclared": false,
+    "availableUiActions": [],
+    "opponents": [
+      {
+        "seat": "west",
+        "discards": [
+          "W",
+          "F",
+          "W",
+          "6s",
+          "9p",
+          "1p",
+          "2s",
+          "2p"
+        ],
+        "riichi": false,
+        "openMelds": 0,
+        "openMeldsObserved": true,
+        "melds": []
+      },
+      {
+        "seat": "north",
+        "discards": [
+          "3p",
+          "1s",
+          "2s",
+          "7p",
+          "5s",
+          "3p",
+          "4s"
+        ],
+        "riichi": false,
+        "openMelds": 0,
+        "openMeldsObserved": true,
+        "melds": []
+      },
+      {
+        "seat": "east",
+        "discards": [
+          "W",
+          "1s",
+          "2m",
+          "9m",
+          "8m",
+          "6s",
+          "4m",
+          "6p",
+          "8s",
+          "C",
+          "4p"
+        ],
+        "riichi": false,
+        "openMelds": 4,
+        "openMeldsObserved": false,
+        "melds": [
+          {
+            "type": "pon",
+            "tiles": [
+              "S",
+              "S",
+              "S"
+            ]
+          },
+          {
+            "type": "pon",
+            "tiles": [
+              "N",
+              "N",
+              "N"
+            ]
+          },
+          {
+            "type": "pon",
+            "tiles": [
+              "E",
+              "E",
+              "E"
+            ]
+          },
+          {
+            "type": "pon",
+            "tiles": [
+              "5s",
+              "0s",
+              "5s"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "originalCandidates": [
+    {
+      "actionId": "discard_1p",
+      "action": "discard",
+      "tile": "1p",
+      "shanten": 3,
+      "form": "standard",
+      "effectiveTiles": [
+        {
+          "tile": "1m",
+          "remaining": 3
+        },
+        {
+          "tile": "2m",
+          "remaining": 3
+        },
+        {
+          "tile": "3m",
+          "remaining": 4
+        },
+        {
+          "tile": "4m",
+          "remaining": 2
+        },
+        {
+          "tile": "5m",
+          "remaining": 1
+        },
+        {
+          "tile": "6m",
+          "remaining": 3
+        },
+        {
+          "tile": "7m",
+          "remaining": 3
+        },
+        {
+          "tile": "8m",
+          "remaining": 2
+        },
+        {
+          "tile": "9m",
+          "remaining": 3
+        },
+        {
+          "tile": "1p",
+          "remaining": 2
+        },
+        {
+          "tile": "2p",
+          "remaining": 2
+        },
+        {
+          "tile": "3p",
+          "remaining": 1
+        },
+        {
+          "tile": "4p",
+          "remaining": 2
+        },
+        {
+          "tile": "6p",
+          "remaining": 2
+        },
+        {
+          "tile": "7p",
+          "remaining": 3
+        },
+        {
+          "tile": "9p",
+          "remaining": 2
+        },
+        {
+          "tile": "7s",
+          "remaining": 2
+        },
+        {
+          "tile": "P",
+          "remaining": 3
+        }
+      ],
+      "ukeire": 43,
+      "danger": 0.059125000000000094,
+      "estimatedValue": 3900,
+      "winProbability": 0.023272727272727275,
+      "tenpaiProbability": 0.07718690421190748,
+      "dealInProbability": 0.059125000000000094,
+      "expectedRoundValue": -348,
+      "evaluationModel": "heuristic-v5"
+    },
+    {
+      "actionId": "discard_3p",
+      "action": "discard",
+      "tile": "3p",
+      "shanten": 3,
+      "form": "standard",
+      "effectiveTiles": [
+        {
+          "tile": "1m",
+          "remaining": 3
+        },
+        {
+          "tile": "2m",
+          "remaining": 3
+        },
+        {
+          "tile": "3m",
+          "remaining": 4
+        },
+        {
+          "tile": "4m",
+          "remaining": 2
+        },
+        {
+          "tile": "5m",
+          "remaining": 1
+        },
+        {
+          "tile": "6m",
+          "remaining": 3
+        },
+        {
+          "tile": "7m",
+          "remaining": 3
+        },
+        {
+          "tile": "8m",
+          "remaining": 2
+        },
+        {
+          "tile": "9m",
+          "remaining": 3
+        },
+        {
+          "tile": "1p",
+          "remaining": 2
+        },
+        {
+          "tile": "2p",
+          "remaining": 2
+        },
+        {
+          "tile": "3p",
+          "remaining": 1
+        },
+        {
+          "tile": "6p",
+          "remaining": 2
+        },
+        {
+          "tile": "7p",
+          "remaining": 3
+        },
+        {
+          "tile": "9p",
+          "remaining": 2
+        },
+        {
+          "tile": "7s",
+          "remaining": 2
+        },
+        {
+          "tile": "P",
+          "remaining": 3
+        }
+      ],
+      "ukeire": 41,
+      "danger": 0.059125000000000094,
+      "estimatedValue": 3900,
+      "winProbability": 0.023272727272727275,
+      "tenpaiProbability": 0.07718690421190748,
+      "dealInProbability": 0.059125000000000094,
+      "expectedRoundValue": -348,
+      "evaluationModel": "heuristic-v5"
+    },
+    {
+      "actionId": "discard_2p",
+      "action": "discard",
+      "tile": "2p",
+      "shanten": 3,
+      "form": "standard",
+      "effectiveTiles": [
+        {
+          "tile": "1m",
+          "remaining": 3
+        },
+        {
+          "tile": "2m",
+          "remaining": 3
+        },
+        {
+          "tile": "3m",
+          "remaining": 4
+        },
+        {
+          "tile": "4m",
+          "remaining": 2
+        },
+        {
+          "tile": "5m",
+          "remaining": 1
+        },
+        {
+          "tile": "6m",
+          "remaining": 3
+        },
+        {
+          "tile": "7m",
+          "remaining": 3
+        },
+        {
+          "tile": "8m",
+          "remaining": 2
+        },
+        {
+          "tile": "9m",
+          "remaining": 3
+        },
+        {
+          "tile": "1p",
+          "remaining": 2
+        },
+        {
+          "tile": "2p",
+          "remaining": 2
+        },
+        {
+          "tile": "3p",
+          "remaining": 1
+        },
+        {
+          "tile": "6p",
+          "remaining": 2
+        },
+        {
+          "tile": "7p",
+          "remaining": 3
+        },
+        {
+          "tile": "9p",
+          "remaining": 2
+        },
+        {
+          "tile": "7s",
+          "remaining": 2
+        },
+        {
+          "tile": "P",
+          "remaining": 3
+        }
+      ],
+      "ukeire": 41,
+      "danger": 0.06749280000000002,
+      "estimatedValue": 3900,
+      "winProbability": 0.023272727272727275,
+      "tenpaiProbability": 0.07718690421190748,
+      "dealInProbability": 0.06749280000000002,
+      "expectedRoundValue": -414,
+      "evaluationModel": "heuristic-v5"
+    },
+    {
+      "actionId": "discard_1m",
+      "action": "discard",
+      "tile": "1m",
+      "shanten": 2,
+      "form": "standard",
+      "effectiveTiles": [
+        {
+          "tile": "3m",
+          "remaining": 4
+        },
+        {
+          "tile": "4m",
+          "remaining": 2
+        },
+        {
+          "tile": "5m",
+          "remaining": 1
+        },
+        {
+          "tile": "6m",
+          "remaining": 3
+        },
+        {
+          "tile": "7m",
+          "remaining": 3
+        },
+        {
+          "tile": "8m",
+          "remaining": 2
+        },
+        {
+          "tile": "9m",
+          "remaining": 3
+        },
+        {
+          "tile": "6p",
+          "remaining": 2
+        },
+        {
+          "tile": "7p",
+          "remaining": 3
+        },
+        {
+          "tile": "9p",
+          "remaining": 2
+        },
+        {
+          "tile": "7s",
+          "remaining": 2
+        },
+        {
+          "tile": "P",
+          "remaining": 3
+        }
+      ],
+      "ukeire": 30,
+      "danger": 0.08264687500000012,
+      "estimatedValue": 3900,
+      "winProbability": 0.06545454545454545,
+      "tenpaiProbability": 0.20552372125864204,
+      "dealInProbability": 0.08264687500000012,
+      "expectedRoundValue": -313,
+      "evaluationModel": "heuristic-v5"
+    },
+    {
+      "actionId": "discard_5m",
+      "action": "discard",
+      "tile": "5m",
+      "shanten": 2,
+      "form": "standard",
+      "effectiveTiles": [
+        {
+          "tile": "1m",
+          "remaining": 3
+        },
+        {
+          "tile": "2m",
+          "remaining": 3
+        },
+        {
+          "tile": "3m",
+          "remaining": 4
+        },
+        {
+          "tile": "6m",
+          "remaining": 3
+        },
+        {
+          "tile": "6p",
+          "remaining": 2
+        },
+        {
+          "tile": "7p",
+          "remaining": 3
+        },
+        {
+          "tile": "9p",
+          "remaining": 2
+        },
+        {
+          "tile": "7s",
+          "remaining": 2
+        },
+        {
+          "tile": "P",
+          "remaining": 3
+        }
+      ],
+      "ukeire": 25,
+      "danger": 0.08264687500000012,
+      "estimatedValue": 3900,
+      "winProbability": 0.05454545454545454,
+      "tenpaiProbability": 0.1876166303929372,
+      "dealInProbability": 0.08264687500000012,
+      "expectedRoundValue": -364,
+      "evaluationModel": "heuristic-v5"
+    },
+    {
+      "actionId": "discard_8p",
+      "action": "discard",
+      "tile": "8p",
+      "shanten": 2,
+      "form": "standard",
+      "effectiveTiles": [
+        {
+          "tile": "1m",
+          "remaining": 3
+        },
+        {
+          "tile": "2m",
+          "remaining": 3
+        },
+        {
+          "tile": "3m",
+          "remaining": 4
+        },
+        {
+          "tile": "4m",
+          "remaining": 2
+        },
+        {
+          "tile": "5m",
+          "remaining": 1
+        },
+        {
+          "tile": "6m",
+          "remaining": 3
+        },
+        {
+          "tile": "7m",
+          "remaining": 3
+        },
+        {
+          "tile": "8m",
+          "remaining": 2
+        },
+        {
+          "tile": "9m",
+          "remaining": 3
+        },
+        {
+          "tile": "7s",
+          "remaining": 2
+        },
+        {
+          "tile": "P",
+          "remaining": 3
+        }
+      ],
+      "ukeire": 29,
+      "danger": 0.11591875000000007,
+      "estimatedValue": 3900,
+      "winProbability": 0.06327272727272727,
+      "tenpaiProbability": 0.2020692950450414,
+      "dealInProbability": 0.11591875000000007,
+      "expectedRoundValue": -590,
+      "evaluationModel": "heuristic-v5"
+    },
+    {
+      "actionId": "discard_7s",
+      "action": "discard",
+      "tile": "7s",
+      "shanten": 3,
+      "form": "standard",
+      "effectiveTiles": [
+        {
+          "tile": "1m",
+          "remaining": 3
+        },
+        {
+          "tile": "2m",
+          "remaining": 3
+        },
+        {
+          "tile": "3m",
+          "remaining": 4
+        },
+        {
+          "tile": "4m",
+          "remaining": 2
+        },
+        {
+          "tile": "5m",
+          "remaining": 1
+        },
+        {
+          "tile": "6m",
+          "remaining": 3
+        },
+        {
+          "tile": "7m",
+          "remaining": 3
+        },
+        {
+          "tile": "8m",
+          "remaining": 2
+        },
+        {
+          "tile": "9m",
+          "remaining": 3
+        },
+        {
+          "tile": "6p",
+          "remaining": 2
+        },
+        {
+          "tile": "7p",
+          "remaining": 3
+        },
+        {
+          "tile": "9p",
+          "remaining": 2
+        },
+        {
+          "tile": "6s",
+          "remaining": 2
+        },
+        {
+          "tile": "7s",
+          "remaining": 2
+        },
+        {
+          "tile": "8s",
+          "remaining": 2
+        },
+        {
+          "tile": "9s",
+          "remaining": 3
+        },
+        {
+          "tile": "P",
+          "remaining": 3
+        }
+      ],
+      "ukeire": 43,
+      "danger": 0.10458437499999995,
+      "estimatedValue": 3900,
+      "winProbability": 0.023272727272727275,
+      "tenpaiProbability": 0.07718690421190748,
+      "dealInProbability": 0.10458437499999995,
+      "expectedRoundValue": -711,
+      "evaluationModel": "heuristic-v5"
+    },
+    {
+      "actionId": "discard_7m",
+      "action": "discard",
+      "tile": "7m",
+      "shanten": 2,
+      "form": "standard",
+      "effectiveTiles": [
+        {
+          "tile": "1m",
+          "remaining": 3
+        },
+        {
+          "tile": "2m",
+          "remaining": 3
+        },
+        {
+          "tile": "3m",
+          "remaining": 4
+        },
+        {
+          "tile": "5m",
+          "remaining": 1
+        },
+        {
+          "tile": "6p",
+          "remaining": 2
+        },
+        {
+          "tile": "7p",
+          "remaining": 3
+        },
+        {
+          "tile": "9p",
+          "remaining": 2
+        },
+        {
+          "tile": "7s",
+          "remaining": 2
+        },
+        {
+          "tile": "P",
+          "remaining": 3
+        }
+      ],
+      "ukeire": 23,
+      "danger": 0.110475383203125,
+      "estimatedValue": 2000,
+      "winProbability": 0.050181818181818175,
+      "tenpaiProbability": 0.17995555006723188,
+      "dealInProbability": 0.110475383203125,
+      "expectedRoundValue": -702,
+      "evaluationModel": "heuristic-v5"
+    },
+    {
+      "actionId": "discard_P",
+      "action": "discard",
+      "tile": "P",
+      "shanten": 2,
+      "form": "standard",
+      "effectiveTiles": [
+        {
+          "tile": "1m",
+          "remaining": 3
+        },
+        {
+          "tile": "2m",
+          "remaining": 3
+        },
+        {
+          "tile": "3m",
+          "remaining": 4
+        },
+        {
+          "tile": "4m",
+          "remaining": 2
+        },
+        {
+          "tile": "5m",
+          "remaining": 1
+        },
+        {
+          "tile": "6m",
+          "remaining": 3
+        },
+        {
+          "tile": "7m",
+          "remaining": 3
+        },
+        {
+          "tile": "8m",
+          "remaining": 2
+        },
+        {
+          "tile": "9m",
+          "remaining": 3
+        },
+        {
+          "tile": "6p",
+          "remaining": 2
+        },
+        {
+          "tile": "7p",
+          "remaining": 3
+        },
+        {
+          "tile": "9p",
+          "remaining": 2
+        },
+        {
+          "tile": "7s",
+          "remaining": 2
+        }
+      ],
+      "ukeire": 33,
+      "danger": 0.12706698124999993,
+      "estimatedValue": 3900,
+      "winProbability": 0.06981818181818181,
+      "tenpaiProbability": 0.2122639865827456,
+      "dealInProbability": 0.12706698124999993,
+      "expectedRoundValue": -649,
+      "evaluationModel": "heuristic-v5"
+    }
+  ],
+  "actualDiscard": "1p",
+  "copyExhaustedAlternative": "8p",
+  "proof": "Four positive known opponent sets leave only a tanki concealed tile. Four8p in ownhand+draw leave no8p concealed by East. Other opponents may still ron8p in a sequence; no guaranteed avoided-loss claim.",
+  "nativeCommittedImage": "test/fixtures/four-meld-tanki-copies-20261023.jpg"
+}

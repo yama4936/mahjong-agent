@@ -13,6 +13,20 @@ export interface TileDanger {
   combinedProbability: number;
 }
 
+function hasFourKnownSets(opponent: GameState["opponents"][number]): boolean {
+  if (opponent.openMelds !== 4 || opponent.melds?.length !== 4) return false;
+  // Positive tile evidence is sufficient even if the whole-row observation
+  // flag is unknown. A geometry-only count cannot prove a single-tile wait.
+  return opponent.melds.every((meld) => {
+    const indexes = meld.tiles.map((value) => tileIndex(normalizeTile(value))).sort((a, b) => a - b);
+    if (meld.type === "chi") return indexes.length === 3 && indexes[2]! < 27
+      && Math.floor(indexes[0]! / 9) === Math.floor(indexes[2]! / 9)
+      && indexes[1] === indexes[0]! + 1 && indexes[2] === indexes[0]! + 2;
+    return indexes.length === (meld.type === "pon" ? 3 : 4)
+      && indexes.every((index) => index === indexes[0]);
+  });
+}
+
 export function evaluateTileDanger(tileInput: string, state: GameState): TileDanger {
   const tile = normalizeTile(tileInput);
   const visibleCounts = toCounts(knownTiles(state));
@@ -31,6 +45,12 @@ export function evaluateTileDanger(tileInput: string, state: GameState): TileDan
     if (opponent.openMelds > 0) reasons.push(`${opponent.openMelds}_open_melds`);
 
     const known = visibleCounts[tileIdx]!;
+    // With four completed sets the only concealed wait is tanki. Before
+    // discarding, four physically known copies leave none for its pair.
+    // This says nothing about sequence waits against the other opponents.
+    if (known === 4 && hasFourKnownSets(opponent)) {
+      return { seat: opponent.seat, probability: 0, reasons: ["four_sets_tanki_all_copies_visible"] };
+    }
     if (tileIdx >= 27) {
       if (known >= 4) return { seat: opponent.seat, probability: 0, reasons: ["all_copies_visible"] };
       if (known === 3) { probability *= 0.1; reasons.push("honor_one_copy_left"); }
