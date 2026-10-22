@@ -1,0 +1,87 @@
+{
+  "sourceImplementation": "92b30ef",
+  "sourceSample": 37,
+  "nativeOwnSeat": "south",
+  "rightActualSeat": "west",
+  "originalRegion": {
+    "x": 1500,
+    "y": 25,
+    "width": 220,
+    "height": 490,
+    "rotationToUpright": 90
+  },
+  "cases": [
+    {
+      "kind": "source",
+      "source": "artifacts/ranked-supervised-92b30ef-20261022/operator-20261022T111009127269Z/frames/2026-10-22T11-20-13.790885+00-00.jpg",
+      "sourceSha256": "e44b1ce9415bdc665a7361726d263cfe3904cc435504e9e1a14cc5b19ad1807c",
+      "file": "test/fixtures/right-chi-678m-source-20261022.png",
+      "nativeIndependentlyViewed": true,
+      "expectedMelds": [
+        {
+          "type": "pon",
+          "tiles": [
+            "E",
+            "E",
+            "E"
+          ]
+        },
+        {
+          "type": "chi",
+          "tiles": [
+            "6m",
+            "7m",
+            "8m"
+          ]
+        }
+      ],
+      "before": {
+        "sidewaysTile": "6m",
+        "candidateCount": 6,
+        "ordinaryMeldCount": 0
+      },
+      "expectedCandidate": {
+        "x": 68,
+        "y": 175,
+        "width": 59,
+        "height": 39
+      }
+    },
+    {
+      "kind": "holdout",
+      "source": "artifacts/ranked-supervised-92b30ef-20261022/operator-20261022T111009127269Z/frames/2026-10-22T11-20-25.578168+00-00.jpg",
+      "sourceSha256": "cb9e4aadc7c2fa100425573c44ece8e32f03fec95d5185cd1a6cf5d87a1b854c",
+      "file": "test/fixtures/right-chi-678m-holdout-20261022.png",
+      "nativeIndependentlyViewed": true,
+      "expectedMelds": [
+        {
+          "type": "pon",
+          "tiles": [
+            "E",
+            "E",
+            "E"
+          ]
+        },
+        {
+          "type": "chi",
+          "tiles": [
+            "6m",
+            "7m",
+            "8m"
+          ]
+        }
+      ],
+      "before": {
+        "sidewaysTile": "6m",
+        "candidateCount": 6,
+        "ordinaryMeldCount": 0
+      },
+      "expectedCandidate": {
+        "x": 68,
+        "y": 175,
+        "width": 59,
+        "height": 39
+      }
+    }
+  ]
+}

@@ -28,6 +28,7 @@ export interface PublicTileRecognitionRegion {
 export interface PublicTileRecognitionOptions extends RegionDetectionOptions {
   retryDiscardBoundaries?: boolean;
   retryRightRedMeld?: boolean;
+  retryRightChiMeld?: boolean;
   minimumConfidence?: number;
   minimumMargin?: number;
 }
@@ -508,6 +509,51 @@ export async function recognizeConfiguredPublicTilesWithVit(
             ambiguityMargin: margin, safe: true } : tile) };
         const melds = recognizeExposedMelds(refined);
         if (melds.reduce((count, meld) => count + meld.tiles.length, 0) === right.candidateCount) result.rightMelds = refined;
+      }
+    }
+  }
+  // A reviewed right 678m chi reads its sideways 8m as 6m when the grey
+  // side dominates the crop. Two different face trims must independently
+  // agree on 8m, beside already accepted upright 6m/7m anchors. A legal chi
+  // alone is never evidence to relabel a tile; retain original coordinates.
+  const rightChi = result.rightMelds;
+  if (options.retryRightChiMeld !== false && classifier.backend === "hybrid"
+    && rightChi?.rotationToUpright === 90 && rightChi.classificationSafe
+    && rightChi.candidateCount === rightChi.recognized.length
+    && recognizeExposedMelds(rightChi).length === 0) {
+    const ordered = [...rightChi.recognized].sort((a, b) => a.y - b.y);
+    const targets = jobs.flatMap((job, index) => {
+      const original = predictions[index]!;
+      if (job.name !== "rightMelds" || !job.candidate.sideways
+        || job.candidate.width <= job.candidate.height || job.candidate.height < 20
+        || original.tile !== "6m" || original.runnerUpTile !== "8m" || original.confidence >= 0.9) return [];
+      const position = ordered.findIndex(tile => tile.x === job.candidate.x && tile.y === job.candidate.y);
+      const anchors = ordered.slice(Math.max(0, position - 2), position);
+      return position >= 2 && anchors.length === 2 && anchors.every(tile => !tile.sideways && tile.safe
+        && tile.confidence >= 0.85 && tile.ambiguityMargin >= 0.7)
+        && anchors.some(tile => tile.confidence >= 0.95 && tile.ambiguityMargin >= 0.9)
+        && anchors.map(tile => tile.tile).sort().join(",") === "6m,7m" ? [index] : [];
+    });
+    if (targets.length === 1) {
+      const index = targets[0]!, candidate = jobs[index]!.candidate;
+      const images = await Promise.all([[0.2, 0], [0.1, 0.1]].map(async ([leftFraction, bottomFraction]) => {
+        const leftTrim = Math.round(candidate.width * leftFraction!);
+        const bottomTrim = Math.round(candidate.height * bottomFraction!);
+        return sharp(screenshot).extract({ left: candidate.x + leftTrim, top: candidate.y,
+          width: candidate.width - leftTrim, height: candidate.height - bottomTrim }).rotate(180).png().toBuffer();
+      }));
+      const retried = await classifier.classifyTileImages(images);
+      if (retried.length !== 2) throw new Error("Model right chi retry returned the wrong prediction count");
+      if (retried.every(tile => tile.tile === "8m" && tile.confidence >= Math.max(0.95, minimumConfidence)
+        && tile.confidence - tile.runnerUpConfidence >= Math.max(0.9, minimumMargin)
+        && tile.confidence - predictions[index]!.confidence >= 0.15)) {
+        const confidence = Math.min(...retried.map(tile => tile.confidence));
+        const runnerUpConfidence = Math.max(...retried.map(tile => tile.runnerUpConfidence));
+        const refined = { ...rightChi, recognized: rightChi.recognized.map(tile =>
+          tile.x === candidate.x && tile.y === candidate.y ? { ...tile, tile: "8m" as const,
+            confidence, runnerUpConfidence, ambiguityMargin: confidence - runnerUpConfidence, safe: true } : tile) };
+        const melds = recognizeExposedMelds(refined);
+        if (melds.reduce((count, meld) => count + meld.tiles.length, 0) === rightChi.candidateCount) result.rightMelds = refined;
       }
     }
   }
