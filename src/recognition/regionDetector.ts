@@ -16,6 +16,7 @@ export interface RegionDetection {
 }
 
 export interface RegionDetectionOptions {
+  extendMeldBoundaries?: boolean;
   maximumColorSpread?: number;
   luminanceThreshold?: number;
   minimumArea?: number;
@@ -24,6 +25,57 @@ export interface RegionDetectionOptions {
   maximumWidth?: number;
   maximumHeight?: number;
   maximumAreaFraction?: number;
+}
+
+/** Follow the existing left meld row beyond a calibration crop, without
+ * admitting the nearby avatar, wall, or concealed hand into that row. */
+async function extendLeftMeldBoundary(
+  screenshot: string | Buffer, region: PublicTileRegion, original: RegionDetection,
+  options: RegionDetectionOptions,
+): Promise<RegionDetection> {
+  const anchors = original.candidates;
+  if (anchors.length < 3 || anchors.length > 16) return original;
+  const width = median(anchors.map(tile => tile.width));
+  const height = median(anchors.map(tile => tile.height));
+  const first = anchors[0]!;
+  if (first.y - region.y > height * 1.5 || anchors.some(tile => tile.fillRatio < 0.25)) return original;
+  const centers = anchors.map(tile => ({ x: tile.x + tile.width / 2, y: tile.y + tile.height / 2 }));
+  const meanX = centers.reduce((sum, point) => sum + point.x, 0) / centers.length;
+  const meanY = centers.reduce((sum, point) => sum + point.y, 0) / centers.length;
+  const variance = centers.reduce((sum, point) => sum + (point.y - meanY) ** 2, 0);
+  if (variance === 0 || centers.at(-1)!.y - centers[0]!.y < height * 2) return original;
+  const slope = centers.reduce((sum, point) => sum + (point.y - meanY) * (point.x - meanX), 0) / variance;
+  const intercept = meanX - slope * meanY;
+  if (slope < -0.75 || slope > 0.05
+    || centers.some(point => Math.abs(point.x - intercept - slope * point.y) > width * 0.35)) return original;
+  const metadata = await sharp(screenshot).metadata();
+  const top = Math.max(0, Math.floor(region.y - region.height * 1.5));
+  const right = Math.min(metadata.width ?? region.x + region.width,
+    Math.ceil(Math.max(region.x + region.width, intercept + slope * top + width)));
+  const expanded = { x: region.x, y: top, width: right - region.x,
+    height: region.y + region.height - top };
+  const detection = await detectBrightTileCandidates(screenshot, expanded, options);
+  const preceding = detection.candidates.filter(tile => {
+    const x = tile.x + tile.width / 2;
+    const y = tile.y + tile.height / 2;
+    return y < centers[0]!.y && tile.y + tile.height <= first.y + height * 0.25
+      && tile.width >= width * 0.55 && tile.width <= width * 1.5
+      && tile.height >= height * 0.5 && tile.height <= height * 1.75
+      && tile.fillRatio >= 0.25 && Math.abs(x - intercept - slope * y) <= width * 0.4;
+  }).sort((left, rightTile) => rightTile.y - left.y);
+  const extension: RegionCandidate[] = [];
+  let frontier = first;
+  for (const candidate of preceding) {
+    const gap = frontier.y - candidate.y - candidate.height;
+    if (gap > Math.max(frontier.height, candidate.height) * 1.6) break;
+    if (gap < -height * 0.3) continue;
+    extension.push(candidate);
+    frontier = candidate;
+  }
+  if (extension.length === 0) return original;
+  const candidates = [...anchors, ...extension].sort((left, rightTile) => left.y - rightTile.y || left.x - rightTile.x);
+  return { ...original, region: expanded, candidates,
+    ...(candidates.length > 16 ? { gridValid: false } : {}) };
 }
 
 /**
@@ -128,12 +180,17 @@ export async function detectConfiguredPublicRegions(
   const detections = await Promise.all(entries.map(async ([name, region]) => {
     // Colored call/riichi glow can bridge adjacent white faces. Exclude only
     // saturated pixels for discard grids; classification still uses originals.
-    const detection = await detectBrightTileCandidates(screenshot, region, {
+    const regionOptions: RegionDetectionOptions = {
       ...(region.detectionMode === "discard_grid" && name.endsWith("Discards")
         ? { maximumColorSpread: 40 } : {}), ...options,
       ...(region.luminanceThreshold !== undefined ? { luminanceThreshold: region.luminanceThreshold } : {}),
       ...(region.minimumWidth !== undefined ? { minimumWidth: region.minimumWidth } : {}),
-    });
+    };
+    let detection = await detectBrightTileCandidates(screenshot, region, regionOptions);
+    if (options.extendMeldBoundaries !== false && name === "leftMelds"
+      && region.rotationToUpright === 270 && region.sidewaysAspectRatio !== undefined) {
+      detection = await extendLeftMeldBoundary(screenshot, region, detection, regionOptions);
+    }
     if (name.endsWith("Melds") && region.sidewaysAspectRatio !== undefined) {
       const vertical = region.rotationToUpright === 90 || region.rotationToUpright === 270;
       detection.candidates = detection.candidates.map((candidate) => ({
