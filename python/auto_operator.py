@@ -629,6 +629,37 @@ def force_auto_reaction_win_button(
     return buttons[0] if len(buttons) == 1 else None
 
 
+def force_auto_riichi_kan_prompt(screenshot: bytes, viewport: dict[str, int],
+                                 pass_region: dict[str, float] | None) -> dict[str, Any] | None:
+    """Identify magenta kan plus contextual skip, never an orange win button."""
+    if not pass_region or force_auto_self_action_buttons(screenshot, viewport):
+        return None
+    left, top = round(viewport["width"] * 0.40), round(viewport["height"] * 0.68)
+    right, bottom = round(viewport["width"] * 0.62), round(viewport["height"] * 0.85)
+    with Image.open(io.BytesIO(screenshot)) as image:
+        red, green, blue = image.convert("RGB").crop((left, top, right, bottom)).split()
+        masks = [red.point([255 if value > 120 else 0 for value in range(256)]),
+                 blue.point([255 if value > 80 else 0 for value in range(256)]),
+                 ImageChops.subtract(red, green).point([255 if value > 45 else 0 for value in range(256)]),
+                 ImageChops.subtract(blue, green).point([255 if value > 25 else 0 for value in range(256)])]
+        mask = masks[0]
+        for other in masks[1:]:
+            mask = ImageChops.multiply(mask, other)
+        bounds = mask.getbbox()
+        fraction = mask.histogram()[255] / max(1, mask.width * mask.height)
+    if not bounds or fraction < 0.03:
+        return None
+    width, height = bounds[2] - bounds[0], bounds[3] - bounds[1]
+    if not (viewport["width"] * 0.07 <= width <= viewport["width"] * 0.20
+            and viewport["height"] * 0.04 <= height <= viewport["height"] * 0.16):
+        return None
+    if not is_contextual_reaction_pass(screenshot, pass_region, 1):
+        return None
+    return {"kan": {"x": left + bounds[0], "y": top + bounds[1], "width": width, "height": height},
+            "pass": {**pass_region, "center": {"x": pass_region["x"] + pass_region["width"] / 2,
+                                                  "y": pass_region["y"] + pass_region["height"] / 2}}}
+
+
 def is_draw_slot_occupied(screenshot: bytes, region: dict[str, float]) -> bool:
     """Cheaply distinguish our 14-tile turn from an opponent's turn.
 
@@ -3149,6 +3180,37 @@ class PythonAutoOperator:
             and not getattr(self.args, "ranked_loop", False)
         )
 
+    def force_auto_riichi_kan_fallback(self, screenshot: Path, evaluation: dict[str, Any]) -> dict[str, Any] | None:
+        """Route the existing decline-kan-after-riichi policy to an actual skip.
+
+        A pending kan selection blocks tile clicks. It is not an opponent's
+        thirteen-tile reaction, and magenta must not be promoted to tsumo/ron.
+        """
+        if self.args.mode != "force-auto" or evaluation.get("status") != "decision":
+            return None
+        state = evaluation.get("state", {})
+        recognition = evaluation.get("recognition", {})
+        selected = evaluation.get("decision", {}).get("selectedAction", {})
+        tiles = recognition.get("tiles", [])
+        if (not state.get("riichiDeclared") or state.get("openMelds", 0) != 0
+                or selected.get("action") != "discard" or len(tiles) != 14
+                or not isinstance(state.get("draw"), str) or not all(isinstance(tile, str) for tile in tiles)
+                or tiles != [*state.get("hand", []), state.get("draw")]):
+            return None
+        canonical = lambda tile: f"5{tile[1]}" if len(tile) == 2 and tile[0] == "0" else tile
+        if sum(canonical(tile) == canonical(state["draw"]) for tile in tiles) != 4:
+            return None
+        prompt = force_auto_riichi_kan_prompt(screenshot.read_bytes(), self.layout["viewport"],
+                                            self.layout.get("actionButtonRegions", {}).get("pass"))
+        if not prompt:
+            return None
+        return {"schemaVersion": 1, "status": "reaction_prompt", "reactionFrame": str(screenshot),
+                "state": state, "recognition": recognition, "availableUiActions": ["kan", "pass"],
+                "decision": {"recommendedAction": "pass", "selectedAction": {"id": "pass", "action": "pass"},
+                             "source": "decline_kan_after_riichi"},
+                "actionButton": {"action": "pass", "present": True, "confidence": 1,
+                                 "center": prompt["pass"]["center"], "source": "force_auto_riichi_kan_pass"}}
+
     def force_auto_reaction_fallback(
         self, screenshot: Path, *, contextual_prompt_verified: bool = False,
     ) -> dict[str, Any] | None:
@@ -3884,7 +3946,23 @@ class PythonAutoOperator:
             and current_at - evaluated_captured_at >= 0.120
             and 0 <= time.monotonic() - current_at <= 0.250
         )
-        if stream_guard:
+        riichi_kan_pass = observed.get("source") == "force_auto_riichi_kan_pass"
+        if riichi_kan_pass:
+            # Revalidate the complete prompt twice. A stable skip-shaped clip
+            # alone cannot prove that a newer tsumo opportunity is absent.
+            first_full = page.screenshot(animations="disabled")
+            page.wait_for_timeout(120)
+            second_full = page.screenshot(animations="disabled")
+            if (evaluated_full is None
+                    or force_auto_riichi_kan_prompt(first_full, self.layout["viewport"], region) is None
+                    or force_auto_riichi_kan_prompt(second_full, self.layout["viewport"], region) is None
+                    or closed_hand_face_mismatches(evaluated_full, second_full, self.layout,
+                                                   self.args.stability_pixel_delta)):
+                raise RetryableSafetyAbort("riichi kan/skip prompt or concealed hand changed before pass")
+            before = crop_screenshot(first_full, button_clip)
+            confirmed = crop_screenshot(second_full, button_clip)
+            stream_guard = False
+        elif stream_guard:
             before = crop_screenshot(evaluated_full, button_clip)
             confirmed = crop_screenshot(current_full, button_clip)
             def verified_pass(frame, clip):
@@ -3897,7 +3975,7 @@ class PythonAutoOperator:
             # Verify the affordance in both frames, including the stylized
             # skip variant only when a green call button is independently found.
             stream_guard = verified_pass(evaluated_full, before) and verified_pass(current_full, confirmed)
-        if not stream_guard:
+        if not stream_guard and not riichi_kan_pass:
             before = page.screenshot(clip=button_clip, animations="disabled")
             page.wait_for_timeout(120)
             confirmed = page.screenshot(clip=button_clip, animations="disabled")
@@ -4984,7 +5062,8 @@ class PythonAutoOperator:
                     )
                     evaluation = self.evaluate(screenshot_path, pending_discard, public_observation, recognition)
                 if evaluation.get("status") != "reaction_prompt":
-                    reaction_fallback = self.force_auto_reaction_fallback(screenshot_path)
+                    reaction_fallback = self.force_auto_riichi_kan_fallback(screenshot_path, evaluation) \
+                        or self.force_auto_reaction_fallback(screenshot_path)
                     if reaction_fallback:
                         evaluation = reaction_fallback
                 if evaluation.get("status") == "reaction_prompt":
