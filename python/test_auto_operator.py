@@ -2957,6 +2957,45 @@ class AwayDialogDetectionTest(unittest.TestCase):
         self.assertIsNone(selected_chi_choice_point(points, None, legal))
         self.assertIsNone(confirmed_call_meld({"action": "chi", "tile": "3s", "consumedTiles": ["4s"]}))
 
+    def test_native_red_pon_preserves_forced_consumption_in_cached_meld(self) -> None:
+        fixture = load_json(FRAME_FIXTURES / "red-call-physical-identity-20261022.json")
+        action = {**fixture["beforeAction"], "consumedTiles": fixture["physicalConsumedTiles"]}
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.cached_public_observation = {
+            "doraIndicators": ["6m"], "ownDiscards": [], "ownMelds": [],
+            "ownMeldTiles": [], "ownMeldsObserved": True,
+            "opponentDiscards": [{"seat": "south", "discards": ["5p"]}],
+        }
+        operator.previous_public_observation = None
+        operator.public_cache_generation = 0
+        operator.log = Mock()
+        operator.reconcile_confirmed_call_discard({"tile": "5p", "fromSeat": "south"}, action)
+        cached = operator.cached_public_observation
+        self.assertEqual(cached["ownMelds"][0]["tiles"], ["0p", "5p", "5p"])
+        self.assertEqual(cached["ownMeldTiles"], ["0p", "5p", "5p"])
+        self.assertTrue(cached["ownMeldsObserved"])
+        self.assertEqual(cached["opponentDiscards"][0]["discards"], [])
+
+    def test_ambiguous_red_consumption_never_certifies_a_physical_meld(self) -> None:
+        action = {"id": "pon_5p", "action": "pon", "tile": "5p",
+                  "consumedTiles": ["0p", "5p"],
+                  "consumedTileChoices": [["0p", "5p"], ["5p", "5p"]]}
+        self.assertIsNone(confirmed_call_meld(action))
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.cached_public_observation = {
+            "doraIndicators": [], "ownDiscards": [], "ownMelds": [],
+            "ownMeldTiles": [], "ownMeldsObserved": True,
+            "opponentDiscards": [{"seat": "south", "discards": ["5p"]}],
+        }
+        operator.previous_public_observation = None
+        operator.public_cache_generation = 0
+        operator.log = Mock()
+        operator.reconcile_confirmed_call_discard({"tile": "5p", "fromSeat": "south"}, action)
+        cached = operator.cached_public_observation
+        self.assertEqual(cached["ownMelds"], [])
+        self.assertFalse(cached["ownMeldsObserved"])
+        self.assertEqual(cached["opponentDiscards"][0]["discards"], [])
+
     def test_persistent_call_tile_conflict_falls_back_to_safe_pass(self) -> None:
         conflict = RetryableSafetyAbort("reaction_tile_count_conflict")
         self.assertTrue(should_retry_call_policy(conflict, 19999))

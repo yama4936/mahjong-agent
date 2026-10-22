@@ -411,7 +411,8 @@ function callPostDiscard(state: GameState, action: CallAction) {
   const remaining = [...state.hand];
   for (const tile of action.consumedTiles) {
     const normalized = normalizeTile(tile);
-    const index = remaining.findIndex((value) => normalizeTile(value) === normalized);
+    const exact = remaining.indexOf(tile as GameTile);
+    const index = exact >= 0 ? exact : remaining.findIndex((value) => normalizeTile(value) === normalized);
     if (index < 0) return undefined;
     remaining.splice(index, 1);
   }
@@ -428,7 +429,7 @@ function callPostDiscard(state: GameState, action: CallAction) {
   const afterCall: GameState = { ...withoutDraw, hand: remaining, phase: "self_turn",
     openMelds: state.openMelds + 1,
     melds: [...state.melds, { type: action.action,
-      tiles: [...action.consumedTiles, action.tile].map(normalizeTile) }] };
+      tiles: [...action.consumedTiles, action.tile] }] };
   const ordinaryTenpai = discards.filter(candidate => candidate.shanten === 0)
     .map(candidate => ({ discard: candidate.tile, report: openTenpaiYaku(candidate, afterCall) }));
   const nonSimples = remaining.filter(tile => isTerminalOrHonor(tileIndex(normalizeTile(tile))));
@@ -450,7 +451,8 @@ function yakuForCall(state: GameState, action: CallAction): { confirmed: string[
   }
   const concealedAfter = [...state.hand];
   for (const used of action.consumedTiles) {
-    const index = concealedAfter.findIndex((tile) => normalizeTile(tile) === normalizeTile(used));
+    const exact = concealedAfter.indexOf(used as GameTile);
+    const index = exact >= 0 ? exact : concealedAfter.findIndex((tile) => normalizeTile(tile) === normalizeTile(used));
     if (index < 0) return { confirmed, candidates };
     concealedAfter.splice(index, 1);
   }

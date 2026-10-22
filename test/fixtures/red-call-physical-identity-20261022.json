@@ -1,0 +1,286 @@
+{
+  "source": "artifacts/ranked-supervised-9f361f0-20261022/operator-20261022T100207576128Z/sample36-red-pon-physical-identity-evidence.json",
+  "nativePostCallScreenshot": "/home/yama1/projects/jantama-auto/artifacts/ranked-supervised-9f361f0-20261022/operator-20261022T100207576128Z/frames/2026-10-22T10-17-23.565233+00-00.jpg",
+  "nativeSha256": "d38225f83bad104e43e1845500d476fc77fed00953d2f03948fe236bd42efbe5",
+  "nativeIndependentlyViewed": true,
+  "reactionState": {
+    "round": "east_2",
+    "matchLength": "east",
+    "honba": 0,
+    "riichiSticks": 0,
+    "seat": "east",
+    "scores": {
+      "east": 19600,
+      "south": 28100,
+      "west": 19600,
+      "north": 32700
+    },
+    "hand": [
+      "2m",
+      "2m",
+      "2m",
+      "3m",
+      "4m",
+      "6m",
+      "7m",
+      "8m",
+      "0p",
+      "5p",
+      "0s",
+      "5s",
+      "6s"
+    ],
+    "doraIndicators": [
+      "6m"
+    ],
+    "ownDiscards": [
+      "3s",
+      "1p",
+      "C",
+      "F",
+      "4p",
+      "P",
+      "8s",
+      "P",
+      "W",
+      "2p",
+      "1p"
+    ],
+    "melds": [],
+    "visibleTiles": [],
+    "openMelds": 0,
+    "turn": 11,
+    "remainingTiles": 29,
+    "phase": "reaction",
+    "pendingDiscard": {
+      "tile": "5p",
+      "fromSeat": "south",
+      "inRiver": true
+    },
+    "recognitionConfidence": 0.790789352365435,
+    "publicStateConfidence": 0,
+    "riichiDeclared": false,
+    "availableUiActions": [
+      "pon",
+      "pass"
+    ],
+    "opponents": [
+      {
+        "seat": "south",
+        "discards": [
+          "N",
+          "C",
+          "8s",
+          "2s",
+          "N",
+          "7p",
+          "2p",
+          "P",
+          "4s",
+          "8m",
+          "5p"
+        ],
+        "riichi": false,
+        "openMelds": 0,
+        "openMeldsObserved": true,
+        "melds": []
+      },
+      {
+        "seat": "west",
+        "discards": [
+          "2p",
+          "4s",
+          "6s",
+          "C",
+          "F",
+          "C",
+          "F",
+          "W",
+          "N"
+        ],
+        "riichi": false,
+        "openMelds": 0,
+        "openMeldsObserved": true,
+        "melds": []
+      },
+      {
+        "seat": "north",
+        "discards": [
+          "S",
+          "S",
+          "9p",
+          "9s",
+          "N",
+          "S",
+          "9s",
+          "P",
+          "1s",
+          "8m"
+        ],
+        "riichi": false,
+        "openMelds": 1,
+        "openMeldsObserved": true,
+        "melds": [
+          {
+            "type": "pon",
+            "tiles": [
+              "E",
+              "E",
+              "E"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "postCallState": {
+    "round": "east_2",
+    "matchLength": "east",
+    "honba": 0,
+    "riichiSticks": 1,
+    "seat": "east",
+    "scores": {
+      "east": 19600,
+      "south": 27100,
+      "west": 19600,
+      "north": 32700
+    },
+    "hand": [
+      "2m",
+      "2m",
+      "2m",
+      "3m",
+      "4m",
+      "6m",
+      "7m",
+      "8m",
+      "0s",
+      "5s"
+    ],
+    "draw": "6s",
+    "doraIndicators": [
+      "6m"
+    ],
+    "ownDiscards": [
+      "3s",
+      "1p",
+      "C",
+      "F",
+      "4p",
+      "P",
+      "8s",
+      "P",
+      "W",
+      "2p",
+      "1p"
+    ],
+    "melds": [
+      {
+        "type": "pon",
+        "tiles": [
+          "5p",
+          "5p",
+          "5p"
+        ]
+      }
+    ],
+    "visibleTiles": [],
+    "openMelds": 1,
+    "turn": 11,
+    "remainingTiles": 29,
+    "phase": "self_turn",
+    "recognitionConfidence": 0.8065266475922706,
+    "publicStateConfidence": 0,
+    "riichiDeclared": false,
+    "availableUiActions": [],
+    "opponents": [
+      {
+        "seat": "south",
+        "discards": [
+          "N",
+          "C",
+          "8s",
+          "2s",
+          "N",
+          "7p",
+          "2p",
+          "P",
+          "4s",
+          "8m"
+        ],
+        "riichi": true,
+        "openMelds": 0,
+        "openMeldsObserved": true,
+        "melds": []
+      },
+      {
+        "seat": "west",
+        "discards": [
+          "2p",
+          "4s",
+          "6s",
+          "C",
+          "F",
+          "C",
+          "F",
+          "W",
+          "N",
+          "E"
+        ],
+        "riichi": false,
+        "openMelds": 0,
+        "openMeldsObserved": true,
+        "melds": []
+      },
+      {
+        "seat": "north",
+        "discards": [
+          "S",
+          "S",
+          "9p",
+          "9s",
+          "N",
+          "S",
+          "9s",
+          "P",
+          "1s",
+          "8m"
+        ],
+        "riichi": false,
+        "openMelds": 1,
+        "openMeldsObserved": true,
+        "melds": [
+          {
+            "type": "pon",
+            "tiles": [
+              "E",
+              "E",
+              "E"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "beforeAction": {
+    "id": "pon_5p",
+    "action": "pon",
+    "tile": "5p",
+    "consumedTiles": [
+      "5p",
+      "5p"
+    ]
+  },
+  "physicalConsumedTiles": [
+    "0p",
+    "5p"
+  ],
+  "physicalCalledTile": "5p",
+  "physicalMeld": [
+    "0p",
+    "5p",
+    "5p"
+  ],
+  "selectedPostCallDiscard": "8m",
+  "avoidedLossEstablished": false
+}

@@ -211,7 +211,8 @@ export function buildJevReactionRequest(state: GameState, actions: readonly Lega
   const criteria = Object.fromEntries(actions.map((action) => [action.id, {
     action: action.action,
     ...(action.action === "chi" || action.action === "pon" || action.action === "minkan"
-      ? { calledTile: action.tile, consumedTiles: action.consumedTiles } : {}),
+      ? { calledTile: action.tile, consumedTiles: action.consumedTiles,
+        ...(action.consumedTileChoices ? { consumedTileChoices: action.consumedTileChoices } : {}) } : {}),
   }]));
   return {
     model,

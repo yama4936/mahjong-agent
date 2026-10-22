@@ -454,6 +454,10 @@ def confirmed_call_meld(selected_action: dict[str, Any] | None) -> dict[str, Any
     """Build typed meld evidence from a call that the UI visibly completed."""
     if not selected_action:
         return None
+    # A structural pon/chi can consume either a red or a normal five.
+    # Hand/meld pixel changes prove the call, not that physical choice.
+    if "consumedTileChoices" in selected_action:
+        return None
     action = selected_action.get("action")
     called_tile = selected_action.get("tile")
     consumed = selected_action.get("consumedTiles")
@@ -2965,7 +2969,7 @@ class PythonAutoOperator:
                 other_visible = [*[tile for item in opponents for tile in item.get("discards", [])], *all_meld_tiles]
                 setattr(self, attribute, {**observation, "opponentDiscards": opponents,
                     "ownMelds": own_melds, "ownMeldTiles": own_meld_tiles,
-                    "ownMeldsObserved": True,
+                    "ownMeldsObserved": bool(confirmed_meld),
                     "allMeldTiles": all_meld_tiles, "otherVisibleTiles": other_visible,
                     "acceptedTiles": len(observation.get("doraIndicators", []))
                     + len(observation.get("ownDiscards", [])) + len(other_visible)})
