@@ -2312,6 +2312,78 @@ class AwayDialogDetectionTest(unittest.TestCase):
             self.assertTrue(operator.screencast_draw_occupied)
             self.assertEqual(operator.screencast_draw_generation, 2)
 
+    def test_run_loop_revisits_identical_hand_after_a_new_streamed_draw(self) -> None:
+        project = Path(__file__).resolve().parents[1]
+        fixtures = FRAME_FIXTURES / "repeated-draw-20261023"
+        first = (fixtures / "first-two-man.jpg").read_bytes()
+        opponent = (fixtures / "opponent-turn.jpg").read_bytes()
+        next_draw = (fixtures / "next-two-man.jpg").read_bytes()
+        with tempfile.TemporaryDirectory() as directory:
+            operator = PythonAutoOperator.__new__(PythonAutoOperator)
+            operator.args = argparse.Namespace(mode="force-auto", max_iterations=2, poll=0.001,
+                                               stop_on_error=True)
+            operator.layout = load_json(project / "config/layout.json")
+            operator.hand_clip = {"x": 223, "y": 926, "width": 1355, "height": 146}
+            operator.action_clip = {"x": 1170, "y": 775, "width": 275, "height": 105}
+            operator.frames = Path(directory)
+            operator.screen_references = {}
+            operator.screencast_session = Mock()
+            operator.screencast_sequence = 0
+            operator.screencast_draw_occupied = None
+            operator.screencast_draw_generation = 0
+            operator.cached_public_observation = None
+            operator.cached_concealed_tiles = None
+            operator.cached_open_melds = 1
+            operator.dynamic_layout_required = True
+            operator.pending_post_call_discard = False
+            operator.pending_post_call_started_at = None
+            operator.restart_open_hand_probe_hash = None
+            operator.last_processed_hand = None
+            operator.armed = True
+            operator.previous_public_observation = None
+            operator.last_shanten = None
+            operator.pointer_retreat_screencast_sequence = 0
+            operator.login_button_clicked_at = None
+            operator.poll_public_recognition = Mock()
+            operator.reconcile_own_discard = Mock()
+            operator.ensure_viewport = Mock()
+            operator.start_screencast_gate = Mock()
+            operator.schedule_periodic_public_recognition = Mock()
+            operator.resume_if_away = Mock(return_value=False)
+            operator.advance_ranked_loop = Mock(return_value=False)
+            # Stop at recognition: this tests the real stream/duplicate gate
+            # without OCR, model execution, browser access, or a tile click.
+            operator.recognize_resident = Mock(return_value={"status": "not_ready"})
+            operator.force_auto_reaction_fallback = Mock(return_value=None)
+            operator.force_auto_riichi_kan_fallback = Mock(return_value=None)
+            operator.log = Mock()
+            page = Mock()
+            page.url = "https://mahjongsoul.game.yo-star.com/"
+            page.wait_for_timeout.side_effect = lambda _: operator.accept_screencast_frame(
+                operator.latest_screencast_frame,
+            )
+            with patch("auto_operator.classify_screen", return_value=("match", 1.0)):
+                operator.accept_screencast_frame(first)
+                operator.run(page)
+                self.assertEqual(operator.screencast_draw_generation, 1)
+                operator.recognize_resident.assert_called_once()
+                first_identity = operator.last_processed_hand
+
+                # Another stable frame of the same draw is still suppressed.
+                operator.armed = False
+                operator.run(page)
+                operator.recognize_resident.assert_called_once()
+                self.assertEqual(operator.last_processed_hand, first_identity)
+
+                operator.accept_screencast_frame(opponent)
+                self.assertFalse(operator.screencast_draw_occupied)
+                operator.accept_screencast_frame(next_draw)
+                self.assertEqual(operator.screencast_draw_generation, 2)
+                operator.run(page)
+                self.assertEqual(operator.recognize_resident.call_count, 2)
+                self.assertEqual(operator.reconcile_own_discard.call_count, 2)
+                self.assertNotEqual(operator.last_processed_hand, first_identity)
+
     def test_run_loop_reaches_post_pon_next_draw_with_trusted_open_meld_count(self) -> None:
         project = Path(__file__).resolve().parents[1]
         layout = load_json(project / "config" / "layout.json")

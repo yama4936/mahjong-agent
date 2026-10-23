@@ -1,0 +1,48 @@
+{
+  "sourceCommit": "934878c",
+  "sampleNumber": 55,
+  "round": "east_4",
+  "honba": 0,
+  "seat": "north",
+  "openMelds": 1,
+  "ownMeld": "1mpon",
+  "concealed": [
+    "2m",
+    "3m",
+    "4m",
+    "6m",
+    "7m",
+    "7p",
+    "7p",
+    "8p",
+    "S",
+    "S"
+  ],
+  "firstAndNextDraw": "2m",
+  "frames": [
+    {
+      "fixture": "first-two-man.jpg",
+      "source": "artifacts/ranked-supervised-934878c-20261023/operator-20261022T225028565044Z/frames/2026-10-22T23-47-12.719623+00-00.jpg",
+      "nativePath": "test/fixtures/repeated-draw-20261023/first-two-man.jpg",
+      "nativeSha256": "075cee02271f676e1125129281efd1f377897c6f0a1b48c471bb1de073c6bc62",
+      "nativeIndependentlyViewed": true
+    },
+    {
+      "fixture": "opponent-turn.jpg",
+      "source": "artifacts/ranked-supervised-934878c-20261023/operator-20261022T225028565044Z/frames/2026-10-22T23-47-23.060973+00-00.public-cache.jpg",
+      "nativePath": "test/fixtures/repeated-draw-20261023/opponent-turn.jpg",
+      "nativeSha256": "241fb314fa1322c4d834b2535f9aaa8612ff4b55a0244ed2de9d5f010b61179a",
+      "nativeIndependentlyViewed": true
+    },
+    {
+      "fixture": "next-two-man.jpg",
+      "source": "artifacts/ranked-supervised-934878c-20261023/operator-20261022T225028565044Z/frames/2026-10-22T23-47-27.434934+00-00.public-cache.jpg",
+      "nativePath": "test/fixtures/repeated-draw-20261023/next-two-man.jpg",
+      "nativeSha256": "2e0c249af106ed8fb514865bcb5bc321c63c83294bffa5d2372f733b62cc9f53",
+      "nativeIndependentlyViewed": true
+    }
+  ],
+  "unalteredOriginalBytes": true,
+  "baselineCombinedHandActionHash": "54d36f0429bf73b13137a02f020423d5cf16f2a34112be312e4d69e4a587cb5d",
+  "regression": "real accept_screencast_frame generations1->1->2 and run duplicate gate; unchanged same draw suppressed, next identical draw must reach reconciliation and recognition. Baseline recognizes once, fixed twice. No OCR/model/browser needed."
+}

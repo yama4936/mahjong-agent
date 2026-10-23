@@ -5215,13 +5215,20 @@ class PythonAutoOperator:
                     evaluation_frame = page.screenshot(animations="disabled")
                     evaluation_captured_at = time.monotonic()
                 evaluation_draw_generation = self.screencast_draw_generation if self.screencast_session else None
-                hand_hash = hashlib.sha256((perceptual_hash(hand) + (perceptual_hash(action_image) if action_image else "")).encode()).hexdigest()
+                hand_identity = perceptual_hash(hand) + (perceptual_hash(action_image) if action_image else "")
+                # Discarding the draw and drawing the same tile next turn can
+                # reproduce both crops exactly. Keep duplicate suppression
+                # within a streamed draw, but let a new draw reach river
+                # reconciliation and recognition even when its pixels match.
+                if evaluation_draw_generation is not None:
+                    hand_identity += f":draw:{evaluation_draw_generation}"
+                hand_hash = hashlib.sha256(hand_identity.encode()).hexdigest()
                 if not self.armed:
                     if hand_hash == self.last_processed_hand:
                         time.sleep(self.args.poll)
                         continue
                     self.armed = True
-                    self.log("rearmed", reason="hand_region_changed")
+                    self.log("rearmed", reason="hand_region_or_draw_generation_changed")
                 if hand_hash == self.last_processed_hand:
                     time.sleep(self.args.poll)
                     continue
