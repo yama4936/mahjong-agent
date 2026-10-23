@@ -2717,6 +2717,7 @@ class PythonAutoOperator:
             self.reset_post_riichi_safety()
             self.ranked_match_finished = False
             self.last_observed_outcome_kind = None
+            self.rank_promotion_stages_advanced = set()
         self.last_ranked_loop_state = state
         self.last_ranked_loop_click_at = now
         self.log("ranked_loop_advanced", state=state, confidence=confidence, clickPoint=point)
@@ -2724,12 +2725,17 @@ class PythonAutoOperator:
 
     def advance_result_screen_once(self, page: Page, state: str, confidence: float) -> bool:
         """Confirm each distinct terminal-result stage exactly once."""
-        if state not in {"round_result", "match_result", "rank_progress", "post_match_reward"} \
+        if state not in {"round_result", "match_result", "rank_progress", "post_match_reward",
+                         "rank_promotion", "rank_certificate"} \
                 or self.result_screen_advanced == state:
             return False
-        y_ratio = 0.92 if state in {"match_result", "rank_progress", "post_match_reward"} else 0.935
-        point = {"x": self.layout["viewport"]["width"] * 0.91,
-                 "y": self.layout["viewport"]["height"] * y_ratio}
+        if state in {"rank_promotion", "rank_certificate"}:
+            point = {"x": 1400 if state == "rank_promotion" else 1525,
+                     "y": 550 if state == "rank_promotion" else 150}
+        else:
+            y_ratio = 0.92 if state in {"match_result", "rank_progress", "post_match_reward"} else 0.935
+            point = {"x": self.layout["viewport"]["width"] * 0.91,
+                     "y": self.layout["viewport"]["height"] * y_ratio}
         page.mouse.click(point["x"], point["y"])
         self.result_screen_advanced = state
         self.log("screen_advanced", state=state, confidence=confidence, clickPoint=point)
@@ -2938,6 +2944,26 @@ class PythonAutoOperator:
                                        screenshot: bytes | None = None) -> bool:
         """Handle verified non-gameplay screens before latency quick gates."""
         self.observe_ranked_match_screen(state)
+        if state in {"rank_promotion", "rank_certificate"}:
+            self.ranked_terminal_matchmaking_seen_at = None
+            # Promotion controls are authorized only by this process's verified
+            # completed ranked match, with all match replays already attached.
+            # A stale stream frame must not click into a later screen.
+            if (confidence >= .95 and screenshot is not None
+                    and getattr(self.args, "ranked_loop", False)
+                    and getattr(self, "ranked_terminal_transition_pending", False)
+                    and getattr(self, "ranked_match_finished", False)
+                    and not getattr(self, "pending_match_replays", [])
+                    and state not in getattr(self, "rank_promotion_stages_advanced", set())
+                    and self.result_screen_advanced != state):
+                current = page.screenshot(animations="disabled")
+                if classify_screen(current, {})[0] == state:
+                    self.advance_result_screen_once(page, state, confidence)
+                    self.rank_promotion_stages_advanced = {
+                        *getattr(self, "rank_promotion_stages_advanced", set()), state,
+                    }
+            self.log("screen_state_bypassed", state=state, confidence=confidence, gameplayClicks=0)
+            return True
         if state == "black_screen":
             if confidence >= .95 and screenshot is not None \
                     and getattr(getattr(self, "args", None), "mode", None) == "force-auto":

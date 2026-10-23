@@ -10,7 +10,7 @@ from PIL import Image, ImageChops, ImageStat
 ScreenState = Literal[
     "login", "account_modal", "session_conflict", "connection_error", "lobby", "ranked_menu", "ranked_room",
     "matchmaking", "loading", "black_screen", "match", "away", "round_result", "match_result", "rank_progress",
-    "post_match_reward", "exit_confirm", "unknown",
+    "post_match_reward", "rank_promotion", "rank_certificate", "exit_confirm", "unknown",
 ]
 
 REFERENCE_FILES: list[tuple[ScreenState, str]] = [
@@ -133,6 +133,30 @@ def _is_rank_progress(image: Image.Image) -> bool:
     board = image.crop((width * 0.50, height * 0.20, width * 0.90, height * 0.85)).convert("RGB")
     dark = _rgb_fraction(board, (("<", 100),) * 3)
     return yellow >= 0.25 and dark >= 0.85
+
+
+@lru_cache(maxsize=3)
+def _promotion_control_reference(filename: str) -> Image.Image:
+    return _open(Path(__file__).resolve().parent.parent / "templates/screens" / filename)
+
+
+def _rank_promotion_state(image: Image.Image) -> ScreenState | None:
+    # These native control crops are calibrated for this viewport. Ignore the
+    # player, rank, date and table, which vary between promotions. A generic
+    # dark overlay or blue/yellow patch is not enough to authorize a click.
+    if image.size != (1920, 1080):
+        return None
+    def matches(box: tuple[int, int, int, int], filename: str) -> bool:
+        return _distance(image.crop(box), _promotion_control_reference(filename)) < .035
+    if matches((1300, 350, 1450, 730), "rank-promotion-scroll.png"):
+        return "rank_promotion"
+    if matches((380, 260, 500, 850), "rank-certificate-heading.png"):
+        # The parchment appears before the close control. Wait through that
+        # reveal; only the independently visible red X/close label may click.
+        return "rank_certificate" if matches(
+            (1495, 120, 1560, 280), "rank-certificate-close.png",
+        ) else "loading"
+    return None
 
 
 def _is_post_match_reward(image: Image.Image) -> bool:
@@ -277,6 +301,9 @@ def classify_screen(
     # normal loading artwork, progress bars and darkened dialogs do not qualify.
     if image.size == (1920, 1080) and all(high <= 8 for _, high in image.getextrema()):
         return "black_screen", 1.0
+    promotion = _rank_promotion_state(image)
+    if promotion is not None:
+        return promotion, 1.0
     if _is_round_result_summary(image):
         return "round_result", 1.0
     if _is_post_match_reward(image):

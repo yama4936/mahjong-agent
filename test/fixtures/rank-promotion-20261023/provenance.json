@@ -1,0 +1,50 @@
+{
+  "sourceCommit": "8eae2aa",
+  "sampleNumber": 57,
+  "promotion": "初心->雀士; nativecertificateindependentlyviewed",
+  "allFramesIndependentlyViewed": true,
+  "frames": [
+    {
+      "fixture": "scroll.png",
+      "source": "artifacts/ranked-supervised-8eae2aa-20261023/operator-20261023T001802480999Z/frames/2026-10-23T00-53-00.642528+00-00.ranked-terminal-transition.png",
+      "sha256": "782c870024c68d99cfcc91d3f7ab6cee8ad7d666c114896ddaa0f12edff33a0d"
+    },
+    {
+      "fixture": "scroll-later.png",
+      "source": "artifacts/promotion-recovery-20261023/certificate-before-click.png",
+      "sha256": "2a3707795b7c515e7d19c78b9134f12f76582e66ff2c36a3dde1690f48f24d5e"
+    },
+    {
+      "fixture": "revealing.png",
+      "source": "artifacts/promotion-recovery-20261023/certificate-after-open-click.png",
+      "sha256": "282326166fb433253297aba1754b2561e946d3307a8abda6ceab37432c8d729d"
+    },
+    {
+      "fixture": "certificate.png",
+      "source": "artifacts/promotion-recovery-20261023/certificate-open-stable.png",
+      "sha256": "90c78e3fc0a12971a1a748f049b11084bf0718ced22727cb22fadca693b316af"
+    }
+  ],
+  "runtimeControlCrops": {
+    "rank-promotion-scroll.png": [
+      1300,
+      350,
+      1450,
+      730
+    ],
+    "rank-certificate-heading.png": [
+      380,
+      260,
+      500,
+      850
+    ],
+    "rank-certificate-close.png": [
+      1495,
+      120,
+      1560,
+      280
+    ]
+  },
+  "cropSource": "scroll.png for scroll, certificate.png for other2; no syntheticvisualchanges",
+  "manualTransitionProof": "ExclusiveUIlease afterallgame/supervisorPIDsabsent, click1400,550 openedscroll, revealno-close thenstablecertificate redcloseX1525,150. No gameplayclicks."
+}

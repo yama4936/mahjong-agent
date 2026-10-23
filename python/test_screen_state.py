@@ -8,6 +8,15 @@ from screen_state import _matches_blocking_dialog, _rgb_fraction, classify_scree
 
 
 class RiichiSelectionScreenTest(unittest.TestCase):
+    def test_native_rank_promotion_stages_require_the_visible_control(self):
+        root = Path(__file__).resolve().parents[1] / "test/fixtures/rank-promotion-20261023"
+        for filename, expected in (("scroll.png", "rank_promotion"),
+                                   ("scroll-later.png", "rank_promotion"),
+                                   ("revealing.png", "loading"),
+                                   ("certificate.png", "rank_certificate")):
+            with self.subTest(filename=filename):
+                self.assertEqual(classify_screen(root / filename, {}), (expected, 1.0))
+
     def test_lost_black_canvas_is_distinct_from_loading_and_reservation(self):
         root = Path(__file__).resolve().parents[1] / "test/fixtures"
         self.assertEqual(classify_screen(root / "black-client-20261021.png", {}), ("black_screen", 1.0))

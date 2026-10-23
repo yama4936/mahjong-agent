@@ -4907,6 +4907,64 @@ class AwayDialogDetectionTest(unittest.TestCase):
             reason="result_transition_missing_verified_ranked_navigation",
         )
 
+    def test_native_promotion_opens_and_closes_once_after_verified_match(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(ranked_loop=True)
+        operator.layout = {"viewport": {"width": 1920, "height": 1080}}
+        operator.ranked_match_finished = True
+        operator.ranked_terminal_transition_pending = True
+        operator.pending_match_replays = []
+        operator.result_screen_advanced = "rank_progress"
+        operator.ranked_terminal_matchmaking_seen_at = time.monotonic() - 60
+        operator.log = Mock()
+        page = Mock()
+        root = FRAME_FIXTURES / "rank-promotion-20261023"
+        for filename, state, point in (("scroll.png", "rank_promotion", (1400, 550)),
+                                       ("certificate.png", "rank_certificate", (1525, 150))):
+            frame = (root / filename).read_bytes()
+            self.assertEqual(classify_screen(frame, {}), (state, 1.0))
+            page.screenshot.return_value = frame
+            for _ in range(2):
+                self.assertTrue(operator.handle_early_non_gameplay_screen(page, state, 1.0, frame))
+            self.assertEqual(page.mouse.click.call_args, call(*point))
+        self.assertEqual(page.mouse.click.call_count, 2)
+        # A reveal/loading frame may clear the ordinary result-stage latch;
+        # it must not make the same promotion control clickable twice.
+        operator.result_screen_advanced = None
+        page.screenshot.return_value = (root / "scroll.png").read_bytes()
+        operator.handle_early_non_gameplay_screen(page, "rank_promotion", 1.0,
+                                                 page.screenshot.return_value)
+        self.assertEqual(page.mouse.click.call_count, 2)
+        self.assertTrue(operator.ranked_terminal_transition_pending)
+        self.assertIsNone(operator.ranked_terminal_matchmaking_seen_at)
+        # Promotion handling must not manufacture verified ranked re-entry.
+        with patch("auto_operator.time.monotonic", return_value=100):
+            self.assertFalse(operator.ranked_terminal_transition_requires_stop("matchmaking"))
+        with patch("auto_operator.time.monotonic", return_value=106):
+            self.assertTrue(operator.ranked_terminal_transition_requires_stop("matchmaking"))
+
+    def test_promotion_controls_refuse_unfinished_or_stale_evidence(self) -> None:
+        frame = (FRAME_FIXTURES / "rank-promotion-20261023/scroll.png").read_bytes()
+        for ranked, finished, pending, replays, fresh in (
+            (False, True, True, [], frame),
+            (True, False, True, [], frame),
+            (True, True, False, [], frame),
+            (True, True, True, [Path("unattached.json")], frame),
+            (True, True, True, [], (FRAME_FIXTURES / "ranked-reservation-20261020.png").read_bytes()),
+        ):
+            with self.subTest(ranked=ranked, finished=finished, pending=pending, replays=replays):
+                operator = PythonAutoOperator.__new__(PythonAutoOperator)
+                operator.args = argparse.Namespace(ranked_loop=ranked)
+                operator.ranked_match_finished = finished
+                operator.ranked_terminal_transition_pending = pending
+                operator.pending_match_replays = replays
+                operator.result_screen_advanced = None
+                operator.log = Mock()
+                page = Mock()
+                page.screenshot.return_value = fresh
+                self.assertTrue(operator.handle_early_non_gameplay_screen(page, "rank_promotion", 1.0, frame))
+                page.mouse.click.assert_not_called()
+
     def test_ranked_result_transition_allows_brief_matchmaking_false_positive(self) -> None:
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
         operator.args = argparse.Namespace(ranked_loop=True)
