@@ -2602,15 +2602,16 @@ class AwayDialogDetectionTest(unittest.TestCase):
             screenshot=str(screenshot),
             captureAgeMs=2300,
             clickBudgetMs=2600,
-            requiredRecognitionWindowMs=2200,
+            requiredRecognitionWindowMs=2000,
         )
 
     def test_ranked_fresh_receipt_runs_after_matching_board_metadata_is_cached(self) -> None:
         """A normal 330--400ms screencast age must not starve short turns.
 
         Board OCR is deliberately deferred on a cold cache.  Once that
-        matching cache is available, a new receipt with the observed CDP
-        delivery age has 2250ms left and must reach the parallel evaluator;
+        matching cache is available, a new receipt with the upper end of the
+        observed 420--547ms CDP delivery age has at least 2050ms left and
+        must reach the parallel evaluator;
         the final click-budget guard remains the authority if it later ages
         out.
         """
@@ -2624,7 +2625,7 @@ class AwayDialogDetectionTest(unittest.TestCase):
         kwargs = dict(dynamic_layout=False, open_melds=None, public_observation=None,
                       force_auto_action_buttons=[], captured_at=10.0)
 
-        with patch("auto_operator.time.monotonic", return_value=10.35):
+        with patch("auto_operator.time.monotonic", return_value=10.547):
             result = operator.recognize_force_auto_or_defer(screenshot, **kwargs)
 
         self.assertEqual(result, {"status": "decision"})
@@ -2634,6 +2635,32 @@ class AwayDialogDetectionTest(unittest.TestCase):
             call.args[0] == "recognition_deferred_insufficient_click_window"
             for call in operator.log.call_args_list
         ))
+
+    def test_ranked_receipt_just_beyond_admission_age_defers(self) -> None:
+        """The relaxed start rule admits the measured range, not stale frames."""
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(mode="force-auto", board_metadata=False,
+                                           force_auto_click_budget_ms=2600)
+        operator.log = Mock()
+        operator.recognize_resident = Mock(side_effect=AssertionError("late recognition started"))
+        screenshot = Path("/tmp/beyond-ranked-admission.jpg")
+
+        # 601ms old leaves 1999ms: below the 2000ms recognition admission
+        # window.  The final click guard remains unchanged and would reject
+        # any later decision that actually consumes the 2600ms budget.
+        with patch("auto_operator.time.monotonic", return_value=10.601):
+            self.assertIsNone(operator.recognize_force_auto_or_defer(
+                screenshot, captured_at=10.0,
+            ))
+
+        operator.recognize_resident.assert_not_called()
+        operator.log.assert_called_once_with(
+            "recognition_deferred_insufficient_click_window",
+            screenshot=str(screenshot),
+            captureAgeMs=601,
+            clickBudgetMs=2600,
+            requiredRecognitionWindowMs=2000,
+        )
 
     def test_ranked_click_budget_stops_after_three_consecutive_expiries(self) -> None:
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
