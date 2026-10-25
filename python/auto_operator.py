@@ -49,6 +49,15 @@ BOARD_STATE_REGIONS = (
     (865, 373, 888, 470), (80, 120, 310, 190),
 )
 
+# A 2600ms ranked click budget includes the physical pre-click validation and
+# mouse dispatch, not merely recognition.  Live measurements show that the
+# resident hand worker plus the final evaluator can take a little over 2.2s
+# on a cache miss.  Do not start that expensive path from an already aging
+# screencast receipt: wait for the next receipt instead.  This is deliberately
+# a *start* admission rule, separate from (and stricter than) the final
+# fail-closed click guard.
+FORCE_AUTO_MIN_RECOGNITION_WINDOW_MS = 2400
+
 
 def board_state_signature(frame: bytes) -> tuple[Image.Image, ...]:
     """Capture stable score/round HUD regions, excluding the draw counter."""
@@ -1601,6 +1610,20 @@ class PythonAutoOperator:
             return None
         return max(0, round((time.monotonic() - captured_at) * 1000))
 
+    def force_auto_has_recognition_window(self, captured_at: float | None) -> bool:
+        """Whether a ranked receipt has enough time left for expensive work.
+
+        A missing timestamp remains eligible because the final click guard is
+        the authority in that case.  The short-window admission applies only
+        to the 2600ms ranked mode; longer friend-match functional runs retain
+        their normal recognition path.
+        """
+        budget = self.force_auto_click_budget_ms()
+        if budget is None or budget > FORCE_AUTO_MIN_RECOGNITION_WINDOW_MS + 200:
+            return True
+        age_ms = self.force_auto_capture_age_ms(captured_at)
+        return age_ms is None or budget - age_ms >= FORCE_AUTO_MIN_RECOGNITION_WINDOW_MS
+
     def require_force_auto_click_budget(
         self, captured_at: float | None, *, phase: str,
     ) -> None:
@@ -2092,6 +2115,39 @@ class PythonAutoOperator:
         dynamic-layout recovery path repeats OCR and hand recognition on the
         same aging frame even when the hand geometry was never at fault.
         """
+        captured_at = kwargs.get("captured_at")
+        if not self.force_auto_has_recognition_window(captured_at):
+            # In ranked play, doing OCR/recognition/evaluation here can only
+            # reach execute() after its 2600ms freshness budget.  Do not turn
+            # a harmless old receipt into a pre-click expiry (and eventually
+            # a three-expiry safety stop); wait for a newer streamed receipt.
+            self.last_processed_hand = None
+            self.armed = True
+            self.log(
+                "recognition_deferred_insufficient_click_window",
+                screenshot=str(screenshot),
+                captureAgeMs=self.force_auto_capture_age_ms(captured_at),
+                clickBudgetMs=self.force_auto_click_budget_ms(),
+                requiredRecognitionWindowMs=FORCE_AUTO_MIN_RECOGNITION_WINDOW_MS,
+            )
+            return None
+        if getattr(self.args, "board_metadata", False) \
+                and self.force_auto_click_budget_ms() is not None \
+                and self.force_auto_click_budget_ms() <= FORCE_AUTO_MIN_RECOGNITION_WINDOW_MS + 200 \
+                and self.cached_board_metadata(screenshot) is None:
+            # Never run synchronous scoreboard OCR on a short ranked turn.
+            # Queue it independently, then recognize a fresh frame only once
+            # the matching HUD cache is available.
+            self.schedule_board_metadata(screenshot.read_bytes())
+            self.last_processed_hand = None
+            self.armed = True
+            self.log(
+                "recognition_deferred_board_metadata_refresh",
+                screenshot=str(screenshot),
+                captureAgeMs=self.force_auto_capture_age_ms(captured_at),
+                clickBudgetMs=self.force_auto_click_budget_ms(),
+            )
+            return None
         try:
             if getattr(self.args, "board_metadata", False):
                 return self.recognize_force_auto_parallel(screenshot, **kwargs)
@@ -2227,30 +2283,36 @@ class PythonAutoOperator:
             # Isolated frame-state probes construct the operator without its
             # background worker; keep their direct OCR path intact.
             return recognize_board(screenshot)
-        self.poll_board_metadata()
-        frame = screenshot.read_bytes()
-        cache = self.board_metadata_cache
-        if cache:
-            age_ms = round((time.monotonic() - cache["capturedAt"]) * 1000)
-            if age_ms <= 8000 and board_state_signature_matches(
-                board_state_signature(frame), cache["signature"],
-            ):
-                self.log("board_metadata_cache_applied", screenshot=str(screenshot),
-                         source=cache["screenshot"], ageMs=age_ms)
-                return cache["metadata"]
+        cached = self.cached_board_metadata(screenshot)
+        if cached is not None:
+            return cached
         if self.board_metadata_thread and self.board_metadata_thread.is_alive():
             self.board_metadata_thread.join(timeout=0.3)
-            self.poll_board_metadata()
-            cache = self.board_metadata_cache
-            if cache and round((time.monotonic() - cache["capturedAt"]) * 1000) <= 8000 \
-                    and board_state_signature_matches(board_state_signature(frame), cache["signature"]):
-                self.log("board_metadata_cache_applied", screenshot=str(screenshot),
-                         source=cache["screenshot"], ageMs=round((time.monotonic() - cache["capturedAt"]) * 1000))
-                return cache["metadata"]
+            cached = self.cached_board_metadata(screenshot)
+            if cached is not None:
+                return cached
             if self.board_metadata_thread.is_alive():
                 raise RetryableSafetyAbort("board metadata refresh in progress")
         with self.board_metadata_ocr_lock:
             return recognize_board(screenshot)
+
+    def cached_board_metadata(self, screenshot: Path) -> dict[str, Any] | None:
+        """Return only a matching, recent HUD cache; never start OCR here."""
+        if not hasattr(self, "board_metadata_lock"):
+            return None
+        self.poll_board_metadata()
+        cache = self.board_metadata_cache
+        if not cache:
+            return None
+        age_ms = round((time.monotonic() - cache["capturedAt"]) * 1000)
+        if age_ms > 8000:
+            return None
+        frame = screenshot.read_bytes()
+        if not board_state_signature_matches(board_state_signature(frame), cache["signature"]):
+            return None
+        self.log("board_metadata_cache_applied", screenshot=str(screenshot),
+                 source=cache["screenshot"], ageMs=age_ms)
+        return cache["metadata"]
 
     def reset_post_riichi_safety(self) -> None:
         self.post_riichi_safety_generation = getattr(self, "post_riichi_safety_generation", 0) + 1

@@ -2579,6 +2579,32 @@ class AwayDialogDetectionTest(unittest.TestCase):
             self.assertEqual(operator.force_auto_capture_age_ms(10.0), 2601)
             self.assertIsNone(operator.force_auto_capture_age_ms(None))
 
+    def test_ranked_stale_receipt_defers_before_expensive_recognition(self) -> None:
+        """An aging 2600ms receipt must not enter OCR/evaluation then expire."""
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(mode="force-auto", board_metadata=False,
+                                           force_auto_click_budget_ms=2600)
+        operator.log = Mock()
+        operator.recognize_resident = Mock(side_effect=AssertionError("late recognition started"))
+        screenshot = Path("/tmp/stale-ranked-receipt.jpg")
+
+        # Only 300ms remain, far below the measured recognition + pre-click
+        # window.  This must defer without calling the evaluator path that
+        # would otherwise reach before_pre_click_validation too late.
+        with patch("auto_operator.time.monotonic", return_value=12.3):
+            self.assertIsNone(operator.recognize_force_auto_or_defer(
+                screenshot, captured_at=10.0,
+            ))
+
+        operator.recognize_resident.assert_not_called()
+        operator.log.assert_called_once_with(
+            "recognition_deferred_insufficient_click_window",
+            screenshot=str(screenshot),
+            captureAgeMs=2300,
+            clickBudgetMs=2600,
+            requiredRecognitionWindowMs=2400,
+        )
+
     def test_ranked_click_budget_stops_after_three_consecutive_expiries(self) -> None:
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
         operator.args = argparse.Namespace(force_auto_click_budget_ms=2600, ranked_loop=True)
