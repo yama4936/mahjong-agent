@@ -4186,7 +4186,9 @@ class AwayDialogDetectionTest(unittest.TestCase):
         operator.hand_clip = hand_clip
         operator.river_clip = {"x": 740, "y": 520, "width": 430, "height": 300}
         operator.cached_open_melds = 3
-        operator.pending_post_call_discard = True
+        # A later compact-hand discard needs the same selected-tile anchor,
+        # even when it did not immediately follow a call.
+        operator.pending_post_call_discard = False
         operator.screencast_session = Mock()
         operator.latest_screencast_frame = settled_full
         operator.screencast_draw_generation = 23

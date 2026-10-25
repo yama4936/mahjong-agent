@@ -4304,7 +4304,8 @@ class PythonAutoOperator:
         )
         if (
             same_draw_generation
-            and getattr(self, "pending_post_call_discard", False)
+            and trusted_open_melds > 0
+            and needs_tile_click
             and has_dynamic_click_point
             and evaluated_full is not None
             and current_streamed_full is not None
