@@ -2400,6 +2400,7 @@ class AwayDialogDetectionTest(unittest.TestCase):
             operator.screen_references = {}
             operator.screencast_session = Mock()
             operator.latest_screencast_frame = frame
+            operator.latest_screencast_captured_at = 123.456
             operator.screencast_sequence = 1
             operator.screencast_draw_occupied = False
             operator.screencast_draw_generation = 0
@@ -2421,6 +2422,7 @@ class AwayDialogDetectionTest(unittest.TestCase):
             operator.resume_if_away = Mock(return_value=False)
             operator.advance_ranked_loop = Mock(return_value=False)
             operator.recognize_resident = Mock(return_value={"status": "not_ready"})
+            operator.evaluate = Mock(return_value={"status": "not_ready"})
             operator.force_auto_reaction_fallback = Mock(return_value=None)
             operator.log = Mock()
             page = Mock()
@@ -2430,6 +2432,10 @@ class AwayDialogDetectionTest(unittest.TestCase):
                 operator.run(page)
 
             operator.recognize_resident.assert_called_once()
+            # A self-turn evaluator must age the same streamed frame that
+            # supplied recognition.  Omitting this causes a full default
+            # evaluator budget to run against an already-old ranked frame.
+            self.assertEqual(operator.evaluate.call_args.kwargs["captured_at"], 123.456)
             # The two loop passes establish the stable streamed draw.  The
             # decision pass must reuse that gate's classification rather than
             # classifying the same bytes again in the full-screen branch.

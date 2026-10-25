@@ -5593,12 +5593,18 @@ class PythonAutoOperator:
                     else:
                         self.cached_concealed_tiles = None
                         recognition = self.recognize_resident(screenshot_path)
-                    evaluation = self.evaluate(screenshot_path, pending_discard, public_observation, recognition)
+                    evaluation = self.evaluate(
+                        screenshot_path, pending_discard, public_observation, recognition,
+                        captured_at=evaluation_captured_at,
+                    )
                 else:
                     recognition = self.recognize_resident(
                         screenshot_path, concealed_only=bool(pending_discard),
                     )
-                    evaluation = self.evaluate(screenshot_path, pending_discard, public_observation, recognition)
+                    evaluation = self.evaluate(
+                        screenshot_path, pending_discard, public_observation, recognition,
+                        captured_at=evaluation_captured_at,
+                    )
                 if evaluation.get("status") != "reaction_prompt":
                     reaction_fallback = self.force_auto_riichi_kan_fallback(screenshot_path, evaluation) \
                         or self.force_auto_reaction_fallback(screenshot_path)
