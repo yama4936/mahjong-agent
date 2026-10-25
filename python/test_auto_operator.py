@@ -4293,6 +4293,47 @@ class AwayDialogDetectionTest(unittest.TestCase):
         image.save(output, format="PNG")
         self.assertFalse(is_away_resume_dialog(output.getvalue(), viewport))
 
+    def test_terminal_latch_allows_verified_away_resume_before_unknown_wait(self) -> None:
+        """A terminal result latch cannot hide the strict away-dialog recovery."""
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(resume_away=True)
+        operator.layout = {"viewport": {"width": 1920, "height": 1080}}
+        operator.round_terminal_latched = True
+        operator.round_terminal_result_observed = True
+        operator.round_terminal_unknown_since = 123.0
+        operator.resume_if_away = Mock(return_value=True)
+        operator.log = Mock()
+        page = Mock()
+
+        self.assertTrue(operator.wait_for_round_terminal(page, b"away-frame", "unknown"))
+
+        operator.resume_if_away.assert_called_once_with(page, b"away-frame")
+        self.assertIsNone(operator.round_terminal_unknown_since)
+        operator.log.assert_called_once_with("round_terminal_away_resumed", gameplayClicks=0)
+
+    def test_terminal_latch_unknown_screen_stops_after_bounded_wait(self) -> None:
+        """A non-away unknown modal is evidence-preserved, never polled forever."""
+        with tempfile.TemporaryDirectory() as directory:
+            operator = PythonAutoOperator.__new__(PythonAutoOperator)
+            operator.args = argparse.Namespace(resume_away=True)
+            operator.layout = {"viewport": {"width": 1920, "height": 1080}}
+            operator.frames = Path(directory)
+            operator.round_terminal_latched = True
+            operator.round_terminal_result_observed = True
+            operator.round_terminal_unknown_since = None
+            operator.resume_if_away = Mock(return_value=False)
+            operator.log = Mock()
+            page = Mock()
+            with patch("auto_operator.time.monotonic", side_effect=[100.0, 130.1]):
+                self.assertTrue(operator.wait_for_round_terminal(page, b"unknown", "unknown"))
+                with self.assertRaisesRegex(RuntimeError, "unknown screen"):
+                    operator.wait_for_round_terminal(page, b"unknown", "unknown")
+            stops = [entry for entry in operator.log.call_args_list
+                     if entry.args == ("round_terminal_unknown_screen_stop",)]
+            self.assertEqual(len(stops), 1)
+            self.assertTrue(Path(stops[0].kwargs["screenshot"]).exists())
+            self.assertEqual(stops[0].kwargs["gameplayClicks"], 0)
+
     def test_local_discard_requires_explicit_flag_and_safe_discard(self) -> None:
         evaluation = {"decision": {"recommendedAction": "discard", "confidence": 0.55, "safety": {"allowed": True}}}
         self.assertTrue(local_discard_allowed(argparse.Namespace(allow_local_discard=True, mode="advisor"), evaluation))

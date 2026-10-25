@@ -1475,6 +1475,7 @@ class PythonAutoOperator:
         self.closed_new_round_candidate_frames: set[str] = set()
         self.round_terminal_latched = False
         self.round_terminal_result_observed = False
+        self.round_terminal_unknown_since: float | None = None
         self.round_terminal_recovery: dict[str, Any] | None = None
         # A result overlay may animate into a dark ranked screen that the
         # generic classifier also recognizes as matchmaking.  Do not let a
@@ -2594,6 +2595,7 @@ class PythonAutoOperator:
     def clear_round_terminal_latch(self, source: str) -> None:
         self.round_terminal_latched = False
         self.round_terminal_result_observed = False
+        self.round_terminal_unknown_since = None
         self.round_terminal_recovery = None
         self.closed_new_round_candidate_frames = set()
         self.ranked_terminal_transition_pending = False
@@ -2604,6 +2606,15 @@ class PythonAutoOperator:
         """Keep win overlays noninteractive; recover only a verified later hand."""
         if not getattr(self, "round_terminal_latched", False):
             return False
+        # Result animations normally own this latch, but a long terminal wait
+        # can also reveal the independently verified away/resume dialog.  Do
+        # not let the latch hide that dialog behind an ``unknown`` screen
+        # state: its geometry is stricter than screen classification and the
+        # existing resume flow re-observes before any gameplay decision.
+        if self.resume_if_away(page, frame):
+            self.round_terminal_unknown_since = None
+            self.log("round_terminal_away_resumed", gameplayClicks=0)
+            return True
         if getattr(self, "round_terminal_result_observed", False) and state == "match" \
                 and closed_concealed_row_visible(frame, self.layout):
             self.clear_round_terminal_latch("verified_new_round_closed_row")
@@ -2658,6 +2669,23 @@ class PythonAutoOperator:
                              previous=recovery["previous"], current=metadata, gameplayClicks=0)
                     self.clear_round_terminal_latch("verified_new_round_after_black_reload")
                     return False
+        # A result latch must never turn an unclassified modal into an
+        # infinite polling loop.  Give ordinary result fades time to settle,
+        # then retain a screenshot and stop with no gameplay click.
+        if state == "unknown":
+            now = time.monotonic()
+            since = getattr(self, "round_terminal_unknown_since", None)
+            if since is None:
+                self.round_terminal_unknown_since = now
+            elif now - since >= 30:
+                snapshot = self.frames / f"{utc_stamp()}.round-terminal-unknown-stop.png"
+                snapshot.write_bytes(frame)
+                snapshot.chmod(0o600)
+                self.log("round_terminal_unknown_screen_stop", screenshot=str(snapshot),
+                         waitSeconds=round(now - since, 3), gameplayClicks=0)
+                raise RuntimeError("round terminal remained on an unknown screen for 30 seconds")
+        else:
+            self.round_terminal_unknown_since = None
         self.log("round_terminal_wait", screenState=state,
                  resultObserved=getattr(self, "round_terminal_result_observed", False))
         return True
