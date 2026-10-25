@@ -2679,6 +2679,24 @@ class AwayDialogDetectionTest(unittest.TestCase):
         self.assertEqual(stop.kwargs["expiryStreak"], 3)
         self.assertEqual(stop.kwargs["reason"], "three_consecutive_force_auto_click_budget_expiries")
 
+    def test_expired_ranked_optional_call_does_not_stop_the_operator(self) -> None:
+        """A late chi/pon may be safely declined without leaving the match."""
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(force_auto_click_budget_ms=2600, ranked_loop=True)
+        operator.log = Mock()
+
+        with patch("auto_operator.time.monotonic", return_value=12.601):
+            for _ in range(3):
+                with self.assertRaisesRegex(RetryableSafetyAbort, "click budget expired"):
+                    operator.require_force_auto_click_budget(
+                        10.0, phase="before_reaction_call_click",
+                    )
+
+        self.assertEqual(getattr(operator, "ranked_click_budget_expiry_streak", 0), 0)
+        self.assertFalse(getattr(operator, "ranked_click_budget_safety_stop_requested", False))
+        self.assertFalse(any(call.args[0] == "ranked_click_budget_safety_stop"
+                             for call in operator.log.call_args_list))
+
     def test_non_ranked_click_budget_expiry_does_not_request_safety_stop(self) -> None:
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
         operator.args = argparse.Namespace(force_auto_click_budget_ms=2600, ranked_loop=False)

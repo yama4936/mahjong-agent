@@ -1655,7 +1655,14 @@ class PythonAutoOperator:
             captureAgeBeforeDecisionMs=capture_age_ms,
             decisionBudgetMs=max(0, budget - capture_age_ms),
         )
-        if getattr(getattr(self, "args", None), "ranked_loop", False):
+        # A stale discard or win decision means the ranked action pipeline is
+        # persistently unsafe and must eventually stop.  A call is different:
+        # declining an expired chi/pon is the safe legal outcome.  Counting
+        # repeated re-observations of that *same* transient call prompt as
+        # ranked failures turns a conservative no-click into an away-dialog
+        # auto-discard for the rest of the live match.
+        is_expired_optional_call = phase == "before_reaction_call_click"
+        if getattr(getattr(self, "args", None), "ranked_loop", False) and not is_expired_optional_call:
             streak = getattr(self, "ranked_click_budget_expiry_streak", 0) + 1
             self.ranked_click_budget_expiry_streak = streak
             if streak >= 3:
