@@ -52,11 +52,16 @@ BOARD_STATE_REGIONS = (
 # A 2600ms ranked click budget includes the physical pre-click validation and
 # mouse dispatch, not merely recognition.  Live measurements show that the
 # resident hand worker plus the final evaluator can take a little over 2.2s
-# on a cache miss.  Do not start that expensive path from an already aging
-# screencast receipt: wait for the next receipt instead.  This is deliberately
-# a *start* admission rule, separate from (and stricter than) the final
-# fail-closed click guard.
-FORCE_AUTO_MIN_RECOGNITION_WINDOW_MS = 2400
+# on a cold cache miss.  Once the matching board-metadata cache is available,
+# live screencast receipts arrive 330--400ms after CDP received their pixels;
+# demanding 2400ms *after* that receipt rejected every otherwise fresh frame.
+# Leave room for the measured recognition path, but let the final fail-closed
+# click guard decide any boundary case.  This is deliberately a *start*
+# admission rule, separate from that final guard.
+FORCE_AUTO_MIN_RECOGNITION_WINDOW_MS = 2200
+# This keeps the ranked fast path distinct from 300+0 friend-match regression
+# runs, whose 8000ms budget may safely wait for synchronous metadata work.
+FORCE_AUTO_SHORT_CLICK_BUDGET_MAX_MS = 2600
 
 
 def board_state_signature(frame: bytes) -> tuple[Image.Image, ...]:
@@ -1619,7 +1624,7 @@ class PythonAutoOperator:
         their normal recognition path.
         """
         budget = self.force_auto_click_budget_ms()
-        if budget is None or budget > FORCE_AUTO_MIN_RECOGNITION_WINDOW_MS + 200:
+        if budget is None or budget > FORCE_AUTO_SHORT_CLICK_BUDGET_MAX_MS:
             return True
         age_ms = self.force_auto_capture_age_ms(captured_at)
         return age_ms is None or budget - age_ms >= FORCE_AUTO_MIN_RECOGNITION_WINDOW_MS
@@ -2133,7 +2138,7 @@ class PythonAutoOperator:
             return None
         if getattr(self.args, "board_metadata", False) \
                 and self.force_auto_click_budget_ms() is not None \
-                and self.force_auto_click_budget_ms() <= FORCE_AUTO_MIN_RECOGNITION_WINDOW_MS + 200 \
+                and self.force_auto_click_budget_ms() <= FORCE_AUTO_SHORT_CLICK_BUDGET_MAX_MS \
                 and self.cached_board_metadata(screenshot) is None:
             # Never run synchronous scoreboard OCR on a short ranked turn.
             # Queue it independently, then recognize a fresh frame only once
