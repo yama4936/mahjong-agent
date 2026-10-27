@@ -1,0 +1,2013 @@
+{
+  "b66d11f097f6087c": {
+    "imageHash": "a6c149ea1245ae4628e0af47e8ee1e3b46d26a3ec24650059e818572f7999f4f",
+    "reviewedAt": "2026-10-27",
+    "status": "partial",
+    "yaku": [
+      {
+        "name": "立直",
+        "han": 1
+      },
+      {
+        "name": "断么九",
+        "han": 1
+      }
+    ],
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "e39844f142b35537": {
+    "imageHash": "01ebbc267816e3ca2e51664d14a84ad20900cb9f100edf47be1e9013b34b8aed",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "fc7258f8a47e8df1": {
+    "imageHash": "66665031b6f300f5b05571f079f67b2fdbd94de523dbc37e2cf7c5da2f1899dd",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "4284a49a2d1e49a8": {
+    "imageHash": "be371b52591a43318694f6023ee4e3ce18e16f06fa2865fbf05cbcdd4aa021f7",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "86cd9c73f882d65c": {
+    "imageHash": "4a650845aa56abf0e6a4e346d3c7d856dba1b3c56a894c7ebce014dcc890e484",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "ca55f9dddb375c56": {
+    "imageHash": "471a0a3a5fb4b61090ca0b5774475c73fedf72cc6a5a19cac8ceaa368e7a3d4e",
+    "reviewedAt": "2026-10-27",
+    "status": "partial",
+    "yaku": [
+      {
+        "name": "立直",
+        "han": 1
+      }
+    ],
+    "bonus": [
+      {
+        "name": "裏ドラ",
+        "han": 0
+      }
+    ],
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "d5fc25053c95a092": {
+    "imageHash": "a5b1980788df7838f7a18039e25bbe5e3f46b5757f1ba0b11dd07abfdacfb466",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "0b1d4bf4b8f242cd": {
+    "imageHash": "f85452ae68a5f8a13e9be0e283009ac97405d2022baeb7792b12fa69e90cf44e",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "0a5919ab0445fbfb": {
+    "imageHash": "e7073b103cf3c216a6a819bc9d98b7565356ffcb42024b0716471cdd641c15b6",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "4dbcb904e40a1488": {
+    "imageHash": "a0323a6b9ddcfc21a737375b29793e2f6b9b49ddd480864659ef79baf23e5d4f",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "a7cd2f09d43e6034": {
+    "imageHash": "1e3497448d8772d499e78f296b1a8d144b40d61e601f15d518634f8860c7ac7b",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "883c28d7d7f4652a": {
+    "imageHash": "be26bac49ba13a24faab4e7309d2e8d5eaa4c9ef4a10c2edcb176a15cde61c15",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "b003e405e4d480eb": {
+    "imageHash": "d288c1774beee4a117022e842c19c9aa9b38d50c1de93859011eaadee461d994",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "5abf6652841129b3": {
+    "imageHash": "7ed54feb38df7e3527e787a8eaa17eb61cd4226c2e7484c100a918de36d41ebc",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "f7d7b4cebe0443b1": {
+    "imageHash": "00dfa802d57840642691f9a7bd01fdd9f2923df521a0e132db7ccb78b200b2bd",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "51fd21769305ee45": {
+    "imageHash": "3ab0f069af6ff9888c6afde72f2b7dacf870a5fab4bbbc33c4362809179c4fea",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "97bcadaf696ada56": {
+    "imageHash": "f0c3fc51a4e6f2a42df81f551cb99a73e0d48de16ed8a4f3a17e36c970f5b54d",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "f1d40dd004af76e4": {
+    "imageHash": "9409b456cf16a39913b704b452f5db654f2390e8db0ef7018d5f255b696f6e8f",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "97e533b6829d9ddd": {
+    "imageHash": "5190b57bebff3039148c5445be706d5ac9496b78b8bd41f1114c128581ed0f58",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "f329ca195f1b89ca": {
+    "imageHash": "b9ad133f2b863352620d25596cc298d0a99edcfbd8120daad099cc9b7f301da8",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "da101cf7d9f85129": {
+    "imageHash": "5bfe2b3b5b1688e270bf4924d255d63943749184e936d3dc6196c9068ae92a3a",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "d74ca00aaaaf7f9e": {
+    "imageHash": "1d125afd284be69495304091bd5f594aa815811adf072e15944537295c4db066",
+    "reviewedAt": "2026-10-27",
+    "status": "partial",
+    "yaku": [
+      {
+        "name": "立直",
+        "han": 1
+      }
+    ],
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "fd683a2f4c25cce5": {
+    "imageHash": "2845c494b2b2eaee2f340fb83d21c93cda5f4e2d9d3f722c8e982a1d72608a27",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "e63469704bb20828": {
+    "imageHash": "05398b605e8b5d6f5b0896ba178bb065c536f90fdc9bb6de1f1c20e38b9a0cfa",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "fd4911271d8e71c2": {
+    "imageHash": "d7b7f45f328307b108b89c966dac8ceb5f78b60aaa94a41a974bebce88a65c89",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "08691bebab259cf5": {
+    "imageHash": "b06111ee44d8dcd0612d1f8fd1a42f04bed9a075685c02ba5032cdd08e0f55fa",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "70664760edfa9f2d": {
+    "imageHash": "06d43d604c45c2cf22ccac2891adcb29c5b7a6abea3b1d591900687708814920",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "fd4d9a317c861259": {
+    "imageHash": "21cd8d44c87ca0704fdf0984678adcc1379522e3210cee736b5c26fbf937ab4a",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "0218ce3a8777082d": {
+    "imageHash": "a9578a677d3ff4ad906bdb565efd930434cb121f48866990d5bcb071bebfe0a2",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "914ed3038c3b15eb": {
+    "imageHash": "b1d4d7fbb5f0cbea418d278b84cdc980771ec91f0e7e67e92cb0ace63d33f510",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "f1a9412eac418348": {
+    "imageHash": "582e725346b38104028672b1a32c160b1d06d33431525d7715f3a7d76e4ffecc",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "9e8a43f75e3f1c4d": {
+    "imageHash": "cbede1390f5abe6676b9e0e89636a274a534545447c0507301744ffee2e4e05a",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "2a85f63197ca6b1d": {
+    "imageHash": "3fe174a097658eb6f2789c195e82af0f6468ad25becfb24b1cb7d12b4c9382b5",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "d5d2999262eb896d": {
+    "imageHash": "ad841577e639ea6679295e8b2e7d052b7d0b4041cf24e90d8620dd6c6c644582",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "8534c48a22d80bcc": {
+    "imageHash": "8772204ec6ac61db7cf48014b45d0e41079a85ed5b1ceacf1cc3886c81fed444",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "c84a633917cc1b51": {
+    "imageHash": "44559bfde875fb6eb2eee7ac7b500fd8b16213cbd9145475eca057cc53f80f08",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "3f5bc0d09163a2d8": {
+    "imageHash": "b0e3a05253eb94bc308b997bd2d9e712c0bb9ee1487f371fd06b73308ed542f9",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "a5e264fda9cbb742": {
+    "imageHash": "db3c9bd53bf724c1a0a11139a134209e177084331887d773732a56b83fac35d5",
+    "reviewedAt": "2026-10-27",
+    "status": "partial",
+    "yaku": [
+      {
+        "name": "立直",
+        "han": 1
+      }
+    ],
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "60f6e17efabd0173": {
+    "imageHash": "8b2a28350e6cbee1755a6a80e361331ab311562fb6eb4c4c66829c694ba30473",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "a141070ea64b6533": {
+    "imageHash": "6104447ea284e5208bd30d8a9456fb722c9026d801d232796e9e6a7f9c70fd99",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "7261b958047fc698": {
+    "imageHash": "7e01a26d6c07c5eead108735637ea7f18726e5630fdc54556a116bec1bb5c042",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "06683f845fc9a98e": {
+    "imageHash": "357c1adff4b1a564f3933467f7d988ee49d434ac2c22ab797802f71048ee2756",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "b1e8d5d9fb8cc34a": {
+    "imageHash": "41092fb238ae6027203dec5d8caf25bad8b1d9422a7ff36a18581f0a0574c997",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "7cd74702d0076fea": {
+    "imageHash": "5f26dfb3ad6b4307401d3c4e2ba8a8bba9473c92e3de2b65236b9d8b62047f7a",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "a15ba10f5b365ef9": {
+    "imageHash": "348ae88332c8ff6ff128436a0ea39d9067a428ccdaf61595392fcba8ea8ecc40",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "bb0e28870b02c943": {
+    "imageHash": "0a7a6f3439addd639fa53bd7d8825faa0d480e40724ec706da0f8dcca04434d3",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "118664a189f5cd9e": {
+    "imageHash": "0616d12e67b78c454e21a6798de3a2be734301ccc4a4d85d5d45ed855af48286",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "a9c16b4c889a4408": {
+    "imageHash": "55d008e673e8327ad2706051697a17fcd3961cac4af2cd15ceec5d280b007c4e",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "44f5cc28b67e64ac": {
+    "imageHash": "eaf678287813ab02c6a9b9fa1b27db39fdbe431213994799a1acd082baa27a15",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "2976b1883643a2b8": {
+    "imageHash": "663ba26ced6d0db5c1c4492b36e147192881684369600131de691da137db5136",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "4dd5452a59751175": {
+    "imageHash": "31338e7feffc78d1ecf69df25207defdfb6d399238902f11ddba0a0921591657",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "b338120003169328": {
+    "imageHash": "5b1d09fe0d1461302fa60e5dd6bf8a964f5e7497007e27518180fd43821739d2",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "ed8976888530f135": {
+    "imageHash": "fb37f5b34f51c1866b2d5acbf15b8e01facf0bddfc33ef7270698ac4bd0436e2",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "1d8354ea970208b9": {
+    "imageHash": "f780c3089457b7f25564833fd6145374be565a2bc2368c4f98814e08e9d8d1f3",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "3efac9ac540b6b75": {
+    "imageHash": "ae7079141591e5de14a6f0a4297d383c18654c5cd22ae1b5a1821e8a40ba7aa1",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "0df10e4aa0b8e9c3": {
+    "imageHash": "421cb983258583272e4a2462e148328bd9e23b2e26543279f399062199374ff3",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "025cca0b05af2828": {
+    "imageHash": "aac652a0268cded5aca57849ca497056247ea5bfea43e229157a72522d06d4cd",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "854039edf235d6b7": {
+    "imageHash": "db2439f1c1353e349d4c2489ed2ae385a6c75e893196fc5065ad051c5b9f984f",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "e13ec1a3f99ee042": {
+    "imageHash": "e4d92aef264616d5b09c3105d4aa4ab8638e6e3d56a4f9438d90d3cccce6b217",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "eec1122ff0bb2fa4": {
+    "imageHash": "ac37e81cc4d3627cbcceab23d97a68e90021ea648d2b4892ac7d771ac6b19448",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "f08e7535e84b58de": {
+    "imageHash": "354ba4b88bd3e764f30e077eb42db586d3a1c842574053037f85c174304753d1",
+    "reviewedAt": "2026-10-27",
+    "status": "partial",
+    "yaku": [
+      {
+        "name": "立直",
+        "han": 1
+      }
+    ],
+    "bonus": [
+      {
+        "name": "赤ドラ",
+        "han": 1
+      }
+    ],
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "1e80bad0f6eb6e1c": {
+    "imageHash": "f5843c24324989ef8e3f3b0c45bb55aa5b2d20d622765288330b09cf7c3caaf6",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "a2b3d1b2c3ef88df": {
+    "imageHash": "e6dff95de2f6ec7d9dd81cfc369fc99b677b1b67d0f271115310f44f8f96b683",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "4c5dd89c9793d2a1": {
+    "imageHash": "6c810482fb7ac7c39b07bf4256026f69ed07d0c005217986ddfd0ca64934574c",
+    "reviewedAt": "2026-10-27",
+    "status": "partial",
+    "yaku": [
+      {
+        "name": "立直",
+        "han": 1
+      }
+    ],
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "dde35aaeabd56026": {
+    "imageHash": "2ccdbbb4a1d4f78f7df1f82935fff4bd27739918404adbbcc48bf3e5efc84ff8",
+    "reviewedAt": "2026-10-27",
+    "status": "partial",
+    "yaku": [
+      {
+        "name": "立直",
+        "han": 1
+      }
+    ],
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "aed616a5d385adc1": {
+    "imageHash": "32dfb378c5fc9d07fd281ed2c3b8f715b2d0a5468afde5e4efc0d0433eebb460",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "16bab19bb58b88f1": {
+    "imageHash": "ab4fe5adbee4ca865ed80e5e03e7731bde54b7b78c6c2d3c3227094c1bc52189",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "28c3e5f5af587501": {
+    "imageHash": "b9f514cb9744b575dc91eb7d2f8a4d0f06418d33ccaa611a72626011394ef0a5",
+    "reviewedAt": "2026-10-27",
+    "status": "partial",
+    "yaku": [
+      {
+        "name": "役牌:自風牌",
+        "han": 1
+      }
+    ],
+    "bonus": null,
+    "observedTotalHan": 1,
+    "observedFu": 30,
+    "points": null
+  },
+  "86b38a7048e3d081": {
+    "imageHash": "c252969a5a2a59b1222af903a747a54a0cd87c0d09bbb9b59bfac846e42caad8",
+    "reviewedAt": "2026-10-27",
+    "status": "partial",
+    "yaku": [
+      {
+        "name": "立直",
+        "han": 1
+      }
+    ],
+    "bonus": [
+      {
+        "name": "赤ドラ",
+        "han": 1
+      }
+    ],
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "77e67bc313a32635": {
+    "imageHash": "349088b6be9168a1dcb9c723cf6800d67a6be089b04750bea280eebf04ec57f6",
+    "reviewedAt": "2026-10-27",
+    "status": "partial",
+    "yaku": [
+      {
+        "name": "立直",
+        "han": 1
+      }
+    ],
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "e03770c30373470f": {
+    "imageHash": "d85b6358c49f46f2b7043196a37e4a61f3d761dcf9460d1ac281db411431b387",
+    "reviewedAt": "2026-10-27",
+    "status": "partial",
+    "yaku": [
+      {
+        "name": "立直",
+        "han": 1
+      },
+      {
+        "name": "門前清自摸和",
+        "han": 1
+      }
+    ],
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "b865addfeb343f0b": {
+    "imageHash": "46ee47d46fff468ca058e60c4e9399bd1b0bbdf93bed6428641f36b84b8b5f53",
+    "reviewedAt": "2026-10-27",
+    "status": "partial",
+    "yaku": [
+      {
+        "name": "立直",
+        "han": 1
+      }
+    ],
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "27b2759c4808bee8": {
+    "imageHash": "dfffc5ba90cfd53094d08fffe34030684bd3cfd9c0eb0bdbe3376cde36653e8b",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "20ef1d05e0c71248": {
+    "imageHash": "abd8b8b811110c862eb9c8cd39edf0bee9531033d34a607efa19a13fff9aea98",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "d328af754f9b2cc4": {
+    "imageHash": "20d3ecbaffb49ba49af56a9f2ab90cce76be39470af1aeb889a97e83dc2b28e8",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "d853cc558f601244": {
+    "imageHash": "d447abc987b28ea0b844b101915344466e04968a5c2cef112acdf258d5cc3a23",
+    "reviewedAt": "2026-10-27",
+    "status": "partial",
+    "yaku": [
+      {
+        "name": "立直",
+        "han": 1
+      },
+      {
+        "name": "一盃口",
+        "han": 1
+      }
+    ],
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "8b406dbb4e3cad5e": {
+    "imageHash": "9282fb03105c062ad0b25645b4408747406d76022872222b68ddc080c2dfe425",
+    "reviewedAt": "2026-10-27",
+    "status": "partial",
+    "yaku": [
+      {
+        "name": "立直",
+        "han": 1
+      }
+    ],
+    "bonus": [
+      {
+        "name": "ドラ",
+        "han": 1
+      },
+      {
+        "name": "裏ドラ",
+        "han": 0
+      }
+    ],
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "efb9fad850112cb6": {
+    "imageHash": "a92724dbfaa8b745e2db54b5361194b30697ae9d8ec2ae50db6419f09ee19b4c",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "5803293065aee32a": {
+    "imageHash": "1579a139b6b734eeeba66a3c1efa63875674fe185a2789758ec6eef3824552e3",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "c39295bef7d94e71": {
+    "imageHash": "970ee1ba91c4b7775b4530a1c72fc69f3a8e7de69c22a143501b5a9376e8d898",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "57afa0ff7c6e33b8": {
+    "imageHash": "0750055ad2b4cb3a5fddae24eb06155fa153f9143d560a0c06d877e127956208",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "f76324a7afae1e2a": {
+    "imageHash": "08376728b79a88e3e66768ca5231bfd3096387e8714d4c688262079cbfaebc54",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "5a954e10de40fa1d": {
+    "imageHash": "60ff10522fab74946d2dd40ff458bf4777614dac4faa54b3a6d73414dab4a8e1",
+    "reviewedAt": "2026-10-27",
+    "status": "partial",
+    "yaku": [
+      {
+        "name": "立直",
+        "han": 1
+      }
+    ],
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "43638553e990e50e": {
+    "imageHash": "3a52b97ae8218b7b0a06ef9884671414e54442d9beedeed5bb8d531c44c52f49",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "360b1466af3a0877": {
+    "imageHash": "b9fb051b93e51f9ced5e5823c949f35d128091eeb5a67a7717d7c334760d9211",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "1ae0fe283592d70a": {
+    "imageHash": "d16e2f845d93fe4b35dcb9a84a61910f0eacdb104b0734492c797a1053301f9b",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "0028c6927f851506": {
+    "imageHash": "a49d6273c9ad57100d253bfdd834119feb0b77999a6bf55f670811cc05fda469",
+    "reviewedAt": "2026-10-27",
+    "status": "partial",
+    "yaku": [
+      {
+        "name": "役牌:場風牌",
+        "han": 1
+      }
+    ],
+    "bonus": [
+      {
+        "name": "赤ドラ",
+        "han": 1
+      }
+    ],
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "2fda7cc28f45f401": {
+    "imageHash": "0a005ff0868a5664d156871691fab94e7e5c6e9e7928ca3f5c78f770351d1b0e",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "d188be5505288941": {
+    "imageHash": "6cc30758225a871dc279c5e69c272d0a21d311c28453e5ba439158a02b9fd81e",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "594d33ba7edd6d15": {
+    "imageHash": "c63ef8b6108375dbe7bd91242025584a88eb7593ad56205a19d6c9648248449b",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "b7fa261b31678cc2": {
+    "imageHash": "fa9a58294d21d5da478e7bb7fe08329804b196fd16e1f5184ed287e3dbca42a2",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "6560bd4c889cba92": {
+    "imageHash": "aef5b25fe538b1ff1c65633d1db5ef33fc93fb526195b7111f5ad649bab0b609",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "058c1c43a89b19d5": {
+    "imageHash": "a3b0f92d7e94394aa9e56aa6ae7475df2f10b60b724686d78e5b91d9d2e07358",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "32ceca6681200fea": {
+    "imageHash": "d9d26c7cffe40902dea01c3abafc2dbd0e59a821737ded56e6e0364e0d55b0ad",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "8a9191988b1cc678": {
+    "imageHash": "0676bc82ba8326bc05be2ac45caf0fa07069622285735c973edf65a4df581dfe",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "cea938106f6e29f9": {
+    "imageHash": "7c78821662068133f47ecfc1d3d7d8d749d4261ecc791dd31e835eea59a72f09",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "8c8fb2d1fc7bace0": {
+    "imageHash": "f003125b06324a507120ff9e42915ed22516e0b893fbdd741e25366198fe0642",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "a73ec713a049f8cf": {
+    "imageHash": "3b7f727984ada679017cb4ce171544f39966342ed2f414d06157c5181c863e4c",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "77da64145f641ffc": {
+    "imageHash": "9423bd2fea5d0062a94cdbc797f74a38c99a8de9f1fd631680d4cf051f30297c",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "3b69b19d97ad4216": {
+    "imageHash": "b0a67392bff0305c3dc761d1375bdc4159f8cbf3b902ed636ca8835ddccf5e0e",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "96503332cf063e2f": {
+    "imageHash": "e3190ab95d7fa663c1db5cb37e67252e866a550a23f979d6abe3c5f3e930f0fe",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "ae23d883dfa997d5": {
+    "imageHash": "5e2cd86b6f7181428fb225706bb8a21a915f7aed6785d5aa039174f0fbaa7853",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "7875f6f4eab6728c": {
+    "imageHash": "ecd90ebb8242017e7cab7fe39568aae7f62079858815ea5e89a67341f11b8aba",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "180a3a54b0957eb6": {
+    "imageHash": "f8544a0ffd685e723e7c5785b00ec8fb32eb55d79b539f9c6010ca4f0a54a26e",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "377e5be04ed651dd": {
+    "imageHash": "2d6021e7f962f11af52d571dc4eb6a42d0a5ec9b638c3c231d7e8d6296f20650",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "2f4e8f512ef9c35c": {
+    "imageHash": "d78629b10ba754b05fc29f41f1eca3d0c3899070cdac3b60dcadde5051848285",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "550ad685403b4a3d": {
+    "imageHash": "ff926db8da7669384b44d8c8aafe34e2459c9dfaea56fb7e8640ea9ca340fdee",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "73f0edf91427009f": {
+    "imageHash": "6febdfb8c55830548f5c7e68a15514332dd8aa79b70ca0ee7726cff65ae1b4c9",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "f8a6ea0017216a65": {
+    "imageHash": "a2d8fda291b01d99568b4d9a97360cf7e5dfcd3b616eadbad0cf8fa58e06cadf",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "004ad3dca72865da": {
+    "imageHash": "a0ed2b2ed766eb47a624239cc2173a489c6e3bba458f84c0b8f933b5d6731e0f",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "8d36761605414b2d": {
+    "imageHash": "74517b7f4988dfaaaae5841fd071255c73bcb046f76e5ebfee2d512062678ead",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "4f99326d2a26d1a3": {
+    "imageHash": "11e79ffa9a77c941b5507b0748d320233159421466414f186e95f9febf781b67",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "652a1cd621b0cda2": {
+    "imageHash": "a2b5e1eab4b0f5d8d7cb41378c18ecc323ff66d7ebbf1e1becdc6ac92be062cd",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "2710c0696c839119": {
+    "imageHash": "3ae6d131f1bfdb7852254f33ddde7a6f18a5429b2fbe90b2f4a63e1cda908650",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "df1d78cd7957e2c5": {
+    "imageHash": "d4df7cb8eb905ced54a98570f51f90add9a47c1e4448116a804993877aef216d",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "23ef2eff98e8bfb6": {
+    "imageHash": "c8cc4f22dbc78083e2d997167bc28109747f50da9dcd767af13df0b76519af5d",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "702cbd52b4755b47": {
+    "imageHash": "bb0ad5305e29c6df10161ab613b8b00ecff1813b82e275e945f364352827c2d4",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "40df28d3431c7cc1": {
+    "imageHash": "4987b340f87f214a3b624118bbc27bd74c152eae03d3c70d0e088d05e7504b4e",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "981045b285fe0117": {
+    "imageHash": "cb197f3595376388a94b4b4b0504872cf47602c828c09c95d95b4860417693aa",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "d2225afaa99b9d2c": {
+    "imageHash": "229e3ff94479827f9f911afce6cae0f2ba285b1d68b1cfff3d0ec6e8965a33b4",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "272a4b90b5bab369": {
+    "imageHash": "cbe0ee58f7f791cfa3ce8aedf28cb3fe230c3a1d6959fbb6c99a62fb3e88d647",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "c91a15f9088d6e52": {
+    "imageHash": "ad040125fa87e1e60ddd6de51990143e5335e98ee1799cff17020a4e115ea38d",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "848638c13a268e47": {
+    "imageHash": "d5c54a15f0ee18b11b4bbd6dbfea7f74743255e32c256ac49f2593ef98474818",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "7f345ecc22749740": {
+    "imageHash": "c7a39b2a22ee5623d3cdd2e5df8898e620d4058d145f27f03391d4abe2967f79",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "182cfaf7c15ffc40": {
+    "imageHash": "7fa7c66ede99fb3b7f1aa420f49a2f05dce2e8f6118945e99def644d13e68ad0",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "cbcb1f72d83a2fd7": {
+    "imageHash": "7beead43f2bf4925284cf6a3b3b8921d8d4f5b3ed34aa42ca5b7d090866e7d61",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "9a9357502a0c9e44": {
+    "imageHash": "96921db125aa3c62bf63ab9925cbd86772dd8acd63bf7e3efc5b507b66cb71d2",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "7374448917538009": {
+    "imageHash": "53be35326ae455ee10c27cf73e5aea822479c29fcab1ed746c79095d727271fe",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "317eac4f04114a8e": {
+    "imageHash": "9d8ad66fb846f0174f52c194f2a14d2b0493ce8390ab3ca07943f71b30066227",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "36fbeb5d3ecea973": {
+    "imageHash": "20fa6e94aba364a844d39b9b2d3df5552710632adf02fbc62b3fc2786533534b",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "a23ef5741f4d2353": {
+    "imageHash": "e4c5c5c46e0f422ab13d6e9a39637993d986a65e2a9a24354affd70f13dbed4f",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "bd141b8a8a5506ca": {
+    "imageHash": "47eec45ad146d336ca8b0f4d67464a62e53eaeeed37fe248c9a243aa5227b088",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "4eeab27476316669": {
+    "imageHash": "89cc9981f1cc5e6118e195b021e70127a5225c6e7041aab2be9db95269fec914",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "11be52121ebd7517": {
+    "imageHash": "8f3b9c4407ef1eb01f6e416b87bc35d982b942995cc2fe337e9185201342b356",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "96f246aec4358c4e": {
+    "imageHash": "27632938a3345f32ac20450452b2683802add15cdb4114bf6e6d30378e58493a",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "461c0a43edbd8dcc": {
+    "imageHash": "6e3bddf931d2b8a1100771c0f29ea9d1087a41de11c8840620493d847eacfc45",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "5f71791df14a16d9": {
+    "imageHash": "797f8faae5441ec03ee5229b1e126247dca05e383adc146f53365f32600a0a60",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "12d91cd103ab8476": {
+    "imageHash": "5f6aedf04461ecd854dc807f5421783483a5eb56890a6fb5e3e80fb8e5fc6f7a",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "ce5e53f5db84f6e0": {
+    "imageHash": "4fcc60392f20fc600b2c7d28c1b694e710b381dc2a181e1f2ca1e6636080f163",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "341260065ded2c91": {
+    "imageHash": "619bb2cb2377b4881bac314836cf64bdeab569c8a10bbc36a7faeb33f0245410",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "ed3d2319c6a2a1f6": {
+    "imageHash": "33b7120588ede00192cd8b707d0442649c5aa4d6dd02b0e677d586fe5f026400",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "9c7b7dbf361e664e": {
+    "imageHash": "272253648e8f604f7e052562693510c8cb266f5d919d8271947489e95ea367c5",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "e068e03377aaec7e": {
+    "imageHash": "7fdd70469e311db3f0a3000b4bde776fe5ddca3dc5d8573ecb3eb2dd15c0bff3",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "f14d2471216c1907": {
+    "imageHash": "2d0e017ea384130b90603674c2221533c15fbdf1d498b557a1c3d103661cdada",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "49e7726cb3be00ed": {
+    "imageHash": "2e1fecbc4be7da2f466e821a1eb780439bcebd3f9001c99ea22922274341d2c1",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "d098e139a071c1d6": {
+    "imageHash": "dd219e6da2dd11d5160371441987b931a862837d0c9796c66ed1a3bc62d4d79d",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "12ae0cf2af4fb726": {
+    "imageHash": "5efe4e4ae225f44b2168ac12499282aae5c2041b06ccbd0d2536000acf66afad",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "f1591786fbf5cf3f": {
+    "imageHash": "d8a3c240ada4aea4258c0ad19f8a9e837f3b428409856d638fc112bdda760d3c",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "46504ec4b86d05ff": {
+    "imageHash": "e5af2d73c93b46cad0775009607dd3e74d13307957085b48a495ec3b95144640",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "3b2332763ac6b649": {
+    "imageHash": "512f6cb8bdaad745e3825f4d40004d945fe4a7111b1ac73ab44668eadf5d4638",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "8e72b527f465b68f": {
+    "imageHash": "d685ca5c9b006dd6eb595bf99c7c65f14c5e97b332ac9bf60123f17839693e31",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "5eb00a555027d33d": {
+    "imageHash": "b3548c68fb6d5e5a63ead0d452e9fd415cd25537ab12db89c6c13ee8d8209114",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "e7b1f1414ea6ceb3": {
+    "imageHash": "769682e6f3131cfa05ac1815b58dc6e1d1f7c4b8b80bd92c3295b94e1d7b6b6f",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "41e77db36eef3436": {
+    "imageHash": "84c58640b1522e9257893dd2ffaa8f653b8dbf54f2b5d566c1931a71df509a3c",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "b3e2e54213c38de4": {
+    "imageHash": "4e7a31163dc92dd70a08214048aca7f01c0c73e804d50798bd059eb3e2ed13d1",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "1d49d4a894b0382a": {
+    "imageHash": "a071fd61f7485ff577ccac361c6fed021185ef7e163c02f34be406cde4b772ef",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "0dfd7951e803c960": {
+    "imageHash": "b9bb228be9270b229d021f272794ba2edab7a7afed73090d2481faa8e537f0fe",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "28e09c95bdc20a3f": {
+    "imageHash": "6efcbcf293300c325b818d8d64737745ac19b9bdb8ff34c864e5f55209c795ff",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "2837d0c7da942c66": {
+    "imageHash": "d2f55d5696ffc2d54a56737d426b1ce0c83424f7873dd5451be3c3ceefe9bd45",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "fc0fe6cd36b92a38": {
+    "imageHash": "4e38a20d3ec9af2990025fcdc5f36c75c87825fdda9f5475c86d257e299c5265",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "fc133bc73a7fb3fa": {
+    "imageHash": "528b0cf6b4b5858b22c6d5899818e63734e037081d9fc793c7a3481fba9e3a46",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "b2bc0cc175ce24db": {
+    "imageHash": "0420aba532cd339e17240f7e9a8a6a50fa4ffcb59c6e0b8af3d38b52513eb191",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "6de895a3221e5efe": {
+    "imageHash": "21b2651f0b3470635763c82b97b9b9057cdedf2642792ce87cb73ff91d1e06e4",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "24ad17d72ddc2340": {
+    "imageHash": "4ff935c952db66e1411d3383e057c7523e81184692ca725e877d3adb148c69d4",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "81b9d083a7ed3ffd": {
+    "imageHash": "18bc558cbba6cd5e35b1a9d3765c4b921815f7c5445c50ddc26b634111a99f9c",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "c0a7c6851cea5a02": {
+    "imageHash": "b4cc349008a3d0ebc6c4a313a6126518583d9280eefa59fe28753cd20b169112",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "b3e8e9b4796bc881": {
+    "imageHash": "8948b661afd1444fd0cef6d06c32f9a45f9de99f91f2d610ad9392dbdac9cb6b",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "e056fcda5fb9bf89": {
+    "imageHash": "cd9f4318c090aec687499f91df354751db871935b4ba88a208093e58f975886c",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "766953d2b0d349e6": {
+    "imageHash": "318e2b2bf94a66adcaa25530100e08730e228bbc3cc09053d005b783f201ebfe",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "701eac4d92f9b5c5": {
+    "imageHash": "ce38df7e001cc7e43e89f00d6c8678bee294b40b9bea9af476d66cbab61b30a8",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "734d87828cc83e19": {
+    "imageHash": "d4fdd569c82cda880d320b84826f19fc3d4ca76d271202c309d0d937e4a1ceff",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "c4b6affdd442e96e": {
+    "imageHash": "727eaf1fbb99c25a2e40aced571a7e02678036e1b7f501d419b85fca96fbe6ea",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "1a6c9266dcff6d29": {
+    "imageHash": "ecee1578ca009b7cb41fa7d648ae27ecf074561ae4ca3cc56303db8d006bf44a",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "b58cc8d084fc72cb": {
+    "imageHash": "8b08873103639cd18df1f7295198d255d4b6e676e483c30911c794a26a02ef54",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "6a7533c79c1e736d": {
+    "imageHash": "8ca5d366eeb41af1f7a83cc5d12a6f1ba63e01c4922206a2157e4e54eb515c78",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "3db3267adff1b489": {
+    "imageHash": "fd8c2af4290971ace6d81979f7b49154aca09b345054748d85e0e8ba67107529",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "a7bf0635f422c073": {
+    "imageHash": "2422887b657603817e142c24ff53597cb59fdcfa6f4e4967b9f238b12ae17121",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "fa530f8e08392f8e": {
+    "imageHash": "d337a6bec7e33909483895bcd16a3c3e7ead9b43bb076995540b1beb07936b55",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "91fff792fa374c5f": {
+    "imageHash": "8d5ad0183d2876434aff67aa46e31f1be8bb60fa63d3e043a678457b41a012c8",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "205fdcf46fce8bf6": {
+    "imageHash": "ce7ae1db6c6ce2a292d5a4cb7c2b7e45ac1d00d6354ce38403068a2c22983e0e",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "e16d4c480d525eaf": {
+    "imageHash": "21187d07068668171eac7cbc44b41c636e741e5e92f65853667e2d103d0d962d",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "6ca36bf92b8798aa": {
+    "imageHash": "8e32210b239de303ad14fff95d7b313b1a9bc25593cfefc867d5fcbe1c36f200",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "a7a4c6df14e251ea": {
+    "imageHash": "175a51ee933ba351fe711f615746ac04a98ce82ded238fece5f6f9cc5848e66a",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "e7f0c338f3ba035e": {
+    "imageHash": "93229ca7749be065fb3e94fc8cba868310b06978352c0533950e77c6586516bd",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "15acab16cb61c931": {
+    "imageHash": "b75e3f707a7bb3a67f7999940a2ebbac2a88267bca740e5b852e30dcfa5453d7",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "68787f6c44a66f77": {
+    "imageHash": "e15da110dc9e6726f0cd31c1a7d1026b1f0e000d801188a8fc1e6a0da73bff2c",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "c12f76bcb631879a": {
+    "imageHash": "a781a2980766404a49154cc3d7885854f5c9c27c8fb8305419f5b8cfc5688a47",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "a0c2849fde92afca": {
+    "imageHash": "6f18b41c328e12c0b2a3facd6b3ed8697d8f978c610651259f5f46c21a4fd9e2",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  },
+  "77edc432c376dede": {
+    "imageHash": "7a14188f2dd4585901821a755914ea4980a51e56f5fbe3834cb33bab68aac05b",
+    "reviewedAt": "2026-10-27",
+    "status": "unreadable",
+    "yaku": null,
+    "bonus": null,
+    "observedTotalHan": null,
+    "observedFu": null,
+    "points": null
+  }
+}
