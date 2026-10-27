@@ -13,7 +13,7 @@ import threading
 from datetime import datetime, timezone
 from unittest.mock import Mock, call, patch
 
-from auto_operator import PythonAutoOperator, RetryableSafetyAbort, action_deadline_timing, ambiguous_open_draw_fallback, away_resume_geometry, closed_concealed_row_visible, closed_hand_face_mismatches, confirmed_call_meld, crop_screenshot, crop_screenshot_regions, discard_point_in_hand_geometry, force_auto_call_buttons, force_auto_chi_choice_points, force_auto_reaction_win_button, force_auto_self_action_buttons, geometric_open_meld_count, is_away_resume_dialog, is_contextual_reaction_pass, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, mean_pixel_delta, merge_public_observations, open_hand_draw_slot, own_meld_surface_visible, post_call_transition, raised_tile_confirmation_point, retreat_pointer_from_hand, riichi_selection_target_region, screencast_frame_follows_pointer_retreat, riichi_selection_is_visible, round_result_conflicts_with_live_table, selected_chi_choice_point, selected_open_draw_is_ambiguous, selected_tile_comparison_region, send_discard_click, should_guard_tenpai_reaction, should_process_reaction_prompt, should_retry_call_policy, stable_hand_comparison_region, stable_hand_delta, tile_face_structure_delta
+from auto_operator import PythonAutoOperator, RetryableSafetyAbort, SelectionStateUncertainAbort, action_deadline_timing, ambiguous_open_draw_fallback, away_resume_geometry, closed_concealed_row_visible, closed_hand_face_mismatches, confirmed_call_meld, crop_screenshot, crop_screenshot_regions, discard_point_in_hand_geometry, force_auto_call_buttons, force_auto_chi_choice_points, force_auto_reaction_win_button, force_auto_self_action_buttons, geometric_open_meld_count, is_away_resume_dialog, is_contextual_reaction_pass, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, mean_pixel_delta, merge_public_observations, open_hand_draw_slot, own_meld_surface_visible, post_call_transition, raised_tile_confirmation_point, retreat_pointer_from_hand, riichi_selection_target_region, screencast_frame_follows_pointer_retreat, riichi_selection_is_visible, round_result_conflicts_with_live_table, selected_chi_choice_point, selected_open_draw_is_ambiguous, selected_tile_comparison_region, send_discard_click, should_guard_tenpai_reaction, should_process_reaction_prompt, should_retry_call_policy, stable_hand_comparison_region, stable_hand_delta, tile_face_structure_delta
 from screen_state import classify_screen, load_references
 from auto_operator import geometric_reaction_open_meld_count, draw_slots_occupied
 from auto_operator import configure_evaluator_click_budget, with_match_length
@@ -4579,7 +4579,44 @@ class AwayDialogDetectionTest(unittest.TestCase):
             ("move", 960, 777.6),
         ])
         self.assertEqual(confirmation["lift"], 28)
-        settle.assert_called_once_with(120)
+        settle.assert_called_once_with(40)
+
+    def test_discard_polls_until_a_later_receipt_proves_lift(self) -> None:
+        """A receipt before the client animation must not cause a false abort."""
+        layout = load_json(Path(__file__).resolve().parents[1] / "config/layout-300-regression.json")
+        point = layout["clickPoints"][13]
+        before, after = self.raised_tile_frames(layout, 13, 48)
+        mouse = RecordingMouse()
+        settle = Mock()
+        receipts = iter((before, after))
+        confirmation = send_discard_click(
+            mouse, point, {"width": 1920, "height": 1080}, settle, before,
+            lambda: next(receipts), layout, 13, 1.5,
+        )
+        self.assertEqual(confirmation["lift"], 48)
+        self.assertEqual(settle.call_args_list, [call(40), call(40)])
+        self.assertEqual(mouse.calls[:2], [
+            (1532, 999, {}), (1532.0, 951.0, {"delay": 80}),
+        ])
+
+    def test_discard_unproven_selection_never_retries_as_a_deselect(self) -> None:
+        layout = load_json(Path(__file__).resolve().parents[1] / "config/layout-300-regression.json")
+        point = layout["clickPoints"][7]
+        before, _ = self.raised_tile_frames(layout, 7, 28)
+        mouse = RecordingMouse()
+        settle = Mock()
+        with self.assertRaisesRegex(SelectionStateUncertainAbort, "could not be verified") as caught:
+            send_discard_click(
+                mouse, point, {"width": 1920, "height": 1080}, settle, before,
+                lambda: before, layout, 7, 1.5,
+            )
+        self.assertIsInstance(caught.exception, RetryableSafetyAbort)
+        self.assertEqual(settle.call_args_list, [
+            call(40), call(40), call(60), call(80), call(100), call(120),
+        ])
+        self.assertEqual(mouse.calls, [
+            (933, 999, {}), ("move", 960, 777.6),
+        ])
 
     @staticmethod
     def raised_tile_frames(layout, index, lift):

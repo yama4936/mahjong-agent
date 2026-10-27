@@ -36,6 +36,15 @@ class RetryableSafetyAbort(RuntimeError):
     """A stale pre-click observation that is safe to reevaluate."""
 
 
+class SelectionStateUncertainAbort(RetryableSafetyAbort):
+    """The first discard click may have selected a tile, but not provably.
+
+    Retrying the same click could deselect that tile rather than selecting it.
+    The caller must therefore disarm this hand until an independently observed
+    state transition, instead of treating this like an ordinary stale frame.
+    """
+
+
 def utc_stamp() -> str:
     return datetime.now(timezone.utc).isoformat().replace(":", "-")
 
@@ -1122,14 +1131,27 @@ def send_discard_click(
     raised hitbox.
     """
     mouse.click(point["x"], point["y"])
-    wait_for_selection(120)
-    confirmation = raised_tile_confirmation_point(
-        selection_before, selection_receipt(), layout, click_index, point,
-        stability_threshold,
-    )
+    # A single fixed 120ms receipt was observed to precede the client's lift
+    # animation.  Poll only briefly and always compare every receipt with the
+    # pre-click frame: a later receipt may prove this exact tile moved, but an
+    # unproven receipt must never be used for the second click.
+    confirmation = None
+    for wait_ms in (40, 40, 60, 80, 100, 120):
+        wait_for_selection(wait_ms)
+        confirmation = raised_tile_confirmation_point(
+            selection_before, selection_receipt(), layout, click_index, point,
+            stability_threshold,
+        )
+        if confirmation is not None:
+            break
     if confirmation is None:
         mouse.move(viewport["width"] / 2, viewport["height"] * 0.72)
-        raise RetryableSafetyAbort("selected tile lift or identity could not be verified before discard confirmation")
+        # The first click might have selected a tile even though no screenshot
+        # could prove it.  Do not let the normal retry path issue a possible
+        # deselect click against that unresolved state.
+        raise SelectionStateUncertainAbort(
+            "selected tile lift or identity could not be verified before discard confirmation"
+        )
     mouse.click(confirmation["x"], confirmation["y"], delay=80)
     # Once the row closes, the next tile can slide under the pointer and stay
     # raised. Move to inert table felt before post-action recognition.
@@ -5907,6 +5929,20 @@ class PythonAutoOperator:
                         evaluated_draw_generation=evaluation_draw_generation,
                         evaluated_captured_at=evaluation_captured_at,
                     )
+                except SelectionStateUncertainAbort as error:
+                    # The first click can have left the evaluated tile raised.
+                    # Replaying this hand would make the next click an
+                    # unverified deselect, so wait for a separately observed
+                    # table transition instead.
+                    self.record_replay(evaluation, screenshot_path, execution_error=str(error))
+                    self.log(
+                        "action_aborted", screenshot=str(screenshot_path), error=str(error),
+                        retryable=False, selectionMayRemain=True,
+                    )
+                    self.last_processed_hand = hand_hash
+                    self.armed = False
+                    time.sleep(self.args.poll)
+                    continue
                 except RetryableSafetyAbort as error:
                     self.record_replay(evaluation, screenshot_path, execution_error=str(error))
                     self.log("action_aborted", screenshot=str(screenshot_path), error=str(error), retryable=True)
