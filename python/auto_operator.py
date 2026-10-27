@@ -882,6 +882,58 @@ def selected_tile_comparison_region(
     return {"x": float(point["x"]) - width / 2, "y": top, "width": width, "height": bottom - top}
 
 
+def raised_tile_confirmation_point(
+    before: bytes, after: bytes, layout: dict[str, Any], click_index: int,
+    point: dict[str, float], threshold: float,
+) -> dict[str, float] | None:
+    """Locate the selected tile's *observed* raised face for click two.
+
+    A fixed vertical offset is not a physical guarantee: the client can use a
+    different lift for a compact hand, and a late second click can otherwise
+    be consumed as a draw discard.  Match the exact pre-click glyph face over
+    a vertical search strip in the selection receipt.  A match must move up
+    by a material amount; an unchanged tile or an adjacent tile animation is
+    not evidence that this physical slot was selected.
+    """
+    slots = [*layout.get("handSlots", [])]
+    draw_slot = layout.get("drawSlot")
+    if draw_slot:
+        slots.append(draw_slot)
+    if not isinstance(click_index, int) or not 0 <= click_index < len(slots):
+        return None
+    slot = slots[click_index]
+    if not all(isinstance(point.get(key), (int, float)) for key in ("x", "y")):
+        return None
+    if not (float(slot["x"]) <= float(point["x"]) < float(slot["x"] + slot["width"])
+            and float(slot["y"]) <= float(point["y"]) < float(slot["y"] + slot["height"])):
+        return None
+    face = {
+        "x": float(slot["x"]) + 10,
+        "y": float(slot["y"]) + 10,
+        "width": float(slot["width"]) - 20,
+        "height": float(slot["height"]) - 38,
+    }
+    if face["width"] <= 0 or face["height"] <= 0:
+        return None
+    try:
+        baseline = crop_screenshot(before, face)
+        # Mahjong Soul lifts toward the table centre.  Search a deliberately
+        # broad but bounded strip; the lower bound avoids accepting an
+        # unchanged face as a selection receipt.
+        candidates: list[tuple[float, int]] = []
+        for lift in range(8, 81):
+            shifted = {**face, "y": face["y"] - lift}
+            delta = tile_face_structure_delta(baseline, crop_screenshot(after, shifted))
+            candidates.append((delta, lift))
+    except Exception:
+        return None
+    delta, lift = min(candidates)
+    if delta > threshold:
+        return None
+    return {"x": float(point["x"]), "y": float(point["y"]) - lift,
+            "lift": float(lift), "faceStructureDelta": round(delta, 3)}
+
+
 def riichi_selection_target_region(
     layout: dict[str, Any], click_index: Any, point: Any,
 ) -> dict[str, float] | None:
@@ -1050,17 +1102,17 @@ def send_discard_click(
     point: dict[str, float],
     viewport: dict[str, int],
     wait_for_selection: Callable[[float], None],
-) -> None:
+    selection_before: bytes,
+    selection_receipt: Callable[[], bytes],
+    layout: dict[str, Any],
+    click_index: int,
+    stability_threshold: float,
+) -> dict[str, float]:
     """Select a tile, then confirm it inside its raised hitbox.
 
-    Mahjong Soul lifts the selected tile between the two input events.  A
-    Playwright ``click_count=2`` repeats the original, lower coordinate after
-    that animation.  In live ranked evidence that second event was consumed
-    by the independent draw slot (for example ``F`` at index 12 became the
-    draw ``8p``), so it is not safe to treat a browser double-click as two
-    clicks on the same tile.  Keep the x coordinate fixed and aim 44 pixels
-    higher for the confirmation, which remains well inside the raised tile
-    face for both the normal and compact rows.
+    Mahjong Soul lifts the selected tile between the two input events.  Do
+    not guess its raised coordinate: prove the selected physical face moved
+    in a post-first-click receipt, then click its measured position.
 
     The wait must be *between* the two click events.  ``mouse.click(delay=…)``
     only holds the second press down; it does not let the client apply the
@@ -1071,10 +1123,18 @@ def send_discard_click(
     """
     mouse.click(point["x"], point["y"])
     wait_for_selection(120)
-    mouse.click(point["x"], point["y"] - 44, delay=80)
+    confirmation = raised_tile_confirmation_point(
+        selection_before, selection_receipt(), layout, click_index, point,
+        stability_threshold,
+    )
+    if confirmation is None:
+        mouse.move(viewport["width"] / 2, viewport["height"] * 0.72)
+        raise RetryableSafetyAbort("selected tile lift or identity could not be verified before discard confirmation")
+    mouse.click(confirmation["x"], confirmation["y"], delay=80)
     # Once the row closes, the next tile can slide under the pointer and stay
     # raised. Move to inert table felt before post-action recognition.
     mouse.move(viewport["width"] / 2, viewport["height"] * 0.72)
+    return confirmation
 
 
 def same_physical_tile(left: str, right: str) -> bool:
@@ -4628,11 +4688,16 @@ class PythonAutoOperator:
             clickPoint=point,
         )
         self.last_action_clicked_at = time.monotonic()
-        send_discard_click(
+        selection_confirmation = send_discard_click(
             page.mouse,
             point,
             self.layout["viewport"],
             lambda milliseconds: page.wait_for_timeout(milliseconds),
+            pre_click_full,
+            lambda: page.screenshot(animations="disabled"),
+            self.layout,
+            click_index,
+            self.args.stability_pixel_delta,
         )
         if force_auto:
             # ``send_discard_click`` ends by moving onto inert table felt.
@@ -4649,6 +4714,7 @@ class PythonAutoOperator:
             "discardedTile": selected.get("tile") if selected_action in {"discard", "riichi"} else None,
             "clickIndex": click_index,
             "clickPoint": point,
+            "selectionConfirmation": selection_confirmation,
             "clickedAt": clicked_at,
             **({"declaration": action_receipt} if selected_action == "riichi" else {}),
             **receipt,

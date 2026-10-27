@@ -13,7 +13,7 @@ import threading
 from datetime import datetime, timezone
 from unittest.mock import Mock, call, patch
 
-from auto_operator import PythonAutoOperator, RetryableSafetyAbort, action_deadline_timing, ambiguous_open_draw_fallback, away_resume_geometry, closed_concealed_row_visible, closed_hand_face_mismatches, confirmed_call_meld, crop_screenshot, crop_screenshot_regions, discard_point_in_hand_geometry, force_auto_call_buttons, force_auto_chi_choice_points, force_auto_reaction_win_button, force_auto_self_action_buttons, geometric_open_meld_count, is_away_resume_dialog, is_contextual_reaction_pass, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, mean_pixel_delta, merge_public_observations, open_hand_draw_slot, own_meld_surface_visible, post_call_transition, retreat_pointer_from_hand, riichi_selection_target_region, screencast_frame_follows_pointer_retreat, riichi_selection_is_visible, round_result_conflicts_with_live_table, selected_chi_choice_point, selected_open_draw_is_ambiguous, selected_tile_comparison_region, send_discard_click, should_guard_tenpai_reaction, should_process_reaction_prompt, should_retry_call_policy, stable_hand_comparison_region, stable_hand_delta, tile_face_structure_delta
+from auto_operator import PythonAutoOperator, RetryableSafetyAbort, action_deadline_timing, ambiguous_open_draw_fallback, away_resume_geometry, closed_concealed_row_visible, closed_hand_face_mismatches, confirmed_call_meld, crop_screenshot, crop_screenshot_regions, discard_point_in_hand_geometry, force_auto_call_buttons, force_auto_chi_choice_points, force_auto_reaction_win_button, force_auto_self_action_buttons, geometric_open_meld_count, is_away_resume_dialog, is_contextual_reaction_pass, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, mean_pixel_delta, merge_public_observations, open_hand_draw_slot, own_meld_surface_visible, post_call_transition, raised_tile_confirmation_point, retreat_pointer_from_hand, riichi_selection_target_region, screencast_frame_follows_pointer_retreat, riichi_selection_is_visible, round_result_conflicts_with_live_table, selected_chi_choice_point, selected_open_draw_is_ambiguous, selected_tile_comparison_region, send_discard_click, should_guard_tenpai_reaction, should_process_reaction_prompt, should_retry_call_policy, stable_hand_comparison_region, stable_hand_delta, tile_face_structure_delta
 from screen_state import classify_screen, load_references
 from auto_operator import geometric_reaction_open_meld_count, draw_slots_occupied
 from auto_operator import configure_evaluator_click_budget, with_match_length
@@ -963,13 +963,15 @@ class PostCallWhiteDiscardTest(unittest.TestCase):
         operator.refresh_discard_reconciliation_before_click = Mock(return_value=False)
         operator.confirm_discard = Mock(return_value={"confirmation": "hand_and_own_river_changed"})
         page = Mock()
-        receipt = operator.execute(page, evaluation, evaluated_full=frame,
-                                   evaluated_hand=crop_screenshot(frame, operator.hand_clip),
-                                   evaluated_draw_generation=4, evaluated_captured_at=10.0)
+        with patch("auto_operator.raised_tile_confirmation_point",
+                   return_value={"x": 933, "y": 971, "lift": 28, "faceStructureDelta": 0.0}):
+            receipt = operator.execute(page, evaluation, evaluated_full=frame,
+                                       evaluated_hand=crop_screenshot(frame, operator.hand_clip),
+                                       evaluated_draw_generation=4, evaluated_captured_at=10.0)
         self.assertEqual(receipt["discardedTile"], "P")
         self.assertEqual(receipt["clickIndex"], 7)
         self.assertEqual(page.mouse.click.call_args_list,
-                         [call(933, 999), call(933, 955, delay=80)])
+                         [call(933, 999), call(933, 971, delay=80)])
         self.assertFalse(any(c.args[0] == "ambiguous_open_draw_fallback"
                              for c in operator.log.call_args_list))
         operator.require_force_auto_click_budget.assert_any_call(10.0, phase="before_discard_click")
@@ -977,9 +979,11 @@ class PostCallWhiteDiscardTest(unittest.TestCase):
         # A later normal draw retains the existing conservative fallback.
         operator.pending_post_call_discard = False
         page.mouse.reset_mock()
-        receipt = operator.execute(page, evaluation, evaluated_full=frame,
-                                   evaluated_hand=crop_screenshot(frame, operator.hand_clip),
-                                   evaluated_draw_generation=4, evaluated_captured_at=10.0)
+        with patch("auto_operator.raised_tile_confirmation_point",
+                   return_value={"x": 933, "y": 971, "lift": 28, "faceStructureDelta": 0.0}):
+            receipt = operator.execute(page, evaluation, evaluated_full=frame,
+                                       evaluated_hand=crop_screenshot(frame, operator.hand_clip),
+                                       evaluated_draw_generation=4, evaluated_captured_at=10.0)
         self.assertEqual(receipt["discardedTile"], "9p")
 
         # The new certificate never bypasses the fresh pre-click hand guard.
@@ -1156,7 +1160,9 @@ class ActionDeadlineTest(unittest.TestCase):
             page = Mock()
             evaluation = {"decision": {"selectedAction": {"action": "discard", "tile": "6p"}},
                           "recognition": {"tiles": tiles, "safe": False}, "clickIndex": 13}
-            with patch("auto_operator.stable_hand_delta", return_value=3.0):
+            with patch("auto_operator.stable_hand_delta", return_value=3.0), \
+                    patch("auto_operator.raised_tile_confirmation_point",
+                          return_value={"x": 1532, "y": 971, "lift": 28, "faceStructureDelta": 0.0}):
                 if same_generation and verified:
                     self.assertTrue(operator.execute(page, evaluation, crop_screenshot(before, operator.hand_clip),
                                                     before, 5)["clicked"])
@@ -2892,6 +2898,8 @@ class AwayDialogDetectionTest(unittest.TestCase):
 
         with patch("auto_operator.time.monotonic", side_effect=lambda: clock["now"]), \
                 patch("auto_operator.stable_hand_delta", return_value=0.0), \
+                patch("auto_operator.raised_tile_confirmation_point",
+                      return_value={"x": 269, "y": 971, "lift": 28, "faceStructureDelta": 0.0}), \
                 patch("auto_operator.classify_screen", side_effect=classify_confirmed_selection), \
                 patch("auto_operator.is_away_resume_dialog", return_value=False), \
                 patch("auto_operator.discard_point_in_hand_geometry", return_value=True):
@@ -4549,20 +4557,72 @@ class AwayDialogDetectionTest(unittest.TestCase):
         self.assertFalse(local_discard_allowed(argparse.Namespace(allow_local_discard=True, mode="advisor"), evaluation))
 
     def test_discard_selects_and_confirms_the_same_guarded_coordinate(self) -> None:
+        layout = load_json(Path(__file__).resolve().parents[1] / "config/layout-300-regression.json")
+        point = layout["clickPoints"][7]
+        before, after = self.raised_tile_frames(layout, 7, 28)
         mouse = RecordingMouse()
         settle = Mock()
-        send_discard_click(
+        confirmation = send_discard_click(
             mouse,
-            {"x": 933, "y": 996.5},
+            point,
             {"width": 1920, "height": 1080},
             settle,
+            before,
+            lambda: after,
+            layout,
+            7,
+            1.5,
         )
         self.assertEqual(mouse.calls, [
-            (933, 996.5, {}),
-            (933, 952.5, {"delay": 80}),
+            (933, 999, {}),
+            (933, 971, {"delay": 80}),
             ("move", 960, 777.6),
         ])
+        self.assertEqual(confirmation["lift"], 28)
         settle.assert_called_once_with(120)
+
+    @staticmethod
+    def raised_tile_frames(layout, index, lift):
+        """Make a unique glyph face move upward without changing neighbours."""
+        slot = [*layout["handSlots"], layout["drawSlot"]][index]
+        before_image = Image.new("RGB", (1920, 1080), "white")
+        after_image = Image.new("RGB", (1920, 1080), "white")
+        # A deliberately asymmetric dark glyph prevents an unrelated static
+        # neighbouring tile from matching the vertical search.
+        glyph = (int(slot["x"] + 29), int(slot["y"] + 31),
+                 int(slot["x"] + 62), int(slot["y"] + 83))
+        before_image.paste("black", glyph)
+        after_image.paste("black", (glyph[0], glyph[1] - lift, glyph[2], glyph[3] - lift))
+        before_buffer, after_buffer = io.BytesIO(), io.BytesIO()
+        before_image.save(before_buffer, format="PNG")
+        after_image.save(after_buffer, format="PNG")
+        return before_buffer.getvalue(), after_buffer.getvalue()
+
+    def test_raised_tile_confirmation_uses_observed_closed_hand_lift(self) -> None:
+        layout = load_json(Path(__file__).resolve().parents[1] / "config/layout-300-regression.json")
+        before, after = self.raised_tile_frames(layout, 11, 31)
+        point = layout["clickPoints"][11]
+        confirmation = raised_tile_confirmation_point(before, after, layout, 11, point, 1.5)
+        self.assertEqual(confirmation, {"x": 1312.5, "y": 968.0, "lift": 31.0,
+                                        "faceStructureDelta": 0.0})
+
+    def test_raised_tile_confirmation_uses_observed_compact_hand_lift(self) -> None:
+        layout = load_json(Path(__file__).resolve().parents[1] / "config/layout-300-regression.json")
+        # One open meld uses compact slot 9 (the precise failing geometry).
+        before, after = self.raised_tile_frames(layout, 9, 19)
+        point = layout["clickPoints"][9]
+        confirmation = raised_tile_confirmation_point(before, after, layout, 9, point, 1.5)
+        self.assertEqual(confirmation, {"x": 1122.5, "y": 980.0, "lift": 19.0,
+                                        "faceStructureDelta": 0.0})
+
+    def test_raised_tile_confirmation_rejects_unmoved_or_other_slot_face(self) -> None:
+        layout = load_json(Path(__file__).resolve().parents[1] / "config/layout-300-regression.json")
+        # The target's unique glyph did not lift (an adjacent selection must
+        # not be accepted as proof for this slot).
+        before, after = self.raised_tile_frames(layout, 9, 0)
+        self.assertIsNone(raised_tile_confirmation_point(
+            before, after, layout, 9, layout["clickPoints"][9], 1.5,
+        ))
 
     def test_startup_clears_tile_hover_before_starting_first_frame_stream(self) -> None:
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
