@@ -4618,6 +4618,44 @@ class AwayDialogDetectionTest(unittest.TestCase):
             (933, 999, {}), ("move", 960, 777.6),
         ])
 
+    def test_uncertain_selection_does_not_rearm_for_changed_hand_pixels(self) -> None:
+        """A raised tile changes the crop, but is still the same selectable tile."""
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.selection_uncertainty_latch = {
+            "drawGeneration": 17,
+            "ownDiscards": ["1m", "4p"],
+        }
+        operator.screencast_draw_occupied = True
+
+        # The run loop deliberately calls this before its generic hash based
+        # rearm.  A different hand hash must therefore not be an input here.
+        self.assertIsNone(operator.selection_uncertainty_rearm_reason(
+            17, {"ownDiscards": ["1m", "4p"]},
+        ))
+        self.assertIsNone(operator.selection_uncertainty_rearm_reason(
+            17, {"ownDiscards": ["1m", "4p"], "opponentDiscards": [
+                {"seat": "south", "discards": ["9s"]},
+            ]},
+        ))
+
+    def test_uncertain_selection_rearms_only_for_independent_turn_evidence(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.selection_uncertainty_latch = {
+            "drawGeneration": 17,
+            "ownDiscards": ["1m", "4p"],
+        }
+
+        # Public history is merged/corroborated before this method sees it.
+        operator.screencast_draw_occupied = False
+        self.assertEqual(operator.selection_uncertainty_rearm_reason(
+            17, {"ownDiscards": ["1m", "4p", "9s"]},
+        ), "confirmed_own_river_append")
+
+        operator.screencast_draw_occupied = True
+        self.assertEqual(operator.selection_uncertainty_rearm_reason(
+            18, {"ownDiscards": ["1m", "4p"]},
+        ), "new_draw_generation")
+
     @staticmethod
     def raised_tile_frames(layout, index, lift):
         """Make a unique glyph face move upward without changing neighbours."""

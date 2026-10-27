@@ -1567,6 +1567,13 @@ class PythonAutoOperator:
                 self.public_recognition_server = None
                 self.log("public_cache_disabled", error=str(error))
         self.last_processed_hand: str | None = None
+        # A failed raised-tile confirmation is different from an ordinary
+        # retryable recognition failure.  Its first click may have selected
+        # the tile, so another click on the same physical row could deselect
+        # it.  Keep a fence until independent table evidence proves that the
+        # turn advanced; a changed hand crop alone is expected when a tile is
+        # raised and is specifically not such evidence.
+        self.selection_uncertainty_latch: dict[str, Any] | None = None
         self.previous_public_observation: dict[str, Any] | None = None
         self.cached_concealed_tiles: list[str] | None = None
         self.pending_own_discard: dict[str, Any] | None = None
@@ -1928,6 +1935,34 @@ class PythonAutoOperator:
             self.log("public_cache_failed", error=envelope["error"])
             return
         self.accept_public_observation(envelope["result"])
+
+    def selection_uncertainty_rearm_reason(
+        self, draw_generation: int | None, public_observation: dict[str, Any] | None,
+    ) -> str | None:
+        """Return independently observed evidence that an uncertain click is stale.
+
+        A visual hand change cannot clear this latch: it may be the exact
+        selected-tile lift left by the first click.  The only local evidence
+        accepted here is a subsequent draw generation, and the only public
+        evidence is a *merged* own-river extension.  ``accept_public_observation``
+        only preserves such an extension after its normal corroboration, so a
+        one-frame OCR candidate cannot release this safety fence.
+        """
+        latch = getattr(self, "selection_uncertainty_latch", None)
+        if not latch:
+            return None
+        baseline_generation = latch.get("drawGeneration")
+        if (draw_generation is not None and baseline_generation is not None
+                and draw_generation > baseline_generation
+                and getattr(self, "screencast_draw_occupied", None) is True):
+            return "new_draw_generation"
+        baseline_river = latch.get("ownDiscards")
+        current_river = (public_observation or {}).get("ownDiscards")
+        if (isinstance(baseline_river, list) and isinstance(current_river, list)
+                and len(current_river) > len(baseline_river)
+                and current_river[:len(baseline_river)] == baseline_river):
+            return "confirmed_own_river_append"
+        return None
 
     def accept_public_observation(self, current: dict[str, Any]) -> bool:
         """Apply one capture through the shared history and receipt guards."""
@@ -3043,6 +3078,7 @@ class PythonAutoOperator:
         self.previous_public_observation = None
         self.pending_own_discard = None
         self.pending_own_river_confirmation = None
+        self.selection_uncertainty_latch = None
         self.public_cache_generation = getattr(self, "public_cache_generation", 0) + 1
         self.public_cache_last_frame_hash = None
         self.last_public_scan_at = 0.0
@@ -3139,6 +3175,7 @@ class PythonAutoOperator:
         self.previous_public_observation = None
         self.pending_own_discard = None
         self.pending_own_river_confirmation = None
+        self.selection_uncertainty_latch = None
         self.public_cache_generation = getattr(self, "public_cache_generation", 0) + 1
         self.public_cache_last_frame_hash = None
         self.last_public_scan_at = 0.0
@@ -3223,6 +3260,7 @@ class PythonAutoOperator:
             self.reset_post_riichi_safety()
             self.previous_public_observation = None
             self.pending_own_river_confirmation = None
+            self.selection_uncertainty_latch = None
             self.last_shanten = None
             self.last_processed_hand = None
             self.armed = True
@@ -5558,6 +5596,31 @@ class PythonAutoOperator:
                 if evaluation_draw_generation is not None:
                     hand_identity += f":draw:{evaluation_draw_generation}"
                 hand_hash = hashlib.sha256(hand_identity.encode()).hexdigest()
+                uncertainty_rearm = self.selection_uncertainty_rearm_reason(
+                    evaluation_draw_generation, public_observation,
+                )
+                if getattr(self, "selection_uncertainty_latch", None):
+                    if uncertainty_rearm is None:
+                        # Do not fall through to the generic hand-hash
+                        # re-arm below.  A raised tile alters that hash while
+                        # remaining the same selectable tile, and a retry
+                        # would be an unproven deselect operation.
+                        if self.args.mode == "force-auto":
+                            self.schedule_public_recognition(evaluation_frame, force=True)
+                        self.last_processed_hand = hand_hash
+                        self.armed = False
+                        self.log(
+                            "selection_uncertainty_wait",
+                            drawGeneration=evaluation_draw_generation,
+                            baselineDrawGeneration=self.selection_uncertainty_latch.get("drawGeneration"),
+                            baselineOwnDiscards=self.selection_uncertainty_latch.get("ownDiscards"),
+                        )
+                        page.wait_for_timeout(max(100, round(self.args.poll * 1000)))
+                        continue
+                    self.log("selection_uncertainty_rearmed", reason=uncertainty_rearm)
+                    self.selection_uncertainty_latch = None
+                    self.last_processed_hand = None
+                    self.armed = True
                 if not self.armed:
                     if hand_hash == self.last_processed_hand:
                         time.sleep(self.args.poll)
@@ -5939,6 +6002,10 @@ class PythonAutoOperator:
                         "action_aborted", screenshot=str(screenshot_path), error=str(error),
                         retryable=False, selectionMayRemain=True,
                     )
+                    self.selection_uncertainty_latch = {
+                        "drawGeneration": evaluation_draw_generation,
+                        "ownDiscards": list((public_observation or {}).get("ownDiscards", [])),
+                    }
                     self.last_processed_hand = hand_hash
                     self.armed = False
                     time.sleep(self.args.poll)
