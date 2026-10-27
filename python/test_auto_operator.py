@@ -694,7 +694,7 @@ class EvaluatorClickBudgetTest(unittest.TestCase):
         self.assertEqual(receipt["confirmation"], "reaction_river_advanced")
         self.assertEqual(receipt["riverRegion"], "ownDiscards")
 
-    def test_own_discard_mismatch_invalidates_concealed_cache(self):
+    def test_own_discard_mismatch_requires_temporal_confirmation_before_quarantine(self):
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
         operator.pending_own_discard = {
             "tile": "W", "before": ["1m", "2m"], "evidenceToClickMs": 6701,
@@ -704,12 +704,26 @@ class EvaluatorClickBudgetTest(unittest.TestCase):
         operator.cached_concealed_tiles = ["1p"] * 13
         operator.cached_public_observation = {
             "ownDiscards": ["1m", "2m", "3p"],
+            "capturedAt": "2026-10-03T00:00:01+00:00",
             "doraIndicators": ["4m"],
             "opponentDiscards": [{"seat": "south", "discards": ["9s"]}],
         }
         operator.pending_own_river_confirmation = ["1m", "2m", "3p"]
         operator.log = Mock()
 
+        operator.reconcile_own_discard()
+
+        self.assertEqual(operator.cached_concealed_tiles, ["1p"] * 13)
+        self.assertIsNotNone(operator.pending_own_discard)
+        self.assertEqual(operator.pending_own_river_confirmation, ["1m", "2m", "3p"])
+        operator.log.assert_called_once_with(
+            "own_discard_mismatch_pending", expected="W", actual="3p", before=["1m", "2m"],
+            observed=["1m", "2m", "3p"], capturedAt="2026-10-03T00:00:01+00:00",
+            clickIndex=4, clickPoint={"x": 555, "y": 999},
+            clickedAt="2026-10-03T00:00:00+00:00", confirmation="hand_and_own_river_changed",
+        )
+
+        operator.cached_public_observation["capturedAt"] = "2026-10-03T00:00:02+00:00"
         operator.reconcile_own_discard()
 
         self.assertIsNone(operator.cached_concealed_tiles)
@@ -721,7 +735,8 @@ class EvaluatorClickBudgetTest(unittest.TestCase):
                          [{"seat": "south", "discards": ["9s"]}])
         operator.log.assert_any_call(
             "own_discard_mismatch", expected="W", actual="3p", evidenceToClickMs=6701,
-            before=["1m", "2m"], observed=["1m", "2m", "3p"], capturedAt=None,
+            before=["1m", "2m"], observed=["1m", "2m", "3p"],
+            capturedAt="2026-10-03T00:00:02+00:00",
             clickIndex=4, clickPoint={"x": 555, "y": 999},
             clickedAt="2026-10-03T00:00:00+00:00", confirmation="hand_and_own_river_changed",
         )
@@ -729,6 +744,42 @@ class EvaluatorClickBudgetTest(unittest.TestCase):
             "own_discard_mismatch_cache_quarantined", expected="W", rejected="3p",
             retainedOwnDiscards=["1m", "2m"],
         )
+
+    def test_delayed_prior_append_followed_by_expected_discard_is_not_mismatch(self):
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.pending_own_discard = {
+            "tile": "E", "before": ["1m", "2m"], "clickIndex": 12,
+            "clickPoint": {"x": 1407.5, "y": 999}, "clickedAt": "when",
+            "confirmation": "hand_and_own_river_changed",
+        }
+        operator.cached_concealed_tiles = ["1p"] * 13
+        operator.cached_public_observation = {
+            "ownDiscards": ["1m", "2m", "7m"], "capturedAt": "2026-10-03T00:00:01+00:00",
+        }
+        operator.pending_own_river_confirmation = None
+        operator.log = Mock()
+
+        operator.reconcile_own_discard()
+        self.assertTrue(operator.own_discard_reconciliation_pending())
+        self.assertIsNotNone(operator.pending_own_discard)
+
+        operator.cached_public_observation = {
+            "ownDiscards": ["1m", "2m", "7m", "E"],
+            "capturedAt": "2026-10-03T00:00:02+00:00",
+        }
+        operator.reconcile_own_discard()
+
+        self.assertIsNone(operator.pending_own_discard)
+        self.assertIsNone(operator.pending_own_river_confirmation)
+        self.assertIsNone(operator.cached_concealed_tiles)
+        operator.log.assert_any_call(
+            "own_discard_reconciled_after_delayed_prior_append", tile="E", delayedPriorAppend="7m",
+            before=["1m", "2m"], observed=["1m", "2m", "7m", "E"],
+            firstCapturedAt="2026-10-03T00:00:01+00:00",
+            confirmedCapturedAt="2026-10-03T00:00:02+00:00", concealedCacheInvalidated=True,
+        )
+        self.assertFalse(any(call.args[0] == "own_discard_mismatch"
+                             for call in operator.log.call_args_list))
 
     def test_reconciliation_failure_records_click_receipt(self):
         operator = PythonAutoOperator.__new__(PythonAutoOperator)

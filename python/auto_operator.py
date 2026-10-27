@@ -3547,6 +3547,41 @@ class PythonAutoOperator:
         if pending.get("earlierReceipts"):
             self.reconcile_own_discard_receipts(pending, observation)
             return
+        # A public scan can catch up with the discard immediately before this
+        # click.  In that case the first confirmed append is not evidence that
+        # this click selected the wrong tile: the requested tile can appear as
+        # the next append on the following independently-confirmed scan.  Do
+        # not quarantine that public identity or label it a wrong physical
+        # click until a later capture has had an opportunity to distinguish
+        # those two histories.
+        mismatch = pending.get("mismatchCandidate")
+        if mismatch:
+            candidate = mismatch["actual"]
+            if (after[:len(before)] == before and len(after) >= len(before) + 2
+                    and same_physical_tile(after[len(before)], candidate)
+                    and same_physical_tile(after[len(before) + 1], pending["tile"])):
+                self.cached_concealed_tiles = None
+                self.pending_own_discard = None
+                self.pending_own_river_confirmation = None
+                self.log("own_discard_reconciled_after_delayed_prior_append",
+                         tile=after[len(before) + 1], delayedPriorAppend=candidate,
+                         before=before, observed=after,
+                         firstCapturedAt=mismatch.get("capturedAt"),
+                         confirmedCapturedAt=observation.get("capturedAt"),
+                         concealedCacheInvalidated=True)
+                return
+            first_capture = public_capture_seconds(mismatch.get("capturedAt"))
+            current_capture = public_capture_seconds(observation.get("capturedAt"))
+            if (after[:len(before)] == before and len(after) == len(before) + 1
+                    and same_physical_tile(after[-1], candidate)
+                    and first_capture is not None and current_capture is not None
+                    and current_capture > first_capture):
+                # A third, newer capture with the same single append rules out
+                # a momentary recognition lag.  This remains a real mismatch,
+                # so preserve the existing cache quarantine behaviour.
+                pending.pop("mismatchCandidate", None)
+            else:
+                return
         # After a confirmed riichi declaration the game can tsumogiri several
         # times before two independent public scans agree. Verify the exact
         # declaration position, never merely search for the tile in the tail.
@@ -3572,6 +3607,24 @@ class PythonAutoOperator:
             return
         actual = after[-1]
         if not same_physical_tile(actual, pending["tile"]):
+            if not mismatch:
+                pending["mismatchCandidate"] = {
+                    "actual": actual,
+                    "capturedAt": observation.get("capturedAt"),
+                }
+                # Block a subsequent discard while this receipt is ambiguous.
+                # The candidate had already passed the public-cache's first
+                # two-scan admission; this is a separate temporal check for a
+                # prior append that recognition observed late.
+                self.pending_own_river_confirmation = list(after)
+                self.log(
+                    "own_discard_mismatch_pending",
+                    expected=pending["tile"], actual=actual, before=before,
+                    observed=after, capturedAt=observation.get("capturedAt"),
+                    clickIndex=pending.get("clickIndex"), clickPoint=pending.get("clickPoint"),
+                    clickedAt=pending.get("clickedAt"), confirmation=pending.get("confirmation"),
+                )
+                return
             self.cached_concealed_tiles = None
             # The independent river scan proved only that *some* tile was
             # appended. It did not prove this OCR identity. Keeping that
