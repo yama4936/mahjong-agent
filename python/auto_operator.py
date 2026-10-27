@@ -1112,7 +1112,7 @@ def send_discard_click(
     viewport: dict[str, int],
     wait_for_selection: Callable[[float], None],
     selection_before: bytes,
-    selection_receipt: Callable[[], bytes],
+    selection_receipt: Callable[[float], bytes | None],
     layout: dict[str, Any],
     click_index: int,
     stability_threshold: float,
@@ -1131,6 +1131,7 @@ def send_discard_click(
     raised hitbox.
     """
     mouse.click(point["x"], point["y"])
+    first_click_at = time.monotonic()
     # A single fixed 120ms receipt was observed to precede the client's lift
     # animation.  Poll only briefly and always compare every receipt with the
     # pre-click frame: a later receipt may prove this exact tile moved, but an
@@ -1138,10 +1139,17 @@ def send_discard_click(
     confirmation = None
     for wait_ms in (40, 40, 60, 80, 100, 120):
         wait_for_selection(wait_ms)
-        confirmation = raised_tile_confirmation_point(
-            selection_before, selection_receipt(), layout, click_index, point,
-            stability_threshold,
-        )
+        receipt = selection_receipt(first_click_at)
+        # A receipt from before the first click cannot prove the selected
+        # tile's animation, even if it happens to contain a raised glyph.
+        # In force-auto this is a fresh CDP screencast frame, deliberately
+        # not a synchronous Page.screenshot() call: synchronous captures can
+        # block for seconds while an open hand is waiting to settle.
+        if receipt is not None:
+            confirmation = raised_tile_confirmation_point(
+                selection_before, receipt, layout, click_index, point,
+                stability_threshold,
+            )
         if confirmation is not None:
             break
     if confirmation is None:
@@ -2158,6 +2166,30 @@ class PythonAutoOperator:
                 self.screencast_draw_generation += 1
             self.screencast_draw_occupied = occupied
         return True
+
+    def fresh_screencast_selection_receipt(
+        self, sequence_before: int | None, first_click_at: float,
+    ) -> bytes | None:
+        """Return a post-click calibrated stream frame for tile confirmation.
+
+        The action gate frame is evidence only for the first click.  A second
+        click may use a frame only when its receipt sequence *and* local
+        arrival time prove that it followed that first click.  This avoids the
+        several-second synchronous screenshot path observed on a compact
+        open-hand selection.
+        """
+        frame = getattr(self, "latest_screencast_frame", None)
+        captured_at = getattr(self, "latest_screencast_captured_at", None)
+        sequence = getattr(self, "screencast_sequence", None)
+        # ``__new__`` unit fixtures predating the stream metadata deliberately
+        # provide their receipt directly. Real operators initialise both
+        # fields, so this compatibility path cannot weaken live safety.
+        if sequence_before is None or captured_at is None:
+            return frame
+        if frame is None or sequence is None or sequence <= sequence_before \
+                or captured_at < first_click_at:
+            return None
+        return frame
 
     def seed_silent_screencast_gate(self, page: Page) -> bool:
         """Seed a newly silent stream once from an exact-size current screenshot."""
@@ -4807,13 +4839,17 @@ class PythonAutoOperator:
             clickPoint=point,
         )
         self.last_action_clicked_at = time.monotonic()
+        selection_sequence_before = getattr(self, "screencast_sequence", None)
+
         selection_confirmation = send_discard_click(
             page.mouse,
             point,
             self.layout["viewport"],
             lambda milliseconds: page.wait_for_timeout(milliseconds),
             pre_click_full,
-            lambda: page.screenshot(animations="disabled"),
+            lambda first_click_at: self.fresh_screencast_selection_receipt(
+                selection_sequence_before, first_click_at,
+            ),
             self.layout,
             click_index,
             self.args.stability_pixel_delta,

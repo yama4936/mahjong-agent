@@ -4568,7 +4568,7 @@ class AwayDialogDetectionTest(unittest.TestCase):
             {"width": 1920, "height": 1080},
             settle,
             before,
-            lambda: after,
+            lambda _: after,
             layout,
             7,
             1.5,
@@ -4591,7 +4591,7 @@ class AwayDialogDetectionTest(unittest.TestCase):
         receipts = iter((before, after))
         confirmation = send_discard_click(
             mouse, point, {"width": 1920, "height": 1080}, settle, before,
-            lambda: next(receipts), layout, 13, 1.5,
+            lambda _: next(receipts), layout, 13, 1.5,
         )
         self.assertEqual(confirmation["lift"], 48)
         self.assertEqual(settle.call_args_list, [call(40), call(40)])
@@ -4608,7 +4608,7 @@ class AwayDialogDetectionTest(unittest.TestCase):
         with self.assertRaisesRegex(SelectionStateUncertainAbort, "could not be verified") as caught:
             send_discard_click(
                 mouse, point, {"width": 1920, "height": 1080}, settle, before,
-                lambda: before, layout, 7, 1.5,
+                lambda _: before, layout, 7, 1.5,
             )
         self.assertIsInstance(caught.exception, RetryableSafetyAbort)
         self.assertEqual(settle.call_args_list, [
@@ -4617,6 +4617,74 @@ class AwayDialogDetectionTest(unittest.TestCase):
         self.assertEqual(mouse.calls, [
             (933, 999, {}), ("move", 960, 777.6),
         ])
+
+    def test_selection_receipt_rejects_stale_pre_click_screencast_frame(self) -> None:
+        """A queued action-gate frame is never proof for the second click."""
+        layout = load_json(Path(__file__).resolve().parents[1] / "config/layout-300-regression.json")
+        point = layout["clickPoints"][9]
+        before, raised = self.raised_tile_frames(layout, 9, 19)
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.latest_screencast_frame = raised
+        operator.screencast_sequence = 12
+        mouse = RecordingMouse()
+        settle = Mock()
+
+        def stale_receipt(first_click_at):
+            operator.latest_screencast_captured_at = first_click_at - 0.001
+            return operator.fresh_screencast_selection_receipt(11, first_click_at)
+
+        with self.assertRaises(SelectionStateUncertainAbort):
+            send_discard_click(
+                mouse, point, {"width": 1920, "height": 1080}, settle, before,
+                stale_receipt, layout, 9, 1.5,
+            )
+        self.assertEqual(mouse.calls, [(1122.5, 999, {}), ("move", 960.0, 777.6)])
+
+    def test_selection_receipt_accepts_fresh_compact_hand_lift_without_screenshot(self) -> None:
+        """The precise open-meld slot is confirmed from a later stream frame."""
+        layout = load_json(Path(__file__).resolve().parents[1] / "config/layout-300-regression.json")
+        point = layout["clickPoints"][9]
+        before, raised = self.raised_tile_frames(layout, 9, 19)
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.latest_screencast_frame = before
+        operator.screencast_sequence = 12
+        operator.latest_screencast_captured_at = 0.0
+        synchronous_screenshot = Mock(side_effect=AssertionError("selection receipt must not screenshot"))
+        mouse = RecordingMouse()
+
+        def wait_for_stream(_):
+            operator.latest_screencast_frame = raised
+            operator.screencast_sequence = 13
+            operator.latest_screencast_captured_at = time.monotonic()
+
+        confirmation = send_discard_click(
+            mouse, point, {"width": 1920, "height": 1080}, wait_for_stream, before,
+            lambda first_click_at: operator.fresh_screencast_selection_receipt(12, first_click_at),
+            layout, 9, 1.5,
+        )
+        self.assertEqual(confirmation["lift"], 19)
+        self.assertEqual(mouse.calls[:2], [(1122.5, 999, {}), (1122.5, 980.0, {"delay": 80})])
+        synchronous_screenshot.assert_not_called()
+
+    def test_selection_receipt_rejects_fresh_unraised_compact_frame(self) -> None:
+        layout = load_json(Path(__file__).resolve().parents[1] / "config/layout-300-regression.json")
+        point = layout["clickPoints"][9]
+        before, unraised = self.raised_tile_frames(layout, 9, 0)
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.latest_screencast_frame = unraised
+        operator.screencast_sequence = 13
+        mouse = RecordingMouse()
+
+        def fresh_unraised(first_click_at):
+            operator.latest_screencast_captured_at = first_click_at + 0.001
+            return operator.fresh_screencast_selection_receipt(12, first_click_at)
+
+        with self.assertRaises(SelectionStateUncertainAbort):
+            send_discard_click(
+                mouse, point, {"width": 1920, "height": 1080}, Mock(), before,
+                fresh_unraised, layout, 9, 1.5,
+            )
+        self.assertEqual(mouse.calls, [(1122.5, 999, {}), ("move", 960.0, 777.6)])
 
     def test_uncertain_selection_does_not_rearm_for_changed_hand_pixels(self) -> None:
         """A raised tile changes the crop, but is still the same selectable tile."""
