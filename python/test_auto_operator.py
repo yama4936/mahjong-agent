@@ -2602,7 +2602,7 @@ class AwayDialogDetectionTest(unittest.TestCase):
             screenshot=str(screenshot),
             captureAgeMs=2300,
             clickBudgetMs=2600,
-            requiredRecognitionWindowMs=2000,
+            requiredRecognitionWindowMs=1800,
         )
 
     def test_ranked_fresh_receipt_runs_after_matching_board_metadata_is_cached(self) -> None:
@@ -2645,10 +2645,10 @@ class AwayDialogDetectionTest(unittest.TestCase):
         operator.recognize_resident = Mock(side_effect=AssertionError("late recognition started"))
         screenshot = Path("/tmp/beyond-ranked-admission.jpg")
 
-        # 601ms old leaves 1999ms: below the 2000ms recognition admission
+        # 801ms old leaves 1799ms: below the 1800ms recognition admission
         # window.  The final click guard remains unchanged and would reject
         # any later decision that actually consumes the 2600ms budget.
-        with patch("auto_operator.time.monotonic", return_value=10.601):
+        with patch("auto_operator.time.monotonic", return_value=10.801):
             self.assertIsNone(operator.recognize_force_auto_or_defer(
                 screenshot, captured_at=10.0,
             ))
@@ -2657,9 +2657,9 @@ class AwayDialogDetectionTest(unittest.TestCase):
         operator.log.assert_called_once_with(
             "recognition_deferred_insufficient_click_window",
             screenshot=str(screenshot),
-            captureAgeMs=601,
+            captureAgeMs=801,
             clickBudgetMs=2600,
-            requiredRecognitionWindowMs=2000,
+            requiredRecognitionWindowMs=1800,
         )
 
     def test_ranked_click_budget_stops_after_three_consecutive_expiries(self) -> None:

@@ -52,14 +52,14 @@ BOARD_STATE_REGIONS = (
 # A 2600ms ranked click budget includes the physical pre-click validation and
 # mouse dispatch, not merely recognition.  Live measurements show that the
 # resident hand worker plus the final evaluator normally complete within about
-# 2.0s once the matching board-metadata cache is available.  In ranked play,
+# 1.8s once the matching board-metadata cache is available.  In ranked play,
 # CDP screencast receipts arrived 420--547ms after their capture; demanding
 # 2200ms *after* receipt (only 400ms age) rejected every one of those usable
 # frames and eventually caused an away/rejoin cycle.  Admit the observed
 # delivery range, while keeping the final fail-closed click guard as the
 # authority when recognition or pre-click validation takes longer than usual.
 # This is deliberately a *start* admission rule, separate from that guard.
-FORCE_AUTO_MIN_RECOGNITION_WINDOW_MS = 2000
+FORCE_AUTO_MIN_RECOGNITION_WINDOW_MS = 1800
 # This keeps the ranked fast path distinct from 300+0 friend-match regression
 # runs, whose 8000ms budget may safely wait for synchronous metadata work.
 FORCE_AUTO_SHORT_CLICK_BUDGET_MAX_MS = 2600
