@@ -971,7 +971,7 @@ class PostCallWhiteDiscardTest(unittest.TestCase):
         self.assertEqual(receipt["discardedTile"], "P")
         self.assertEqual(receipt["clickIndex"], 7)
         self.assertEqual(page.mouse.click.call_args_list,
-                         [call(933, 999), call(933, 999, delay=80)])
+                         [call(933, 999), call(933, 971, delay=80)])
         self.assertFalse(any(c.args[0] == "ambiguous_open_draw_fallback"
                              for c in operator.log.call_args_list))
         operator.require_force_auto_click_budget.assert_any_call(10.0, phase="before_discard_click")
@@ -4575,7 +4575,7 @@ class AwayDialogDetectionTest(unittest.TestCase):
         )
         self.assertEqual(mouse.calls, [
             (933, 999, {}),
-            (933, 999, {"delay": 80}),
+            (933, 971, {"delay": 80}),
             ("move", 960, 777.6),
         ])
         self.assertEqual(confirmation["lift"], 28)
@@ -4596,7 +4596,7 @@ class AwayDialogDetectionTest(unittest.TestCase):
         self.assertEqual(confirmation["lift"], 48)
         self.assertEqual(settle.call_args_list, [call(40), call(40)])
         self.assertEqual(mouse.calls[:2], [
-            (1532, 999, {}), (1532, 999, {"delay": 80}),
+            (1532, 999, {}), (1532.0, 951.0, {"delay": 80}),
         ])
 
     def test_discard_unproven_selection_never_retries_as_a_deselect(self) -> None:
@@ -4663,10 +4663,9 @@ class AwayDialogDetectionTest(unittest.TestCase):
             layout, 9, 1.5,
         )
         self.assertEqual(confirmation["lift"], 19)
-        # The later stream frame proves that this slot was selected, but the
-        # calibrated centre remains the only stable input hitbox for the
-        # second activation.
-        self.assertEqual(mouse.calls[:2], [(1122.5, 999, {}), (1122.5, 999, {"delay": 80})])
+        # The later stream frame supplies the only input hitbox which is
+        # known to remain on the selected physical tile.
+        self.assertEqual(mouse.calls[:2], [(1122.5, 999, {}), (1122.5, 980.0, {"delay": 80})])
         synchronous_screenshot.assert_not_called()
 
     def test_selection_receipt_rejects_fresh_unraised_compact_frame(self) -> None:

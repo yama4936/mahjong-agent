@@ -1161,14 +1161,13 @@ def send_discard_click(
         raise SelectionStateUncertainAbort(
             "selected tile lift or identity could not be verified before discard confirmation"
         )
-    # The stream receipt proves that the requested physical tile was selected,
-    # but its visual lift coordinate is not a stable input hitbox.  In the
-    # 5+20 regression a North tile remained visibly selected after the
-    # lifted-coordinate click while the client later discarded a different
-    # tile.  Mahjong Soul continues to accept the original slot centre for a
-    # selected tile, so keep the second activation on the same calibrated
-    # input coordinate and use the measured lift only as selection evidence.
-    mouse.click(point["x"], point["y"], delay=80)
+    # The receipt proves the requested physical tile is still raised.  The
+    # second activation must target that observed raised hitbox, not the
+    # now-vacated calibrated centre: in the 5+20 445541f regression, clicking
+    # the original centre left 5s selected and Mahjong Soul later tsumogiri'd
+    # 7s.  A measured raised coordinate is therefore both the identity proof
+    # and the only admissible confirmation target.
+    mouse.click(confirmation["x"], confirmation["y"], delay=80)
     # Once the row closes, the next tile can slide under the pointer and stay
     # raised. Move to inert table felt before post-action recognition.
     mouse.move(viewport["width"] / 2, viewport["height"] * 0.72)
