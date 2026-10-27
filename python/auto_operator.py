@@ -2819,6 +2819,64 @@ class PythonAutoOperator:
             return False
         return winds.index(current["seat"]) == (winds.index(previous["seat"]) - rounds) % 4
 
+    def start_self_win_capture(self, action: str) -> None:
+        """Arm a bounded, click-free capture after our confirmed ron/tsumo."""
+        self.self_win_capture = {
+            "id": utc_stamp(), "action": action, "started": time.monotonic(),
+            "frames": [], "sawOverlay": False,
+        }
+        self.log("self_win_capture_started", winId=self.self_win_capture["id"],
+                 action=action, maxDurationMs=15000, intervalMs=500)
+
+    def capture_self_win_result(self, page: Page) -> bool:
+        """Sample the whole yaku animation before result-confirmation can click.
+
+        Canvas animations are not frozen by Playwright animations='disabled'.
+        Keep a sequence rather than calling the first result frame a settled
+        yaku screen. This is image evidence, not OCR or a verified yaku label.
+        """
+        capture = getattr(self, "self_win_capture", None)
+        if capture is None:
+            return False
+        elapsed = time.monotonic() - capture["started"]
+        reason = None
+        if elapsed >= 15 or len(capture["frames"]) >= 30:
+            reason = "capture_window_complete"
+        else:
+            try:
+                frame = page.screenshot(animations="disabled")
+                state, _ = classify_screen(frame, getattr(self, "screen_references", {}))
+                # Do not delay a later live hand if the client auto-advanced.
+                live = (capture["sawOverlay"] and state == "match"
+                        and closed_concealed_row_visible(frame, self.layout)
+                        and round_result_conflicts_with_live_table(frame, self.layout))
+                if live:
+                    reason = "live_table_returned"
+                else:
+                    snapshot = self.frames / f"{utc_stamp()}.self-win-{capture['action']}.png"
+                    snapshot.write_bytes(frame)
+                    snapshot.chmod(0o600)
+                    evidence = {"observedAt": datetime.now(timezone.utc).isoformat(),
+                                "screenshot": str(snapshot), "screenState": state,
+                                "elapsedMs": round(elapsed * 1000)}
+                    capture["frames"].append(evidence)
+                    self.log("self_win_frame", winId=capture["id"],
+                             action=capture["action"], evidence=evidence)
+                    capture["sawOverlay"] |= state in {"round_result", "match_result", "unknown"}
+                    if state == "match_result":
+                        reason = "match_result_reached"
+            except Exception as error:
+                # A recording error must never repeat an already-sent win.
+                reason = "capture_error"
+                self.log("self_win_capture_error", winId=capture["id"], error=str(error))
+        if reason:
+            self.log("self_win_capture_finished", winId=capture["id"],
+                     action=capture["action"], frameCount=len(capture["frames"]), reason=reason)
+            self.self_win_capture = None
+            return False
+        page.wait_for_timeout(500)
+        return True
+
     def clear_round_terminal_latch(self, source: str) -> None:
         self.round_terminal_latched = False
         self.round_terminal_result_observed = False
@@ -4645,7 +4703,8 @@ class PythonAutoOperator:
                 region_override=region if force_auto else None,
             )
             if selected_action != "riichi":
-                if button_action == "tsumo":
+                if button_action in {"tsumo", "ron"}:
+                    self.start_self_win_capture(button_action)
                     self.round_terminal_latched = True
                     self.round_terminal_result_observed = False
                 return {"clicked": True, "policy": "certified_auto", "action": selected_action,
@@ -4990,6 +5049,7 @@ class PythonAutoOperator:
                 self.pending_post_call_started_at = None
                 self.round_terminal_latched = True
                 self.round_terminal_result_observed = False
+                self.start_self_win_capture("ron")
                 return {
                     "clicked": True, "policy": "force_auto", "action": "ron",
                     "clickPoint": point, "confirmation": "reaction_win_button_disappeared",
@@ -5050,6 +5110,8 @@ class PythonAutoOperator:
                 public_observation = self.cached_public_observation \
                     if self.args.mode == "force-auto" else None
                 self.ensure_viewport(page)
+                if self.capture_self_win_result(page):
+                    continue
                 gate_frame = None
                 gate_captured_at: float | None = None
                 quick_draw = False
