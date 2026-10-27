@@ -30,6 +30,7 @@ from playwright.sync_api import Browser, CDPSession, Page, sync_playwright
 from PIL import Image, ImageChops, ImageStat
 from screen_state import _rgb_fraction, classify_screen, load_references
 from operator_lock import OperatorAlreadyRunning, endpoint_key, operator_lease
+from analysis_recorder import AnalysisRecorder
 
 
 class RetryableSafetyAbort(RuntimeError):
@@ -2732,6 +2733,14 @@ class PythonAutoOperator:
         with self.log_path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n")
         print(json.dumps(record, ensure_ascii=False), flush=True)
+        # Analysis must never interrupt gameplay or replace the raw evidence log.
+        try:
+            if not hasattr(self, "analysis_recorder"):
+                self.analysis_recorder = AnalysisRecorder(self.log_path.parent / "analysis", str(self.log_path.parent))
+            self.analysis_recorder.observe(record)
+        except Exception as exc:
+            print(f"analysis_export_failed: {type(exc).__name__}: {exc}", file=sys.stderr, flush=True)
+
 
     @staticmethod
     def ranked_loop_click_point(state: str, viewport: dict[str, int]) -> dict[str, float] | None:
