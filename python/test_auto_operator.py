@@ -13,7 +13,7 @@ import threading
 from datetime import datetime, timezone
 from unittest.mock import Mock, call, patch
 
-from auto_operator import PythonAutoOperator, RetryableSafetyAbort, action_deadline_timing, ambiguous_open_draw_fallback, away_resume_geometry, closed_concealed_row_visible, closed_hand_face_mismatches, confirmed_call_meld, crop_screenshot, crop_screenshot_regions, discard_point_in_hand_geometry, force_auto_call_buttons, force_auto_chi_choice_points, force_auto_reaction_win_button, force_auto_self_action_buttons, geometric_open_meld_count, is_away_resume_dialog, is_contextual_reaction_pass, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, mean_pixel_delta, merge_public_observations, open_hand_draw_slot, own_meld_surface_visible, post_call_transition, retreat_pointer_from_hand, screencast_frame_follows_pointer_retreat, riichi_selection_is_visible, round_result_conflicts_with_live_table, selected_chi_choice_point, selected_open_draw_is_ambiguous, selected_tile_comparison_region, send_discard_click, should_guard_tenpai_reaction, should_process_reaction_prompt, should_retry_call_policy, stable_hand_comparison_region, stable_hand_delta, tile_face_structure_delta
+from auto_operator import PythonAutoOperator, RetryableSafetyAbort, action_deadline_timing, ambiguous_open_draw_fallback, away_resume_geometry, closed_concealed_row_visible, closed_hand_face_mismatches, confirmed_call_meld, crop_screenshot, crop_screenshot_regions, discard_point_in_hand_geometry, force_auto_call_buttons, force_auto_chi_choice_points, force_auto_reaction_win_button, force_auto_self_action_buttons, geometric_open_meld_count, is_away_resume_dialog, is_contextual_reaction_pass, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, mean_pixel_delta, merge_public_observations, open_hand_draw_slot, own_meld_surface_visible, post_call_transition, retreat_pointer_from_hand, riichi_selection_target_region, screencast_frame_follows_pointer_retreat, riichi_selection_is_visible, round_result_conflicts_with_live_table, selected_chi_choice_point, selected_open_draw_is_ambiguous, selected_tile_comparison_region, send_discard_click, should_guard_tenpai_reaction, should_process_reaction_prompt, should_retry_call_policy, stable_hand_comparison_region, stable_hand_delta, tile_face_structure_delta
 from screen_state import classify_screen, load_references
 from auto_operator import geometric_reaction_open_meld_count, draw_slots_occupied
 from auto_operator import configure_evaluator_click_budget, with_match_length
@@ -1037,6 +1037,16 @@ class ActionDeadlineTest(unittest.TestCase):
         hand_clip = {"x": 223, "y": 926, "width": 1355, "height": 146}
         self.assertTrue(riichi_selection_is_visible(crop_screenshot(selection, hand_clip)))
         self.assertFalse(riichi_selection_is_visible(crop_screenshot(ordinary, hand_clip)))
+
+    def test_riichi_selection_target_requires_the_evaluated_physical_slot(self) -> None:
+        layout = load_json(Path(__file__).resolve().parents[1] / "config/layout-300-regression.json")
+        point = layout["clickPoints"][7]
+        region = riichi_selection_target_region(layout, 7, point)
+        self.assertIsNotNone(region)
+        self.assertEqual(region["x"], layout["handSlots"][7]["x"] + 10)
+        # A hand-wide geometry check is insufficient: a neighbouring slot
+        # must not be accepted for the post-Riichi target.
+        self.assertIsNone(riichi_selection_target_region(layout, 7, layout["clickPoints"][6]))
 
     def test_riichi_confirmation_accepts_dimmed_selection_not_unchanged_button(self) -> None:
         project = Path(__file__).resolve().parents[1]
@@ -2792,11 +2802,7 @@ class AwayDialogDetectionTest(unittest.TestCase):
             mode="force-auto", allow_local_discard=False, stability_pixel_delta=1.5,
             force_auto_click_budget_ms=2600,
         )
-        operator.layout = {
-            "viewport": {"width": 1920, "height": 1080},
-            "clickPoints": [],
-            "publicTileRegions": {},
-        }
+        operator.layout = load_json(project / "config/layout-300-regression.json")
         operator.hand_clip = {"x": 223, "y": 926, "width": 1355, "height": 146}
         operator.river_clip = {"x": 10, "y": 0, "width": 10, "height": 10}
         frame = (project / "test/fixtures/riichi-before-selection-20261020.jpg").read_bytes()
@@ -2855,6 +2861,47 @@ class AwayDialogDetectionTest(unittest.TestCase):
             call.args and call.args[0] == "force_auto_click_budget_expired"
             for call in operator.log.call_args_list
         ))
+
+    def test_riichi_discard_aborts_when_selection_target_moves_after_declaration(self) -> None:
+        """Never apply the pre-Riichi target after a changing selection row."""
+        project = Path(__file__).resolve().parents[1]
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(
+            mode="force-auto", allow_local_discard=False, stability_pixel_delta=1.5,
+            force_auto_click_budget_ms=2600,
+        )
+        operator.layout = load_json(project / "config/layout-300-regression.json")
+        operator.hand_clip = {"x": 223, "y": 926, "width": 1355, "height": 146}
+        operator.river_clip = {"x": 770, "y": 535, "width": 390, "height": 225}
+        frame = (project / "test/fixtures/riichi-before-selection-20261020.jpg").read_bytes()
+        selection = (project / "test/fixtures/riichi-two-candidates-selection-20261020.jpg").read_bytes()
+        operator.screencast_session = Mock()
+        operator.latest_screencast_frame = frame
+        operator.screencast_draw_generation = 4
+        operator.cached_open_melds = 0
+        operator.confirm_action_button = Mock(return_value={"confirmation": "riichi_selection_hand_changed"})
+        operator.refresh_discard_reconciliation_before_click = Mock(return_value=False)
+        operator.require_action_deadline = Mock()
+        operator.log = Mock()
+        page = Mock()
+        page.screenshot.side_effect = lambda **kwargs: selection
+        evaluation = {
+            "decision": {"selectedAction": {"action": "riichi", "tile": "1m"}},
+            "recognition": {"tiles": ["1m"] * 14, "safe": False},
+            "clickIndex": 0,
+            "clickPoint": {"x": 269, "y": 999},
+            "actionButton": {"action": "riichi", "x": 1087, "y": 788, "width": 352, "height": 57,
+                             "center": {"x": 1263, "y": 816.5}},
+        }
+        with patch("auto_operator.stable_hand_delta", side_effect=[0.0, 2.0]), \
+                patch("auto_operator.classify_screen", return_value=("match", 1.0)), \
+                patch("auto_operator.is_away_resume_dialog", return_value=False), \
+                patch("auto_operator.discard_point_in_hand_geometry", return_value=True), \
+                patch("auto_operator.time.monotonic", return_value=10.1):
+            with self.assertRaisesRegex(RetryableSafetyAbort, "riichi selection target changed"):
+                operator.execute(page, evaluation, crop_screenshot(frame, operator.hand_clip), frame, 4, 10.0)
+        # The declaration can be sent, but the unsafe second tile click cannot.
+        page.mouse.click.assert_called_once_with(1263, 816.5)
 
     def test_reaction_call_never_clicks_a_stale_ranked_capture(self) -> None:
         operator = PythonAutoOperator.__new__(PythonAutoOperator)

@@ -882,6 +882,41 @@ def selected_tile_comparison_region(
     return {"x": float(point["x"]) - width / 2, "y": top, "width": width, "height": bottom - top}
 
 
+def riichi_selection_target_region(
+    layout: dict[str, Any], click_index: Any, point: Any,
+) -> dict[str, float] | None:
+    """Return the face ROI for the physical tile chosen after Riichi.
+
+    The declaration changes the hand into a dimmed selection UI.  Its tile
+    positions must be proved from that *new* UI, rather than trusting the
+    evaluator's pre-declaration coordinate.  Restrict the comparison to the
+    selected physical slot so unrelated table animation cannot mask a moved
+    or replaced target.
+    """
+    slots = [*layout.get("handSlots", [])]
+    draw_slot = layout.get("drawSlot")
+    if draw_slot is None:
+        return None
+    slots.append(draw_slot)
+    if not isinstance(click_index, int) or not 0 <= click_index < len(slots):
+        return None
+    if not isinstance(point, dict) or not all(isinstance(point.get(key), (int, float)) for key in ("x", "y")):
+        return None
+    slot = slots[click_index]
+    x, y = float(point["x"]), float(point["y"])
+    if not (slot["x"] <= x < slot["x"] + slot["width"]
+            and slot["y"] <= y < slot["y"] + slot["height"]):
+        return None
+    # Match the glyph-only portions used by the ordinary stale-hand guard.
+    # This excludes the bottom click/hover effect and tile borders.
+    width = float(slot["width"]) - 20
+    height = float(slot["height"]) - 38
+    if width <= 0 or height <= 0:
+        return None
+    return {"x": float(slot["x"]) + 10, "y": float(slot["y"]) + 10,
+            "width": width, "height": height}
+
+
 def local_discard_allowed(args: argparse.Namespace, evaluation: dict[str, Any]) -> bool:
     decision = evaluation.get("decision", {})
     return bool(
@@ -4454,6 +4489,35 @@ class PythonAutoOperator:
             )
             if post_riichi_state != "match" or not riichi_selection_is_visible(post_riichi_hand):
                 raise RetryableSafetyAbort("riichi selection state disappeared before discard click")
+            post_riichi_target = riichi_selection_target_region(
+                self.layout, click_index,
+                dynamic_click_point if has_dynamic_click_point else points[click_index],
+            )
+            if post_riichi_target is None:
+                raise RetryableSafetyAbort("riichi selection target is outside its physical hand slot")
+            # Confirmation only establishes that the selection UI appeared;
+            # it does not establish that its settling animation retained the
+            # evaluator's target slot.  Take a second, temporally separate
+            # selection receipt and compare the exact chosen tile face before
+            # issuing the discard click.  This specifically prevents a
+            # pre-Riichi coordinate from selecting a neighbouring tile after
+            # the dimmed row has relaid out.
+            page.wait_for_timeout(120)
+            settled_riichi_full = page.screenshot(animations="disabled")
+            settled_riichi_hand = crop_screenshot(settled_riichi_full, self.hand_clip)
+            settled_riichi_state, _ = classify_screen(
+                settled_riichi_full, getattr(self, "screen_references", {}),
+            )
+            if (settled_riichi_state != "match"
+                    or not riichi_selection_is_visible(settled_riichi_hand)):
+                raise RetryableSafetyAbort("riichi selection state changed while settling before discard click")
+            target_before = crop_screenshot(post_riichi_full, post_riichi_target)
+            target_settled = crop_screenshot(settled_riichi_full, post_riichi_target)
+            target_delta = stable_hand_delta(target_before, target_settled, 0)
+            if target_delta > self.args.stability_pixel_delta:
+                raise RetryableSafetyAbort(
+                    f"riichi selection target changed while settling (pixel delta={target_delta:.3f})"
+                )
             # The declaration was confirmed and this full viewport was then
             # captured specifically to verify the dimmed discard-selection
             # UI.  That observation is the safety boundary for the second
@@ -4463,8 +4527,8 @@ class PythonAutoOperator:
             # unconfirmed declaration or any other action path.
             if force_auto:
                 evaluated_captured_at = post_riichi_captured_at
-            hand_before = post_riichi_hand
-            river_before = crop_screenshot(post_riichi_full, self.river_clip)
+            hand_before = settled_riichi_hand
+            river_before = crop_screenshot(settled_riichi_full, self.river_clip)
 
         point = dynamic_click_point if has_dynamic_click_point else points[click_index]
         require_post_riichi_draw_click(evaluation, selected, self.layout,
