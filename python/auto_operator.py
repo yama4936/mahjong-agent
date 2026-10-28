@@ -4131,13 +4131,41 @@ class PythonAutoOperator:
             if len(appended) < len(receipts) and cursor == len(appended):
                 self.cached_concealed_tiles = None
                 self.pending_own_discard = None
-                observation["ownDiscards"] = list(before)
+                # Two independently admitted river scans can show the later
+                # receipt while the first tile was taken before any scan saw
+                # it. Preserve the visible append only when an independently
+                # observed new pon is compatible with that missing receipt.
+                # This still does not certify which physical tile was called
+                # or retain the concealed cache.
+                retain_append = False
+                if (len(receipts) == 2 and len(appended) == 1
+                        and not same_physical_tile(receipts[0]["tile"], receipts[1]["tile"])
+                        and same_physical_tile(appended[0], receipts[1]["tile"])):
+                    first = receipts[0]
+                    captured = public_capture_seconds(observation.get("capturedAt"))
+                    clicked = public_capture_seconds(first.get("clickedAt"))
+                    if captured is not None and clicked is not None and captured > clicked:
+                        for row in observation.get("opponentDiscards", []):
+                            old = first.get("opponentMeldsBefore", {}).get(row.get("seat"))
+                            new = row.get("melds", [])
+                            if row.get("meldsObserved") is not True or old is None:
+                                continue
+                            if new[:len(old)] != old or len(new) != len(old) + 1:
+                                continue
+                            meld = new[-1]
+                            tiles = meld.get("tiles", [])
+                            if (meld.get("type") == "pon" and len(tiles) == 3
+                                    and all(tile == first["tile"] for tile in tiles)):
+                                retain_append = True
+                                break
+                if not retain_append:
+                    observation["ownDiscards"] = list(before)
                 self.pending_own_river_confirmation = None
                 self.log("own_discard_reconciliation_unresolved",
                          reason="river_missing_queued_receipt", before=before, observed=after,
                          capturedAt=observation.get("capturedAt"),
                          receiptTiles=[item["tile"] for item in receipts],
-                         concealedCacheInvalidated=True, untrustedAppendQuarantined=True)
+                         concealedCacheInvalidated=True, untrustedAppendQuarantined=not retain_append)
                 return
             rejected = receipts[wrong]
             self.cached_concealed_tiles = None

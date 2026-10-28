@@ -129,6 +129,40 @@ class QueuedDiscardReceiptTest(unittest.TestCase):
         self.scan(fixture['scans'][1]['ownDiscards'], '2026-10-22T05:45:03+00:00')
         self.assertEqual(self.op.cached_public_observation['ownDiscards'], ['9s', '6m'])
 
+    def test_confirmed_visible_later_tile_survives_new_pon_of_missing_receipt(self):
+        self.op.pending_own_discard = None
+        self.op.log.reset_mock()
+        before = ['1p', 'P', 'W', 'S', '2m', '4p', '1m']
+        self.op.cached_public_observation = {'ownDiscards': list(before)}
+        self.op.register_pending_own_discard({'tile': 'N', 'before': before,
+            'clickedAt': '2026-10-28T05:39:38+00:00', 'opponentMeldsBefore': {'north': []}})
+        self.op.register_pending_own_discard({'tile': '7p', 'before': before})
+        pending = self.op.pending_own_discard
+        observation = {'ownDiscards': before + ['7p'], 'capturedAt': '2026-10-28T05:39:55+00:00',
+            'opponentDiscards': [{'seat': 'north', 'meldsObserved': True,
+                'melds': [{'type': 'pon', 'tiles': ['N', 'N', 'N']}]}]}
+        self.op.reconcile_own_discard_receipts(pending, observation)
+        self.assertEqual(observation['ownDiscards'], before + ['7p'])
+        self.assertIsNone(self.op.pending_own_discard)
+        self.assertIsNone(self.op.cached_concealed_tiles)
+        self.assertFalse(self.op.log.call_args.kwargs['untrustedAppendQuarantined'])
+        self.op.record_post_riichi_pass_candidate.assert_not_called()
+
+        # Missing or older/unchanged meld evidence must remain quarantined.
+        for rows in ([], [{'seat': 'north', 'meldsObserved': False,
+                           'melds': [{'type': 'pon', 'tiles': ['N'] * 3}]}],
+                     [{'seat': 'north', 'meldsObserved': True,
+                       'melds': [{'type': 'pon', 'tiles': ['W'] * 3}]}]):
+            with self.subTest(rows=rows):
+                self.op.pending_own_discard = None
+                self.op.register_pending_own_discard({'tile': 'N', 'before': before,
+                    'clickedAt': '2026-10-28T05:39:38+00:00', 'opponentMeldsBefore': {'north': []}})
+                self.op.register_pending_own_discard({'tile': '7p', 'before': before})
+                candidate = {'ownDiscards': before + ['7p'], 'capturedAt': '2026-10-28T05:39:55+00:00',
+                             'opponentDiscards': rows}
+                self.op.reconcile_own_discard_receipts(self.op.pending_own_discard, candidate)
+                self.assertEqual(candidate['ownDiscards'], before)
+
     def test_missing_interior_or_duplicate_receipt_never_certifies_a_sparse_sequence(self):
         for expected, observed in [(['P', '4m', '8s'], ['P', '8s']),
                                    (['P', 'P', '8s'], ['P', '8s']),
