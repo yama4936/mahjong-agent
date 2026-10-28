@@ -72,6 +72,19 @@ class UncertainSelectionClockTest(unittest.TestCase):
         self.assertTrue(self.op.rearm_uncertain_selection_clock(37, 40.0))
         self.assertEqual(self.op.action_evidence_started_at, 30.0)
 
+    def test_draw_generation_animation_cannot_rearm_or_extend_deadline(self):
+        # Occupancy can toggle during an animation.  Even several resulting
+        # generations are not an own-river receipt and must not enable clicks.
+        self.assertFalse(self.op.rearm_uncertain_selection_clock(37, 40.0))
+        self.assertEqual(self.op.action_evidence_started_at, 10.0)
+
+    def test_unconfirmed_later_draw_stops_after_grace_from_observation(self):
+        # The receipt time is delivery/observation time, not the unknown game
+        # turn-start time.  It only bounds a no-click grace period.
+        self.assertFalse(self.op.rearm_uncertain_selection_clock(36, 30.0))
+        self.assertFalse(self.op.selection_uncertainty_stop_due(32.99))
+        self.assertTrue(self.op.selection_uncertainty_stop_due(33.0))
+
 
 if __name__ == "__main__":
     unittest.main()

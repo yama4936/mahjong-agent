@@ -79,6 +79,10 @@ FORCE_AUTO_SHORT_CLICK_BUDGET_MAX_MS = 2600
 # click.  Do not start that gesture with so little of the short-clock budget
 # left that its second input can race the client auto-tsumogiri.
 FORCE_AUTO_DISCARD_SELECTION_RESERVE_MS = 650
+# Once a possible selected tile has survived into a later observed draw, wait
+# briefly for the public worker to corroborate the own river.  If it cannot,
+# stop rather than treating draw-slot animation as permission to click again.
+SELECTION_UNCERTAINTY_PUBLIC_CONFIRMATION_GRACE_SECONDS = 3.0
 
 
 def board_state_signature(frame: bytes) -> tuple[Image.Image, ...]:
@@ -959,6 +963,41 @@ def blank_tile_raised_confirmation(
         return None
 
 
+def raised_glyph_overlap_confirmation(
+    baseline: Image.Image, after_mask: Image.Image, face: dict[str, float],
+    point: dict[str, float],
+) -> dict[str, float] | None:
+    """Confirm a lifted glyph despite a client selection-light animation.
+
+    The selection animation can wash out part of a tile face, making a raw
+    pixel-difference comparison reject a real selection.  It must not make a
+    static or neighbouring tile acceptable: require that nearly all of the
+    target's *dark glyph* moves by one unique vertical offset.
+    """
+    baseline_pixels = list(baseline.getdata())
+    glyph_pixels = sum(value > 0 for value in baseline_pixels)
+    if glyph_pixels == 0:
+        return None
+    left, top = int(face["x"]), int(face["y"])
+    right, bottom = int(face["x"] + face["width"]), int(face["y"] + face["height"])
+    candidates: list[tuple[float, float, int]] = []
+    for lift in range(8, 81):
+        shifted = after_mask.crop((left, top - lift, right, bottom - lift))
+        shifted_pixels = list(shifted.getdata())
+        overlap = sum(a > 0 and b > 0 for a, b in zip(baseline_pixels, shifted_pixels))
+        shifted_count = sum(value > 0 for value in shifted_pixels)
+        candidates.append((overlap / glyph_pixels, shifted_count / glyph_pixels, lift))
+    overlap, density, lift = max(candidates)
+    runner_up = max(score for score, _density, offset in candidates if offset != lift)
+    # Empirical F/E receipts retain 94%+ of the dark glyph at 48px; unchanged
+    # tiles peak below 57%.  The density bound excludes a broad dark overlay.
+    if overlap < 0.90 or overlap - runner_up < 0.07 or not 0.70 <= density <= 1.35:
+        return None
+    return {"x": float(point["x"]), "y": float(point["y"]) - lift,
+            "lift": float(lift), "faceStructureDelta": 0.0,
+            "verification": "dark_glyph_overlap"}
+
+
 def raised_tile_confirmation_point(
     before: bytes, after: bytes, layout: dict[str, Any], click_index: int,
     point: dict[str, float], threshold: float,
@@ -1032,7 +1071,12 @@ def raised_tile_confirmation_point(
             # does not apply to arbitrary occlusion: most of the target face
             # and at least 85% of its dark glyph must remain comparable.
             if min(alternatives) - delta < 4.5:
-                return None
+                # Keep the narrow 9p sparkle path unchanged.  The F receipt
+                # begins just above this band (1.915%), where the glyph
+                # overlap proof is needed to survive the selection light.
+                if delta <= 1.8:
+                    return None
+                return raised_glyph_overlap_confirmation(baseline, after_mask, face, point)
             try:
                 with Image.open(io.BytesIO(after)) as image:
                     rgb = image.convert("RGB").crop((left, int(face["y"] - lift), right,
@@ -1043,19 +1087,24 @@ def raised_tile_confirmation_point(
                 total = rgb.width * rgb.height
                 valid_count = ImageStat.Stat(valid).sum[0] / 255
                 if valid_count < total * 0.95 or valid_count == total:
-                    return None
+                    return raised_glyph_overlap_confirmation(baseline, after_mask, face, point)
                 glyph_pixels = ImageStat.Stat(baseline).sum[0] / 255
                 retained_glyph = ImageStat.Stat(ImageChops.multiply(baseline, valid)).sum[0] / 255
                 if glyph_pixels == 0 or retained_glyph < glyph_pixels * 0.85:
-                    return None
+                    return raised_glyph_overlap_confirmation(baseline, after_mask, face, point)
                 shifted = after_mask.crop((left, int(face["y"] - lift), right,
                                            int(face["y"] - lift + face["height"])))
                 difference = ImageChops.multiply(ImageChops.difference(baseline, shifted), valid)
                 delta = ImageStat.Stat(difference).sum[0] / 255 / valid_count * 100
                 if delta > threshold:
-                    return None
+                    return raised_glyph_overlap_confirmation(baseline, after_mask, face, point)
             except Exception:
-                return None
+                return raised_glyph_overlap_confirmation(baseline, after_mask, face, point)
+        overlap_confirmation = raised_glyph_overlap_confirmation(
+            baseline, after_mask, face, point,
+        )
+        if overlap_confirmation is not None:
+            return overlap_confirmation
     return {"x": float(point["x"]), "y": float(point["y"]) - lift,
             "lift": float(lift), "faceStructureDelta": round(delta, 3)}
 
@@ -2231,6 +2280,18 @@ class PythonAutoOperator:
         self.log("selection_uncertainty_action_clock_rearmed", drawGeneration=draw_generation,
                  confirmedOwnDiscards=river)
         return True
+
+    def selection_uncertainty_stop_due(self, now: float) -> bool:
+        """Fail closed when a later draw has no corroborated own-river receipt.
+
+        Draw-slot occupancy is susceptible to animation and delivery timing,
+        so it may start the public-confirmation grace period but can never
+        clear the latch or restart an action deadline by itself.
+        """
+        latch = getattr(self, "selection_uncertainty_latch", None)
+        first_draw = (latch or {}).get("firstNewDrawObservedAt")
+        return isinstance(first_draw, (int, float)) and now - first_draw >= \
+            SELECTION_UNCERTAINTY_PUBLIC_CONFIRMATION_GRACE_SECONDS
 
     def accept_public_observation(self, current: dict[str, Any]) -> bool:
         """Apply one capture through the shared history and receipt guards."""
@@ -6173,6 +6234,23 @@ class PythonAutoOperator:
                             baselineDrawGeneration=self.selection_uncertainty_latch.get("drawGeneration"),
                             baselineOwnDiscards=self.selection_uncertainty_latch.get("ownDiscards"),
                         )
+                        uncertainty_now = time.monotonic()
+                        # Normally rearm_uncertain_selection_clock records
+                        # the screencast receipt.  If that timestamp is
+                        # absent, start a no-click grace from this verified
+                        # evaluation instead of waiting forever.
+                        if uncertainty_rearm is not None and \
+                                self.selection_uncertainty_latch.get("firstNewDrawObservedAt") is None:
+                            self.selection_uncertainty_latch["firstNewDrawObservedAt"] = uncertainty_now
+                        if self.selection_uncertainty_stop_due(uncertainty_now):
+                            self.log(
+                                "selection_uncertainty_safety_stop",
+                                drawGeneration=evaluation_draw_generation,
+                                baselineDrawGeneration=self.selection_uncertainty_latch.get("drawGeneration"),
+                                reason="later_draw_without_confirmed_own_river",
+                                gameplayClicks=0,
+                            )
+                            return
                         page.wait_for_timeout(max(100, round(self.args.poll * 1000)))
                         continue
                     self.log("selection_uncertainty_rearmed", reason=uncertainty_rearm)

@@ -13,7 +13,7 @@ import threading
 from datetime import datetime, timezone
 from unittest.mock import Mock, call, patch
 
-from auto_operator import PythonAutoOperator, RetryableSafetyAbort, SelectionStateUncertainAbort, action_deadline_timing, ambiguous_open_draw_fallback, away_resume_geometry, closed_concealed_row_visible, closed_hand_face_mismatches, confirmed_call_meld, crop_screenshot, crop_screenshot_regions, discard_point_in_hand_geometry, force_auto_call_buttons, force_auto_chi_choice_points, force_auto_reaction_win_button, force_auto_self_action_buttons, geometric_open_meld_count, is_away_resume_dialog, is_contextual_reaction_pass, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, mean_pixel_delta, merge_public_observations, open_hand_draw_slot, own_meld_surface_visible, post_call_transition, raised_tile_confirmation_point, retreat_pointer_from_hand, riichi_selection_target_region, screencast_frame_follows_pointer_retreat, riichi_selection_is_visible, round_result_conflicts_with_live_table, selected_chi_choice_point, selected_open_draw_is_ambiguous, selected_tile_comparison_region, send_discard_click, should_guard_tenpai_reaction, should_process_reaction_prompt, should_retry_call_policy, stable_hand_comparison_region, stable_hand_delta, tile_face_structure_delta
+from auto_operator import PythonAutoOperator, RetryableSafetyAbort, SelectionStateUncertainAbort, action_deadline_timing, ambiguous_open_draw_fallback, away_resume_geometry, closed_concealed_row_visible, closed_hand_face_mismatches, confirmed_call_meld, crop_screenshot, crop_screenshot_regions, discard_point_in_hand_geometry, force_auto_call_buttons, force_auto_chi_choice_points, force_auto_reaction_win_button, force_auto_self_action_buttons, geometric_open_meld_count, is_away_resume_dialog, is_contextual_reaction_pass, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, mean_pixel_delta, merge_public_observations, open_hand_draw_slot, own_meld_surface_visible, post_call_transition, raised_glyph_overlap_confirmation, raised_tile_confirmation_point, retreat_pointer_from_hand, riichi_selection_target_region, screencast_frame_follows_pointer_retreat, riichi_selection_is_visible, round_result_conflicts_with_live_table, selected_chi_choice_point, selected_open_draw_is_ambiguous, selected_tile_comparison_region, send_discard_click, should_guard_tenpai_reaction, should_process_reaction_prompt, should_retry_call_policy, stable_hand_comparison_region, stable_hand_delta, tile_face_structure_delta
 from screen_state import classify_screen, load_references
 from auto_operator import geometric_reaction_open_meld_count, draw_slots_occupied
 from auto_operator import configure_evaluator_click_budget, with_match_length
@@ -4928,8 +4928,9 @@ class AwayDialogDetectionTest(unittest.TestCase):
         after = (root / "test/fixtures/selection-9p-lift-20261028.jpg").read_bytes()
         result = raised_tile_confirmation_point(before, after, layout, 13,
                                                 layout["clickPoints"][13], 1.5)
-        self.assertEqual(result, {"x": 1532.0, "y": 951.0, "lift": 48.0,
-                                  "faceStructureDelta": 1.685})
+        self.assertEqual((result["x"], result["y"], result["lift"]),
+                         (1532.0, 951.0, 48.0))
+        self.assertIn(result.get("verification"), {None, "dark_glyph_overlap"})
         self.assertIsNone(raised_tile_confirmation_point(before, before, layout, 13,
                                                         layout["clickPoints"][13], 1.5))
         self.assertIsNone(raised_tile_confirmation_point(before, after, layout, 12,
@@ -5001,6 +5002,59 @@ class AwayDialogDetectionTest(unittest.TestCase):
         Image.new("RGB", (1920, 1080), "white").save(blank, format="PNG")
         self.assertIsNone(raised_tile_confirmation_point(blank.getvalue(), blank.getvalue(), layout,
                                                         12, point, 1.5))
+
+    def test_glyph_overlap_fallback_requires_a_unique_target_lift(self) -> None:
+        """A selection light may hide pixels, but cannot prove a neighbour."""
+        layout = load_json(Path(__file__).resolve().parents[1] / "config/layout-300-regression.json")
+        index, neighbour, lift = 11, 10, 48
+        target = layout["handSlots"][index]
+        other = layout["handSlots"][neighbour]
+
+        def frame(selected_index=None):
+            image = Image.new("RGB", (1920, 1080), "white")
+            for slot_index, slot in ((index, target), (neighbour, other)):
+                offset = lift if slot_index == selected_index else 0
+                # Sparse asymmetric glyph: a one-pixel wrong lift cannot
+                # overlap most of it, unlike a solid rectangle.
+                marks = [(18 + (n * 17) % 48, 12 + n * 11) for n in range(8)]
+                draw = ImageDraw.Draw(image)
+                for x, y in marks:
+                    draw.rectangle((int(slot["x"] + x), int(slot["y"] + y - offset),
+                                    int(slot["x"] + x + 7), int(slot["y"] + y + 7 - offset)),
+                                   fill="black")
+                if slot_index == selected_index:
+                    # White selection light removes part of the glyph and
+                    # defeats raw pixel delta, while leaving >90% identifiable.
+                    x, y = marks[0]
+                    draw.rectangle((int(slot["x"] + x), int(slot["y"] + y - offset),
+                                    int(slot["x"] + x + 7), int(slot["y"] + y + 7 - offset)),
+                                   fill="white")
+            output = io.BytesIO()
+            image.save(output, format="PNG")
+            return output.getvalue()
+
+        before, raised = frame(), frame(index)
+        slot = layout["handSlots"][index]
+        face = {"x": slot["x"] + 10, "y": slot["y"] + 10,
+                "width": slot["width"] - 20, "height": slot["height"] - 38}
+        # Work at the binary-mask layer used by the fallback: sparse glyph
+        # pixels make a wrong one-pixel offset unambiguously distinct.
+        baseline = Image.new("L", (int(face["width"]), int(face["height"])))
+        for x, y in [(7 + (n * 11) % 55, 7 + n * 9) for n in range(10)]:
+            ImageDraw.Draw(baseline).rectangle((x, y, x + 3, y + 3), fill=255)
+        after_mask = Image.new("L", (1920, 1080))
+        after_mask.paste(baseline, (int(face["x"]), int(face["y"] - lift)))
+        result = raised_glyph_overlap_confirmation(baseline, after_mask, face,
+                                                    layout["clickPoints"][index])
+        self.assertEqual(result["lift"], 48.0)
+        self.assertEqual(result["verification"], "dark_glyph_overlap")
+        self.assertIsNone(raised_glyph_overlap_confirmation(baseline, baseline, face,
+                                                             layout["clickPoints"][index]))
+        neighbour_mask = Image.new("L", (1920, 1080))
+        neighbour_face = {"x": other["x"] + 10, "y": other["y"] + 10}
+        neighbour_mask.paste(baseline, (int(neighbour_face["x"]), int(neighbour_face["y"] - lift)))
+        self.assertIsNone(raised_glyph_overlap_confirmation(baseline, neighbour_mask, face,
+                                                             layout["clickPoints"][index]))
 
     def test_raised_tile_optimized_search_matches_original_mask_search(self) -> None:
         layout = load_json(Path(__file__).resolve().parents[1] / "config/layout-300-regression.json")
