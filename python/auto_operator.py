@@ -3839,12 +3839,10 @@ class PythonAutoOperator:
                 self.ranked_terminal_transition_pending = state in {
                     "match_result", "rank_progress", "post_match_reward",
                 }
-            # The normal full-screen branch exits a completed friend
-            # regression before advancing the result.  The screencast quick
-            # gate must preserve that invariant as well; otherwise a
-            # --advance-screens run can click through to matchmaking before
-            # the regular branch observes the result.
+            # Save the result first, then permit one confirmation only.  The
+            # stop prevents navigating or starting another friend match.
             if self.should_stop_after_match_result(state):
+                self.confirm_friend_match_result(page, state, confidence, screenshot)
                 self.match_completed_stop_requested = True
                 self.log("match_completed_stop", confidence=confidence)
                 return True
@@ -4647,7 +4645,7 @@ class PythonAutoOperator:
         return staged
 
     def should_stop_after_match_result(self, screen_state: str) -> bool:
-        """Stop a completed friend regression before it can reach matchmaking.
+        """Stop a completed friend regression after its optional confirmation.
 
         Ranked-loop is the only mode that is allowed to continue beyond a
         match result. Friend functional runs must stop after result evidence
@@ -4658,6 +4656,12 @@ class PythonAutoOperator:
             and getattr(self.args, "mode", None) == "force-auto"
             and not getattr(self.args, "ranked_loop", False)
         )
+
+    def confirm_friend_match_result(self, page: Page, state: str, confidence: float,
+                                    screenshot: bytes | None) -> None:
+        """Confirm only after the caller has attached the captured result."""
+        if self.args.advance_screens and screenshot is not None:
+            self.advance_result_screen_once(page, state, confidence)
 
     def force_auto_riichi_kan_fallback(self, screenshot: Path, evaluation: dict[str, Any]) -> dict[str, Any] | None:
         """Route the existing decline-kan-after-riichi policy to an actual skip.
@@ -6114,11 +6118,10 @@ class PythonAutoOperator:
                         }
                     if screen_state not in {"rank_progress", "post_match_reward"}:
                         self.attach_outcome("match" if screen_state == "match_result" else "round", full_screen, screen_confidence)
-                    # A friend functional/regression run has no automated
-                    # destination after its final result. This must not be
-                    # coupled to --advance-screens: advancing a result can
-                    # put the UI on matchmaking before the next loop sees it.
+                    # Confirm at most once after preserving the result, then
+                    # stop without navigating or starting another match.
                     if self.should_stop_after_match_result(screen_state):
+                        self.confirm_friend_match_result(page, screen_state, screen_confidence, full_screen)
                         self.log("match_completed_stop", confidence=screen_confidence)
                         return
                     if self.args.advance_screens or self.args.ranked_loop:

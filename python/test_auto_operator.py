@@ -4038,19 +4038,33 @@ class AwayDialogDetectionTest(unittest.TestCase):
         operator.poll_public_recognition()
         self.assertIsNone(operator.cached_public_observation)
 
-    def test_early_friend_match_result_requests_stop_before_screen_advance(self) -> None:
-        """The fast gate must stop a completed friend run at its result."""
+    def test_early_friend_match_result_confirms_after_evidence_then_stops(self) -> None:
+        """The fast gate saves the result, confirms once, and stops."""
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
         operator.args = argparse.Namespace(mode="force-auto", ranked_loop=False, advance_screens=True)
         operator.match_completed_stop_requested = False
         operator.log = Mock()
         operator.advance_result_screen_once = Mock()
+        operator.attach_outcome = Mock()
+        operator.advance_result_screen_once.side_effect = lambda *args: operator.attach_outcome.assert_called_once_with(
+            "match", b"result", 0.98
+        )
         page = Mock()
 
-        self.assertTrue(operator.handle_early_non_gameplay_screen(page, "match_result", 0.98))
+        self.assertTrue(operator.handle_early_non_gameplay_screen(page, "match_result", 0.98, b"result"))
         self.assertTrue(operator.match_completed_stop_requested)
-        operator.advance_result_screen_once.assert_not_called()
+        operator.attach_outcome.assert_called_once_with("match", b"result", 0.98)
+        operator.advance_result_screen_once.assert_called_once_with(page, "match_result", 0.98)
         operator.log.assert_called_once_with("match_completed_stop", confidence=0.98)
+
+    def test_early_friend_result_without_evidence_does_not_confirm(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(mode="force-auto", ranked_loop=False, advance_screens=True)
+        operator.log = Mock()
+        operator.advance_result_screen_once = Mock()
+        self.assertTrue(operator.handle_early_non_gameplay_screen(Mock(), "match_result", 0.98))
+        operator.advance_result_screen_once.assert_not_called()
+        self.assertTrue(operator.match_completed_stop_requested)
 
     def test_early_friend_lobby_after_unconfirmed_selection_requests_stop(self) -> None:
         """A withheld second click must not leave a completed friend run polling lobby."""
