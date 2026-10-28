@@ -45,6 +45,7 @@ class ReviewedFriendOcrWarmupTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "changed"):
                     op.run(page)
             self.assertEqual(verify.call_count, 2)
+            self.assertEqual(verify.call_args_list[1].kwargs["attempts"], 16)
             engine.assert_called_once()
             page.mouse.click.assert_not_called()
 

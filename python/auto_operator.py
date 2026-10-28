@@ -5742,7 +5742,10 @@ class PythonAutoOperator:
             if self.warm_reviewed_friend_board_ocr():
                 # Initialization can take seconds: revalidate the room before
                 # clicking because the reviewed state may have changed.
-                captures += await_reviewed_friend_room(page, reviewed, on_capture=save_friend_start_capture)
+                # Animated room particles can intermittently obscure settings;
+                # allow more observations without weakening the two-frame gate.
+                captures += await_reviewed_friend_room(page, reviewed, attempts=16,
+                                                       on_capture=save_friend_start_capture)
             started_at = time.monotonic()
             page.mouse.click(1140, 998)
             startup_turn_guard.record_verified_start_click(clicked_at=started_at)
