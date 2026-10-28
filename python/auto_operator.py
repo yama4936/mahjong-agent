@@ -4563,9 +4563,12 @@ class PythonAutoOperator:
                 return
             rejected = receipts[wrong]
             self.cached_concealed_tiles = None
-            self.pending_own_discard = None
             observation["ownDiscards"] = list(before)
-            self.pending_own_river_confirmation = None
+            # As with a single mismatched receipt, quarantining the OCR
+            # identity does not make the missing river history safe to use.
+            # Keep the whole sequence pending until independent observations
+            # establish it, and block further discard decisions meanwhile.
+            self.pending_own_river_confirmation = list(after)
             self.log("own_discard_mismatch", expected=rejected["tile"], actual=appended[wrong],
                      before=before, observed=after, capturedAt=observation.get("capturedAt"),
                      evidenceToClickMs=rejected.get("evidenceToClickMs"),

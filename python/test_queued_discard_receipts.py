@@ -74,10 +74,15 @@ class QueuedDiscardReceiptTest(unittest.TestCase):
                 self.setUp()
                 for stamp in ['2026-10-22T04:10:52+00:00', '2026-10-22T04:10:53+00:00']:
                     self.scan(self.baseline + tail, stamp)
-                self.assertIsNone(self.op.pending_own_discard)
+                self.assertIsNotNone(self.op.pending_own_discard)
+                self.assertTrue(self.op.own_discard_reconciliation_pending())
                 self.assertIsNone(self.op.cached_concealed_tiles)
                 self.assertEqual(self.op.cached_public_observation['ownDiscards'], self.baseline)
                 self.assertTrue(any(c.args[0] == 'own_discard_mismatch' for c in self.op.log.call_args_list))
+                for stamp in ['2026-10-22T04:10:54+00:00', '2026-10-22T04:10:55+00:00']:
+                    self.scan(self.baseline + ['P', '8s'], stamp)
+                self.assertIsNone(self.op.pending_own_discard)
+                self.assertFalse(self.op.own_discard_reconciliation_pending())
 
     def test_extra_automatic_discard_is_not_certified_by_receipts(self):
         for stamp in ['2026-10-22T04:10:52+00:00', '2026-10-22T04:10:53+00:00']:
@@ -207,7 +212,8 @@ class QueuedDiscardReceiptTest(unittest.TestCase):
                     self.op.register_pending_own_discard({'tile': tile, 'before': list(self.baseline)})
                 for stamp in ['2026-10-22T04:10:52+00:00', '2026-10-22T04:10:53+00:00']:
                     self.scan(self.baseline + observed, stamp)
-                self.assertIsNone(self.op.pending_own_discard)
+                self.assertIsNotNone(self.op.pending_own_discard)
+                self.assertTrue(self.op.own_discard_reconciliation_pending())
                 self.assertIsNone(self.op.cached_concealed_tiles)
                 self.assertEqual(self.op.cached_public_observation['ownDiscards'], self.baseline)
                 self.assertTrue(any(c.args[0] == 'own_discard_mismatch'
