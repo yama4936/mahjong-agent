@@ -4975,6 +4975,33 @@ class AwayDialogDetectionTest(unittest.TestCase):
                 self.assertIsNone(raised_tile_confirmation_point(before, output.getvalue(), layout,
                                                                 index, point, 1.5))
 
+    def test_native_white_lift_requires_moving_edge_and_stable_neighbour(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        layout = load_json(root / "config/layout-300-regression.json")
+        before = (root / "test/fixtures/selection-white-before-20261028.jpg").read_bytes()
+        after = (root / "test/fixtures/selection-white-lift-20261028.jpg").read_bytes()
+        point = layout["clickPoints"][12]
+        result = raised_tile_confirmation_point(before, after, layout, 12, point, 1.5)
+        self.assertEqual(result["lift"], 48.0)
+        self.assertEqual(result["verification"], "blank_tile_edge_and_stable_neighbour")
+        self.assertIsNone(raised_tile_confirmation_point(before, before, layout, 12, point, 1.5))
+        self.assertIsNone(raised_tile_confirmation_point(before, after, layout, 11,
+                                                        layout["clickPoints"][11], 1.5))
+        for rectangle in ((1375, 860, 1445, 910), (1280, 860, 1350, 910),
+                          (1375, 860, 1445, 1030)):
+            with self.subTest(obstruction=rectangle):
+                with Image.open(io.BytesIO(after)) as image:
+                    obscured = image.convert("RGB")
+                ImageDraw.Draw(obscured).rectangle(rectangle, fill=(240, 240, 240))
+                output = io.BytesIO()
+                obscured.save(output, format="PNG")
+                self.assertIsNone(raised_tile_confirmation_point(before, output.getvalue(), layout,
+                                                                12, point, 1.5))
+        blank = io.BytesIO()
+        Image.new("RGB", (1920, 1080), "white").save(blank, format="PNG")
+        self.assertIsNone(raised_tile_confirmation_point(blank.getvalue(), blank.getvalue(), layout,
+                                                        12, point, 1.5))
+
     def test_raised_tile_optimized_search_matches_original_mask_search(self) -> None:
         layout = load_json(Path(__file__).resolve().parents[1] / "config/layout-300-regression.json")
         for index, lift in ((11, 31), (9, 19), (9, 0)):

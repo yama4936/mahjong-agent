@@ -898,6 +898,67 @@ def selected_tile_comparison_region(
     return {"x": float(point["x"]) - width / 2, "y": top, "width": width, "height": bottom - top}
 
 
+def blank_tile_raised_confirmation(
+    before: bytes, after: bytes, slots: list[dict[str, Any]], click_index: int,
+    point: dict[str, float],
+) -> dict[str, float] | None:
+    """Prove a blank tile's top edge moved while its neighbour stayed put."""
+    slot = slots[click_index]
+    if click_index == 0:
+        return None
+    neighbour = slots[click_index - 1]
+    try:
+        with Image.open(io.BytesIO(before)) as a, Image.open(io.BytesIO(after)) as b:
+            first, second = a.convert("RGB"), b.convert("RGB")
+
+        def tops(image: Image.Image, tile: dict[str, Any]) -> list[int] | None:
+            center = float(tile["x"]) + float(tile["width"]) / 2
+            top = int(tile["y"])
+            offsets = (-28, -14, 0, 14)
+            result = []
+            for offset in offsets:
+                x = int(center + offset)
+                found = None
+                for y in range(max(0, top - 80), min(image.height - 2, top + 8)):
+                    # Require three consecutive neutral light pixels to avoid
+                    # isolated sparkle noise, then compare several columns.
+                    if all(min(rgb := image.getpixel((x, y + dy))) > 130
+                           and max(rgb) - min(rgb) < 50 for dy in range(3)):
+                        found = y
+                        break
+                if found is None:
+                    return None
+                result.append(found)
+            return result
+
+        old, new = tops(first, slot), tops(second, slot)
+        neighbour_old, neighbour_new = tops(first, neighbour), tops(second, neighbour)
+        if any(value is None for value in (old, new, neighbour_old, neighbour_new)):
+            return None
+        center = float(slot["x"]) + float(slot["width"]) / 2
+        for image, edges in ((first, old), (second, new)):
+            for offset, edge in zip((-28, -14, 0, 14), edges):
+                x = int(center + offset)
+                if not any((rgb := image.getpixel((x, y)))[0] > 150
+                           and rgb[0] - rgb[1] > 35 and rgb[1] - rgb[2] > 30
+                           for y in range(max(0, edge - 8), edge)):
+                    return None
+        expected_top = int(slot["y"])
+        if any(abs(y - expected_top) > 5 for y in old):
+            return None
+        lifts = [a - b for a, b in zip(old, new)]
+        if min(lifts) < 12 or max(lifts) > 80 or max(lifts) - min(lifts) > 2:
+            return None
+        if any(abs(a - b) > 2 for a, b in zip(neighbour_old, neighbour_new)):
+            return None
+        lift = round(sum(lifts) / len(lifts))
+        return {"x": float(point["x"]), "y": float(point["y"]) - lift,
+                "lift": float(lift), "faceStructureDelta": 0.0,
+                "verification": "blank_tile_edge_and_stable_neighbour"}
+    except Exception:
+        return None
+
+
 def raised_tile_confirmation_point(
     before: bytes, after: bytes, layout: dict[str, Any], click_index: int,
     point: dict[str, float], threshold: float,
@@ -944,9 +1005,9 @@ def raised_tile_confirmation_point(
         right, bottom = int(face["x"] + face["width"]), int(face["y"] + face["height"])
         baseline = before_mask.crop((left, top, right, bottom))
         # An entirely blank face matches every vertical offset; it cannot
-        # establish that this specific tile actually moved.
+        # establish movement by its glyph. Require independent edge movement.
         if ImageStat.Stat(baseline).sum[0] == 0:
-            return None
+            return blank_tile_raised_confirmation(before, after, slots, click_index, point)
         # Mahjong Soul lifts toward the table centre.  Search a deliberately
         # broad but bounded strip; the lower bound avoids accepting an
         # unchanged face as a selection receipt.
