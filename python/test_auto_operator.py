@@ -5017,6 +5017,34 @@ class AwayDialogDetectionTest(unittest.TestCase):
         self.assertIsNone(raised_tile_confirmation_point(blank.getvalue(), blank.getvalue(), layout,
                                                         12, point, 1.5))
 
+    def test_white_draw_lift_with_overlapping_countdown_requires_physical_evidence(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        layout = load_json(root / "config/layout-300-regression.json")
+        # Live geometry used by the operator in this 300+0 match.
+        layout["drawSlot"].update({"y": 921, "height": 151})
+        layout["handSlots"][12].update({"y": 921, "height": 151})
+        point = {"x": 1532, "y": 996.5}
+        before = (root / "test/fixtures/selection-white-draw-timer-before-20261028.png").read_bytes()
+        after = (root / "test/fixtures/selection-white-draw-timer-lift-20261028.png").read_bytes()
+        result = raised_tile_confirmation_point(before, after, layout, 13, point, 1.5)
+        self.assertEqual(result["lift"], 48.0)
+        self.assertEqual(result["verification"], "blank_tile_edge_and_stable_neighbour")
+        self.assertIsNone(raised_tile_confirmation_point(before, before, layout, 13, point, 1.5))
+        self.assertIsNone(raised_tile_confirmation_point(before, after, layout, 12,
+                                                        layout["clickPoints"][12], 1.5))
+        # Hiding the selected rim or disturbing the stationary neighbour must
+        # not turn a bright countdown into evidence of a selected tile.
+        for rectangle in ((1490, 872, 1575, 880), (1370, 920, 1450, 935),
+                          (1490, 860, 1575, 1000)):
+            with self.subTest(obstruction=rectangle):
+                with Image.open(io.BytesIO(after)) as image:
+                    obscured = image.convert("RGB")
+                ImageDraw.Draw(obscured).rectangle(rectangle, fill=(235, 235, 235))
+                output = io.BytesIO()
+                obscured.save(output, format="PNG")
+                self.assertIsNone(raised_tile_confirmation_point(before, output.getvalue(), layout,
+                                                                13, point, 1.5))
+
     def test_glyph_overlap_fallback_requires_a_unique_target_lift(self) -> None:
         """A selection light may hide pixels, but cannot prove a neighbour."""
         layout = load_json(Path(__file__).resolve().parents[1] / "config/layout-300-regression.json")

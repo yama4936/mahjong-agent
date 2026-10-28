@@ -915,7 +915,7 @@ def blank_tile_raised_confirmation(
         with Image.open(io.BytesIO(before)) as a, Image.open(io.BytesIO(after)) as b:
             first, second = a.convert("RGB"), b.convert("RGB")
 
-        def tops(image: Image.Image, tile: dict[str, Any]) -> list[int] | None:
+        def tops(image: Image.Image, tile: dict[str, Any], require_rim: bool = False) -> list[int] | None:
             center = float(tile["x"]) + float(tile["width"]) / 2
             top = int(tile["y"])
             offsets = (-28, -14, 0, 14)
@@ -926,8 +926,12 @@ def blank_tile_raised_confirmation(
                 for y in range(max(0, top - 80), min(image.height - 2, top + 8)):
                     # Require three consecutive neutral light pixels to avoid
                     # isolated sparkle noise, then compare several columns.
-                    if all(min(rgb := image.getpixel((x, y + dy))) > 130
-                           and max(rgb) - min(rgb) < 50 for dy in range(3)):
+                    if (all(min(rgb := image.getpixel((x, y + dy))) > 130
+                            and max(rgb) - min(rgb) < 50 for dy in range(3))
+                            and (not require_rim or any(
+                                (rgb := image.getpixel((x, rim_y)))[0] > 150
+                                and rgb[0] - rgb[1] > 35 and rgb[1] - rgb[2] > 30
+                                for rim_y in range(max(0, y - 8), y)))):
                         found = y
                         break
                 if found is None:
@@ -935,7 +939,9 @@ def blank_tile_raised_confirmation(
                 result.append(found)
             return result
 
-        old, new = tops(first, slot), tops(second, slot)
+        # Search for a rim-backed edge, not the first light pixels: the large
+        # countdown can overlap the search strip above a white draw tile.
+        old, new = tops(first, slot, True), tops(second, slot, True)
         neighbour_old, neighbour_new = tops(first, neighbour), tops(second, neighbour)
         if any(value is None for value in (old, new, neighbour_old, neighbour_new)):
             return None
