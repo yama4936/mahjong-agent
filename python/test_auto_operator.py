@@ -5333,6 +5333,50 @@ class AwayDialogDetectionTest(unittest.TestCase):
                 self.assertIsNone(raised_tile_confirmation_point(before, output.getvalue(), layout,
                                                                 13, point, 1.5))
 
+    def test_paired_west_sparkle_lift_requires_target_and_stable_neighbour(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        layout = load_json(root / "config/layout-300-regression.json")
+        before = (root / "test/fixtures/selection-paired-west-before-20261029.png").read_bytes()
+        after = (root / "test/fixtures/selection-paired-west-lift-20261029.png").read_bytes()
+        point = {"x": 1407.5, "y": 999}
+        # An identical neighbouring W moving cannot prove this slot moved.
+        with Image.open(io.BytesIO(before)) as image:
+            wrong_slot = image.convert("RGB")
+        neighbour = layout["handSlots"][11]
+        box = tuple(int(v) for v in (neighbour["x"], neighbour["y"],
+                                     neighbour["x"] + neighbour["width"],
+                                     neighbour["y"] + neighbour["height"]))
+        tile = wrong_slot.crop(box)
+        ImageDraw.Draw(wrong_slot).rectangle(box, fill=(35, 55, 78))
+        wrong_slot.paste(tile, (box[0], box[1] - 48))
+        wrong_output = io.BytesIO()
+        wrong_slot.save(wrong_output, format="PNG")
+        self.assertIsNone(raised_tile_confirmation_point(before, wrong_output.getvalue(), layout,
+                                                        12, point, 1.5))
+        result = raised_tile_confirmation_point(before, after, layout, 12, point, 1.5)
+        self.assertEqual(result["lift"], 48.0)
+        self.assertEqual(result["verification"], "sparkle_masked_unique_glyph_and_stable_neighbour")
+        second_before = (root / "test/fixtures/selection-paired-west-second-before-20261029.png").read_bytes()
+        second_after = (root / "test/fixtures/selection-paired-west-second-lift-20261029.png").read_bytes()
+        self.assertEqual(raised_tile_confirmation_point(second_before, second_after, layout, 12, point, 1.5)["lift"], 48.0)
+        self.assertIsNone(raised_tile_confirmation_point(second_before, second_before, layout, 12, point, 1.5))
+        self.assertIsNone(raised_tile_confirmation_point(second_before, second_after, layout, 11,
+                                                        layout["clickPoints"][11], 1.5))
+        self.assertIsNone(raised_tile_confirmation_point(before, before, layout, 12, point, 1.5))
+        self.assertIsNone(raised_tile_confirmation_point(before, after, layout, 11,
+                                                        layout["clickPoints"][11], 1.5))
+        for rectangle, color in (((1370, 880, 1445, 1020), (240, 240, 240)),
+                                 ((1275, 936, 1350, 1030), (0, 0, 0)),
+                                 ((1370, 880, 1445, 1020), (255, 130, 210))):
+            with self.subTest(obstruction=rectangle):
+                with Image.open(io.BytesIO(after)) as image:
+                    altered = image.convert("RGB")
+                ImageDraw.Draw(altered).rectangle(rectangle, fill=color)
+                output = io.BytesIO()
+                altered.save(output, format="PNG")
+                self.assertIsNone(raised_tile_confirmation_point(before, output.getvalue(), layout,
+                                                                12, point, 1.5))
+
     def test_glyph_overlap_fallback_requires_a_unique_target_lift(self) -> None:
         """A selection light may hide pixels, but cannot prove a neighbour."""
         layout = load_json(Path(__file__).resolve().parents[1] / "config/layout-300-regression.json")

@@ -1048,7 +1048,11 @@ def sparkle_masked_lift_confirmation(
             shifted = second.crop((x, y - offset, x + w, y + h - offset))
             return count(ImageChops.multiply(ImageChops.difference(baseline, shifted), valid)) / valid_count * 100
         delta = difference(lift)
-        if delta > threshold or min(difference(offset) for offset in range(8, 81) if offset != lift) - delta < 4.5:
+        # Adjacent one- or two-pixel offsets describe the same physical lift,
+        # not competing tiles. Demand separation from distinct offsets while
+        # still requiring the selected slot and its neighbour to match.
+        if delta > threshold or min(difference(offset) for offset in range(8, 81)
+                                    if abs(offset - lift) > 2) - delta < 4.5:
             return None
         neighbour = slots[click_index - 1]
         nx, ny = int(neighbour["x"]) + 10, int(neighbour["y"]) + 10
