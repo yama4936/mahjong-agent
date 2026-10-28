@@ -23,6 +23,29 @@ from auto_operator import verified_post_call_white_discard
 FRAME_FIXTURES = Path(__file__).resolve().parents[1] / "test/fixtures"
 
 
+class ActionTemplatesArgumentTest(unittest.TestCase):
+    def test_missing_path_is_rejected_and_existing_path_is_accepted(self):
+        from auto_operator import parse_args
+
+        base = ["auto_operator.py", "--layout", "layout.json", "--templates", "tiles",
+                "--state", "state.json"]
+        with tempfile.TemporaryDirectory() as directory:
+            existing = Path(directory) / "actions"
+            existing.mkdir()
+            missing = Path(directory) / "missing"
+            for value in (None, "", str(existing)):
+                argv = base if value is None else base + ["--action-templates", value]
+                with self.subTest(value=value), patch("sys.argv", argv):
+                    self.assertEqual(parse_args().action_templates, value or "")
+            stderr = io.StringIO()
+            with patch("sys.argv", base + ["--action-templates", str(missing)]), \
+                 patch("sys.stderr", stderr), self.assertRaises(SystemExit) as raised:
+                parse_args()
+            self.assertEqual(raised.exception.code, 2)
+            self.assertIn("--action-templates path does not exist", stderr.getvalue())
+            self.assertIn(str(missing), stderr.getvalue())
+
+
 class OperatorShutdownOrderTest(unittest.TestCase):
     def test_close_before_playwright_exit_on_normal_and_exception_paths(self):
         from auto_operator import main

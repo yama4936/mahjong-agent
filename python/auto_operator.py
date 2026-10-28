@@ -7012,6 +7012,8 @@ def parse_args() -> argparse.Namespace:
         help="explicitly allow confidence-gated deterministic discards in advisor mode; no defense/Jev",
     )
     args = parser.parse_args()
+    if args.action_templates and not Path(args.action_templates).exists():
+        parser.error(f"--action-templates path does not exist: {args.action_templates}")
     if args.ranked_loop and args.match_length == "south":
         parser.error("--ranked-loop selects East rooms; --match-length=south is incompatible")
     if args.action_deadline_ms <= 0:
