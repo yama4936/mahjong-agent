@@ -2690,6 +2690,34 @@ class AwayDialogDetectionTest(unittest.TestCase):
 
         operator.log.assert_not_called()
 
+    def test_long_friend_first_turn_keeps_separate_deadline_and_observed_budget(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(force_auto_click_budget_ms=8000, action_deadline_ms=300000)
+        operator.log = Mock()
+        with patch("auto_operator.time.monotonic", return_value=17.0):
+            operator.mark_action_evidence("discard", observed_at=0.0, budget_observed_at=16.0)
+            self.assertEqual(operator.action_deadline_remaining_ms(), 283000)
+            self.assertEqual(operator.force_auto_action_evidence_age_ms(), 1000)
+            operator.require_force_auto_click_budget(16.5, phase="before_recognition")
+        with patch("auto_operator.time.monotonic", return_value=24.0):
+            operator.mark_action_evidence("discard")
+            with self.assertRaises(RetryableSafetyAbort):
+                operator.require_force_auto_click_budget(23.9, phase="before_recognition")
+            self.assertEqual(operator.action_deadline_remaining_ms(), 276000)
+            operator.mark_action_evidence("win", supersede=True)
+            self.assertEqual(operator.force_auto_action_evidence_age_ms(), 0)
+            operator.action_timing(clear=True)
+            self.assertIsNone(operator.action_budget_started_at)
+
+    def test_default_start_anchor_remains_budget_anchor(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(force_auto_click_budget_ms=2600, action_deadline_ms=300000)
+        operator.log = Mock()
+        with patch("auto_operator.time.monotonic", return_value=17.0):
+            operator.mark_action_evidence("discard", observed_at=0.0)
+            with self.assertRaises(RetryableSafetyAbort):
+                operator.require_force_auto_click_budget(16.9, phase="before_recognition")
+
     def test_short_discard_selection_reserves_confirmed_second_click(self) -> None:
         """Do not select a tile after the measured two-click reserve is gone."""
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
@@ -5065,6 +5093,29 @@ class AwayDialogDetectionTest(unittest.TestCase):
         Image.new("RGB", (1920, 1080), "white").save(blank, format="PNG")
         self.assertIsNone(raised_tile_confirmation_point(blank.getvalue(), blank.getvalue(), layout,
                                                         12, point, 1.5))
+
+    def test_riichi_white_lift_with_timer_covering_top_edge(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        layout = load_json(root / "config/layout-300-regression.json")
+        layout["handSlots"][12].update({"y": 921, "height": 151})
+        layout["handSlots"][11].update({"y": 921, "height": 151})
+        point = {"x": 1407, "y": 996.5}
+        before = (root / "test/fixtures/selection-white-riichi-timer-before-20261028.png").read_bytes()
+        after = (root / "test/fixtures/selection-white-riichi-timer-lift-20261028.png").read_bytes()
+        result = raised_tile_confirmation_point(before, after, layout, 12, point, 1.5)
+        self.assertEqual(result["lift"], 47.0)
+        self.assertIsNone(raised_tile_confirmation_point(before, before, layout, 12, point, 1.5))
+        self.assertIsNone(raised_tile_confirmation_point(before, after, layout, 11, layout["clickPoints"][11], 1.5))
+        # A single surviving column or a disturbed neighbour cannot establish
+        # the intended tile moved, even when the countdown resembles a rim.
+        for rect in ((1385, 870, 1400, 900), (1275, 920, 1350, 935)):
+            with self.subTest(obstruction=rect):
+                with Image.open(io.BytesIO(after)) as image:
+                    altered = image.convert("RGB")
+                ImageDraw.Draw(altered).rectangle(rect, fill=(235, 235, 235))
+                output = io.BytesIO()
+                altered.save(output, format="PNG")
+                self.assertIsNone(raised_tile_confirmation_point(before, output.getvalue(), layout, 12, point, 1.5))
 
     def test_white_draw_lift_with_overlapping_countdown_requires_physical_evidence(self) -> None:
         root = Path(__file__).resolve().parents[1]

@@ -5,7 +5,7 @@ from unittest.mock import Mock, patch
 
 from PIL import Image, ImageDraw
 
-from friend_start import await_reviewed_friend_room, verified_friend_room
+from friend_start import await_reviewed_friend_room, reviewed_friend_clock_is_300_plus_zero, verified_friend_room
 
 
 class FriendStartRetryTests(unittest.TestCase):
@@ -83,3 +83,12 @@ class FriendStartTests(unittest.TestCase):
                     (310, 700, 325, 720)):
             with self.subTest(box=box):
                 self.assertFalse(verified_friend_room(self.changed(box), self.frame))
+
+    def test_long_clock_does_not_match_short_clock(self):
+        root = Path(__file__).resolve().parents[1] / "artifacts"
+        long_room = root / "friend-300-669cd6e-20261028/preflight-room.png"
+        short_room = root / "friend-5plus20-e16c0dd-20261028/preflight-room.png"
+        if not long_room.exists() or not short_room.exists():
+            self.skipTest("native room clock frames unavailable")
+        self.assertTrue(reviewed_friend_clock_is_300_plus_zero(long_room.read_bytes()))
+        self.assertFalse(reviewed_friend_clock_is_300_plus_zero(short_room.read_bytes()))

@@ -32,7 +32,7 @@ from screen_state import _rgb_fraction, classify_screen, load_references
 from operator_lock import OperatorAlreadyRunning, endpoint_key, operator_lease
 from analysis_recorder import AnalysisRecorder
 from startup_turn_guard import StartupTurnGuard
-from friend_start import await_reviewed_friend_room
+from friend_start import await_reviewed_friend_room, reviewed_friend_clock_is_300_plus_zero
 
 
 class RetryableSafetyAbort(RuntimeError):
@@ -916,7 +916,7 @@ def blank_tile_raised_confirmation(
         with Image.open(io.BytesIO(before)) as a, Image.open(io.BytesIO(after)) as b:
             first, second = a.convert("RGB"), b.convert("RGB")
 
-        def tops(image: Image.Image, tile: dict[str, Any], require_rim: bool = False) -> list[int] | None:
+        def tops(image: Image.Image, tile: dict[str, Any], require_rim: bool = False) -> list[int | None]:
             center = float(tile["x"]) + float(tile["width"]) / 2
             top = int(tile["y"])
             offsets = (-28, -14, 0, 14)
@@ -927,7 +927,7 @@ def blank_tile_raised_confirmation(
                 for y in range(max(0, top - 80), min(image.height - 2, top + 8)):
                     # Require three consecutive neutral light pixels to avoid
                     # isolated sparkle noise, then compare several columns.
-                    if (all(min(rgb := image.getpixel((x, y + dy))) > 130
+                    if (all(min(rgb := image.getpixel((x, y + dy))) > (130 if require_rim else 70)
                             and max(rgb) - min(rgb) < 50 for dy in range(3))
                             and (not require_rim or any(
                                 (rgb := image.getpixel((x, rim_y)))[0] > 150
@@ -935,8 +935,6 @@ def blank_tile_raised_confirmation(
                                 for rim_y in range(max(0, y - 8), y)))):
                         found = y
                         break
-                if found is None:
-                    return None
                 result.append(found)
             return result
 
@@ -944,16 +942,8 @@ def blank_tile_raised_confirmation(
         # countdown can overlap the search strip above a white draw tile.
         old, new = tops(first, slot, True), tops(second, slot, True)
         neighbour_old, neighbour_new = tops(first, neighbour), tops(second, neighbour)
-        if any(value is None for value in (old, new, neighbour_old, neighbour_new)):
+        if any(value is None for value in (*old, *neighbour_old, *neighbour_new)):
             return None
-        center = float(slot["x"]) + float(slot["width"]) / 2
-        for image, edges in ((first, old), (second, new)):
-            for offset, edge in zip((-28, -14, 0, 14), edges):
-                x = int(center + offset)
-                if not any((rgb := image.getpixel((x, y)))[0] > 150
-                           and rgb[0] - rgb[1] > 35 and rgb[1] - rgb[2] > 30
-                           for y in range(max(0, edge - 8), edge)):
-                    return None
         # Calibration captures can include a few pixels of felt above the
         # tile's orange rim.  The live 300+0 layout has a six-pixel offset;
         # retain a tight eight-pixel physical range rather than rejecting a
@@ -961,12 +951,17 @@ def blank_tile_raised_confirmation(
         expected_top = int(slot["y"])
         if any(abs(y - expected_top) > 8 for y in old):
             return None
-        lifts = [a - b for a, b in zip(old, new)]
-        if min(lifts) < 12 or max(lifts) > 80 or max(lifts) - min(lifts) > 2:
+        # The countdown icon can cover part of the raised tile and contribute
+        # unrelated rim-like pixels. Require two independent columns agreeing
+        # on the same upward motion; treat other columns as obstructed.
+        lifts = [a - b for a, b in zip(old, new) if b is not None and 12 <= a - b <= 80]
+        matching = [candidate for candidate in lifts
+                    if sum(abs(candidate - other) <= 2 for other in lifts) >= 2]
+        if len(matching) < 2 or max(matching) - min(matching) > 2:
             return None
         if any(abs(a - b) > 2 for a, b in zip(neighbour_old, neighbour_new)):
             return None
-        lift = round(sum(lifts) / len(lifts))
+        lift = round(sum(matching) / len(matching))
         return {"x": float(point["x"]), "y": float(point["y"]) - lift,
                 "lift": float(lift), "faceStructureDelta": 0.0,
                 "verification": "blank_tile_edge_and_stable_neighbour"}
@@ -1846,6 +1841,7 @@ class PythonAutoOperator:
         self.login_button_clicked_at: float | None = None
         self.result_screen_advanced: str | None = None
         self.action_evidence_started_at: float | None = None
+        self.action_budget_started_at: float | None = None
         self.action_evidence_kind: str | None = None
         self.action_evidence_generation: int | None = None
         self.last_action_clicked_at: float | None = None
@@ -1869,6 +1865,7 @@ class PythonAutoOperator:
     def mark_action_evidence(
         self, kind: str, *, observed_at: float | None = None,
         gate_generation: int | None = None, supersede: bool = False,
+        budget_observed_at: float | None = None,
     ) -> None:
         """Latch first visible evidence; later recognition must not reset the SLA clock."""
         seen_at = time.monotonic() if observed_at is None else observed_at
@@ -1892,9 +1889,10 @@ class PythonAutoOperator:
                 gateGeneration=gate_generation,
             )
         self.action_evidence_started_at = seen_at
+        self.action_budget_started_at = budget_observed_at if budget_observed_at is not None else seen_at
         self.action_evidence_kind = kind
         self.action_evidence_generation = gate_generation
-        self.action_evidence_last_seen_at = seen_at
+        self.action_evidence_last_seen_at = budget_observed_at if budget_observed_at is not None else seen_at
         self.last_action_clicked_at = None
         self.log("action_deadline_started", actionKind=kind, deadlineMs=self.configured_action_deadline_ms())
 
@@ -1910,6 +1908,7 @@ class PythonAutoOperator:
         timing["actionKind"] = getattr(self, "action_evidence_kind", None)
         if clear:
             self.action_evidence_started_at = None
+            self.action_budget_started_at = None
             self.action_evidence_kind = None
             self.action_evidence_generation = None
             self.last_action_clicked_at = None
@@ -1963,7 +1962,9 @@ class PythonAutoOperator:
         short click budget must include that earlier observation or a 5+20
         client can auto-tsumogiri while we are confirming a selected tile.
         """
-        started = getattr(self, "action_evidence_started_at", None)
+        started = getattr(self, "action_budget_started_at", None)
+        if started is None:
+            started = getattr(self, "action_evidence_started_at", None)
         if not isinstance(started, (int, float)):
             return None
         return max(0, round((time.monotonic() - started) * 1000))
@@ -5600,11 +5601,17 @@ class PythonAutoOperator:
     def run(self, page: Page) -> None:
         self.ensure_viewport(page, force=True)
         startup_turn_guard = StartupTurnGuard()
+        long_friend_initial_clock = False
         preflight_path = getattr(self.args, "start_reviewed_friend_room", None)
         if preflight_path:
             if self.args.mode != "force-auto" or getattr(self.args, "ranked_loop", False):
                 raise RuntimeError("reviewed friend start requires non-ranked force-auto")
             reviewed = Path(preflight_path).read_bytes()
+            long_friend_initial_clock = (
+                self.configured_action_deadline_ms() == 300000
+                and self.force_auto_click_budget_ms() == 8000
+                and reviewed_friend_clock_is_300_plus_zero(reviewed)
+            )
             captures = await_reviewed_friend_room(page, reviewed)
             started_at = time.monotonic()
             page.mouse.click(1140, 998)
@@ -5827,17 +5834,31 @@ class PythonAutoOperator:
                         continue
                     initial_anchor = startup_turn_guard.initial_action_anchor
                     startup_turn_guard.initial_action_anchor = None
+                    initial_budget_observed = (
+                        gate_captured_at
+                        if long_friend_initial_clock and initial_anchor is not None
+                        and gate_captured_at is not None
+                        and initial_anchor <= gate_captured_at <= time.monotonic()
+                        else None
+                    )
+                    if initial_budget_observed is not None:
+                        self.log("friend_initial_budget_clock_separated",
+                                 elapsedSinceStartMs=round((initial_budget_observed - initial_anchor) * 1000),
+                                 deadlineMs=self.configured_action_deadline_ms(),
+                                 clickBudgetMs=self.force_auto_click_budget_ms())
                     draw_gate_streak = draw_gate_streak + 1 if quick_draw else 0
                     pass_gate_streak = pass_gate_streak + 1 if quick_pass else 0
                     call_gate_streak = call_gate_streak + 1 if quick_calls else 0
                     reaction_win_gate_streak = reaction_win_gate_streak + 1 if quick_reaction_win else 0
                     if quick_reaction_win:
                         self.mark_action_evidence(
-                            "win", observed_at=initial_anchor, gate_generation=self.screencast_sequence,
+                            "win", observed_at=initial_anchor, budget_observed_at=initial_budget_observed,
+                            gate_generation=self.screencast_sequence,
                         )
                     elif quick_pass or quick_calls:
                         self.mark_action_evidence(
-                            "reaction", observed_at=initial_anchor, gate_generation=self.screencast_sequence,
+                            "reaction", observed_at=initial_anchor, budget_observed_at=initial_budget_observed,
+                            gate_generation=self.screencast_sequence,
                         )
                     elif quick_draw:
                         prior_kind = getattr(self, "action_evidence_kind", None)
@@ -5850,6 +5871,7 @@ class PythonAutoOperator:
                         self.mark_action_evidence(
                             "discard",
                             observed_at=initial_anchor,
+                            budget_observed_at=initial_budget_observed,
                             gate_generation=self.screencast_sequence,
                             supersede=verified_later_draw,
                         )
@@ -5861,6 +5883,7 @@ class PythonAutoOperator:
                     elif getattr(self, "action_evidence_started_at", None) is not None \
                             and time.monotonic() - (getattr(self, "action_evidence_last_seen_at", None) or 0) > 0.75:
                         self.action_evidence_started_at = None
+                        self.action_budget_started_at = None
                         self.action_evidence_kind = None
                         self.action_evidence_generation = None
                         self.action_evidence_last_seen_at = None

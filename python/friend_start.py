@@ -22,6 +22,23 @@ _BOUND_REGIONS = (
     (1000, 955, 1280, 1040),
 )
 
+# Native 300+0 time label from the independently reviewed friend-room
+# preflight. The 5+20 label must not match this template.
+_LONG_FRIEND_CLOCK = "FypLFypLFipMFipLJTlZJDdYEydKFipMKjxbGSxMFihJJjhYIjNUFylKFypLEydJFilLFCdJKDpaHC5PGy5POkxrQ1RzEidJP1FwFipMFypLGCtMFSlMFSlMEyhLIjZYXG2LcoGeMUVmTl9+cYCbU2OALj9ecX+abXyXIzVVGCtMJTlZDiNFPlBvcYCbY3KOIzZWbn6ZTmB+N0pqZ3eTQlRzGCtMGCtMFClMFClMFClMFClNHjFVZ3eURVd3bH2ZGi5PbXyXZXSQO0tqUmJ/SFh2MUNiZnaSGi5PbHyXIzZWZXSQPE5sgY+qeomjYXKOWmqIWmuIMkNiFShJFSpQFCpPFSpPECZMMUVoeommQVR0a3uYEydKbHuWcH+ZMkRkSVl4WGeEXG2KiJewQVNybn6aGy9RYHCMO01tf46oeYmkO05uZ3eUU2SDJThZFypMFi5XFi5XFC1VJz5kK0FnT2OEXG+PZniXO09xa3yZUmSEVGaFZHWTOU1vHjRZSF1+CyRLYHOSQ1Z3a3yZP1R2ZHeWPFF0HDNZYXOSVGeIFStRGjBVGDRjGDRjFjJhJ0JuY3mcZHmcITxnMkx1bIGiOlJ4HzljY3iaWG6RHDZgGjRgGDRgFTFdJkFran6gSmGGEi1aQVl/RVyCY3eZVGuPGTRhGjVgGzZh"
+
+
+def reviewed_friend_clock_is_300_plus_zero(frame: bytes) -> bool:
+    try:
+        with Image.open(io.BytesIO(frame)) as source:
+            image = source.convert("RGB")
+        if image.size != (1920, 1080):
+            return False
+        template = Image.frombytes("RGB", (28, 6), base64.b64decode(_LONG_FRIEND_CLOCK))
+        observed = image.crop((1670, 260, 1810, 290)).resize((28, 6))
+        return sum(ImageStat.Stat(ImageChops.difference(observed, template)).mean) / 3 <= 3
+    except (OSError, ValueError):
+        return False
+
 
 def verified_friend_room(frame: bytes, reviewed_preflight: bytes) -> bool:
     """Bind current room to a separately reviewed image; fail closed.
