@@ -3477,6 +3477,26 @@ class PythonAutoOperator:
                 self.advance_result_screen_once(page, state, confidence)
             return True
         if state in {"lobby", "ranked_menu", "ranked_room", "matchmaking", "loading"}:
+            # A discard whose second, raised-tile confirmation was withheld
+            # deliberately leaves the selection state unresolved.  Never
+            # issue a retry against it.  If that live friend table has since
+            # returned to the lobby without exposing a result frame, there is
+            # no safe automated destination and continuing would otherwise
+            # spin forever in ``screen_state_bypassed``.  This is terminal
+            # evidence for the *operator*, not a synthetic match result: do
+            # not attach it to decision replays as one.
+            if state == "lobby" \
+                    and getattr(self.args, "mode", None) == "force-auto" \
+                    and not getattr(self.args, "ranked_loop", False) \
+                    and getattr(self, "selection_uncertainty_latch", None):
+                self.match_completed_stop_requested = True
+                self.log(
+                    "match_completed_stop", confidence=confidence,
+                    terminalState=state,
+                    reason="selection_uncertainty_followed_by_lobby",
+                    gameplayClicks=0,
+                )
+                return True
             if self.ranked_terminal_transition_requires_stop(state):
                 self.ranked_terminal_transition_stop_requested = True
                 self.log_ranked_terminal_transition_stop(state, confidence, screenshot)

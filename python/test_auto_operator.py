@@ -3898,6 +3898,43 @@ class AwayDialogDetectionTest(unittest.TestCase):
         operator.advance_result_screen_once.assert_not_called()
         operator.log.assert_called_once_with("match_completed_stop", confidence=0.98)
 
+    def test_early_friend_lobby_after_unconfirmed_selection_requests_stop(self) -> None:
+        """A withheld second click must not leave a completed friend run polling lobby."""
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(mode="force-auto", ranked_loop=False, advance_screens=True)
+        operator.match_completed_stop_requested = False
+        operator.selection_uncertainty_latch = {"drawGeneration": 7, "ownDiscards": ["9m"]}
+        operator.log = Mock()
+        operator.advance_ranked_loop = Mock()
+        page = Mock()
+
+        self.assertTrue(operator.handle_early_non_gameplay_screen(page, "lobby", 1.0, b"lobby"))
+
+        self.assertTrue(operator.match_completed_stop_requested)
+        operator.advance_ranked_loop.assert_not_called()
+        page.mouse.click.assert_not_called()
+        operator.log.assert_called_once_with(
+            "match_completed_stop", confidence=1.0, terminalState="lobby",
+            reason="selection_uncertainty_followed_by_lobby", gameplayClicks=0,
+        )
+
+    def test_early_friend_lobby_without_unconfirmed_selection_does_not_stop(self) -> None:
+        """A normal lobby label alone remains insufficient to invent a match result."""
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(mode="force-auto", ranked_loop=False, advance_screens=True)
+        operator.selection_uncertainty_latch = None
+        operator.log = Mock()
+        operator.advance_ranked_loop = Mock(return_value=False)
+        page = Mock()
+
+        self.assertTrue(operator.handle_early_non_gameplay_screen(page, "lobby", 1.0, b"lobby"))
+
+        operator.advance_ranked_loop.assert_called_once_with(page, "lobby", 1.0, screenshot=b"lobby")
+        self.assertFalse(any(
+            call.args and call.args[0] == "match_completed_stop"
+            for call in operator.log.call_args_list
+        ))
+
     def test_riichi_button_is_not_merged_with_concealed_tile_borders(self) -> None:
         from auto_operator import self_turn_draw_visible
         screenshot = (Path(__file__).resolve().parents[1] / "artifacts/live/riichi-button-hand-border-20260928.jpg").read_bytes()
