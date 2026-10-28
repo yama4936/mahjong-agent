@@ -3013,10 +3013,36 @@ class PythonAutoOperator:
         if reason:
             self.log("self_win_capture_finished", winId=capture["id"],
                      action=capture["action"], frameCount=len(capture["frames"]), reason=reason)
+            # A self-win animation can be captured as round_result without the
+            # normal result-handling path ever seeing the summary. If the
+            # client auto-advances, use the same independent new-hand/round
+            # verification as black-screen recovery; never turn the animation
+            # itself into an attached score result.
+            if (getattr(self, "round_terminal_latched", False)
+                    and not getattr(self, "round_terminal_result_observed", False)
+                    and getattr(self, "round_terminal_recovery", None) is None
+                    and any(item.get("screenState") == "round_result" for item in capture["frames"])):
+                previous = self.round_terminal_previous_state()
+                self.round_terminal_recovery = {"previous": previous, "since": None,
+                                                "source": "self_win_capture"}
+                self.closed_new_round_candidate_frames = set()
+                self.log("round_terminal_recovery_armed", source="self_win_capture",
+                         previous=previous, gameplayClicks=0)
             self.self_win_capture = None
             return False
         page.wait_for_timeout(500)
         return True
+
+    def round_terminal_previous_state(self) -> dict[str, Any] | None:
+        pending = getattr(self, "pending_round_replays", [])
+        if pending:
+            try:
+                previous = load_json(pending[-1]).get("state")
+                if previous is not None:
+                    return previous
+            except (OSError, ValueError):
+                pass
+        return (getattr(self, "board_metadata_cache", None) or {}).get("metadata")
 
     def clear_round_terminal_latch(self, source: str) -> None:
         self.round_terminal_latched = False
@@ -3082,7 +3108,9 @@ class PythonAutoOperator:
                     pending = list(getattr(self, "pending_round_replays", []))
                     ledger = snapshot.with_suffix(".round-terminal-unobserved-result.json")
                     ledger.write_text(json.dumps({
-                        "reason": "round_result_lost_during_black_recovery",
+                        "reason": ("round_result_not_observed_after_self_win_capture"
+                                   if recovery.get("source") == "self_win_capture"
+                                   else "round_result_lost_during_black_recovery"),
                         "previous": recovery["previous"], "current": metadata,
                         "screenshot": str(snapshot),
                         "pendingRoundReplays": [str(p) for p in pending],
@@ -3090,10 +3118,36 @@ class PythonAutoOperator:
                     }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
                     ledger.chmod(0o600)
                     self.pending_round_replays = []
+                    if recovery.get("source") == "self_win_capture":
+                        # Unlike the reload path, this path has not yet
+                        # invalidated any data belonging to the old round.
+                        self.cached_concealed_tiles = None
+                        self.cached_open_melds = 0
+                        self.dynamic_layout_required = False
+                        self.pending_post_call_discard = False
+                        self.pending_post_call_started_at = None
+                        self.cached_public_observation = None
+                        self.previous_public_observation = None
+                        self.pending_own_discard = None
+                        self.pending_own_river_confirmation = None
+                        self.selection_uncertainty_latch = None
+                        self.public_cache_generation = getattr(self, "public_cache_generation", 0) + 1
+                        self.public_cache_last_frame_hash = None
+                        self.last_public_scan_at = 0.0
+                        self.board_metadata_cache = None
+                        self.board_metadata_last_scan_at = 0.0
+                        self.riichi_metadata_history = None
+                        self.reset_post_riichi_safety()
+                        self.last_processed_hand = None
+                        self.last_shanten = None
+                        self.armed = True
                     self.log("round_terminal_recovered_without_result", screenshot=str(snapshot),
                              ledger=str(ledger), retiredRoundReplays=len(pending),
                              previous=recovery["previous"], current=metadata, gameplayClicks=0)
-                    self.clear_round_terminal_latch("verified_new_round_after_black_reload")
+                    self.clear_round_terminal_latch(
+                        "verified_new_round_after_self_win_capture"
+                        if recovery.get("source") == "self_win_capture"
+                        else "verified_new_round_after_black_reload")
                     return False
         # A result latch must never turn an unclassified modal into an
         # infinite polling loop.  Give ordinary result fades time to settle,
@@ -3255,15 +3309,7 @@ class PythonAutoOperator:
         self.black_screen_seen_since = None
         if getattr(self, "round_terminal_latched", False) \
                 and not getattr(self, "round_terminal_result_observed", False):
-            previous = None
-            pending = getattr(self, "pending_round_replays", [])
-            if pending:
-                try:
-                    previous = load_json(pending[-1]).get("state")
-                except (OSError, ValueError):
-                    pass
-            if previous is None:
-                previous = (getattr(self, "board_metadata_cache", None) or {}).get("metadata")
+            previous = self.round_terminal_previous_state()
             self.round_terminal_recovery = {"previous": previous, "since": None}
             self.closed_new_round_candidate_frames = set()
         self.black_screen_recovery_pending_outcome = bool(getattr(self, "pending_match_replays", []))

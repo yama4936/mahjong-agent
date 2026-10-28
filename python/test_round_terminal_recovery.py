@@ -159,6 +159,50 @@ class RoundTerminalRecoveryTest(unittest.TestCase):
         op.current_board_metadata.assert_not_called()
         self.page.mouse.click.assert_not_called()
 
+    def test_self_win_animation_arms_independent_new_round_recovery(self):
+        op = self.operator
+        op.self_win_capture = {'id': 'win', 'action': 'ron', 'started': 100,
+            'frames': [{'screenState': 'round_result'}], 'sawOverlay': True}
+        with patch('auto_operator.time.monotonic', return_value=120):
+            self.assertFalse(op.capture_self_win_result(self.page))
+            self.assertEqual(op.round_terminal_recovery['source'], 'self_win_capture')
+            self.assertTrue(op.wait_for_round_terminal(self.page, self.frames[0], 'match'))
+            self.assertFalse(op.wait_for_round_terminal(self.page, self.frames[1], 'match'))
+        ledger = json.loads(next(op.frames.glob('*.round-terminal-unobserved-result.json')).read_text())
+        self.assertEqual(ledger['reason'], 'round_result_not_observed_after_self_win_capture')
+        self.assertEqual(op.pending_round_replays, [])
+        self.assertEqual(op.pending_match_replays, [self.old_replay])
+        self.assertNotIn('actualResult', json.loads(self.old_replay.read_text()))
+        self.assertIsNone(op.cached_public_observation)
+        self.assertIsNone(op.cached_concealed_tiles)
+        self.assertEqual(op.cached_open_melds, 0)
+        self.page.mouse.click.assert_not_called()
+
+    def test_self_win_capture_does_not_unlock_same_round(self):
+        op = self.operator
+        op.self_win_capture = {'id': 'win', 'action': 'ron', 'started': 100,
+            'frames': [{'screenState': 'round_result'}], 'sawOverlay': True}
+        op.current_board_metadata.return_value = {**self.metadata,
+            **{k: self.evidence['previousState'][k] for k in ('round', 'seat', 'honba')}}
+        with patch('auto_operator.time.monotonic', return_value=120):
+            self.assertFalse(op.capture_self_win_result(self.page))
+            for frame in self.frames:
+                self.assertTrue(op.wait_for_round_terminal(self.page, frame, 'match'))
+        self.assertTrue(op.round_terminal_latched)
+        self.assertEqual(op.pending_round_replays, [self.old_replay])
+        self.page.mouse.click.assert_not_called()
+
+    def test_self_win_without_result_evidence_does_not_arm_recovery(self):
+        op = self.operator
+        op.self_win_capture = {'id': 'win', 'action': 'ron', 'started': 100,
+            'frames': [{'screenState': 'unknown'}], 'sawOverlay': True}
+        with patch('auto_operator.time.monotonic', return_value=120):
+            self.assertFalse(op.capture_self_win_result(self.page))
+            for frame in self.frames:
+                self.assertTrue(op.wait_for_round_terminal(self.page, frame, 'match'))
+        self.assertTrue(op.round_terminal_latched)
+        op.current_board_metadata.assert_not_called()
+
     def test_missing_previous_hand_cannot_unlock_a_visible_later_table(self):
         self.old_replay.unlink()
         self.reload()
