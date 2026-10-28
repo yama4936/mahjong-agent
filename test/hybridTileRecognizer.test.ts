@@ -118,6 +118,17 @@ test("live seven-pin confusions are unsafe while the verified shimmer hand remai
     assert.ok((laterFalseSafe.matches[6]?.confidence ?? 0) > 0.75);
     assert.equal(laterFalseSafe.safe, false);
 
+    // The original 698264b frame also contains a raised 1s read as 8s.
+    // Its current unsafe result depends on the separate 7p-as-6p veto;
+    // it must not be taken as proof that raised tiles are generally detected.
+    const raised = await recognizer.recognizeHand(
+      "artifacts/live/raised-one-sou-read-two-sou-698264b-20260929.jpg", layout,
+    );
+    assert.equal(raised.matches[8]?.tile, "6p");
+    assert.equal(raised.matches[8]?.runnerUpTile, "7p");
+    assert.equal(raised.matches[9]?.tile, "8s");
+    assert.equal(raised.safe, false);
+
     const verified = await recognizer.recognizeHand(
       "artifacts/live/riichi-shimmer-hand-before-20260928.jpg", layout,
     );
