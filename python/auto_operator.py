@@ -5612,7 +5612,13 @@ class PythonAutoOperator:
                 and self.force_auto_click_budget_ms() == 8000
                 and reviewed_friend_clock_is_300_plus_zero(reviewed)
             )
-            captures = await_reviewed_friend_room(page, reviewed)
+            def save_friend_start_capture(index: int, frame: bytes, matched: bool) -> None:
+                path = self.frames / f"{utc_stamp()}.friend-start-{index}.png"
+                path.write_bytes(frame)
+                self.log("friend_start_capture", screenshot=str(path),
+                         capture=index, matched=matched)
+
+            captures = await_reviewed_friend_room(page, reviewed, on_capture=save_friend_start_capture)
             started_at = time.monotonic()
             page.mouse.click(1140, 998)
             startup_turn_guard.record_verified_start_click(clicked_at=started_at)

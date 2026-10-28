@@ -47,6 +47,29 @@ class FriendStartRetryTests(unittest.TestCase):
         self.assertEqual(await_reviewed_friend_room(page, preflight.read_bytes(), attempts=2), 2)
         page.mouse.click.assert_not_called()
 
+    def test_native_settings_particle_and_capture_evidence(self):
+        directory = Path(__file__).resolve().parents[1] / "artifacts/friend-300-bd8724f-20261028"
+        paths = [directory / f"analysis-frame-{i}.png" for i in (2, 3)]
+        preflight = directory / "preflight-room.png"
+        if not preflight.exists() or not all(path.exists() for path in paths):
+            self.skipTest("native settings-particle sequence unavailable")
+        page, recorder = Mock(), Mock()
+        frames = [path.read_bytes() for path in paths]
+        page.screenshot.side_effect = frames
+        self.assertEqual(await_reviewed_friend_room(page, preflight.read_bytes(), attempts=2,
+                                                    on_capture=recorder), 2)
+        self.assertEqual(recorder.call_args_list[0].args, (1, frames[0], True))
+        self.assertEqual(recorder.call_args_list[1].args, (2, frames[1], True))
+
+    def test_failed_capture_is_recorded_without_click(self):
+        page, recorder = Mock(), Mock()
+        page.screenshot.return_value = b"not an image"
+        with self.assertRaises(RuntimeError):
+            await_reviewed_friend_room(page, b"reference", attempts=2, on_capture=recorder)
+        self.assertEqual(recorder.call_count, 2)
+        self.assertTrue(all(not call.args[2] for call in recorder.call_args_list))
+        page.mouse.click.assert_not_called()
+
 
 class FriendStartTests(unittest.TestCase):
     def setUp(self):
@@ -83,6 +106,21 @@ class FriendStartTests(unittest.TestCase):
                     (310, 700, 325, 720)):
             with self.subTest(box=box):
                 self.assertFalse(verified_friend_room(self.changed(box), self.frame))
+
+    def test_faint_settings_difference_cannot_change_glyph_bitmap(self):
+        directory = Path(__file__).resolve().parents[1] / "artifacts/friend-300-bd8724f-20261028"
+        original = directory / "preflight-room.png"
+        if not original.exists():
+            self.skipTest("native preflight unavailable")
+        frame = original.read_bytes()
+        image = Image.open(io.BytesIO(frame)).convert("RGB")
+        # Four changed pixels are small enough that a whole-panel average
+        # would hide them; place them in a settings-tile glyph mask.
+        for x in range(1706, 1710):
+            image.putpixel((x, 720), (255, 255, 255))
+        out = io.BytesIO()
+        image.save(out, format="PNG")
+        self.assertFalse(verified_friend_room(out.getvalue(), frame))
 
     def test_long_clock_does_not_match_short_clock(self):
         root = Path(__file__).resolve().parents[1] / "artifacts"
