@@ -5298,6 +5298,30 @@ class AwayDialogDetectionTest(unittest.TestCase):
             clickPoint={"x": 1390.08, "y": 324.0},
         )
 
+    def test_stale_lobby_screencast_is_rejected_by_current_table_frame(self) -> None:
+        """A stale CDP frame must not bypass an already resumed friend table."""
+        project = Path(__file__).resolve().parents[1]
+        live_table = (project / "artifacts" / "recovery-6df3771b-20261028" / "state-0452.png").read_bytes()
+        self.assertEqual(classify_screen(live_table, {}), ("match", 1.0))
+
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.screen_references = {}
+        operator.log = Mock()
+        page = Mock()
+        page.screenshot.return_value = live_table
+
+        state, confidence, frame, rejected = operator.verify_screencast_non_gameplay_state(
+            page, "lobby", 1.0, b"stale-lobby-frame",
+        )
+
+        self.assertEqual((state, confidence, frame, rejected), ("match", 1.0, live_table, True))
+        page.screenshot.assert_called_once_with(animations="disabled")
+        operator.log.assert_called_once_with(
+            "screencast_non_gameplay_state_rejected",
+            streamedState="lobby", streamedConfidence=1.0,
+            currentState="match", currentConfidence=1.0, gameplayClicks=0,
+        )
+
     def test_current_cherry_ranked_menu_is_navigation_not_gameplay(self) -> None:
         project = Path(__file__).resolve().parents[1]
         frame = project / "artifacts" / "ranked-menu-current.png"

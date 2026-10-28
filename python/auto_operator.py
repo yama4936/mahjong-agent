@@ -3519,6 +3519,38 @@ class PythonAutoOperator:
             return True
         return False
 
+    def verify_screencast_non_gameplay_state(
+        self,
+        page: Page,
+        state: str,
+        confidence: float,
+        screenshot: bytes | None,
+    ) -> tuple[str, float, bytes | None, bool]:
+        """Confirm a streamed navigation/result frame before bypassing table work.
+
+        CDP's screencast may lag behind a fresh page screenshot when a table
+        resumes underneath an old lobby frame.  A non-match classification
+        otherwise returns from the latency gate before any current table
+        evidence is inspected.  This confirmation is deliberately limited to
+        the non-gameplay branch, so normal turn handling still uses the low
+        latency streamed frame.
+        """
+        if screenshot is None or state == "match":
+            return state, confidence, screenshot, False
+        current = page.screenshot(animations="disabled")
+        current_state, current_confidence = classify_screen(current, self.screen_references)
+        if current_state == state:
+            return state, confidence, screenshot, False
+        self.log(
+            "screencast_non_gameplay_state_rejected",
+            streamedState=state,
+            streamedConfidence=confidence,
+            currentState=current_state,
+            currentConfidence=current_confidence,
+            gameplayClicks=0,
+        )
+        return current_state, current_confidence, current, True
+
     def record_replay(
         self,
         evaluation: dict[str, Any],
@@ -5321,6 +5353,13 @@ class PythonAutoOperator:
                     # reaction/draw gate and never run gameplay clicks there.
                     early_state, early_confidence = classify_screen(gate_frame, self.screen_references) \
                         if gate_frame else ("unknown", 0.0)
+                    early_state, early_confidence, verified_gate_frame, non_gameplay_rejected = \
+                        self.verify_screencast_non_gameplay_state(
+                            page, early_state, early_confidence, gate_frame,
+                        )
+                    if non_gameplay_rejected:
+                        gate_frame = verified_gate_frame
+                        gate_captured_at = time.monotonic()
                     gate_screen_state, gate_screen_confidence = early_state, early_confidence
                     if self.handle_early_non_gameplay_screen(
                         page, early_state, early_confidence, gate_frame,
