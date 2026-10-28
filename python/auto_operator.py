@@ -4294,6 +4294,15 @@ class PythonAutoOperator:
         mismatch = pending.get("mismatchCandidate")
         if mismatch:
             candidate = mismatch["actual"]
+            if (after[:len(before)] == before and len(after) >= len(before) + 1
+                    and same_physical_tile(after[len(before)], pending["tile"])):
+                self.pending_own_discard = None
+                self.pending_own_river_confirmation = None
+                self.cached_concealed_tiles = None
+                self.log("own_discard_reconciled", tile=after[len(before)],
+                         followingAutomaticDiscards=len(after) - len(before) - 1,
+                         concealedCacheInvalidated=True)
+                return
             if (after[:len(before)] == before and len(after) >= len(before) + 2
                     and same_physical_tile(after[len(before)], candidate)
                     and same_physical_tile(after[len(before) + 1], pending["tile"])):
@@ -4387,6 +4396,13 @@ class PythonAutoOperator:
                 expected=pending["tile"], rejected=actual,
                 retainedOwnDiscards=list(before),
             )
+            # Keep the receipt unresolved: an incomplete river must never be
+            # supplied to a later discard decision. Future scans can still
+            # resolve it when the expected tile is recognized.
+            pending["mismatchCandidate"] = {"actual": actual,
+                                            "capturedAt": observation.get("capturedAt")}
+            self.pending_own_river_confirmation = list(after)
+            return
         else:
             self.log("own_discard_reconciled", tile=actual)
             self.record_post_riichi_pass_candidate(pending, actual)

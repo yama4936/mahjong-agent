@@ -46,6 +46,19 @@ class QueuedDiscardReceiptTest(unittest.TestCase):
         self.assertEqual(contexts[0].args[0]['before'], self.baseline)
         self.assertEqual(contexts[1].args[0]['before'], self.baseline + ['P'])
 
+    def test_wrong_single_append_blocks_until_expected_identity_is_confirmed(self):
+        self.op.pending_own_discard = {'tile': '5m', 'before': list(self.baseline)}
+        for second in range(3):
+            self.scan(self.baseline + ['3m'], f'2026-10-22T04:10:5{second}+00:00')
+        self.assertIsNotNone(self.op.pending_own_discard)
+        self.assertTrue(self.op.own_discard_reconciliation_pending())
+        self.assertEqual(self.op.cached_public_observation['ownDiscards'], self.baseline)
+        for second in (3, 4):
+            self.scan(self.baseline + ['5m', 'S'], f'2026-10-22T04:10:5{second}+00:00')
+        self.assertIsNone(self.op.pending_own_discard)
+        self.assertFalse(self.op.own_discard_reconciliation_pending())
+        self.assertEqual(self.op.cached_public_observation['ownDiscards'], self.baseline + ['5m', 'S'])
+
     def test_partial_prefix_keeps_latest_receipt_pending(self):
         for stamp in ['2026-10-22T04:10:50+00:00', '2026-10-22T04:10:51+00:00']:
             self.scan(self.baseline + ['P'], stamp)

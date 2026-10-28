@@ -776,8 +776,9 @@ class EvaluatorClickBudgetTest(unittest.TestCase):
         operator.reconcile_own_discard()
 
         self.assertIsNone(operator.cached_concealed_tiles)
-        self.assertIsNone(operator.pending_own_discard)
-        self.assertIsNone(operator.pending_own_river_confirmation)
+        self.assertIsNotNone(operator.pending_own_discard)
+        self.assertEqual(operator.pending_own_river_confirmation, ["1m", "2m", "3p"])
+        self.assertTrue(operator.own_discard_reconciliation_pending())
         self.assertEqual(operator.cached_public_observation["ownDiscards"], ["1m", "2m"])
         self.assertEqual(operator.cached_public_observation["doraIndicators"], ["4m"])
         self.assertEqual(operator.cached_public_observation["opponentDiscards"],
