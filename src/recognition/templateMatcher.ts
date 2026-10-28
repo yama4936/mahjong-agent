@@ -19,6 +19,36 @@ export interface TileMatch {
 
 interface PreparedImage { data: Int16Array; width: number; height: number; foregroundFraction: number; neutralBrightCore: boolean; redUpperGlyph: boolean; threeRedBambooMarks: boolean }
 
+// The per-image terms are independent of its comparison partner. Feature
+// values are integers, so these sums remain exact for 44x64x3 pixels.
+const featureStats = new WeakMap<PreparedImage, Map<string, { norm: number; magnitude: number }>>();
+function regionStats(image: PreparedImage, left: number, top: number, right: number, bottom: number) {
+  let regions = featureStats.get(image);
+  if (!regions) { regions = new Map(); featureStats.set(image, regions); }
+  const key = `${left},${top},${right},${bottom}`;
+  let stats = regions.get(key);
+  if (!stats) {
+    let norm = 0, magnitude = 0;
+    for (let y = top; y < bottom; y += 1) for (let x = left; x < right; x += 1) {
+      const index = (y * image.width + x) * 3;
+      for (let channel = 0; channel < 3; channel += 1) {
+        const value = image.data[index + channel]!;
+        norm += value * value;
+        magnitude += Math.abs(value);
+      }
+    }
+    stats = { norm, magnitude };
+    regions.set(key, stats);
+  }
+  return stats;
+}
+
+function overlapStats(a: PreparedImage, b: PreparedImage, dx: number, dy: number) {
+  const left = Math.max(2, 2 - dx), top = Math.max(2, 2 - dy);
+  const right = Math.min(a.width - 2, b.width - 2 - dx), bottom = Math.min(a.height - 2, b.height - 2 - dy);
+  return [regionStats(a, left, top, right, bottom), regionStats(b, left + dx, top + dy, right + dx, bottom + dy)] as const;
+}
+
 const templateCache = new Map<string, Promise<Map<GameTile, PreparedImage[]>>>();
 
 async function prepare(input: string | Buffer, rect?: Rect, options: MatcherOptions = {}): Promise<PreparedImage> {
@@ -122,8 +152,7 @@ function cosineSimilarity(a: PreparedImage, b: PreparedImage): number {
 
 function cosineSimilarityAtOffset(a: PreparedImage, b: PreparedImage, dx: number, dy: number): number {
   let dot = 0;
-  let normA = 0;
-  let normB = 0;
+  const [aStats, bStats] = overlapStats(a, b, dx, dy);
   for (let y = 2; y < a.height - 2; y += 1) {
     const by = y + dy;
     if (by < 2 || by >= b.height - 2) continue;
@@ -136,20 +165,16 @@ function cosineSimilarityAtOffset(a: PreparedImage, b: PreparedImage, dx: number
         const av = a.data[aIndex + channel]!;
         const bv = b.data[bIndex + channel]!;
         dot += av * bv;
-        normA += av * av;
-        normB += bv * bv;
       }
     }
   }
-  return normA > 0 && normB > 0 ? dot / Math.sqrt(normA * normB) : 0;
+  return aStats.norm > 0 && bStats.norm > 0 ? dot / Math.sqrt(aStats.norm * bStats.norm) : 0;
 }
 
 function similarityAtOffset(a: PreparedImage, b: PreparedImage, dx: number, dy: number): number {
   let dot = 0;
-  let normA = 0;
-  let normB = 0;
+  const [aStats, bStats] = overlapStats(a, b, dx, dy);
   let absoluteDifference = 0;
-  let absoluteMagnitude = 0;
   for (let y = 2; y < a.height - 2; y += 1) {
     const by = y + dy;
     if (by < 2 || by >= b.height - 2) continue;
@@ -162,18 +187,16 @@ function similarityAtOffset(a: PreparedImage, b: PreparedImage, dx: number, dy: 
         const av = a.data[aIndex + channel]!;
         const bv = b.data[bIndex + channel]!;
         dot += av * bv;
-        normA += av * av;
-        normB += bv * bv;
         absoluteDifference += Math.abs(av - bv);
-        absoluteMagnitude += Math.abs(av) + Math.abs(bv);
       }
     }
   }
-  if (normA === 0 || normB === 0) return 0;
-  const cosine = dot / Math.sqrt(normA * normB);
+  if (aStats.norm === 0 || bStats.norm === 0) return 0;
+  const cosine = dot / Math.sqrt(aStats.norm * bStats.norm);
   // Cosine similarity alone makes tiles that differ by only one pip look
   // deceptively identical. The normalized L1 term preserves exact matches
   // while giving missing/extra strokes enough weight for a useful margin.
+  const absoluteMagnitude = aStats.magnitude + bStats.magnitude;
   const shape = absoluteMagnitude > 0 ? 1 - absoluteDifference / absoluteMagnitude : 0;
   return 0.55 * cosine + 0.45 * shape;
 }
