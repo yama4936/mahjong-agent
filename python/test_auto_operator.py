@@ -2854,6 +2854,10 @@ class AwayDialogDetectionTest(unittest.TestCase):
         )
         operator.layout = {"actionButtonRegions": {"pass": {"x": 10, "y": 20, "width": 100, "height": 40}}}
         operator.log = Mock()
+        # This is intentionally an old *self-turn* latch: the current UI is
+        # a separately verified reaction prompt, so its PASS must use the
+        # fresh button confirmation rather than the obsolete turn clock.
+        operator.action_evidence_started_at = 10.0
         operator.confirm_action_button = Mock(return_value={"confirmation": "action_button_region_changed"})
         page = Mock()
         button = io.BytesIO()
@@ -4952,7 +4956,8 @@ class AwayDialogDetectionTest(unittest.TestCase):
                         operator.execute_reaction_pass(page, evaluation, evaluated_captured_at=10.0)
                         page.mouse.click.assert_called_once_with(60, 40)
                         operator.require_force_auto_click_budget.assert_called_once_with(
-                            10.9 if case in ("fresh", "contextual") else 11.0, phase="before_reaction_pass_click")
+                            10.9 if case in ("fresh", "contextual") else 11.0,
+                            phase="before_reaction_pass_click", include_action_evidence=False)
                 self.assertEqual(page.screenshot.call_count, 0 if case in ("fresh", "changed", "contextual") else 2)
 
     def test_successful_tsumo_arms_round_terminal_latch(self) -> None:

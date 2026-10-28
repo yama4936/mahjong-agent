@@ -1785,6 +1785,7 @@ class PythonAutoOperator:
 
     def require_force_auto_click_budget(
         self, captured_at: float | None, *, phase: str,
+        include_action_evidence: bool = True,
     ) -> None:
         """Fail closed when a force-auto decision is based on an old frame.
 
@@ -1797,7 +1798,14 @@ class PythonAutoOperator:
         if budget is None:
             return
         capture_age_ms = self.force_auto_capture_age_ms(captured_at)
-        action_evidence_age_ms = self.force_auto_action_evidence_age_ms()
+        # The self-turn gate bounds tile choices, but it does not bound a
+        # reaction PASS.  PASS is re-certified immediately from its own
+        # stable button affordance and a stale self-turn latch can otherwise
+        # suppress that safe, prompt-local action indefinitely.
+        action_evidence_age_ms = (
+            self.force_auto_action_evidence_age_ms()
+            if include_action_evidence else None
+        )
         elapsed_ms = max(age for age in (capture_age_ms, action_evidence_age_ms) if age is not None) \
             if capture_age_ms is not None or action_evidence_age_ms is not None else None
         if elapsed_ms is None:
@@ -5003,6 +5011,7 @@ class PythonAutoOperator:
         if self.args.mode == "force-auto":
             self.require_force_auto_click_budget(
                 pass_confirmed_at, phase="before_reaction_pass_click",
+                include_action_evidence=False,
             )
         self.require_action_deadline()
         self.log("action_click_sent", action="pass", clickPoint=point,
