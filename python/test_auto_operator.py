@@ -23,6 +23,55 @@ from auto_operator import verified_post_call_white_discard
 FRAME_FIXTURES = Path(__file__).resolve().parents[1] / "test/fixtures"
 
 
+class OperatorShutdownOrderTest(unittest.TestCase):
+    def test_close_before_playwright_exit_on_normal_and_exception_paths(self):
+        from auto_operator import main
+
+        for failure in (None, RuntimeError("run failed"), KeyboardInterrupt()):
+            with self.subTest(failure=failure):
+                events = []
+                lease = Mock()
+                lease.__enter__ = Mock(return_value=None)
+                lease.__exit__ = Mock(return_value=False)
+                context = Mock()
+                context.__enter__ = Mock(return_value=Mock())
+                context.__exit__ = Mock(side_effect=lambda *args: events.append("playwright_exit"))
+                operator = Mock()
+                operator.run.side_effect = failure
+                operator.close.side_effect = lambda: events.append("operator_close")
+                with patch("auto_operator.parse_args", return_value=argparse.Namespace(cdp="endpoint")), \
+                     patch("auto_operator.operator_lease", return_value=lease), \
+                     patch("auto_operator.PythonAutoOperator", return_value=operator), \
+                     patch("auto_operator.sync_playwright", return_value=context), \
+                     patch("auto_operator.find_mahjong_page", return_value=Mock()):
+                    if isinstance(failure, RuntimeError):
+                        with self.assertRaisesRegex(RuntimeError, "run failed"):
+                            main()
+                    else:
+                        self.assertEqual(main(), 0)
+                self.assertEqual(events, ["operator_close", "playwright_exit"])
+                operator.close.assert_called_once()
+
+    def test_close_when_playwright_context_fails_to_enter(self):
+        from auto_operator import main
+
+        lease = Mock()
+        lease.__enter__ = Mock(return_value=None)
+        lease.__exit__ = Mock(return_value=False)
+        context = Mock()
+        context.__enter__ = Mock(side_effect=RuntimeError("driver unavailable"))
+        context.__exit__ = Mock()
+        operator = Mock()
+        with patch("auto_operator.parse_args", return_value=argparse.Namespace(cdp="endpoint")), \
+             patch("auto_operator.operator_lease", return_value=lease), \
+             patch("auto_operator.PythonAutoOperator", return_value=operator), \
+             patch("auto_operator.sync_playwright", return_value=context):
+            with self.assertRaisesRegex(RuntimeError, "driver unavailable"):
+                main()
+        operator.close.assert_called_once()
+        context.__exit__.assert_not_called()
+
+
 class MatchLengthFlowTest(unittest.TestCase):
     def test_explicit_format_survives_metadata_and_resident_requests(self):
         raw = {"seat": "north", "round": "unknown", "opponents": []}

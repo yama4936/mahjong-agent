@@ -32,6 +32,7 @@ from screen_state import _rgb_fraction, classify_screen, load_references
 from operator_lock import OperatorAlreadyRunning, endpoint_key, operator_lease
 from analysis_recorder import AnalysisRecorder
 from startup_turn_guard import StartupTurnGuard
+from friend_start import verified_friend_room
 
 
 class RetryableSafetyAbort(RuntimeError):
@@ -5598,6 +5599,24 @@ class PythonAutoOperator:
 
     def run(self, page: Page) -> None:
         self.ensure_viewport(page, force=True)
+        startup_turn_guard = StartupTurnGuard()
+        preflight_path = getattr(self.args, "start_reviewed_friend_room", None)
+        if preflight_path:
+            if self.args.mode != "force-auto" or getattr(self.args, "ranked_loop", False):
+                raise RuntimeError("reviewed friend start requires non-ranked force-auto")
+            reviewed = Path(preflight_path).read_bytes()
+            first = page.screenshot(animations="disabled")
+            if not verified_friend_room(first, reviewed):
+                raise RuntimeError("friend room does not match reviewed preflight")
+            page.wait_for_timeout(100)
+            current = page.screenshot(animations="disabled")
+            if not verified_friend_room(current, reviewed):
+                raise RuntimeError("friend room changed before start")
+            started_at = time.monotonic()
+            page.mouse.click(1140, 998)
+            startup_turn_guard.record_verified_start_click(clicked_at=started_at)
+            self.log("reviewed_friend_start_clicked", preflight=str(preflight_path),
+                     point={"x": 1140, "y": 998})
         if self.args.mode == "force-auto":
             # Room-start clicks can leave the pointer over the initial hand.
             # Clear hover before starting the stream, so its first frame cannot
@@ -5625,7 +5644,6 @@ class PythonAutoOperator:
         silent_gate_polls = 0
         unchanged_gate_content_polls = 0
         last_gate_content_hash: str | None = None
-        startup_turn_guard = StartupTurnGuard()
         startup_guard_last_state: str | None = None
         while True:
             iterations += 1
@@ -5813,17 +5831,19 @@ class PythonAutoOperator:
                         # deadline. Do not manufacture a new clock for it.
                         page.wait_for_timeout(max(20, round(self.args.poll * 1000)))
                         continue
+                    initial_anchor = startup_turn_guard.initial_action_anchor
+                    startup_turn_guard.initial_action_anchor = None
                     draw_gate_streak = draw_gate_streak + 1 if quick_draw else 0
                     pass_gate_streak = pass_gate_streak + 1 if quick_pass else 0
                     call_gate_streak = call_gate_streak + 1 if quick_calls else 0
                     reaction_win_gate_streak = reaction_win_gate_streak + 1 if quick_reaction_win else 0
                     if quick_reaction_win:
                         self.mark_action_evidence(
-                            "win", gate_generation=self.screencast_sequence,
+                            "win", observed_at=initial_anchor, gate_generation=self.screencast_sequence,
                         )
                     elif quick_pass or quick_calls:
                         self.mark_action_evidence(
-                            "reaction", gate_generation=self.screencast_sequence,
+                            "reaction", observed_at=initial_anchor, gate_generation=self.screencast_sequence,
                         )
                     elif quick_draw:
                         prior_kind = getattr(self, "action_evidence_kind", None)
@@ -5835,6 +5855,7 @@ class PythonAutoOperator:
                             and reaction_vanished_for > 0.75
                         self.mark_action_evidence(
                             "discard",
+                            observed_at=initial_anchor,
                             gate_generation=self.screencast_sequence,
                             supersede=verified_later_draw,
                         )
@@ -6790,6 +6811,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--stop-on-error", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--resume-away", action=argparse.BooleanOptionalAction, default=False)
     parser.add_argument("--advance-screens", action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument("--start-reviewed-friend-room", default=None, metavar="PREFLIGHT_PNG",
+                        help="start only the friend room matching this manually reviewed preflight")
     parser.add_argument(
         "--public-cache", action=argparse.BooleanOptionalAction, default=True,
         help="recognize dora/rivers/melds asynchronously during opponent turns",
@@ -6826,14 +6849,23 @@ def main() -> int:
         with operator_lease(args.cdp):
             # Acquire before resident recognizers or any Playwright connection.
             operator = PythonAutoOperator(args)
+            operator_closed = False
             try:
                 with sync_playwright() as playwright:
-                    browser = playwright.chromium.connect_over_cdp(args.cdp)
-                    operator.run(find_mahjong_page(browser))
+                    try:
+                        browser = playwright.chromium.connect_over_cdp(args.cdp)
+                        operator.run(find_mahjong_page(browser))
+                    finally:
+                        # Stop the screencast while its CDP transport is still
+                        # alive, before Playwright tears down its driver.
+                        operator_closed = True
+                        operator.close()
             except KeyboardInterrupt:
                 operator.log("stopped", reason="keyboard_interrupt")
             finally:
-                operator.close()
+                # Entering the Playwright context itself can fail.
+                if not operator_closed:
+                    operator.close()
     except OperatorAlreadyRunning as error:
         evidence = {"timestamp": datetime.now(timezone.utc).isoformat(),
                     "event": "duplicate_operator_stop", "pid": os.getpid(),

@@ -24,6 +24,30 @@ class StartupTurnGuardTests(unittest.TestCase):
         self.assertEqual(guard.observe(verified_match=True, action_visible=False, now=0), "wait")
         self.assertEqual(guard.observe(verified_match=True, action_visible=False, now=1), "ready")
 
+    def test_verified_start_preserves_conservative_initial_action_clock(self):
+        guard = StartupTurnGuard()
+        guard.record_verified_start_click(clicked_at=10)
+        self.assertEqual(guard.observe(verified_match=False, action_visible=False, now=12), "wait")
+        self.assertEqual(guard.observe(verified_match=True, action_visible=True, now=20), "ready")
+        self.assertEqual(guard.initial_action_anchor, 10)
+
+    def test_stale_or_reversed_start_and_existing_quarantine_fail_closed(self):
+        for now in (9, 41):
+            guard = StartupTurnGuard()
+            guard.record_verified_start_click(clicked_at=10)
+            self.assertEqual(guard.observe(verified_match=True, action_visible=True, now=now), "quarantine")
+        guard = StartupTurnGuard()
+        guard.observe(verified_match=True, action_visible=True, now=1)
+        guard.record_verified_start_click(clicked_at=2)
+        self.assertEqual(guard.observe(verified_match=True, action_visible=True, now=3), "quarantine")
+
+    def test_no_initial_action_does_not_backdate_later_turn(self):
+        guard = StartupTurnGuard()
+        guard.record_verified_start_click(clicked_at=10)
+        self.assertEqual(guard.observe(verified_match=True, action_visible=False, now=15), "wait")
+        self.assertEqual(guard.observe(verified_match=True, action_visible=False, now=16), "ready")
+        self.assertIsNone(guard.initial_action_anchor)
+
 
 if __name__ == "__main__":
     unittest.main()

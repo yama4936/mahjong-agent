@@ -13,6 +13,17 @@ class StartupTurnGuard:
         self.ready = False
         self.no_draw_since: float | None = None
         self.quarantined = False
+        self.start_click_at: float | None = None
+        self.initial_action_anchor: float | None = None
+
+    def record_verified_start_click(self, *, clicked_at: float) -> None:
+        """Record a click made by this process on a separately verified room.
+
+        The caller must verify the room and its controls immediately before
+        clicking. This is not permission to trust a generic navigation screen.
+        """
+        if not self.ready and not self.quarantined:
+            self.start_click_at = clicked_at
 
     def observe(self, *, verified_match: bool, action_visible: bool, now: float) -> str:
         if self.ready:
@@ -20,6 +31,18 @@ class StartupTurnGuard:
         if not verified_match:
             self.no_draw_since = None
             return "wait"
+        if self.start_click_at is not None:
+            # A stale click, slow load, reconnect, or clock reversal cannot
+            # authorize an initial action. The short window is intentionally
+            # independent of the configured game deadline.
+            age = now - self.start_click_at
+            if 0 <= age <= 30 and action_visible:
+                self.ready = True
+                self.initial_action_anchor = self.start_click_at
+                self.start_click_at = None
+                return "ready"
+            if not 0 <= age <= 30:
+                self.start_click_at = None
         if action_visible:
             self.no_draw_since = None
             self.quarantined = True
