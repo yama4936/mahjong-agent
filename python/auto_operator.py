@@ -955,7 +955,14 @@ def raised_tile_confirmation_point(
         return None
     delta, lift = min(candidates)
     if delta > threshold:
-        return None
+        # A click sparkle can change a small part of the selected glyph. In
+        # the recorded 9p receipt the true 48px lift differed by 1.685%,
+        # while the nearest alternative differed by 17.091%. Admit only this
+        # narrow excess when the matching offset is decisively isolated;
+        # ambiguous or substantially changed faces remain fail-closed.
+        alternatives = [other for other, offset in candidates if offset != lift]
+        if delta > threshold + 0.5 or min(alternatives) - delta < 10.0:
+            return None
     return {"x": float(point["x"]), "y": float(point["y"]) - lift,
             "lift": float(lift), "faceStructureDelta": round(delta, 3)}
 

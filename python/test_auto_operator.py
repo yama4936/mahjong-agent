@@ -4919,6 +4919,34 @@ class AwayDialogDetectionTest(unittest.TestCase):
         self.assertEqual(confirmation, {"x": 1312.5, "y": 968.0, "lift": 31.0,
                                         "faceStructureDelta": 0.0})
 
+    def test_native_9p_lift_with_click_sparkle_requires_unique_glyph_match(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        layout = load_json(root / "config/layout-300-regression.json")
+        before = (root / "test/fixtures/selection-9p-before-20261028.jpg").read_bytes()
+        after = (root / "test/fixtures/selection-9p-lift-20261028.jpg").read_bytes()
+        result = raised_tile_confirmation_point(before, after, layout, 13,
+                                                layout["clickPoints"][13], 1.5)
+        self.assertEqual(result, {"x": 1532.0, "y": 951.0, "lift": 48.0,
+                                  "faceStructureDelta": 1.685})
+        self.assertIsNone(raised_tile_confirmation_point(before, before, layout, 13,
+                                                        layout["clickPoints"][13], 1.5))
+        self.assertIsNone(raised_tile_confirmation_point(before, after, layout, 12,
+                                                        layout["clickPoints"][12], 1.5))
+        with Image.open(io.BytesIO(after)) as image:
+            altered = image.convert("RGB")
+        ImageDraw.Draw(altered).rectangle((1496, 918, 1566, 1026), fill="white")
+        output = io.BytesIO()
+        altered.save(output, format="PNG")
+        self.assertIsNone(raised_tile_confirmation_point(before, output.getvalue(), layout, 13,
+                                                        layout["clickPoints"][13], 1.5))
+        # A near-threshold match with a plausible competing vertical offset
+        # must not be treated as unique evidence of the selected hitbox.
+        deltas = [1.7, 2.0] + [30.0] * 71
+        stats = [Mock(mean=[value * 255 / 100]) for value in deltas]
+        with patch("auto_operator.ImageStat.Stat", side_effect=stats):
+            self.assertIsNone(raised_tile_confirmation_point(before, after, layout, 13,
+                                                            layout["clickPoints"][13], 1.5))
+
     def test_raised_tile_optimized_search_matches_original_mask_search(self) -> None:
         layout = load_json(Path(__file__).resolve().parents[1] / "config/layout-300-regression.json")
         for index, lift in ((11, 31), (9, 19), (9, 0)):
