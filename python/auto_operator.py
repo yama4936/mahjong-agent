@@ -33,6 +33,7 @@ from operator_lock import OperatorAlreadyRunning, endpoint_key, operator_lease
 from analysis_recorder import AnalysisRecorder
 from startup_turn_guard import StartupTurnGuard
 from friend_start import await_reviewed_friend_room, reviewed_friend_clock_is_300_plus_zero
+from screencast_diagnostic import ScreencastDiagnostic
 
 
 class RetryableSafetyAbort(RuntimeError):
@@ -1849,6 +1850,7 @@ class PythonAutoOperator:
         self.dynamic_layout_required = False
         self.last_shanten: int | None = None
         self.screencast_session: CDPSession | None = None
+        self.screencast_diagnostic = None
         self.latest_screencast_frame: bytes | None = None
         # Monotonic receipt time for the exact streamed frame above.  A
         # force-auto evaluator can finish after the short ranked click budget
@@ -2161,6 +2163,10 @@ class PythonAutoOperator:
             except Exception:
                 pass
             self.screencast_session = None
+        diagnostic = getattr(self, "screencast_diagnostic", None)
+        if diagnostic is not None:
+            self.log("screencast_diagnostic_closed", **diagnostic.close())
+            self.screencast_diagnostic = None
         if self.recognition_server.poll() is None:
             self.recognition_server.terminate()
             try:
@@ -2491,11 +2497,21 @@ class PythonAutoOperator:
         if self.args.mode != "force-auto" or self.screencast_session is not None:
             return
         session = page.context.new_cdp_session(page)
+        diagnostic_path = getattr(self.args, "screencast_diagnostic", None)
+        if diagnostic_path:
+            self.screencast_diagnostic = ScreencastDiagnostic(diagnostic_path)
 
         def receive_frame(event: dict[str, Any]) -> None:
             try:
+                receipt = time.monotonic()
                 frame = base64.b64decode(event["data"])
                 self.accept_screencast_frame(frame)
+                if self.screencast_diagnostic is not None:
+                    try:
+                        self.screencast_diagnostic.offer(self.screencast_sequence, receipt,
+                                                         event.get("metadata", {}), frame)
+                    except Exception as error:
+                        self.log("screencast_diagnostic_offer_failed", error=str(error))
             finally:
                 session.send("Page.screencastFrameAck", {"sessionId": event["sessionId"]})
 
@@ -6968,6 +6984,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--artifacts", default="artifacts/python-auto")
     parser.add_argument("--snapshot-nonmatch", action="store_true",
                         help="Save one local screenshot per observed non-match state for diagnosis")
+    parser.add_argument("--screencast-diagnostic", default=None, metavar="DIRECTORY",
+                        help="opt-in asynchronous recording of the first 30 seconds of screencast receipts")
     parser.add_argument("--mode", choices=("observer", "advisor", "auto", "force-auto"), default="advisor",
                         help="force-auto ignores confidence and calibration gates but keeps stability and post-click checks")
     parser.add_argument("--poll", type=float, default=0.1)
