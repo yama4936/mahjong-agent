@@ -1364,6 +1364,41 @@ class ActionDeadlineTest(unittest.TestCase):
 
 
 class AwayDialogDetectionTest(unittest.TestCase):
+    def test_board_frame_memo_requires_same_bytes_cache_identity_and_freshness(self):
+        from auto_operator import wall_counter_signature
+        root = Path(__file__).resolve().parents[1]
+        before = (root / "test/fixtures/board-right-highlight-before-20261029.jpg").read_bytes()
+        after = (root / "test/fixtures/board-right-highlight-after-20261029.jpg").read_bytes()
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.board_metadata_lock = threading.Lock()
+        operator.board_metadata_ocr_lock = threading.Lock()
+        operator.board_metadata_result = None
+        operator.log = Mock()
+        metadata = {"verified": True, "seat": "north", "remainingTiles": 57,
+                    "scores": {"north": 25000, "east": 25000, "south": 25000, "west": 25000}}
+        operator.board_metadata_cache = {"metadata": metadata, "signature": board_state_signature(before),
+                                         "wallSignature": wall_counter_signature(before),
+                                         "capturedAt": 10.0, "screenshot": "before"}
+        with tempfile.TemporaryDirectory() as directory, \
+             patch("auto_operator.time.monotonic", return_value=11) as now, \
+             patch("board_metadata.recognize_remaining_count", return_value=54) as wall, \
+             patch("board_metadata.recognize_right_score", return_value=25000) as score:
+            frame = Path(directory) / "frame.jpg"
+            frame.write_bytes(after)
+            first = operator.cached_board_metadata(frame)
+            first["scores"]["east"] = 0
+            self.assertEqual(operator.cached_board_metadata(frame)["scores"]["east"], 25000)
+            self.assertEqual((wall.call_count, score.call_count), (1, 1))
+            # Same filename is not enough if its bytes change.
+            frame.write_bytes(before)
+            self.assertEqual(operator.cached_board_metadata(frame)["remainingTiles"], 57)
+            frame.write_bytes(after)
+            operator.board_metadata_cache = dict(operator.board_metadata_cache)
+            self.assertEqual(operator.cached_board_metadata(frame)["remainingTiles"], 54)
+            self.assertEqual((wall.call_count, score.call_count), (2, 2))
+            now.return_value = 19
+            self.assertIsNone(operator.cached_board_metadata(frame))
+
     def test_board_cache_verifies_changed_right_score_panel(self):
         from auto_operator import wall_counter_signature
         root = Path(__file__).resolve().parents[1]
@@ -1385,6 +1420,9 @@ class AwayDialogDetectionTest(unittest.TestCase):
              patch("board_metadata.recognize_remaining_count", return_value=54), \
              patch("board_metadata.recognize_right_score", return_value=25000) as score:
             self.assertEqual(operator.cached_board_metadata(after_path)["remainingTiles"], 54)
+            self.assertEqual(operator.cached_board_metadata(after_path)["remainingTiles"], 54)
+            score.assert_called_once()
+            operator.board_metadata_frame_memo = None
             score.return_value = 24000
             self.assertIsNone(operator.cached_board_metadata(after_path))
             score.return_value = None
@@ -1431,8 +1469,10 @@ class AwayDialogDetectionTest(unittest.TestCase):
             with patch("board_metadata.recognize_remaining_count", return_value=68):
                 self.assertEqual(operator.cached_board_metadata(frame)["remainingTiles"], 68)
                 self.assertEqual(operator.board_metadata_cache["metadata"]["remainingTiles"], 69)
+            operator.board_metadata_frame_memo = None
             with patch("board_metadata.recognize_remaining_count", return_value=0):
                 self.assertEqual(operator.cached_board_metadata(frame)["remainingTiles"], 0)
+            operator.board_metadata_frame_memo = None
             with patch("board_metadata.recognize_remaining_count", return_value=None):
                 self.assertIsNone(operator.cached_board_metadata(frame))
             with operator.board_metadata_ocr_lock:

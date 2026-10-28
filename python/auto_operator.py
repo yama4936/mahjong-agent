@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import copy
 import hashlib
 import io
 import json
@@ -2956,6 +2957,11 @@ class PythonAutoOperator:
         if age_ms > 8000:
             return None
         frame = screenshot.read_bytes()
+        memo = getattr(self, "board_metadata_frame_memo", None)
+        if memo is not None and memo[0] is cache and memo[1] == frame:
+            self.log("board_metadata_frame_memo_applied", screenshot=str(screenshot),
+                     source=cache["screenshot"], ageMs=age_ms)
+            return copy.deepcopy(memo[2])
         signature = board_state_signature(frame)
         previous = cache["signature"]
         if len(signature) != len(BOARD_STATE_REGIONS) or len(previous) != len(BOARD_STATE_REGIONS):
@@ -2996,10 +3002,13 @@ class PythonAutoOperator:
                 lock.release()
             if refresh_wall and remaining is None:
                 return None
-            metadata = {**cache["metadata"], **({"remainingTiles": remaining} if refresh_wall else {})}
+            metadata = copy.deepcopy(cache["metadata"])
+            if refresh_wall:
+                metadata["remainingTiles"] = remaining
             self.log("board_metadata_partial_refreshed" if changed else "board_metadata_counter_refreshed", screenshot=str(screenshot),
                      source=cache["screenshot"], ageMs=age_ms,
                      remainingTiles=remaining, rightScoreVerified=bool(changed))
+            self.board_metadata_frame_memo = (cache, frame, copy.deepcopy(metadata))
             return metadata
         self.log("board_metadata_cache_applied", screenshot=str(screenshot),
                  source=cache["screenshot"], ageMs=age_ms)
