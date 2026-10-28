@@ -2972,6 +2972,64 @@ class AwayDialogDetectionTest(unittest.TestCase):
             for call in operator.log.call_args_list
         ))
 
+    def test_confirmed_riichi_selection_uses_local_budget_only_for_long_friend_mode(self) -> None:
+        project = Path(__file__).resolve().parents[1]
+        frame = (project / "test/fixtures/riichi-before-selection-20261020.jpg").read_bytes()
+        selection = (project / "test/fixtures/riichi-two-candidates-selection-20261020.jpg").read_bytes()
+        for budget, ranked, stale_selection, should_click in (
+            (8000, False, False, True), (8000, True, False, False),
+            (2600, False, False, False), (8000, False, True, False),
+        ):
+            with self.subTest(budget=budget, ranked=ranked, stale_selection=stale_selection):
+                operator = PythonAutoOperator.__new__(PythonAutoOperator)
+                operator.args = argparse.Namespace(mode="force-auto", allow_local_discard=False,
+                    stability_pixel_delta=1.5, force_auto_click_budget_ms=budget, ranked_loop=ranked)
+                operator.layout = load_json(project / "config/layout-300-regression.json")
+                operator.hand_clip = {"x": 223, "y": 926, "width": 1355, "height": 146}
+                operator.river_clip = {"x": 10, "y": 0, "width": 10, "height": 10}
+                operator.screencast_session = Mock()
+                operator.latest_screencast_frame = frame
+                operator.screencast_draw_generation = 4
+                operator.cached_open_melds = 0
+                operator.action_evidence_started_at = 10.0
+                operator.confirm_action_button = Mock(return_value={"confirmation": "riichi_selection_hand_changed"})
+                operator.confirm_discard = Mock(return_value={"confirmation": "hand_and_own_river_changed"})
+                operator.refresh_discard_reconciliation_before_click = Mock(return_value=False)
+                operator.require_action_deadline = Mock()
+                operator.log = Mock()
+                page = Mock()
+                button = io.BytesIO()
+                Image.new("RGB", (100, 40), "orange").save(button, format="PNG")
+                page.screenshot.side_effect = lambda **kw: button.getvalue() if "clip" in kw else selection
+                evaluation = {
+                    "decision": {"selectedAction": {"action": "riichi", "tile": "1m"}},
+                    "recognition": {"tiles": ["1m"] * 14, "safe": False},
+                    "clickIndex": 0, "clickPoint": {"x": 269, "y": 999},
+                    "actionButton": {"action": "riichi", "x": 1087, "y": 788, "width": 352,
+                                     "height": 57, "center": {"x": 1263, "y": 816.5}},
+                }
+                clock = {"now": 10.1}
+                def classify(*_args):
+                    clock["now"] = 18.8
+                    return "match", 1.0
+                def stable_delta(*_args):
+                    if stale_selection and clock["now"] >= 18.8:
+                        clock["now"] = 27.0
+                    return 0.0
+                with patch("auto_operator.time.monotonic", side_effect=lambda: clock["now"]), \
+                        patch("auto_operator.stable_hand_delta", side_effect=stable_delta), \
+                        patch("auto_operator.raised_tile_confirmation_point", return_value={"x": 269, "y": 971, "lift": 28, "faceStructureDelta": 0.0}), \
+                        patch("auto_operator.classify_screen", side_effect=classify), \
+                        patch("auto_operator.is_away_resume_dialog", return_value=False), \
+                        patch("auto_operator.discard_point_in_hand_geometry", return_value=True):
+                    if should_click:
+                        receipt = operator.execute(page, evaluation, crop_screenshot(frame, operator.hand_clip), frame, 4, 10.0)
+                        self.assertTrue(receipt["clicked"])
+                    else:
+                        with self.assertRaisesRegex(RetryableSafetyAbort, "click budget expired"):
+                            operator.execute(page, evaluation, crop_screenshot(frame, operator.hand_clip), frame, 4, 10.0)
+                        page.mouse.click.assert_called_once_with(1263, 816.5)
+
     def test_riichi_discard_aborts_when_selection_target_moves_after_declaration(self) -> None:
         """Never apply the pre-Riichi target after a changing selection row."""
         project = Path(__file__).resolve().parents[1]

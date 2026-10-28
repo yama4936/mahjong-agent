@@ -4649,6 +4649,7 @@ class PythonAutoOperator:
         selected = decision.get("selectedAction", {"action": decision.get("recommendedAction", "discard")})
         selected_action = selected.get("action")
         force_auto = self.args.mode == "force-auto"
+        selection_local_budget = False
         certified_auto = self.args.mode == "auto" and decision.get("executable") is True
         local_auto = local_discard_allowed(self.args, evaluation)
         if not force_auto and not certified_auto and not local_auto:
@@ -4918,6 +4919,7 @@ class PythonAutoOperator:
             # the dimmed row has relaid out.
             page.wait_for_timeout(120)
             settled_riichi_full = page.screenshot(animations="disabled")
+            settled_riichi_captured_at = time.monotonic()
             settled_riichi_hand = crop_screenshot(settled_riichi_full, self.hand_clip)
             settled_riichi_state, _ = classify_screen(
                 settled_riichi_full, getattr(self, "screen_references", {}),
@@ -4940,7 +4942,17 @@ class PythonAutoOperator:
             # confirmation/classification work.  Do not do this for an
             # unconfirmed declaration or any other action path.
             if force_auto:
-                evaluated_captured_at = post_riichi_captured_at
+                selection_local_budget = (
+                    not getattr(self.args, "ranked_loop", False)
+                    and self.force_auto_click_budget_ms() is not None
+                    and self.force_auto_click_budget_ms() > FORCE_AUTO_SHORT_CLICK_BUDGET_MAX_MS
+                )
+                evaluated_captured_at = (settled_riichi_captured_at if selection_local_budget
+                                         else post_riichi_captured_at)
+                if selection_local_budget:
+                    self.log("riichi_selection_local_budget_started",
+                             clickBudgetMs=self.force_auto_click_budget_ms(),
+                             targetPixelDelta=round(target_delta, 3))
             hand_before = settled_riichi_hand
             river_before = crop_screenshot(settled_riichi_full, self.river_clip)
 
@@ -4979,6 +4991,7 @@ class PythonAutoOperator:
         if force_auto:
             self.require_force_auto_click_budget(
                 evaluated_captured_at, phase="before_discard_click",
+                **({"include_action_evidence": False} if selection_local_budget else {}),
             )
             self.require_force_auto_discard_selection_window(evaluated_captured_at)
         self.require_action_deadline()
@@ -5006,6 +5019,7 @@ class PythonAutoOperator:
             self.args.stability_pixel_delta,
             (lambda: self.require_force_auto_click_budget(
                 evaluated_captured_at, phase="before_discard_confirmation_click",
+                **({"include_action_evidence": False} if selection_local_budget else {}),
             )) if force_auto else None,
         )
         if force_auto:
