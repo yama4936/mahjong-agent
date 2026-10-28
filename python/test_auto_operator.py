@@ -1364,6 +1364,42 @@ class ActionDeadlineTest(unittest.TestCase):
 
 
 class AwayDialogDetectionTest(unittest.TestCase):
+    def test_board_cache_verifies_changed_right_score_panel(self):
+        from auto_operator import wall_counter_signature
+        root = Path(__file__).resolve().parents[1]
+        before = (root / "test/fixtures/board-right-highlight-before-20261029.jpg").read_bytes()
+        after_path = root / "test/fixtures/board-right-highlight-after-20261029.jpg"
+        self.assertFalse(board_state_signature_matches(board_state_signature(before),
+                                                       board_state_signature(after_path.read_bytes())))
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.board_metadata_lock = threading.Lock()
+        operator.board_metadata_ocr_lock = threading.Lock()
+        operator.board_metadata_result = None
+        operator.log = Mock()
+        metadata = {"verified": True, "seat": "north", "remainingTiles": 57,
+                    "scores": {"north": 25000, "east": 25000, "south": 25000, "west": 25000}}
+        operator.board_metadata_cache = {"metadata": metadata, "signature": board_state_signature(before),
+                                         "wallSignature": wall_counter_signature(before),
+                                         "capturedAt": 10.0, "screenshot": "before"}
+        with patch("auto_operator.time.monotonic", return_value=11), \
+             patch("board_metadata.recognize_remaining_count", return_value=54), \
+             patch("board_metadata.recognize_right_score", return_value=25000) as score:
+            self.assertEqual(operator.cached_board_metadata(after_path)["remainingTiles"], 54)
+            score.return_value = 24000
+            self.assertIsNone(operator.cached_board_metadata(after_path))
+            score.return_value = None
+            self.assertIsNone(operator.cached_board_metadata(after_path))
+            score.return_value = 25000
+            with operator.board_metadata_ocr_lock:
+                self.assertIsNone(operator.cached_board_metadata(after_path))
+            with tempfile.TemporaryDirectory() as directory:
+                changed = Path(directory) / "changed.png"
+                with Image.open(after_path) as image:
+                    modified = image.convert("RGB")
+                ImageDraw.Draw(modified).rectangle((905, 385, 1015, 424), fill="white")
+                modified.save(changed)
+                self.assertIsNone(operator.cached_board_metadata(changed))
+
     def test_board_cache_requires_exact_wall_counter_for_cached_remaining_tiles(self):
         from auto_operator import wall_counter_signature
 

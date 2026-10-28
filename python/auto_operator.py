@@ -2956,30 +2956,50 @@ class PythonAutoOperator:
         if age_ms > 8000:
             return None
         frame = screenshot.read_bytes()
-        if not board_state_signature_matches(board_state_signature(frame), cache["signature"]):
+        signature = board_state_signature(frame)
+        previous = cache["signature"]
+        if len(signature) != len(BOARD_STATE_REGIONS) or len(previous) != len(BOARD_STATE_REGIONS):
             return None
-        if "remainingTiles" in cache["metadata"] and (
+        changed = [index for index, (a, b) in enumerate(zip(signature, previous))
+                   if sum(ImageStat.Stat(ImageChops.difference(a, b)).mean) / 3 > 3.0]
+        # The right player's turn highlight can brighten that score panel.
+        # All other HUD regions must still match; independently OCR the
+        # current right score rather than ignoring a potential score change.
+        if any(index != 2 for index in changed):
+            return None
+        refresh_wall = "remainingTiles" in cache["metadata"] and (
             cache.get("wallSignature") is None
             or wall_counter_signature(frame) != cache["wallSignature"]
-        ):
-            from board_metadata import recognize_remaining_count
+        )
+        if changed or refresh_wall:
+            from board_metadata import recognize_remaining_count, recognize_right_score
             lock = getattr(self, "board_metadata_ocr_lock", None)
             if lock is None or not lock.acquire(blocking=False):
                 return None
             try:
                 try:
-                    remaining = recognize_remaining_count(screenshot)
+                    if changed:
+                        seat_order = ("east", "south", "west", "north")
+                        seat = cache["metadata"].get("seat")
+                        if seat not in seat_order:
+                            return None
+                        right = seat_order[(seat_order.index(seat) + 1) % 4]
+                        score = recognize_right_score(screenshot)
+                        if score is None or score != cache["metadata"].get("scores", {}).get(right):
+                            return None
+                    remaining = recognize_remaining_count(screenshot) if refresh_wall else None
                 except Exception as error:
                     self.log("board_metadata_counter_refresh_failed", screenshot=str(screenshot),
                              error=str(error))
                     return None
             finally:
                 lock.release()
-            if remaining is None:
+            if refresh_wall and remaining is None:
                 return None
-            metadata = {**cache["metadata"], "remainingTiles": remaining}
-            self.log("board_metadata_counter_refreshed", screenshot=str(screenshot),
-                     source=cache["screenshot"], ageMs=age_ms, remainingTiles=remaining)
+            metadata = {**cache["metadata"], **({"remainingTiles": remaining} if refresh_wall else {})}
+            self.log("board_metadata_partial_refreshed" if changed else "board_metadata_counter_refreshed", screenshot=str(screenshot),
+                     source=cache["screenshot"], ageMs=age_ms,
+                     remainingTiles=remaining, rightScoreVerified=bool(changed))
             return metadata
         self.log("board_metadata_cache_applied", screenshot=str(screenshot),
                  source=cache["screenshot"], ageMs=age_ms)

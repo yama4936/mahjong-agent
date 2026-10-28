@@ -6,10 +6,21 @@ from types import SimpleNamespace
 from unittest.mock import patch
 from pathlib import Path
 from PIL import Image
-from board_metadata import parse_board_tokens, recognize_board, recognize_remaining_count, recognize_riichi_sticks, remap_seats, reconcile_riichi_metadata
+from board_metadata import parse_board_tokens, recognize_board, recognize_remaining_count, recognize_right_score, recognize_riichi_sticks, remap_seats, reconcile_riichi_metadata
 
 
 class BoardMetadataTest(unittest.TestCase):
+    def test_isolated_right_score_rejects_ambiguous_or_low_confidence(self):
+        frame = Path(__file__).resolve().parents[1] / "test/fixtures/board-right-highlight-after-20261029.jpg"
+        for text, confidence, expected in [("25000", 0.99, 25000), ("22500", 0.99, 22500),
+                                           ("25000", 0.97, None), ("2S000", 0.99, None),
+                                           ("0", 0.99, None)]:
+            with self.subTest(text=text, confidence=confidence), patch(
+                "board_metadata.ocr_engine",
+                return_value=lambda *args, **kwargs: SimpleNamespace(txts=[text], scores=[confidence]),
+            ):
+                self.assertEqual(recognize_right_score(frame), expected)
+
     def test_isolated_wall_counter_requires_confident_bounded_reading(self):
         with tempfile.TemporaryDirectory() as directory:
             frame = Path(directory) / "frame.png"

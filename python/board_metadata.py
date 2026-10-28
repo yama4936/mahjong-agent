@@ -47,6 +47,23 @@ def recognize_remaining_count(image_path: Path) -> int | None:
     return int(match.group(1))
 
 
+def recognize_right_score(image_path: Path) -> int | None:
+    """Read the calibrated right-hand score; reject ambiguous OCR."""
+    import numpy as np
+    from PIL import Image
+    with Image.open(image_path) as source:
+        if source.size != (1920, 1080):
+            return None
+        upright = source.convert("RGB").crop((1031, 368, 1063, 471)).rotate(270, expand=True)
+    result = ocr_engine()(np.array(upright.resize((412, 128))), use_det=False, use_cls=False, use_rec=True)
+    if result.txts is None or len(result.txts) != 1 or float(result.scores[0]) < 0.98:
+        return None
+    text = result.txts[0]
+    if not re.fullmatch(r"-?\d{3,6}", text):
+        return None
+    return int(text)
+
+
 def parse_board_tokens(tokens: list[dict], expected_total_points: int = 100000) -> dict:
     def at(x: float, y: float, pattern: str, minimum_confidence: float = 0.98):
         matches = [item for item in tokens if item["confidence"] >= minimum_confidence
