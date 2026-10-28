@@ -2639,6 +2639,28 @@ class AwayDialogDetectionTest(unittest.TestCase):
 
         operator.log.assert_not_called()
 
+    def test_short_click_budget_rejects_fresh_frame_after_old_self_turn_gate(self) -> None:
+        """A later receipt cannot reset the 5+20 turn clock."""
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(force_auto_click_budget_ms=2600)
+        operator.action_evidence_started_at = 10.0
+        operator.log = Mock()
+
+        with patch("auto_operator.time.monotonic", return_value=12.601):
+            with self.assertRaisesRegex(RetryableSafetyAbort, "click budget expired"):
+                # This frame itself is only 100ms old, but the self-turn
+                # has already exceeded the short execution budget.
+                operator.require_force_auto_click_budget(12.5, phase="before_discard_click")
+
+        operator.log.assert_called_once_with(
+            "force_auto_click_budget_expired",
+            phase="before_discard_click",
+            clickBudgetMs=2600,
+            captureAgeBeforeDecisionMs=101,
+            actionEvidenceAgeMs=2601,
+            decisionBudgetMs=0,
+        )
+
     def test_ranked_capture_age_uses_stream_receipt_not_temporary_file_time(self) -> None:
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
 

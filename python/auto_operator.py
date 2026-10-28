@@ -1755,6 +1755,20 @@ class PythonAutoOperator:
             return None
         return max(0, round((time.monotonic() - captured_at) * 1000))
 
+    def force_auto_action_evidence_age_ms(self) -> int | None:
+        """Age of the current self-action, when the turn gate observed one.
+
+        A fresh screencast receipt is not a fresh Mahjong Soul turn.  In
+        particular, an expensive metadata refresh can produce a recent hand
+        frame several seconds after the self-turn gate first opened.  The
+        short click budget must include that earlier observation or a 5+20
+        client can auto-tsumogiri while we are confirming a selected tile.
+        """
+        started = getattr(self, "action_evidence_started_at", None)
+        if not isinstance(started, (int, float)):
+            return None
+        return max(0, round((time.monotonic() - started) * 1000))
+
     def force_auto_has_recognition_window(self, captured_at: float | None) -> bool:
         """Whether a ranked receipt has enough time left for expensive work.
 
@@ -1780,19 +1794,27 @@ class PythonAutoOperator:
         Re-observation is safe; clicking that frame is not.
         """
         budget = self.force_auto_click_budget_ms()
-        if budget is None or captured_at is None:
+        if budget is None:
             return
         capture_age_ms = self.force_auto_capture_age_ms(captured_at)
-        if capture_age_ms is None:
+        action_evidence_age_ms = self.force_auto_action_evidence_age_ms()
+        elapsed_ms = max(age for age in (capture_age_ms, action_evidence_age_ms) if age is not None) \
+            if capture_age_ms is not None or action_evidence_age_ms is not None else None
+        if elapsed_ms is None:
             return
-        if capture_age_ms < budget:
+        if elapsed_ms < budget:
             return
+        timing_payload = {
+            "phase": phase,
+            "clickBudgetMs": budget,
+            "captureAgeBeforeDecisionMs": capture_age_ms,
+            "decisionBudgetMs": max(0, budget - elapsed_ms),
+        }
+        if action_evidence_age_ms is not None:
+            timing_payload["actionEvidenceAgeMs"] = action_evidence_age_ms
         self.log(
             "force_auto_click_budget_expired",
-            phase=phase,
-            clickBudgetMs=budget,
-            captureAgeBeforeDecisionMs=capture_age_ms,
-            decisionBudgetMs=max(0, budget - capture_age_ms),
+            **timing_payload,
         )
         # A stale discard or win decision means the ranked action pipeline is
         # persistently unsafe and must eventually stop.  A call is different:
@@ -1811,6 +1833,8 @@ class PythonAutoOperator:
                     expiryStreak=streak,
                     clickBudgetMs=budget,
                     captureAgeBeforeDecisionMs=capture_age_ms,
+                    **({"actionEvidenceAgeMs": action_evidence_age_ms}
+                       if action_evidence_age_ms is not None else {}),
                     reason="three_consecutive_force_auto_click_budget_expiries",
                 )
         raise RetryableSafetyAbort(
