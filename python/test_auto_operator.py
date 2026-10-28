@@ -6217,6 +6217,48 @@ class AwayDialogDetectionTest(unittest.TestCase):
         self.assertEqual(evaluate.kwargs["frame_public_state"], state)
         self.assertEqual(evaluate.kwargs["public_observation"], observation)
 
+    def test_reconciliation_staging_requires_confirmed_public_receipt(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(board_metadata=True)
+        operator.force_auto_has_recognition_window = Mock(return_value=True)
+        operator.cached_board_metadata = Mock(return_value={"round": "east_1"})
+        operator.dynamic_layout_required = True
+        operator.cached_open_melds = 1
+        operator.recognize_resident = Mock(return_value={"recognitionId": "token"})
+        operator.poll_public_recognition = Mock()
+        operator.reconcile_own_discard = Mock()
+        operator.own_discard_reconciliation_pending = Mock(side_effect=[True, False])
+        frame = Path("same-frame.jpg")
+
+        self.assertIsNone(operator.stage_hand_during_discard_reconciliation(frame, 10.0))
+        self.assertEqual(operator.stage_hand_during_discard_reconciliation(frame, 10.0),
+                         {"recognitionId": "token"})
+        self.assertEqual(operator.poll_public_recognition.call_count, 2)
+        self.assertEqual(operator.reconcile_own_discard.call_count, 2)
+        operator.recognize_resident.assert_called_with(
+            frame, dynamic_layout=True, open_melds=1, stage_force_auto_recognition=True,
+        )
+
+    def test_reconciliation_staged_hand_uses_fresh_public_state(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        frame = Path("same-frame.jpg")
+        state = {"round": "east_1"}
+        observation = {"ownDiscards": ["6s", "N", "6p"]}
+        operator.frame_metadata_state = Mock(return_value=(state, observation, None))
+        operator.recognize_resident = Mock(return_value={"status": "decision"})
+        result = operator.recognize_force_auto_parallel(
+            frame, dynamic_layout=True, open_melds=1, public_observation=observation,
+            force_auto_action_buttons=[], captured_at=10.0,
+            staged_recognition={"recognitionId": "same-frame-token"},
+        )
+        self.assertEqual(result["status"], "decision")
+        operator.recognize_resident.assert_called_once()
+        request = operator.recognize_resident.call_args
+        self.assertEqual(request.args[0], frame)
+        self.assertEqual(request.kwargs["force_auto_recognition_id"], "same-frame-token")
+        self.assertEqual(request.kwargs["public_observation"], observation)
+        self.assertEqual(request.kwargs["frame_public_state"], state)
+
     def test_metadata_update_abort_reobserves_without_serial_layout_retry(self) -> None:
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
         operator.args = argparse.Namespace(board_metadata=True)

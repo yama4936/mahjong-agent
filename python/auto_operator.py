@@ -2727,7 +2727,7 @@ class PythonAutoOperator:
         same aging frame even when the hand geometry was never at fault.
         """
         captured_at = kwargs.get("captured_at")
-        if not self.force_auto_has_recognition_window(captured_at):
+        if not kwargs.get("staged_recognition") and not self.force_auto_has_recognition_window(captured_at):
             # In ranked play, doing OCR/recognition/evaluation here can only
             # reach execute() after its 2600ms freshness budget.  Do not turn
             # a harmless old receipt into a pre-click expiry (and eventually
@@ -2762,6 +2762,7 @@ class PythonAutoOperator:
         try:
             if getattr(self.args, "board_metadata", False):
                 return self.recognize_force_auto_parallel(screenshot, **kwargs)
+            kwargs.pop("staged_recognition", None)
             return self.recognize_resident(screenshot, evaluate_force_auto=True, **kwargs)
         except RetryableSafetyAbort as error:
             self.last_processed_hand = None
@@ -2775,6 +2776,7 @@ class PythonAutoOperator:
         public_observation: dict[str, Any] | None,
         force_auto_action_buttons: list[dict[str, Any]] | None,
         captured_at: float | None = None,
+        staged_recognition: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Overlap hand recognition and board OCR for one immutable screenshot.
 
@@ -2783,9 +2785,9 @@ class PythonAutoOperator:
         produced from another frame or with another compact-row layout.
         """
         started_at = time.monotonic()
-        staged: dict[str, Any] = {}
+        staged: dict[str, Any] = dict(staged_recognition or {})
         failure: list[BaseException] = []
-        hand_staged_at: float | None = None
+        hand_staged_at: float | None = started_at if staged_recognition is not None else None
 
         def stage_hand() -> None:
             nonlocal hand_staged_at
@@ -2798,15 +2800,18 @@ class PythonAutoOperator:
             except BaseException as error:
                 failure.append(error)
 
-        worker = threading.Thread(target=stage_hand, daemon=True)
-        worker.start()
+        worker = None
+        if staged_recognition is None:
+            worker = threading.Thread(target=stage_hand, daemon=True)
+            worker.start()
         try:
             frame_public_state, public_observation, _ = self.frame_metadata_state(
                 screenshot, public_observation, refresh_public_cache=True,
             )
             board_metadata_ready_at = time.monotonic()
         finally:
-            worker.join()
+            if worker:
+                worker.join()
         if failure:
             raise failure[0]
         recognition_id = staged.get("recognitionId")
@@ -4612,6 +4617,34 @@ class PythonAutoOperator:
             confirmationCandidate=self.pending_own_river_confirmation,
         )
         return True
+
+    def stage_hand_during_discard_reconciliation(
+        self, screenshot: Path, captured_at: float | None,
+    ) -> dict[str, Any] | None:
+        """Overlap hand recognition with the independent public receipt scan.
+
+        Staging never decides or clicks. Return a result only if the normal
+        two-observation reconciliation has completed, so the later evaluator
+        sees the updated public state and the normal pre-click guards apply.
+        """
+        if not getattr(self.args, "board_metadata", False) \
+                or not self.force_auto_has_recognition_window(captured_at) \
+                or self.cached_board_metadata(screenshot) is None:
+            return None
+        try:
+            staged = self.recognize_resident(
+                screenshot, dynamic_layout=self.dynamic_layout_required,
+                open_melds=self.cached_open_melds if self.cached_open_melds > 0 else None,
+                stage_force_auto_recognition=True,
+            )
+        except RuntimeError as error:
+            self.log("reconciliation_hand_stage_failed", error=str(error))
+            return None
+        self.poll_public_recognition()
+        self.reconcile_own_discard()
+        if self.own_discard_reconciliation_pending():
+            return None
+        return staged
 
     def should_stop_after_match_result(self, screen_state: str) -> bool:
         """Stop a completed friend regression before it can reach matchmaking.
@@ -6521,6 +6554,7 @@ class PythonAutoOperator:
                     else self.infer_pending_discard(self.previous_public_observation, public_observation)
                 if public_observation and self.args.mode != "force-auto":
                     self.previous_public_observation = public_observation
+                staged_reconciliation_hand = None
                 if self.args.mode == "force-auto" and self.own_discard_reconciliation_pending():
                     # A candidate post-click river snapshot is independent
                     # evidence for the concealed-hand cache.  Require its
@@ -6539,10 +6573,15 @@ class PythonAutoOperator:
                             before=pending.get("before"),
                             confirmationCandidate=self.pending_own_river_confirmation,
                         )
-                    self.last_processed_hand = None
-                    self.armed = True
-                    page.wait_for_timeout(max(100, round(self.args.poll * 1000)))
-                    continue
+                    staged_reconciliation_hand = self.stage_hand_during_discard_reconciliation(
+                        screenshot_path, evaluation_captured_at,
+                    )
+                    if staged_reconciliation_hand is None:
+                        self.last_processed_hand = None
+                        self.armed = True
+                        page.wait_for_timeout(max(100, round(self.args.poll * 1000)))
+                        continue
+                    public_observation = self.cached_public_observation
                 if self.args.mode == "force-auto" and not pending_discard:
                     self_action_buttons = force_auto_self_action_buttons(
                         evaluation_frame, self.layout["viewport"],
@@ -6556,6 +6595,8 @@ class PythonAutoOperator:
                             "force_auto_action_buttons": self_action_buttons,
                             "captured_at": evaluation_captured_at,
                         }
+                        if staged_reconciliation_hand is not None:
+                            recognition_kwargs["staged_recognition"] = staged_reconciliation_hand
                         # Cached tiles are not guaranteed to match the newly
                         # sorted physical row after the last discard.  With
                         # board metadata enabled, recognize that complete row
