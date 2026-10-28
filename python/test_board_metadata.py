@@ -2,12 +2,29 @@ import unittest
 import tempfile
 import importlib.util
 import json
+from types import SimpleNamespace
+from unittest.mock import patch
 from pathlib import Path
 from PIL import Image
-from board_metadata import parse_board_tokens, recognize_board, recognize_riichi_sticks, remap_seats, reconcile_riichi_metadata
+from board_metadata import parse_board_tokens, recognize_board, recognize_remaining_count, recognize_riichi_sticks, remap_seats, reconcile_riichi_metadata
 
 
 class BoardMetadataTest(unittest.TestCase):
+    def test_isolated_wall_counter_requires_confident_bounded_reading(self):
+        with tempfile.TemporaryDirectory() as directory:
+            frame = Path(directory) / "frame.png"
+            Image.new("RGB", (1920, 1080)).save(frame)
+            for text, confidence, expected in [("余01", 0.99, 1), ("余00", 0.99, 0),
+                                               ("余70", 0.99, 70), ("余71", 0.99, None),
+                                               ("余69", 0.97, None), ("69", 0.99, None)]:
+                with self.subTest(text=text, confidence=confidence), patch(
+                    "board_metadata.ocr_engine",
+                    return_value=lambda *args, **kwargs: SimpleNamespace(txts=[text], scores=[confidence]),
+                ):
+                    self.assertEqual(recognize_remaining_count(frame), expected)
+            Image.new("RGB", (100, 100)).save(frame)
+            self.assertIsNone(recognize_remaining_count(frame))
+
     def declaration_fixture(self):
         return json.loads((Path(__file__).resolve().parents[1]
                            / "test/fixtures/riichi-declaration-transition-20261021.json").read_text())

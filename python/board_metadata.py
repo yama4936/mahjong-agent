@@ -30,6 +30,23 @@ def ocr_engine():
     return RapidOCR()
 
 
+def recognize_remaining_count(image_path: Path) -> int | None:
+    """Read the calibrated wall counter independently; never guess on failure."""
+    import numpy as np
+    from PIL import Image
+    with Image.open(image_path) as source:
+        if source.size != (1920, 1080):
+            return None
+        crop = source.convert("RGB").crop((923, 429, 995, 455)).resize((288, 104))
+    result = ocr_engine()(np.array(crop), use_det=False, use_cls=False, use_rec=True)
+    if result.txts is None or len(result.txts) != 1 or float(result.scores[0]) < 0.98:
+        return None
+    match = re.fullmatch(r"余(\d{1,2})", result.txts[0])
+    if not match or int(match.group(1)) > 70:
+        return None
+    return int(match.group(1))
+
+
 def parse_board_tokens(tokens: list[dict], expected_total_points: int = 100000) -> dict:
     def at(x: float, y: float, pattern: str, minimum_confidence: float = 0.98):
         matches = [item for item in tokens if item["confidence"] >= minimum_confidence

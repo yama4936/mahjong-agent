@@ -1391,9 +1391,20 @@ class AwayDialogDetectionTest(unittest.TestCase):
             self.assertEqual(operator.cached_board_metadata(frame), metadata)
             frame.write_bytes(after)
             self.assertIsNone(operator.cached_board_metadata(frame))
+            operator.board_metadata_ocr_lock = threading.Lock()
+            with patch("board_metadata.recognize_remaining_count", return_value=68):
+                self.assertEqual(operator.cached_board_metadata(frame)["remainingTiles"], 68)
+                self.assertEqual(operator.board_metadata_cache["metadata"]["remainingTiles"], 69)
+            with patch("board_metadata.recognize_remaining_count", return_value=0):
+                self.assertEqual(operator.cached_board_metadata(frame)["remainingTiles"], 0)
+            with patch("board_metadata.recognize_remaining_count", return_value=None):
+                self.assertIsNone(operator.cached_board_metadata(frame))
+            with operator.board_metadata_ocr_lock:
+                self.assertIsNone(operator.cached_board_metadata(frame))
             frame.write_bytes(before)
             operator.board_metadata_cache.pop("wallSignature")
-            self.assertIsNone(operator.cached_board_metadata(frame))
+            with patch("board_metadata.recognize_remaining_count", return_value=None):
+                self.assertIsNone(operator.cached_board_metadata(frame))
 
     def test_board_metadata_cache_ignores_turn_rim_but_expires(self) -> None:
         project = Path(__file__).resolve().parents[1]
