@@ -943,6 +943,10 @@ def raised_tile_confirmation_point(
         left, top = int(face["x"]), int(face["y"])
         right, bottom = int(face["x"] + face["width"]), int(face["y"] + face["height"])
         baseline = before_mask.crop((left, top, right, bottom))
+        # An entirely blank face matches every vertical offset; it cannot
+        # establish that this specific tile actually moved.
+        if ImageStat.Stat(baseline).sum[0] == 0:
+            return None
         # Mahjong Soul lifts toward the table centre.  Search a deliberately
         # broad but bounded strip; the lower bound avoids accepting an
         # unchanged face as a selection receipt.
@@ -963,7 +967,34 @@ def raised_tile_confirmation_point(
         # ambiguous or substantially changed faces remain fail-closed.
         alternatives = [other for other, offset in candidates if offset != lift]
         if delta > threshold + 0.5 or min(alternatives) - delta < 10.0:
-            return None
+            # Ignore only a small pink click sparkle in the receipt. This
+            # does not apply to arbitrary occlusion: most of the target face
+            # and at least 85% of its dark glyph must remain comparable.
+            if min(alternatives) - delta < 4.5:
+                return None
+            try:
+                with Image.open(io.BytesIO(after)) as image:
+                    rgb = image.convert("RGB").crop((left, int(face["y"] - lift), right,
+                                                     int(face["y"] - lift + face["height"])))
+                valid = Image.new("L", rgb.size)
+                valid.putdata([0 if r > 140 and b > 100 and r > g * 1.15 and b > g * 1.1 else 255
+                               for r, g, b in rgb.getdata()])
+                total = rgb.width * rgb.height
+                valid_count = ImageStat.Stat(valid).sum[0] / 255
+                if valid_count < total * 0.95 or valid_count == total:
+                    return None
+                glyph_pixels = ImageStat.Stat(baseline).sum[0] / 255
+                retained_glyph = ImageStat.Stat(ImageChops.multiply(baseline, valid)).sum[0] / 255
+                if glyph_pixels == 0 or retained_glyph < glyph_pixels * 0.85:
+                    return None
+                shifted = after_mask.crop((left, int(face["y"] - lift), right,
+                                           int(face["y"] - lift + face["height"])))
+                difference = ImageChops.multiply(ImageChops.difference(baseline, shifted), valid)
+                delta = ImageStat.Stat(difference).sum[0] / 255 / valid_count * 100
+                if delta > threshold:
+                    return None
+            except Exception:
+                return None
     return {"x": float(point["x"]), "y": float(point["y"]) - lift,
             "lift": float(lift), "faceStructureDelta": round(delta, 3)}
 

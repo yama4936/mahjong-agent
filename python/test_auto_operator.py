@@ -4944,10 +4944,36 @@ class AwayDialogDetectionTest(unittest.TestCase):
         # A near-threshold match with a plausible competing vertical offset
         # must not be treated as unique evidence of the selected hitbox.
         deltas = [1.7, 2.0] + [30.0] * 71
-        stats = [Mock(mean=[value * 255 / 100]) for value in deltas]
+        stats = [Mock(sum=[255])] + [Mock(mean=[value * 255 / 100]) for value in deltas]
         with patch("auto_operator.ImageStat.Stat", side_effect=stats):
             self.assertIsNone(raised_tile_confirmation_point(before, after, layout, 13,
                                                             layout["clickPoints"][13], 1.5))
+
+    def test_native_green_and_8s_lifts_ignore_only_small_pink_sparkles(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        layout = load_json(root / "config/layout-300-regression.json")
+        for name, index in (("8s", 8), ("green", 13)):
+            with self.subTest(tile=name):
+                before = (root / f"test/fixtures/selection-{name}-before-20261028.jpg").read_bytes()
+                after = (root / f"test/fixtures/selection-{name}-lift-20261028.jpg").read_bytes()
+                point = layout["clickPoints"][index]
+                result = raised_tile_confirmation_point(before, after, layout, index, point, 1.5)
+                self.assertEqual(result["lift"], 48.0)
+                self.assertLessEqual(result["faceStructureDelta"], 1.5)
+                self.assertIsNone(raised_tile_confirmation_point(before, before, layout, index, point, 1.5))
+                adjacent = 7 if index == 8 else 12
+                self.assertIsNone(raised_tile_confirmation_point(before, after, layout, adjacent,
+                                                                layout["clickPoints"][adjacent], 1.5))
+                slots = [*layout["handSlots"], layout["drawSlot"]]
+                slot = slots[index]
+                with Image.open(io.BytesIO(after)) as image:
+                    occluded = image.convert("RGB")
+                ImageDraw.Draw(occluded).rectangle((slot["x"] + 10, slot["y"] - 38,
+                    slot["x"] + slot["width"] - 10, slot["y"] + 55), fill=(255, 100, 220))
+                output = io.BytesIO()
+                occluded.save(output, format="PNG")
+                self.assertIsNone(raised_tile_confirmation_point(before, output.getvalue(), layout,
+                                                                index, point, 1.5))
 
     def test_raised_tile_optimized_search_matches_original_mask_search(self) -> None:
         layout = load_json(Path(__file__).resolve().parents[1] / "config/layout-300-regression.json")
