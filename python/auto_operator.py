@@ -94,6 +94,12 @@ def board_state_signature(frame: bytes) -> tuple[Image.Image, ...]:
         return tuple(image.crop(box) for box in BOARD_STATE_REGIONS)
 
 
+def wall_counter_signature(frame: bytes) -> bytes:
+    """Bind cached remainingTiles to the exact observed counter pixels."""
+    with Image.open(io.BytesIO(frame)) as source:
+        return source.convert("RGB").crop((923, 429, 995, 455)).tobytes()
+
+
 def board_state_signature_matches(left: tuple[Image.Image, ...],
                                   right: tuple[Image.Image, ...]) -> bool:
     return len(left) == len(right) == len(BOARD_STATE_REGIONS) and all(
@@ -2874,12 +2880,15 @@ class PythonAutoOperator:
             return
         now = time.monotonic()
         signature = board_state_signature(frame)
+        wall_signature = wall_counter_signature(frame)
         previous_signature = getattr(self, "board_metadata_last_scan_signature", None)
         if now - self.board_metadata_last_scan_at < 6.0 and previous_signature is not None \
-                and board_state_signature_matches(signature, previous_signature):
+                and board_state_signature_matches(signature, previous_signature) \
+                and wall_signature == getattr(self, "board_metadata_last_wall_signature", None):
             return
         self.board_metadata_last_scan_at = now
         self.board_metadata_last_scan_signature = signature
+        self.board_metadata_last_wall_signature = wall_signature
         path = self.frames / f"{utc_stamp()}.board-cache.jpg"
         path.write_bytes(frame)
 
@@ -2895,6 +2904,7 @@ class PythonAutoOperator:
             with self.board_metadata_lock:
                 self.board_metadata_result = {
                     "metadata": result, "signature": signature,
+                    "wallSignature": wall_signature,
                     "capturedAt": now, "screenshot": str(path),
                 }
 
@@ -2945,6 +2955,11 @@ class PythonAutoOperator:
             return None
         frame = screenshot.read_bytes()
         if not board_state_signature_matches(board_state_signature(frame), cache["signature"]):
+            return None
+        if "remainingTiles" in cache["metadata"] and (
+            cache.get("wallSignature") is None
+            or wall_counter_signature(frame) != cache["wallSignature"]
+        ):
             return None
         self.log("board_metadata_cache_applied", screenshot=str(screenshot),
                  source=cache["screenshot"], ageMs=age_ms)
@@ -3072,6 +3087,11 @@ class PythonAutoOperator:
                   if key in metadata}
         source_seat = self.public_state.get("seat", "east")
         state = {**remap_seats(self.public_state, source_seat, fields["seat"]), **fields}
+        # Unknown current wall length must not inherit a configured or prior
+        # observation, including the schema's legacy snake_case alias.
+        state.pop("remaining_tiles", None)
+        if "remainingTiles" not in fields:
+            state.pop("remainingTiles", None)
         self.log("board_metadata_verified", screenshot=str(screenshot), **fields)
         mapped_observation = remap_seats(observation, source_seat, fields["seat"])
         riichi_seats = metadata.get("riichiSeats", [])

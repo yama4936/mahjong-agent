@@ -96,6 +96,26 @@ class OperatorShutdownOrderTest(unittest.TestCase):
 
 
 class MatchLengthFlowTest(unittest.TestCase):
+    def test_missing_current_wall_count_does_not_inherit_configured_value(self):
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.public_state = {"seat": "north", "round": "east_1", "opponents": [],
+                                 "remainingTiles": 55, "remaining_tiles": 56}
+        operator.log = Mock()
+        metadata = {"verified": True, "seat": "north", "round": "east_1",
+                    "scores": {"north": 25000, "east": 25000, "south": 25000, "west": 25000},
+                    "honba": 0, "riichiSticks": 0}
+        state, _, _ = operator.frame_metadata_state(
+            FRAME_FIXTURES / "black-client-20261021.png", prepared_metadata=metadata,
+        )
+        self.assertNotIn("remainingTiles", state)
+        self.assertNotIn("remaining_tiles", state)
+        state, _, _ = operator.frame_metadata_state(
+            FRAME_FIXTURES / "black-client-20261021.png",
+            prepared_metadata={**metadata, "remainingTiles": 0},
+        )
+        self.assertEqual(state["remainingTiles"], 0)
+        self.assertNotIn("remaining_tiles", state)
+
     def test_explicit_format_survives_metadata_and_resident_requests(self):
         raw = {"seat": "north", "round": "unknown", "opponents": []}
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
@@ -1344,6 +1364,37 @@ class ActionDeadlineTest(unittest.TestCase):
 
 
 class AwayDialogDetectionTest(unittest.TestCase):
+    def test_board_cache_requires_exact_wall_counter_for_cached_remaining_tiles(self):
+        from auto_operator import wall_counter_signature
+
+        def make_frame(digit):
+            image = Image.new("RGB", (1920, 1080), (20, 30, 50))
+            ImageDraw.Draw(image).text((960, 435), digit, fill=(220, 220, 220))
+            output = io.BytesIO()
+            image.save(output, format="PNG")
+            return output.getvalue()
+
+        before, after = make_frame("9"), make_frame("8")
+        self.assertTrue(board_state_signature_matches(board_state_signature(before),
+                                                      board_state_signature(after)))
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.board_metadata_lock = threading.Lock()
+        operator.board_metadata_result = None
+        operator.log = Mock()
+        metadata = {"verified": True, "remainingTiles": 69}
+        operator.board_metadata_cache = {"metadata": metadata, "signature": board_state_signature(before),
+                                         "wallSignature": wall_counter_signature(before),
+                                         "capturedAt": 10.0, "screenshot": "before"}
+        with tempfile.TemporaryDirectory() as directory, patch("auto_operator.time.monotonic", return_value=11):
+            frame = Path(directory) / "frame.png"
+            frame.write_bytes(before)
+            self.assertEqual(operator.cached_board_metadata(frame), metadata)
+            frame.write_bytes(after)
+            self.assertIsNone(operator.cached_board_metadata(frame))
+            frame.write_bytes(before)
+            operator.board_metadata_cache.pop("wallSignature")
+            self.assertIsNone(operator.cached_board_metadata(frame))
+
     def test_board_metadata_cache_ignores_turn_rim_but_expires(self) -> None:
         project = Path(__file__).resolve().parents[1]
         before = (project / "test/fixtures/board-cache-opponent-turn-20261020.jpg").read_bytes()
