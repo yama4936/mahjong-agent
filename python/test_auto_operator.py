@@ -4985,10 +4985,24 @@ class AwayDialogDetectionTest(unittest.TestCase):
         result = raised_tile_confirmation_point(before, after, layout, 12, point, 1.5)
         self.assertEqual(result["lift"], 48.0)
         self.assertEqual(result["verification"], "blank_tile_edge_and_stable_neighbour")
+        # The live 300+0 calibration has a 921px slot top while the tile rim
+        # begins at 922px and its neutral face at 927px.  That six-pixel crop
+        # convention must not override the observed rim/lift evidence.
+        live_geometry = json.loads(json.dumps(layout))
+        live_geometry["handSlots"][12].update({"y": 921, "height": 151})
+        live_geometry["handSlots"][11].update({"y": 921, "height": 151})
+        live_point = {"x": 1407, "y": 996.5}
+        self.assertEqual(raised_tile_confirmation_point(before, after, live_geometry, 12,
+                                                        live_point, 1.5)["lift"], 48.0)
+        out_of_range_geometry = json.loads(json.dumps(live_geometry))
+        out_of_range_geometry["handSlots"][12]["y"] = 918
+        self.assertIsNone(raised_tile_confirmation_point(before, after, out_of_range_geometry, 12,
+                                                        live_point, 1.5))
         self.assertIsNone(raised_tile_confirmation_point(before, before, layout, 12, point, 1.5))
         self.assertIsNone(raised_tile_confirmation_point(before, after, layout, 11,
                                                         layout["clickPoints"][11], 1.5))
         for rectangle in ((1375, 860, 1445, 910), (1280, 860, 1350, 910),
+                          (1375, 872, 1445, 880),
                           (1375, 860, 1445, 1030)):
             with self.subTest(obstruction=rectangle):
                 with Image.open(io.BytesIO(after)) as image:

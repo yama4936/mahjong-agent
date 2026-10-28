@@ -947,8 +947,12 @@ def blank_tile_raised_confirmation(
                            and rgb[0] - rgb[1] > 35 and rgb[1] - rgb[2] > 30
                            for y in range(max(0, edge - 8), edge)):
                     return None
+        # Calibration captures can include a few pixels of felt above the
+        # tile's orange rim.  The live 300+0 layout has a six-pixel offset;
+        # retain a tight eight-pixel physical range rather than rejecting a
+        # perfectly evidenced border/lift because of that crop convention.
         expected_top = int(slot["y"])
-        if any(abs(y - expected_top) > 5 for y in old):
+        if any(abs(y - expected_top) > 8 for y in old):
             return None
         lifts = [a - b for a, b in zip(old, new)]
         if min(lifts) < 12 or max(lifts) > 80 or max(lifts) - min(lifts) > 2:
