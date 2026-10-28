@@ -31,6 +31,7 @@ from PIL import Image, ImageChops, ImageStat
 from screen_state import _rgb_fraction, classify_screen, load_references
 from operator_lock import OperatorAlreadyRunning, endpoint_key, operator_lease
 from analysis_recorder import AnalysisRecorder
+from startup_turn_guard import StartupTurnGuard
 
 
 class RetryableSafetyAbort(RuntimeError):
@@ -5461,6 +5462,8 @@ class PythonAutoOperator:
         silent_gate_polls = 0
         unchanged_gate_content_polls = 0
         last_gate_content_hash: str | None = None
+        startup_turn_guard = StartupTurnGuard()
+        startup_guard_last_state: str | None = None
         while True:
             iterations += 1
             if self.args.max_iterations and iterations > self.args.max_iterations:
@@ -5633,6 +5636,20 @@ class PythonAutoOperator:
                         # Its result OR any orange button is therefore exactly
                         # this predicate; do not decode and scan them again.
                         quick_reaction_win = bool(quick_self_actions)
+                    startup_guard_state = startup_turn_guard.observe(
+                        verified_match=early_state == "match",
+                        action_visible=bool(quick_draw or quick_pass or quick_calls or quick_reaction_win),
+                        now=time.monotonic(),
+                    )
+                    if startup_guard_state != startup_guard_last_state:
+                        self.log("startup_turn_guard", state=startup_guard_state,
+                                 quarantined=startup_turn_guard.quarantined)
+                        startup_guard_last_state = startup_guard_state
+                    if startup_guard_state != "ready":
+                        # The first visible action may already be near the game
+                        # deadline. Do not manufacture a new clock for it.
+                        page.wait_for_timeout(max(20, round(self.args.poll * 1000)))
+                        continue
                     draw_gate_streak = draw_gate_streak + 1 if quick_draw else 0
                     pass_gate_streak = pass_gate_streak + 1 if quick_pass else 0
                     call_gate_streak = call_gate_streak + 1 if quick_calls else 0

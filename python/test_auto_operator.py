@@ -2429,7 +2429,9 @@ class AwayDialogDetectionTest(unittest.TestCase):
             page.wait_for_timeout.side_effect = lambda _: operator.accept_screencast_frame(
                 operator.latest_screencast_frame,
             )
-            with patch("auto_operator.classify_screen", return_value=("match", 1.0)):
+            with patch("auto_operator.classify_screen", return_value=("match", 1.0)), \
+                    patch("auto_operator.StartupTurnGuard") as guard:
+                guard.return_value.observe.return_value = "ready"
                 operator.accept_screencast_frame(first)
                 operator.run(page)
                 self.assertEqual(operator.screencast_draw_generation, 1)
