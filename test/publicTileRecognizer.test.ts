@@ -601,6 +601,9 @@ test("classifies upright and rotated public tile candidates after orientation no
     minimumArea: 100,
     minimumWidth: 20,
     minimumHeight: 20,
+    // This synthetic template exercises orientation, not colored-glow
+    // rejection; retain its colored face pixels in the component bounds.
+    maximumColorSpread: 255,
   });
   assert.equal(result.ownDiscards?.recognized[0]?.tile, "1m");
   assert.equal(result.rightDiscards?.recognized[0]?.tile, "1m");

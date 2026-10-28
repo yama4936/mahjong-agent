@@ -4,6 +4,25 @@ import sharp from "sharp";
 import { detectBrightTileCandidates, detectConfiguredPublicRegions, orderDiscardGridCandidates, type RegionCandidate } from "../src/recognition/regionDetector.js";
 import { layoutSchema } from "../src/recognition/layout.js";
 
+test("legacy layout sorts perspective-jittered own discards as a grid", async () => {
+  const screenshot = await sharp({ create: { width: 300, height: 180, channels: 3, background: "#111820" } })
+    .composite([
+      { input: { create: { width: 24, height: 36, channels: 3, background: "#eeeeee" } }, left: 30, top: 52 },
+      { input: { create: { width: 24, height: 36, channels: 3, background: "#eeeeee" } }, left: 60, top: 54 },
+      { input: { create: { width: 24, height: 36, channels: 3, background: "#eeeeee" } }, left: 90, top: 50 },
+    ]).png().toBuffer();
+  const layout = layoutSchema.parse({
+    viewport: { width: 300, height: 180 },
+    handSlots: [{ x: 0, y: 140, width: 8, height: 30 }],
+    clickPoints: [{ x: 4, y: 155 }],
+    publicTileRegions: { ownDiscards: { x: 0, y: 30, width: 150, height: 100 } },
+  });
+  assert.equal(layout.publicTileRegions?.ownDiscards?.detectionMode, "discard_grid");
+  const detection = (await detectConfiguredPublicRegions(screenshot, layout)).ownDiscards!;
+  assert.equal(detection.gridValid, true);
+  assert.deepEqual(detection.candidates.map(candidate => candidate.x), [30, 60, 90]);
+});
+
 test("separates highlighted left river faces without bypassing grid validation", async () => {
   const layout = layoutSchema.parse({
     viewport: { width: 1920, height: 1080 },

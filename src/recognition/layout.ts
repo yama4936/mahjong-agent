@@ -17,10 +17,12 @@ const publicTileRegionSchema = rectSchema.extend({
 
 const publicTileRegionsSchema = z.object({
   doraIndicators: publicTileRegionSchema.optional(),
-  ownDiscards: publicTileRegionSchema.optional(),
-  rightDiscards: publicTileRegionSchema.optional(),
-  oppositeDiscards: publicTileRegionSchema.optional(),
-  leftDiscards: publicTileRegionSchema.optional(),
+  // Older calibrated layouts predate detectionMode. Rivers still require
+  // grid ordering and validation; raw component order is not discard order.
+  ownDiscards: publicTileRegionSchema.extend({ detectionMode: z.literal("discard_grid").default("discard_grid") }).optional(),
+  rightDiscards: publicTileRegionSchema.extend({ detectionMode: z.literal("discard_grid").default("discard_grid") }).optional(),
+  oppositeDiscards: publicTileRegionSchema.extend({ detectionMode: z.literal("discard_grid").default("discard_grid") }).optional(),
+  leftDiscards: publicTileRegionSchema.extend({ detectionMode: z.literal("discard_grid").default("discard_grid") }).optional(),
   ownMelds: publicTileRegionSchema.optional(),
   rightMelds: publicTileRegionSchema.optional(),
   oppositeMelds: publicTileRegionSchema.optional(),
