@@ -2123,6 +2123,21 @@ class AwayDialogDetectionTest(unittest.TestCase):
         self.assertEqual(operator.schedule_public_recognition.call_args_list[0].args, (b"first",))
         self.assertEqual(operator.schedule_public_recognition.call_args_list[1].args, (b"second",))
 
+    def test_pending_discard_temporarily_accelerates_unforced_public_scans(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(public_cache=True, public_scan_interval=2.0)
+        operator.public_recognition_server = Mock()
+        operator.last_public_scan_at = 10.0
+        operator.pending_own_discard = {"tile": "9m", "before": ["3p"], "registeredMonotonic": 10.0}
+        operator.schedule_public_recognition = Mock()
+
+        self.assertFalse(operator.schedule_periodic_public_recognition(b"same", now=10.39))
+        self.assertTrue(operator.schedule_periodic_public_recognition(b"new", now=10.41, verified_match=True))
+        operator.schedule_public_recognition.assert_called_once_with(b"new", verified_match=True)
+        operator.last_public_scan_at = 12.8
+        self.assertFalse(operator.schedule_periodic_public_recognition(b"later", now=13.0))
+        self.assertTrue(operator.schedule_periodic_public_recognition(b"later", now=14.8))
+
     def test_public_cache_scheduler_rejects_friend_room_even_when_forced(self) -> None:
         root = Path(__file__).resolve().parents[1]
         screenshot = (root / "artifacts/live/friend-room-public-cache-contamination-20260929.png").read_bytes()

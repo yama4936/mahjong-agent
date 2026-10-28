@@ -2255,6 +2255,14 @@ class PythonAutoOperator:
             return False
         observed_at = time.monotonic() if now is None else now
         interval = max(0.1, float(getattr(self.args, "public_scan_interval", 2.0)))
+        pending = getattr(self, "pending_own_discard", None)
+        registered_at = pending.get("registeredMonotonic") if pending else None
+        if isinstance(registered_at, (int, float)) and 0 <= observed_at - registered_at < 3.0:
+            # Seek the same independently corroborated river receipt sooner,
+            # while the other players act. Do not force repeated recognition
+            # of the same frame: the normal frame-hash gate remains in place.
+            # Bound the burst even when an expected discard was called away.
+            interval = min(interval, 0.4)
         if observed_at - self.last_public_scan_at < interval:
             return False
         self.last_public_scan_at = observed_at
@@ -4440,6 +4448,7 @@ class PythonAutoOperator:
                          expected=previous["tile"], before=previous["before"],
                          earlierReceipts=previous.get("earlierReceipts", []),
                          nextBaseline=pending["before"], concealedCacheInvalidated=True)
+        pending["registeredMonotonic"] = time.monotonic()
         self.pending_own_discard = pending
 
     def reconcile_own_discard_receipts(self, pending: dict[str, Any], observation: dict[str, Any]) -> None:
