@@ -1004,6 +1004,59 @@ def raised_glyph_overlap_confirmation(
             "verification": "dark_glyph_overlap"}
 
 
+def sparkle_masked_lift_confirmation(
+    before: bytes, after: bytes, slots: list[dict[str, Any]], click_index: int,
+    face: dict[str, float], point: dict[str, float], lift: int, threshold: float,
+) -> dict[str, float] | None:
+    """Verify the unoccluded glyph around a small pink click animation."""
+    if click_index == 0:
+        return None
+    try:
+        with Image.open(io.BytesIO(before)) as source, Image.open(io.BytesIO(after)) as receipt:
+            first = source.convert("L").point([255 if v < 120 else 0 for v in range(256)])
+            rgb = receipt.convert("RGB")
+            second = rgb.convert("L").point([255 if v < 120 else 0 for v in range(256)])
+        x, y, w, h = (int(face[k]) for k in ("x", "y", "width", "height"))
+        baseline = first.crop((x, y, x + w, y + h))
+        selected = rgb.crop((x, y - lift, x + w, y + h - lift))
+        pink = Image.new("L", selected.size)
+        pink.putdata([255 if r > 140 and b > 100 and r > g * 1.15 and b > g * 1.1 else 0
+                      for r, g, b in selected.getdata()])
+        bounds = pink.getbbox()
+        if bounds is None or ImageStat.Stat(pink).sum[0] / 255 < 20:
+            return None
+        left, top, right, bottom = bounds
+        left, top, right, bottom = max(0, left - 5), max(0, top - 5), min(w, right + 5), min(h, bottom + 5)
+        if (right - left) * (bottom - top) > w * h * 0.2:
+            return None
+        valid = Image.new("L", (w, h), 255)
+        valid.paste(0, (left, top, right, bottom))
+        count = lambda image: ImageStat.Stat(image).sum[0] / 255
+        glyph = count(baseline)
+        retained = count(ImageChops.multiply(baseline, valid))
+        if glyph < 100 or retained < glyph * 0.7:
+            return None
+        valid_count = count(valid)
+        def difference(offset: int) -> float:
+            shifted = second.crop((x, y - offset, x + w, y + h - offset))
+            return count(ImageChops.multiply(ImageChops.difference(baseline, shifted), valid)) / valid_count * 100
+        delta = difference(lift)
+        if delta > threshold or min(difference(offset) for offset in range(8, 81) if offset != lift) - delta < 4.5:
+            return None
+        neighbour = slots[click_index - 1]
+        nx, ny = int(neighbour["x"]) + 10, int(neighbour["y"]) + 10
+        nw, nh = int(neighbour["width"]) - 20, int(neighbour["height"]) - 38
+        old = first.crop((nx, ny, nx + nw, ny + nh))
+        new = second.crop((nx, ny, nx + nw, ny + nh))
+        if ImageStat.Stat(ImageChops.difference(old, new)).mean[0] / 255 * 100 > threshold:
+            return None
+        return {"x": float(point["x"]), "y": float(point["y"]) - lift,
+                "lift": float(lift), "faceStructureDelta": round(delta, 3),
+                "verification": "sparkle_masked_unique_glyph_and_stable_neighbour"}
+    except Exception:
+        return None
+
+
 def raised_tile_confirmation_point(
     before: bytes, after: bytes, layout: dict[str, Any], click_index: int,
     point: dict[str, float], threshold: float,
@@ -1066,6 +1119,11 @@ def raised_tile_confirmation_point(
         return None
     delta, lift = min(candidates)
     if delta > threshold:
+        sparkle_confirmation = sparkle_masked_lift_confirmation(
+            before, after, slots, click_index, face, point, lift, threshold,
+        )
+        if sparkle_confirmation is not None:
+            return sparkle_confirmation
         # A click sparkle can change a small part of the selected glyph. In
         # the recorded 9p receipt the true 48px lift differed by 1.685%,
         # while the nearest alternative differed by 17.091%. Admit only this
