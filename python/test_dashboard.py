@@ -1,12 +1,36 @@
 import json
 import base64
+import argparse
+import signal
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 from dashboard import HTML, capture_cdp_screenshot, read_decision_history, read_operator_status
 
 
 class DashboardTest(unittest.TestCase):
+    def test_sigterm_unwinds_playwright_and_restores_handler(self):
+        from dashboard import main
+
+        previous = signal.getsignal(signal.SIGTERM)
+        server = MagicMock()
+        context = MagicMock()
+        page = MagicMock()
+        page.wait_for_timeout.side_effect = lambda *_: signal.getsignal(signal.SIGTERM)(signal.SIGTERM, None)
+        with patch("dashboard.parse_args", return_value=argparse.Namespace(
+            host="127.0.0.1", port=0, interval=0.1, cdp="endpoint", operator_log=None)), \
+             patch("dashboard.load_references"), \
+             patch("dashboard.ThreadingHTTPServer", return_value=server), \
+             patch("dashboard.threading.Thread"), \
+             patch("dashboard.sync_playwright", return_value=context), \
+             patch("dashboard.find_page", return_value=page):
+            self.assertEqual(main(), 0)
+        context.__exit__.assert_called_once()
+        server.shutdown.assert_called_once()
+        server.server_close.assert_called_once()
+        self.assertIs(signal.getsignal(signal.SIGTERM), previous)
+
     def test_raw_cdp_capture_does_not_use_page_viewport_emulation(self):
         class Session:
             def __init__(self):

@@ -32,7 +32,7 @@ from screen_state import _rgb_fraction, classify_screen, load_references
 from operator_lock import OperatorAlreadyRunning, endpoint_key, operator_lease
 from analysis_recorder import AnalysisRecorder
 from startup_turn_guard import StartupTurnGuard
-from friend_start import verified_friend_room
+from friend_start import await_reviewed_friend_room
 
 
 class RetryableSafetyAbort(RuntimeError):
@@ -5605,18 +5605,12 @@ class PythonAutoOperator:
             if self.args.mode != "force-auto" or getattr(self.args, "ranked_loop", False):
                 raise RuntimeError("reviewed friend start requires non-ranked force-auto")
             reviewed = Path(preflight_path).read_bytes()
-            first = page.screenshot(animations="disabled")
-            if not verified_friend_room(first, reviewed):
-                raise RuntimeError("friend room does not match reviewed preflight")
-            page.wait_for_timeout(100)
-            current = page.screenshot(animations="disabled")
-            if not verified_friend_room(current, reviewed):
-                raise RuntimeError("friend room changed before start")
+            captures = await_reviewed_friend_room(page, reviewed)
             started_at = time.monotonic()
             page.mouse.click(1140, 998)
             startup_turn_guard.record_verified_start_click(clicked_at=started_at)
             self.log("reviewed_friend_start_clicked", preflight=str(preflight_path),
-                     point={"x": 1140, "y": 998})
+                     captures=captures, point={"x": 1140, "y": 998})
         if self.args.mode == "force-auto":
             # Room-start clicks can leave the pointer over the initial hand.
             # Clear hover before starting the stream, so its first frame cannot

@@ -1,10 +1,40 @@
 import io
 import unittest
 from pathlib import Path
+from unittest.mock import Mock, patch
 
 from PIL import Image, ImageDraw
 
-from friend_start import verified_friend_room
+from friend_start import await_reviewed_friend_room, verified_friend_room
+
+
+class FriendStartRetryTests(unittest.TestCase):
+    def test_transient_mismatch_requires_fresh_consecutive_matches(self):
+        page = Mock()
+        page.screenshot.side_effect = [b"1", b"2", b"3", b"4", b"5"]
+        with patch("friend_start.verified_friend_room", side_effect=[True, False, True, True]) as verify:
+            self.assertEqual(await_reviewed_friend_room(page, b"reviewed"), 4)
+        self.assertEqual(verify.call_count, 4)
+        page.mouse.click.assert_not_called()
+
+    def test_intermittent_matches_or_persistent_change_never_authorize(self):
+        for checks in ([True, False] * 4, [False] * 8):
+            page = Mock()
+            with patch("friend_start.verified_friend_room", side_effect=checks):
+                with self.assertRaises(RuntimeError):
+                    await_reviewed_friend_room(page, b"reviewed")
+            page.mouse.click.assert_not_called()
+
+    def test_native_overlay_sequence_recovers_without_relaxing_match(self):
+        directory = Path(__file__).resolve().parents[1] / "artifacts/friend-300-b864bfc-20261028"
+        paths = [directory / f"analysis-frame-{i}.png" for i in range(4)]
+        preflight = directory / "preflight-room.png"
+        if not preflight.exists() or not all(path.exists() for path in paths):
+            self.skipTest("native overlay sequence unavailable")
+        page = Mock()
+        page.screenshot.side_effect = [path.read_bytes() for path in paths]
+        self.assertEqual(await_reviewed_friend_room(page, preflight.read_bytes(), attempts=4), 4)
+        page.mouse.click.assert_not_called()
 
 
 class FriendStartTests(unittest.TestCase):

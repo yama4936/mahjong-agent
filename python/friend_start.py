@@ -55,3 +55,20 @@ def verified_friend_room(frame: bytes, reviewed_preflight: bytes) -> bool:
         return True
     except (OSError, ValueError):
         return False
+
+
+def await_reviewed_friend_room(page, reviewed_preflight: bytes, *, attempts: int = 8) -> int:
+    """Require two consecutive fresh matches; retry transient visual overlays.
+
+    Each capture independently passes all existing strict checks. A mismatch
+    clears the streak; no accumulated or majority evidence authorizes a click.
+    """
+    streak = 0
+    for index in range(attempts):
+        frame = page.screenshot(animations="disabled")
+        streak = streak + 1 if verified_friend_room(frame, reviewed_preflight) else 0
+        if streak == 2:
+            return index + 1
+        if index + 1 < attempts:
+            page.wait_for_timeout(100)
+    raise RuntimeError("friend room did not match reviewed preflight in consecutive captures")

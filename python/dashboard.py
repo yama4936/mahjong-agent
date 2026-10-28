@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import base64
 import json
+import signal
 import threading
 from datetime import datetime, timezone
 from http import HTTPStatus
@@ -284,9 +285,15 @@ def main() -> int:
     server = ThreadingHTTPServer((args.host, args.port), handler_for(shared, operator_log))
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
-    print(f"Dashboard: http://{args.host}:{args.port}", flush=True)
     operator_log = Path(args.operator_log).resolve() if args.operator_log else None
+    # The launcher sends SIGTERM when the operator exits.  Turn it into the
+    # same orderly shutdown as Ctrl-C so Playwright can close its driver pipes.
+    previous_sigterm = signal.getsignal(signal.SIGTERM)
+    def stop_on_sigterm(_signum: int, _frame: Any) -> None:
+        raise KeyboardInterrupt
+    signal.signal(signal.SIGTERM, stop_on_sigterm)
     try:
+        print(f"Dashboard: http://{args.host}:{args.port}", flush=True)
         with sync_playwright() as playwright:
             browser = playwright.chromium.connect_over_cdp(args.cdp)
             page = find_page(browser)
@@ -331,6 +338,7 @@ def main() -> int:
     except KeyboardInterrupt:
         return 0
     finally:
+        signal.signal(signal.SIGTERM, previous_sigterm)
         server.shutdown()
         server.server_close()
     return 0
