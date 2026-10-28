@@ -1,0 +1,28 @@
+name: jantama-live
+services:
+  relay:
+    build:
+      context: ../..
+      dockerfile: deploy/live/Dockerfile
+    image: jantama-live:local
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      CDP_URL: http://127.0.0.1:9222
+      LIVE_FPS: '3'
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 64
+    mem_limit: 256m
+    cpus: 1.0
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: '2'
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4383/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

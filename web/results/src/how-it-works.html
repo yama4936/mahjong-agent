@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="style.css"><link rel="stylesheet" href="how-it-works.css">
 </head>
 <body>
-<header><a class="brand" href="index.html"><span class="tile">發</span> JANTAMA <b>AUTO</b></a><a href="index.html">対局一覧</a><a href="analysis.html">役の分析</a><a href="charts.html">グラフ分析</a></header>
+<header><a class="brand" href="index.html"><span class="tile">發</span> JANTAMA <b>AUTO</b></a><a href="index.html">対局一覧</a><a href="analysis.html">役の分析</a><a href="charts.html">グラフ分析</a><a href="live.html">ライブ観戦 ↗</a></header>
 <main class="guide">
 <p class="eyebrow">HOW IT WORKS</p><h1>画面を読み、考え、<br>結果を記録する。</h1>
 <p class="guide-lead">このサイトは、雀魂の画面を認識して操作する自動対局システムの記録です。どのように判断し、何を成績として数えているのか。結果を確かめながら読めるようにまとめました。</p>
@@ -15,7 +15,7 @@
 <nav class="guide-toc" aria-label="説明の目次"><a href="#flow">全体の流れ</a><a href="#vision">画面認識</a><a href="#decision">判断の仕組み</a><a href="#operation">操作とモード</a><a href="#records">記録と公開</a><a href="#metrics">成績の読み方</a><a href="#yaku">和了・役の記録</a><a href="#limits">検証と限界</a></nav>
 <section id="flow"><p class="eyebrow">01 / OVERVIEW</p><h2>対局から公開までの流れ</h2>
 <ol class="flow"><li><strong>画面を取得</strong><span>ブラウザの卓・手牌・ボタンを画像として観測</span></li><li><strong>局面を認識</strong><span>牌や公開情報を判断用のデータに変換</span></li><li><strong>候補を比較</strong><span>牌効率・打点・守備を見て行動を選択</span></li><li><strong>操作を確認</strong><span>クリック前後の画面変化を照合</span></li><li><strong>結果を公開</strong><span>終了記録と画像を抽出し、このサイトへ反映</span></li></ol>
-<p>自動対局を動かすプログラムと、この閲覧サイトは別です。Pythonの操作者が画面取得・クリック・記録を担い、TypeScript側が牌認識や候補評価を担います。サイトは出力された記録を表示する静的なアーカイブで、訪問者のブラウザから対局を操作する機能はありません。</p></section>
+<p>自動対局を動かすプログラムと、この閲覧サイトは別です。Pythonの操作者が画面取得・クリック・記録を担い、TypeScript側が牌認識や候補評価を担います。成績ページは出力された記録を表示する静的なアーカイブです。別のライブ観戦ページでは、対局PC上のDocker配信サービスからWebSocketで最大3fpsの映像を受け取ります。音声や操作機能はなく、ログイン・ロビーなど対局以外の画面は待機表示になります。</p></section>
 <section id="vision"><p class="eyebrow">02 / VISION</p><h2>まず、何が画面に出ているかを読む</h2>
 <p>ブラウザの画面を取得し、手牌やボタンなど、校正した領域を切り出して認識します。ログイン画面、ロビー、マッチング、対局中、局結果、最終結果などを分類し、状態に応じた処理へ進みます。画面サイズや牌の配置が違えば、同じ座標をそのまま使えるとは限りません。</p>
 <div class="guide-grid"><article><h3>手牌</h3><p>牌面の切り出しとテンプレート照合などで牌を読みます。副露で手牌が短くなった場合や、離れたツモ牌の位置も区別します。判断に使った牌と、実際にクリックする位置が対応していることが必要です。</p></article><article><h3>公開情報</h3><p>ドラ表示、河、副露、リーチ表示などを認識します。force-autoでは別プロセスで更新し、期限内のキャッシュを判断に利用する構成があります。未認識の情報を、確認済みの情報と同じ精度で扱えるわけではありません。</p></article></div>
