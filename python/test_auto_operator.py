@@ -5301,7 +5301,7 @@ class AwayDialogDetectionTest(unittest.TestCase):
     def test_stale_lobby_screencast_is_rejected_by_current_table_frame(self) -> None:
         """A stale CDP frame must not bypass an already resumed friend table."""
         project = Path(__file__).resolve().parents[1]
-        live_table = (project / "artifacts" / "recovery-6df3771b-20261028" / "state-0452.png").read_bytes()
+        live_table = (project / "test" / "fixtures" / "riichi-stick-red-occluded-20261021.jpg").read_bytes()
         self.assertEqual(classify_screen(live_table, {}), ("match", 1.0))
 
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
