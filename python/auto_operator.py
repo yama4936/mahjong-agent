@@ -1721,7 +1721,7 @@ class PythonAutoOperator:
         seen_at = time.monotonic() if observed_at is None else observed_at
         previous_started = getattr(self, "action_evidence_started_at", None)
         previous_kind = getattr(self, "action_evidence_kind", None)
-        if previous_started is not None and previous_kind == kind:
+        if previous_started is not None and previous_kind == kind and not supersede:
             self.action_evidence_last_seen_at = seen_at
             self.action_evidence_generation = gate_generation
             return
@@ -2090,6 +2090,55 @@ class PythonAutoOperator:
             return "confirmed_own_river_append"
         return None
 
+    def observe_uncertain_selection_river(self, current: dict[str, Any]) -> None:
+        """Independently corroborate a post-abort own-river extension twice."""
+        latch = getattr(self, "selection_uncertainty_latch", None)
+        if not latch or current.get("ownDiscardsObserved") is not True:
+            return
+        baseline = latch.get("ownDiscards")
+        river = current.get("ownDiscards")
+        captured = public_capture_seconds(current.get("capturedAt"))
+        aborted = public_capture_seconds(latch.get("abortedAt"))
+        if captured is None or aborted is None or captured <= aborted:
+            return
+        if (not isinstance(baseline, list) or not isinstance(river, list)
+                or len(river) <= len(baseline) or river[:len(baseline)] != baseline):
+            latch.pop("riverCandidate", None)
+            latch.pop("confirmedOwnDiscards", None)
+            return
+        candidate = latch.get("riverCandidate")
+        if candidate and candidate["river"] == river and captured - candidate["captured"] >= 0.5:
+            latch["confirmedOwnDiscards"] = list(river)
+        elif not candidate or candidate["river"] != river:
+            latch.pop("confirmedOwnDiscards", None)
+            latch["riverCandidate"] = {"river": list(river), "captured": captured}
+
+    def rearm_uncertain_selection_clock(self, draw_generation: int | None,
+                                        observed_at: float | None) -> bool:
+        """Supersede a stale discard clock only after a verified later turn."""
+        latch = getattr(self, "selection_uncertainty_latch", None)
+        if not latch or getattr(self, "action_evidence_kind", None) != "discard":
+            return False
+        baseline = latch.get("drawGeneration")
+        if (not isinstance(baseline, int) or not isinstance(draw_generation, int)
+                or draw_generation <= baseline
+                or getattr(self, "screencast_draw_occupied", None) is not True):
+            return False
+        if latch.get("firstNewDrawObservedAt") is None and observed_at is not None:
+            latch["firstNewDrawObservedAt"] = observed_at
+        river = latch.get("confirmedOwnDiscards")
+        original = latch.get("ownDiscards")
+        first_seen = latch.get("firstNewDrawObservedAt")
+        if (not isinstance(original, list) or not isinstance(river, list)
+                or len(river) <= len(original) or river[:len(original)] != original
+                or not isinstance(first_seen, (int, float))):
+            return False
+        self.mark_action_evidence("discard", observed_at=first_seen,
+                                  gate_generation=draw_generation, supersede=True)
+        self.log("selection_uncertainty_action_clock_rearmed", drawGeneration=draw_generation,
+                 confirmedOwnDiscards=river)
+        return True
+
     def accept_public_observation(self, current: dict[str, Any]) -> bool:
         """Apply one capture through the shared history and receipt guards."""
         prior = self.cached_public_observation
@@ -2097,6 +2146,7 @@ class PythonAutoOperator:
         previous_capture = public_capture_seconds((prior or {}).get("capturedAt"))
         if captured is not None and previous_capture is not None and captured <= previous_capture:
             return False
+        self.observe_uncertain_selection_river(current)
         merged = merge_public_observations(prior, current, getattr(self, "cached_open_melds", 0))
         for repair in merged.get("opponentRiverRepairs", []):
             self.log("opponent_river_prefix_repaired", **repair)
@@ -2282,6 +2332,7 @@ class PythonAutoOperator:
             occupied = is_draw_slot_clip_occupied(crop_screenshot(frame, draw_slot))
             if occupied and self.screencast_draw_occupied is not True:
                 self.screencast_draw_generation += 1
+                self.screencast_draw_generation_at = self.latest_screencast_captured_at
             self.screencast_draw_occupied = occupied
         return True
 
@@ -5994,7 +6045,11 @@ class PythonAutoOperator:
                     evaluation_draw_generation, public_observation,
                 )
                 if getattr(self, "selection_uncertainty_latch", None):
-                    if uncertainty_rearm is None:
+                    clock_rearmed = self.rearm_uncertain_selection_clock(
+                        evaluation_draw_generation,
+                        getattr(self, "screencast_draw_generation_at", None),
+                    )
+                    if uncertainty_rearm is None or not clock_rearmed:
                         # Do not fall through to the generic hand-hash
                         # re-arm below.  A raised tile alters that hash while
                         # remaining the same selectable tile, and a retry
@@ -6399,6 +6454,7 @@ class PythonAutoOperator:
                     self.selection_uncertainty_latch = {
                         "drawGeneration": evaluation_draw_generation,
                         "ownDiscards": list((public_observation or {}).get("ownDiscards", [])),
+                        "abortedAt": datetime.now(timezone.utc).isoformat(),
                     }
                     self.last_processed_hand = hand_hash
                     self.armed = False
