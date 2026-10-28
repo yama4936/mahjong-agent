@@ -39,7 +39,7 @@ WebSocketはmetadata JSONとJPEGバイナリの順で送信します。状態・
 
 ## サイト更新
 
-`web/results/src/live.html`が公開プレイヤーをiframeで表示します。Sitesへの反映は`web/results/README.md`の手順で、既存Site IDと一般公開の設定を維持します。配信サービスのUI変更はDockerを再ビルド、アーカイブ側の変更はSitesを再公開してください。
+`web/results/src/live.html`がプレイヤーを直接表示し、公開WebSocketを受信します（iframeは使用しません）。Sitesへの反映は`web/results/README.md`の手順で、既存Site IDと一般公開の設定を維持します。配信サービスのUI変更はDockerを再ビルド、アーカイブ側の変更はSitesを再公開してください。
 
 ## 検証
 

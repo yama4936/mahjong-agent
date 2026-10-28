@@ -5,10 +5,12 @@
 <meta name="description" content="雀魂自動対局の画面認識・打牌判断・操作確認と、対局成績や役の集計方法を解説します。">
 <title>仕組みと記録の読み方 — JANTAMA AUTO</title>
 <link rel="stylesheet" href="style.css"><link rel="stylesheet" href="how-it-works.css">
-</head>
+<link rel="stylesheet" href="shell.css"><script src="shell.js" defer></script></head>
 <body>
-<header><a class="brand" href="index.html"><span class="tile">發</span> JANTAMA <b>AUTO</b></a><a href="index.html">対局一覧</a><a href="analysis.html">役の分析</a><a href="charts.html">グラフ分析</a><a href="live.html">ライブ観戦 ↗</a></header>
-<main class="guide">
+<a class="skip-link" href="#main-content">本文へ移動</a>
+<div class="mobile-bar"><a href="index.html">JANTAMA AUTO</a><button id="nav-toggle" type="button" aria-expanded="false" aria-controls="site-sidebar">メニュー</button></div>
+<aside id="site-sidebar" class="site-sidebar"><a class="brand" href="index.html"><span class="tile">發</span><span>JANTAMA <b>AUTO</b></span></a><p class="sidebar-label">対局アーカイブ</p><nav class="site-nav" aria-label="メインナビゲーション"><a href="index.html"><span aria-hidden="true">01</span>対局一覧</a><a href="live.html"><span aria-hidden="true">02</span>ライブ観戦</a><a href="analysis.html"><span aria-hidden="true">03</span>役の分析</a><a href="charts.html"><span aria-hidden="true">04</span>グラフ分析</a><a href="how-it-works.html" aria-current="page"><span aria-hidden="true">05</span>仕組みと読み方</a></nav><p class="sidebar-note">記録をたどる。<br>いまの対局を見守る。</p></aside>
+<main id="main-content" class="guide" tabindex="-1">
 <p class="eyebrow">HOW IT WORKS</p><h1>画面を読み、考え、<br>結果を記録する。</h1>
 <p class="guide-lead">このサイトは、雀魂の画面を認識して操作する自動対局システムの記録です。どのように判断し、何を成績として数えているのか。結果を確かめながら読めるようにまとめました。</p>
 <p class="muted">説明の確認日：2026年10月28日 · 現在の実装と、公開データの集計仕様に基づく説明です。過去の対局には異なるバージョンや設定が含まれます。</p>

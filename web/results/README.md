@@ -64,4 +64,8 @@
 
 ## ライブ観戦
 
-`live.html` からDockerの観戦専用プレイヤーを表示します。ライブ配信はアーカイブ更新とは独立しています。構成・起動・停止・検証方法は `../../deploy/live/README.md` を参照。公開元は `https://jantama-live.yama.asia/` です。
+`live.html` にプレイヤーを直接表示し、DockerのWebSocket配信を受信します。外部ページをiframeで埋め込まないため、プレイヤー内の移動で対局一覧が入れ子になることはありません。ライブ配信はアーカイブ更新とは独立しています。構成・起動・停止・検証方法は `../../deploy/live/README.md` を参照。公開元は `https://jantama-live.yama.asia/` です。
+
+## ナビゲーション
+
+全5ページを共通サイドバーで移動できます。現在のページは `aria-current` で表示し、800px以下では開閉メニューになります。Escapeで閉じてボタンへフォーカスを戻します。`shell.css` / `shell.js` が共通の見た目と開閉を担当します。`live-view.js` は独立プレイヤーの `web/live/live.js` と同じ受信処理です。配信プロトコル変更時は両方を更新してください。
