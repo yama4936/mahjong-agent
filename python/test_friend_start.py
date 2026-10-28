@@ -1,4 +1,7 @@
 import io
+import argparse
+import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -6,6 +9,55 @@ from unittest.mock import Mock, patch
 from PIL import Image, ImageDraw
 
 from friend_start import await_reviewed_friend_room, reviewed_friend_clock_is_300_plus_zero, verified_friend_room
+from auto_operator import PythonAutoOperator
+
+
+class ReviewedFriendOcrWarmupTests(unittest.TestCase):
+    def operator(self, path, **overrides):
+        op = PythonAutoOperator.__new__(PythonAutoOperator)
+        values = dict(mode="force-auto", ranked_loop=False, board_metadata=True,
+                      start_reviewed_friend_room=str(path))
+        values.update(overrides)
+        op.args = argparse.Namespace(**values)
+        op.board_metadata_ocr_lock = threading.Lock()
+        op.ensure_viewport = Mock()
+        op.configured_action_deadline_ms = Mock(return_value=1)
+        op.force_auto_click_budget_ms = Mock(return_value=2600)
+        op.log = Mock()
+        op.layout = {"viewport": {"width": 1920, "height": 1080}}
+        op.start_screencast_gate = Mock(side_effect=RuntimeError("stop after click"))
+        return op
+
+    def test_warmup_only_reviewed_nonranked_force_auto(self):
+        for overrides in ({"start_reviewed_friend_room": None}, {"ranked_loop": True},
+                          {"board_metadata": False}, {"mode": "observer"}):
+            with self.subTest(overrides=overrides), patch("board_metadata.ocr_engine") as engine:
+                self.assertFalse(self.operator("unused", **overrides).warm_reviewed_friend_board_ocr())
+                engine.assert_not_called()
+
+    def test_warmup_rechecks_room_and_fails_closed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "reviewed.png"
+            path.write_bytes(b"reviewed")
+            op, page = self.operator(path), Mock()
+            with patch("auto_operator.await_reviewed_friend_room", side_effect=[2, RuntimeError("changed")]) as verify, \
+                    patch("board_metadata.ocr_engine") as engine:
+                with self.assertRaisesRegex(RuntimeError, "changed"):
+                    op.run(page)
+            self.assertEqual(verify.call_count, 2)
+            engine.assert_called_once()
+            page.mouse.click.assert_not_called()
+
+    def test_warmup_failure_prevents_start(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "reviewed.png"
+            path.write_bytes(b"reviewed")
+            op, page = self.operator(path), Mock()
+            with patch("auto_operator.await_reviewed_friend_room", return_value=2), \
+                    patch("board_metadata.ocr_engine", side_effect=RuntimeError("ocr failed")):
+                with self.assertRaisesRegex(RuntimeError, "ocr failed"):
+                    op.run(page)
+            page.mouse.click.assert_not_called()
 
 
 class FriendStartRetryTests(unittest.TestCase):

@@ -5706,6 +5706,18 @@ class PythonAutoOperator:
                 }
         raise RetryableSafetyAbort("reaction win button did not disappear after click")
 
+    def warm_reviewed_friend_board_ocr(self) -> bool:
+        """Initialize OCR only within the explicitly reviewed friend-start flow."""
+        if not getattr(self.args, "board_metadata", False) \
+                or not getattr(self.args, "start_reviewed_friend_room", None) \
+                or getattr(self.args, "ranked_loop", False) \
+                or self.args.mode != "force-auto":
+            return False
+        from board_metadata import ocr_engine
+        with self.board_metadata_ocr_lock:
+            ocr_engine()
+        return True
+
     def run(self, page: Page) -> None:
         self.ensure_viewport(page, force=True)
         startup_turn_guard = StartupTurnGuard()
@@ -5727,6 +5739,10 @@ class PythonAutoOperator:
                          capture=index, matched=matched)
 
             captures = await_reviewed_friend_room(page, reviewed, on_capture=save_friend_start_capture)
+            if self.warm_reviewed_friend_board_ocr():
+                # Initialization can take seconds: revalidate the room before
+                # clicking because the reviewed state may have changed.
+                captures += await_reviewed_friend_room(page, reviewed, on_capture=save_friend_start_capture)
             started_at = time.monotonic()
             page.mouse.click(1140, 998)
             startup_turn_guard.record_verified_start_click(clicked_at=started_at)
