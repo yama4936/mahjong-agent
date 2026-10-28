@@ -931,14 +931,25 @@ def raised_tile_confirmation_point(
     if face["width"] <= 0 or face["height"] <= 0:
         return None
     try:
-        baseline = crop_screenshot(before, face)
+        # Decode each viewport once. Re-decoding the full JPEG and encoding a
+        # PNG for every vertical offset took longer than the ranked click
+        # budget after the tile was already selected. The same threshold and
+        # full 8..80 search are retained; only image transport is removed.
+        with Image.open(io.BytesIO(before)) as before_image, Image.open(io.BytesIO(after)) as after_image:
+            lookup = [255 if value < 120 else 0 for value in range(256)]
+            before_mask = before_image.convert("L").point(lookup)
+            after_mask = after_image.convert("L").point(lookup)
+        left, top = int(face["x"]), int(face["y"])
+        right, bottom = int(face["x"] + face["width"]), int(face["y"] + face["height"])
+        baseline = before_mask.crop((left, top, right, bottom))
         # Mahjong Soul lifts toward the table centre.  Search a deliberately
         # broad but bounded strip; the lower bound avoids accepting an
         # unchanged face as a selection receipt.
         candidates: list[tuple[float, int]] = []
         for lift in range(8, 81):
-            shifted = {**face, "y": face["y"] - lift}
-            delta = tile_face_structure_delta(baseline, crop_screenshot(after, shifted))
+            shifted = after_mask.crop((left, int(face["y"] - lift), right,
+                                       int(face["y"] - lift + face["height"])))
+            delta = ImageStat.Stat(ImageChops.difference(baseline, shifted)).mean[0] / 255 * 100
             candidates.append((delta, lift))
     except Exception:
         return None

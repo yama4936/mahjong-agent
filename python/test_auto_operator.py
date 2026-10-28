@@ -4915,6 +4915,25 @@ class AwayDialogDetectionTest(unittest.TestCase):
         self.assertEqual(confirmation, {"x": 1312.5, "y": 968.0, "lift": 31.0,
                                         "faceStructureDelta": 0.0})
 
+    def test_raised_tile_optimized_search_matches_original_mask_search(self) -> None:
+        layout = load_json(Path(__file__).resolve().parents[1] / "config/layout-300-regression.json")
+        for index, lift in ((11, 31), (9, 19), (9, 0)):
+            with self.subTest(index=index, lift=lift):
+                before, after = self.raised_tile_frames(layout, index, lift)
+                slot = layout['handSlots'][index]
+                face = {'x': slot['x'] + 10, 'y': slot['y'] + 10,
+                        'width': slot['width'] - 20, 'height': slot['height'] - 38}
+                baseline = crop_screenshot(before, face)
+                delta, old_lift = min((tile_face_structure_delta(baseline, crop_screenshot(
+                    after, {**face, 'y': face['y'] - offset})), offset) for offset in range(8, 81))
+                result = raised_tile_confirmation_point(before, after, layout, index,
+                                                         layout['clickPoints'][index], 1.5)
+                if delta > 1.5:
+                    self.assertIsNone(result)
+                else:
+                    self.assertEqual(result['lift'], float(old_lift))
+                    self.assertEqual(result['faceStructureDelta'], round(delta, 3))
+
     def test_raised_tile_confirmation_uses_observed_compact_hand_lift(self) -> None:
         layout = load_json(Path(__file__).resolve().parents[1] / "config/layout-300-regression.json")
         # One open meld uses compact slot 9 (the precise failing geometry).
