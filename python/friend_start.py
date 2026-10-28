@@ -13,7 +13,10 @@ _CONTROLS = (
     ((1000, 955, 1280, 1040), "sYhj/Mxi+8lg+8lg+8lg+8lg+8lg+8lg+8lg+8lg+8lg+8lg+8lg+8lg/cxhw5tm77hY/LtF+7pG+7pG+7pG/bxG/75G/rxG/LtG/bxG/LtG+7pG+7pG+7pG+7pF+b5T7a1O+LBC97BD97BD+bFD3p5DrXtCuIJC5aND0ZRD6qZD+bFD97BD97BD969C9rJK6J9H9KQ+86M+86Q++Kc/uHw8dk84lGM6rXU6h1w5voE796Y/86Q+86M+86M+8aRE45I/75g57pc57pc585o6vHg0ZkMrmWIxiVgvbEYsomgy8po67pc57pc57pc57Jc93oU36ow06Ys06Ys07o01uG4tgk4mkFcop2QrbkIjoWAr74416Ys06os06os054o22Xkw54Ew5YAw5YAw5oEw4X4v4H0v2Hku5YAw3Hsv4H4v5oAw5YEw5YAw5oEw4n4wn1Mq4Xgs33cs33cs33cs4Hgs4Hgs4Xgs4Hcs4Xgt4Hgs33cs33cs33cs4ngss10p"),
 )
 _BOUND_REGIONS = (
-    (700, 40, 1100, 120), (1610, 175, 1870, 900),
+    # The room-ID glyphs occupy y=65..112. The strip above them contains
+    # free-floating animated particles, including in the reviewed preflight;
+    # comparing that unrelated strip can reject every subsequent frame.
+    (730, 65, 1094, 113), (1610, 175, 1870, 900),
     (80, 650, 440, 910), (470, 650, 830, 910),
     (850, 650, 1210, 910), (1230, 650, 1590, 910),
     (1000, 955, 1280, 1040),

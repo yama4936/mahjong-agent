@@ -36,6 +36,17 @@ class FriendStartRetryTests(unittest.TestCase):
         self.assertEqual(await_reviewed_friend_room(page, preflight.read_bytes(), attempts=4), 4)
         page.mouse.click.assert_not_called()
 
+    def test_native_preflight_particle_above_id_does_not_block(self):
+        directory = Path(__file__).resolve().parents[1] / "artifacts/friend-300-f6aa509-20261028"
+        paths = [directory / f"analysis-frame-{i}.png" for i in range(2)]
+        preflight = directory / "preflight-room.png"
+        if not preflight.exists() or not all(path.exists() for path in paths):
+            self.skipTest("native preflight particle sequence unavailable")
+        page = Mock()
+        page.screenshot.side_effect = [path.read_bytes() for path in paths]
+        self.assertEqual(await_reviewed_friend_room(page, preflight.read_bytes(), attempts=2), 2)
+        page.mouse.click.assert_not_called()
+
 
 class FriendStartTests(unittest.TestCase):
     def setUp(self):
@@ -65,3 +76,10 @@ class FriendStartTests(unittest.TestCase):
         out = io.BytesIO()
         blank.save(out, format="PNG")
         self.assertFalse(verified_friend_room(out.getvalue(), out.getvalue()))
+
+    def test_small_changes_to_id_and_settings_remain_rejected(self):
+        for box in ((975, 77, 988, 100), (1065, 77, 1080, 100),
+                    (1700, 267, 1714, 285), (1730, 355, 1744, 375),
+                    (310, 700, 325, 720)):
+            with self.subTest(box=box):
+                self.assertFalse(verified_friend_room(self.changed(box), self.frame))
