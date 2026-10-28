@@ -1798,6 +1798,7 @@ class PythonAutoOperator:
         self.board_metadata_lock = threading.Lock()
         self.board_metadata_ocr_lock = threading.Lock()
         self.board_metadata_last_scan_at = 0.0
+        self.board_metadata_last_scan_signature = None
         self.public_cache_generation = 0
         self.public_cache_last_frame_hash: str | None = None
         self.last_public_scan_at = 0.0
@@ -2856,12 +2857,15 @@ class PythonAutoOperator:
         if self.board_metadata_thread and self.board_metadata_thread.is_alive():
             return
         now = time.monotonic()
-        if now - self.board_metadata_last_scan_at < 6.0:
+        signature = board_state_signature(frame)
+        previous_signature = getattr(self, "board_metadata_last_scan_signature", None)
+        if now - self.board_metadata_last_scan_at < 6.0 and previous_signature is not None \
+                and board_state_signature_matches(signature, previous_signature):
             return
         self.board_metadata_last_scan_at = now
+        self.board_metadata_last_scan_signature = signature
         path = self.frames / f"{utc_stamp()}.board-cache.jpg"
         path.write_bytes(frame)
-        signature = board_state_signature(frame)
 
         def recognize() -> None:
             from board_metadata import recognize_board

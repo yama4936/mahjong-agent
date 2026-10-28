@@ -1399,6 +1399,41 @@ class AwayDialogDetectionTest(unittest.TestCase):
                 self.assertEqual(operator.current_board_metadata(path), metadata)
                 self.assertEqual(recognize.call_count, 2)
 
+    def test_board_metadata_refresh_throttle_yields_to_changed_hud(self) -> None:
+        def frame(color):
+            image = Image.new("RGB", (1920, 1080), (20, 30, 50))
+            ImageDraw.Draw(image).rectangle((910, 460, 1010, 505), fill=color)
+            output = io.BytesIO()
+            image.save(output, format="PNG")
+            return output.getvalue()
+
+        first = frame((45, 50, 55))
+        changed = frame((120, 130, 140))
+        with tempfile.TemporaryDirectory() as directory:
+            operator = PythonAutoOperator.__new__(PythonAutoOperator)
+            operator.args = argparse.Namespace(board_metadata=True)
+            operator.frames = Path(directory)
+            operator.board_metadata_thread = None
+            operator.board_metadata_result = None
+            operator.board_metadata_cache = None
+            operator.board_metadata_lock = threading.Lock()
+            operator.board_metadata_ocr_lock = threading.Lock()
+            operator.board_metadata_last_scan_at = 0.0
+            operator.log = Mock()
+            metadata = {"verified": True, "round": "east_1", "scores": {"east": 25000}}
+            with patch("auto_operator.time.monotonic", return_value=100.0), \
+                    patch("board_metadata.recognize_board", return_value=metadata) as recognize:
+                operator.schedule_board_metadata(first)
+                operator.board_metadata_thread.join(timeout=2)
+                operator.schedule_board_metadata(first)
+                self.assertEqual(recognize.call_count, 1)
+                operator.schedule_board_metadata(changed)
+                operator.board_metadata_thread.join(timeout=2)
+                self.assertEqual(recognize.call_count, 2)
+                path = Path(directory) / "old.png"
+                path.write_bytes(first)
+                self.assertIsNone(operator.cached_board_metadata(path))
+
     def setUp(self) -> None:
         # Captured live-match frames are intentionally gitignored. Keep these
         # regressions active on workstations that retain them, while allowing a
