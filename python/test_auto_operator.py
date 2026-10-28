@@ -2639,6 +2639,28 @@ class AwayDialogDetectionTest(unittest.TestCase):
 
         operator.log.assert_not_called()
 
+    def test_short_discard_selection_reserves_confirmed_second_click(self) -> None:
+        """Do not select a tile after the measured two-click reserve is gone."""
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(force_auto_click_budget_ms=2600)
+        operator.action_evidence_started_at = 10.0
+        operator.log = Mock()
+
+        # This is the 5+20 failure shape: the first click would be within
+        # 2600ms but leaves only 289ms to observe and hit the raised tile.
+        with patch("auto_operator.time.monotonic", return_value=12.311):
+            with self.assertRaisesRegex(RetryableSafetyAbort, "lacks time"):
+                operator.require_force_auto_discard_selection_window(12.2)
+
+        operator.log.assert_called_once_with(
+            "force_auto_discard_selection_window_insufficient",
+            clickBudgetMs=2600,
+            reserveMs=650,
+            captureAgeBeforeSelectionMs=111,
+            actionEvidenceAgeMs=2311,
+            remainingMs=289,
+        )
+
     def test_short_click_budget_rejects_fresh_frame_after_old_self_turn_gate(self) -> None:
         """A later receipt cannot reset the 5+20 turn clock."""
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
@@ -2919,7 +2941,10 @@ class AwayDialogDetectionTest(unittest.TestCase):
             # Classification consumes the remaining time from the original
             # evaluated frame, but the verified selection screenshot itself
             # was captured at 12.5 and remains inside the 2600ms budget.
-            clock["now"] = 15.0
+            # A Riichi declaration establishes a new baseline, but its tile
+            # discard is still a two-click gesture and must retain the
+            # confirmed-selection reserve for the raised hitbox.
+            clock["now"] = 14.3
             return "match", 1.0
 
         with patch("auto_operator.time.monotonic", side_effect=lambda: clock["now"]), \
@@ -4623,6 +4648,24 @@ class AwayDialogDetectionTest(unittest.TestCase):
         self.assertEqual(settle.call_args_list, [call(40), call(40)])
         self.assertEqual(mouse.calls[:2], [
             (1532, 999, {}), (1532.0, 951.0, {"delay": 80}),
+        ])
+
+    def test_discard_does_not_confirm_after_second_click_budget_expires(self) -> None:
+        """A selected tile is latched rather than risk a late second click."""
+        layout = load_json(Path(__file__).resolve().parents[1] / "config/layout-300-regression.json")
+        point = layout["clickPoints"][7]
+        before, after = self.raised_tile_frames(layout, 7, 28)
+        mouse = RecordingMouse()
+        with self.assertRaisesRegex(SelectionStateUncertainAbort, "confirmation withheld"):
+            send_discard_click(
+                mouse, point, {"width": 1920, "height": 1080}, Mock(), before,
+                lambda _: after, layout, 7, 1.5,
+                lambda: (_ for _ in ()).throw(
+                    RetryableSafetyAbort("force-auto click budget expired before safe click")
+                ),
+            )
+        self.assertEqual(mouse.calls, [
+            (933, 999, {}), ("move", 960, 777.6),
         ])
 
     def test_discard_unproven_selection_never_retries_as_a_deselect(self) -> None:

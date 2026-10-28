@@ -73,6 +73,11 @@ FORCE_AUTO_MIN_RECOGNITION_WINDOW_MS = 1800
 # This keeps the ranked fast path distinct from 300+0 friend-match regression
 # runs, whose 8000ms budget may safely wait for synchronous metadata work.
 FORCE_AUTO_SHORT_CLICK_BUDGET_MAX_MS = 2600
+# A discard is a two-input gesture: the first click only raises the selected
+# physical tile and a later, observed raised hitbox receives the confirmation
+# click.  Do not start that gesture with so little of the short-clock budget
+# left that its second input can race the client auto-tsumogiri.
+FORCE_AUTO_DISCARD_SELECTION_RESERVE_MS = 650
 
 
 def board_state_signature(frame: bytes) -> tuple[Image.Image, ...]:
@@ -1117,6 +1122,7 @@ def send_discard_click(
     layout: dict[str, Any],
     click_index: int,
     stability_threshold: float,
+    before_confirmation_click: Callable[[], None] | None = None,
 ) -> dict[str, float]:
     """Select a tile, then confirm it inside its raised hitbox.
 
@@ -1167,6 +1173,18 @@ def send_discard_click(
     # the original centre left 5s selected and Mahjong Soul later tsumogiri'd
     # 7s.  A measured raised coordinate is therefore both the identity proof
     # and the only admissible confirmation target.
+    if before_confirmation_click is not None:
+        try:
+            before_confirmation_click()
+        except Exception as error:
+            # The first click may have left the requested tile raised.  A
+            # normal retry could therefore deselect it; disarm this hand just
+            # as for an unproven receipt, while preserving the actual guard
+            # failure in the error text.
+            mouse.move(viewport["width"] / 2, viewport["height"] * 0.72)
+            raise SelectionStateUncertainAbort(
+                f"discard confirmation withheld after tile selection: {error}"
+            ) from error
     mouse.click(confirmation["x"], confirmation["y"], delay=80)
     # Once the row closes, the next tile can slide under the pointer and stay
     # raised. Move to inert table felt before post-action recognition.
@@ -1847,6 +1865,39 @@ class PythonAutoOperator:
                 )
         raise RetryableSafetyAbort(
             "force-auto click budget expired before safe click; reobserve current hand"
+        )
+
+    def require_force_auto_discard_selection_window(self, captured_at: float | None) -> None:
+        """Reserve time for the observed second click of a discard gesture.
+
+        Checking the ordinary budget immediately before the *first* click is
+        insufficient: selecting a tile is not a discard, and the client can
+        auto-tsumogiri the draw while the operator waits for a screencast
+        receipt proving that selected tile's raised hitbox.  This admission
+        guard leaves the measured selection/confirmation reserve before any
+        hand input is sent.
+        """
+        budget = self.force_auto_click_budget_ms()
+        if budget is None or budget > FORCE_AUTO_SHORT_CLICK_BUDGET_MAX_MS:
+            return
+        capture_age_ms = self.force_auto_capture_age_ms(captured_at)
+        action_evidence_age_ms = self.force_auto_action_evidence_age_ms()
+        elapsed_ms = max(age for age in (capture_age_ms, action_evidence_age_ms)
+                         if age is not None) \
+            if capture_age_ms is not None or action_evidence_age_ms is not None else None
+        if elapsed_ms is None or budget - elapsed_ms >= FORCE_AUTO_DISCARD_SELECTION_RESERVE_MS:
+            return
+        self.log(
+            "force_auto_discard_selection_window_insufficient",
+            clickBudgetMs=budget,
+            reserveMs=FORCE_AUTO_DISCARD_SELECTION_RESERVE_MS,
+            captureAgeBeforeSelectionMs=capture_age_ms,
+            **({"actionEvidenceAgeMs": action_evidence_age_ms}
+               if action_evidence_age_ms is not None else {}),
+            remainingMs=max(0, budget - elapsed_ms),
+        )
+        raise RetryableSafetyAbort(
+            "force-auto discard selection lacks time for confirmed second click; reobserve current hand"
         )
 
     def reset_ranked_click_budget_expiry_streak(self) -> None:
@@ -4877,6 +4928,7 @@ class PythonAutoOperator:
             self.require_force_auto_click_budget(
                 evaluated_captured_at, phase="before_discard_click",
             )
+            self.require_force_auto_discard_selection_window(evaluated_captured_at)
         self.require_action_deadline()
         self.log(
             "click_sent",
@@ -4900,6 +4952,9 @@ class PythonAutoOperator:
             self.layout,
             click_index,
             self.args.stability_pixel_delta,
+            (lambda: self.require_force_auto_click_budget(
+                evaluated_captured_at, phase="before_discard_confirmation_click",
+            )) if force_auto else None,
         )
         if force_auto:
             # ``send_discard_click`` ends by moving onto inert table felt.
