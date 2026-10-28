@@ -2949,6 +2949,7 @@ class AwayDialogDetectionTest(unittest.TestCase):
 
         with patch("auto_operator.time.monotonic", side_effect=lambda: clock["now"]), \
                 patch("auto_operator.stable_hand_delta", return_value=0.0), \
+                patch("auto_operator.send_discard_click", wraps=send_discard_click) as discard_click, \
                 patch("auto_operator.raised_tile_confirmation_point",
                       return_value={"x": 269, "y": 971, "lift": 28, "faceStructureDelta": 0.0}), \
                 patch("auto_operator.classify_screen", side_effect=classify_confirmed_selection), \
@@ -2963,6 +2964,7 @@ class AwayDialogDetectionTest(unittest.TestCase):
             )
 
         self.assertTrue(receipt["clicked"])
+        self.assertEqual(discard_click.call_args.args[4], selection)
         # send_discard_click may issue its normal focus/click sequence after
         # the declaration; both phases reached the mouse without a budget
         # abort.
@@ -4840,6 +4842,7 @@ class AwayDialogDetectionTest(unittest.TestCase):
         operator.latest_screencast_frame = unraised
         operator.screencast_sequence = 13
         mouse = RecordingMouse()
+        evidence = Mock()
 
         def fresh_unraised(first_click_at):
             operator.latest_screencast_captured_at = first_click_at + 0.001
@@ -4848,9 +4851,10 @@ class AwayDialogDetectionTest(unittest.TestCase):
         with self.assertRaises(SelectionStateUncertainAbort):
             send_discard_click(
                 mouse, point, {"width": 1920, "height": 1080}, Mock(), before,
-                fresh_unraised, layout, 9, 1.5,
+                fresh_unraised, layout, 9, 1.5, on_unverified_selection=evidence,
             )
         self.assertEqual(mouse.calls, [(1122.5, 999, {}), ("move", 960.0, 777.6)])
+        evidence.assert_called_once_with(before, unraised)
 
     def test_uncertain_selection_does_not_rearm_for_changed_hand_pixels(self) -> None:
         """A raised tile changes the crop, but is still the same selectable tile."""

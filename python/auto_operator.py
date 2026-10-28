@@ -1134,6 +1134,7 @@ def send_discard_click(
     click_index: int,
     stability_threshold: float,
     before_confirmation_click: Callable[[], None] | None = None,
+    on_unverified_selection: Callable[[bytes, bytes | None], None] | None = None,
 ) -> dict[str, float]:
     """Select a tile, then confirm it inside its raised hitbox.
 
@@ -1155,6 +1156,7 @@ def send_discard_click(
     # pre-click frame: a later receipt may prove this exact tile moved, but an
     # unproven receipt must never be used for the second click.
     confirmation = None
+    last_receipt = None
     for wait_ms in (40, 40, 60, 80, 100, 120):
         wait_for_selection(wait_ms)
         receipt = selection_receipt(first_click_at)
@@ -1164,6 +1166,7 @@ def send_discard_click(
         # not a synchronous Page.screenshot() call: synchronous captures can
         # block for seconds while an open hand is waiting to settle.
         if receipt is not None:
+            last_receipt = receipt
             confirmation = raised_tile_confirmation_point(
                 selection_before, receipt, layout, click_index, point,
                 stability_threshold,
@@ -1172,6 +1175,13 @@ def send_discard_click(
             break
     if confirmation is None:
         mouse.move(viewport["width"] / 2, viewport["height"] * 0.72)
+        if on_unverified_selection is not None:
+            try:
+                on_unverified_selection(selection_before, last_receipt)
+            except Exception:
+                # Evidence capture must never turn an unsafe first click into
+                # an ordinary retry against an uncertain selection.
+                pass
         # The first click might have selected a tile even though no screenshot
         # could prove it.  Do not let the normal retry path issue a possible
         # deselect click against that unresolved state.
@@ -2291,6 +2301,19 @@ class PythonAutoOperator:
                 or captured_at < first_click_at:
             return None
         return frame
+
+    def record_unverified_selection(self, baseline: bytes, receipt: bytes | None) -> None:
+        stamp = utc_stamp()
+        before_path = self.frames / f"{stamp}.selection-before.png"
+        before_path.write_bytes(baseline)
+        before_path.chmod(0o600)
+        receipt_path = None
+        if receipt is not None:
+            receipt_path = self.frames / f"{stamp}.selection-receipt.png"
+            receipt_path.write_bytes(receipt)
+            receipt_path.chmod(0o600)
+        self.log("unverified_selection_evidence", baseline=str(before_path),
+                 receipt=str(receipt_path) if receipt_path else None)
 
     def seed_silent_screencast_gate(self, page: Page) -> bool:
         """Seed a newly silent stream once from an exact-size current screenshot."""
@@ -5040,6 +5063,10 @@ class PythonAutoOperator:
                              targetPixelDelta=round(target_delta, 3))
             hand_before = settled_riichi_hand
             river_before = crop_screenshot(settled_riichi_full, self.river_clip)
+            # The lift receipt must be compared to the same confirmed
+            # selection UI. The pre-declaration stream frame has different
+            # tile illumination and cannot prove this physical face moved.
+            pre_click_full = settled_riichi_full
 
         point = dynamic_click_point if has_dynamic_click_point else points[click_index]
         require_post_riichi_draw_click(evaluation, selected, self.layout,
@@ -5106,6 +5133,7 @@ class PythonAutoOperator:
                 evaluated_captured_at, phase="before_discard_confirmation_click",
                 **({"include_action_evidence": False} if selection_local_budget else {}),
             )) if force_auto else None,
+            self.record_unverified_selection if force_auto else None,
         )
         if force_auto:
             # ``send_discard_click`` ends by moving onto inert table felt.
