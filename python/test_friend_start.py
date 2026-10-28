@@ -61,6 +61,16 @@ class FriendStartRetryTests(unittest.TestCase):
         self.assertEqual(recorder.call_args_list[0].args, (1, frames[0], True))
         self.assertEqual(recorder.call_args_list[1].args, (2, frames[1], True))
 
+    def test_native_particle_over_room_id_colon_does_not_bind_decoration(self):
+        directory = Path(__file__).resolve().parents[1] / "artifacts/friend-300-6efe75c-20261028"
+        frames = sorted((directory / "frames").glob("*friend-start*.png"))
+        preflight = directory / "preflight-room.png"
+        if not preflight.exists() or len(frames) < 2:
+            self.skipTest("native colon-particle sequence unavailable")
+        page = Mock()
+        page.screenshot.side_effect = [path.read_bytes() for path in frames[:2]]
+        self.assertEqual(await_reviewed_friend_room(page, preflight.read_bytes(), attempts=2), 2)
+
     def test_failed_capture_is_recorded_without_click(self):
         page, recorder = Mock(), Mock()
         page.screenshot.return_value = b"not an image"
@@ -121,6 +131,19 @@ class FriendStartTests(unittest.TestCase):
         out = io.BytesIO()
         image.save(out, format="PNG")
         self.assertFalse(verified_friend_room(out.getvalue(), frame))
+
+    def test_each_room_id_digit_is_still_bound(self):
+        path = Path(__file__).resolve().parents[1] / "artifacts/friend-300-6efe75c-20261028/preflight-room.png"
+        if not path.exists():
+            self.skipTest("native ID frame unavailable")
+        frame = path.read_bytes()
+        for x in (970, 995, 1019, 1043, 1067):
+            image = Image.open(io.BytesIO(frame)).convert("RGB")
+            ImageDraw.Draw(image).rectangle((x, 74, x + 14, 105), fill="black")
+            out = io.BytesIO()
+            image.save(out, format="PNG")
+            with self.subTest(digit_x=x):
+                self.assertFalse(verified_friend_room(out.getvalue(), frame))
 
     def test_long_clock_does_not_match_short_clock(self):
         root = Path(__file__).resolve().parents[1] / "artifacts"

@@ -16,7 +16,10 @@ _BOUND_REGIONS = (
     # The room-ID glyphs occupy y=65..112. The strip above them contains
     # free-floating animated particles, including in the reviewed preflight;
     # comparing that unrelated strip can reject every subsequent frame.
-    (730, 65, 1094, 113), (1610, 175, 1870, 900),
+    # Bind the five room-ID digits, not their decorative label/colon. A
+    # particle over the colon in the reviewed 6efe75c frame remained a
+    # permanent mismatch after the particle disappeared in all 8 captures.
+    (968, 65, 1094, 113), (1610, 175, 1870, 900),
     (80, 650, 440, 910), (470, 650, 830, 910),
     (850, 650, 1210, 910), (1230, 650, 1590, 910),
     (1000, 955, 1280, 1040),
