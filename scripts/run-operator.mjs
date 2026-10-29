@@ -1,7 +1,8 @@
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { windowsCaEnvironment } from "./windows-ca.mjs";
+import { defaultOperatorLayoutArgs } from "./operator-layout.mjs";
 
 const root = path.resolve(import.meta.dirname, "..");
 const mode = process.argv[2];
@@ -9,13 +10,6 @@ const modes = new Set(["observer", "advisor", "auto", "force-auto"]);
 if (!modes.has(mode)) {
   console.error("Usage: node scripts/run-operator.mjs <observer|advisor|auto|force-auto> [options]");
   process.exit(2);
-}
-
-function latestLiveLayout() {
-  const directory = path.join(root, "artifacts", "live");
-  if (!existsSync(directory)) return path.join(root, "config", "layout.json");
-  const layouts = readdirSync(directory).filter((name) => name.endsWith(".layout.json")).sort().reverse();
-  return layouts[0] ? path.join(directory, layouts[0]) : path.join(root, "config", "layout.json");
 }
 
 const python = process.platform === "win32"
@@ -26,9 +20,10 @@ if (!existsSync(python)) {
   process.exit(1);
 }
 
+const forwarded = process.argv.slice(3);
 const defaults = [
   path.join(root, "python", "auto_operator.py"),
-  "--layout", latestLiveLayout(),
+  ...defaultOperatorLayoutArgs(root, forwarded),
   "--templates", path.join(root, "templates", "bootstrap"),
   "--state", path.join(root, "examples", "public-unknown.json"),
   "--mode", mode,
@@ -37,7 +32,6 @@ if (mode !== "observer") defaults.push("--resume-away");
 const actionTemplates = path.join(root, "templates", "actions");
 if (existsSync(actionTemplates)) defaults.push("--action-templates", actionTemplates);
 
-const forwarded = process.argv.slice(3);
 const dashboardDisabled = forwarded.includes("--no-dashboard");
 const operatorArgs = forwarded.filter((value) => value !== "--no-dashboard");
 const artifactsIndex = operatorArgs.findIndex((value) => value === "--artifacts");
