@@ -466,6 +466,41 @@ class ResidentPublicRecognitionTest(unittest.TestCase):
         operator.log = Mock()
         return operator
 
+    def test_reaction_metadata_promotion_is_frame_bound_and_cannot_roll_back(self):
+        operator = self.operator()
+        operator.observe_public_board = Mock(return_value={})
+        operator.recognize_reaction_hand = Mock(return_value={})
+        operator.board_metadata_lock = threading.Lock()
+        operator.board_metadata_result = None
+        operator.board_metadata_cache = None
+        with tempfile.TemporaryDirectory() as directory, patch("auto_operator.time.monotonic", return_value=100):
+            frame = Path(directory) / "prompt.png"
+            frame.write_bytes((Path(__file__).resolve().parents[1] /
+                               "test/fixtures/selection-paired-west-before-20261029.png").read_bytes())
+            result = {"verified": True, "source": str(frame), "remainingTiles": 41}
+            operator.current_board_metadata = Mock(return_value=result)
+            operator.recognize_reaction_context(frame, captured_at=98)
+            promoted = operator.board_metadata_cache
+            self.assertEqual(promoted["capturedAt"], 98)
+            self.assertEqual(promoted["metadata"]["remainingTiles"], 41)
+            # Older background OCR must not overwrite the promoted prompt.
+            operator.board_metadata_result = {"metadata": {"verified": True}, "capturedAt": 97,
+                                              "screenshot": "older"}
+            operator.poll_board_metadata()
+            self.assertIs(operator.board_metadata_cache, promoted)
+            operator.recognize_reaction_context(frame, captured_at=89)
+            self.assertIs(operator.board_metadata_cache, promoted)
+            result["source"] = "other-frame"
+            operator.recognize_reaction_context(frame, captured_at=99)
+            self.assertIs(operator.board_metadata_cache, promoted)
+            result["source"] = str(frame)
+            def replace_frame(_path):
+                frame.write_bytes(b"changed")
+                return result
+            operator.current_board_metadata.side_effect = replace_frame
+            operator.recognize_reaction_context(frame, captured_at=99)
+            self.assertIs(operator.board_metadata_cache, promoted)
+
     def test_reaction_uses_exact_prompt_and_seat_without_starting_cli(self):
         operator = self.operator()
         result = {"ownDiscards": ["1m"], "highlightedDiscard": {"tile": "3p", "fromSeat": "west"}}

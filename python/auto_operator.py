@@ -2921,6 +2921,10 @@ class PythonAutoOperator:
         if result and result.get("error"):
             self.log("board_metadata_cache_failed", screenshot=result["screenshot"], error=result["error"])
         elif result and result["metadata"].get("verified"):
+            current = getattr(self, "board_metadata_cache", None)
+            if current and result["capturedAt"] < current["capturedAt"]:
+                self.log("board_metadata_cache_older_result_ignored", screenshot=result["screenshot"])
+                return
             self.board_metadata_cache = result
             self.log("board_metadata_cache_updated", screenshot=result["screenshot"],
                      round=result["metadata"].get("round"),
@@ -4180,7 +4184,7 @@ class PythonAutoOperator:
             raise RuntimeError((result.stderr or result.stdout or "frame evaluator failed").strip())
         return json.loads(result.stdout)
 
-    def recognize_reaction_context(self, screenshot: Path):
+    def recognize_reaction_context(self, screenshot: Path, *, captured_at: float | None = None):
         """Recognize the same immutable prompt across independent workers."""
         results = {}
         failures = []
@@ -4198,6 +4202,7 @@ class PythonAutoOperator:
         ]
         for worker in workers:
             worker.start()
+        frame = screenshot.read_bytes() if captured_at is not None else None
         try:
             metadata = self.current_board_metadata(screenshot)
             timings["metadataMs"] = round((time.monotonic() - started) * 1000)
@@ -4206,6 +4211,22 @@ class PythonAutoOperator:
                 worker.join()
         if failures:
             raise failures[0]
+        # Publish only direct OCR of this immutable prompt, never extend the
+        # lifetime of a previously cached result merely because it was reused.
+        now = time.monotonic()
+        current = getattr(self, "board_metadata_cache", None)
+        if (frame is not None and isinstance(captured_at, (int, float))
+                and now - 8.0 <= captured_at <= now
+                and metadata.get("verified") is True
+                and metadata.get("source") == str(screenshot)
+                and screenshot.read_bytes() == frame
+                and (not current or current["capturedAt"] < captured_at)):
+            self.board_metadata_cache = {
+                "metadata": copy.deepcopy(metadata), "signature": board_state_signature(frame),
+                "wallSignature": wall_counter_signature(frame), "capturedAt": captured_at,
+                "screenshot": str(screenshot),
+            }
+            self.log("board_metadata_reaction_promoted", screenshot=str(screenshot))
         self.log("reaction_parallel_recognition", screenshot=str(screenshot),
                  elapsedMs=round((time.monotonic() - started) * 1000), **timings)
         return results["public"], results["hand"], metadata
@@ -4235,7 +4256,7 @@ class PythonAutoOperator:
         recognition = None
         metadata = None
         if getattr(getattr(self, "args", None), "board_metadata", False):
-            fresh_public, recognition, metadata = self.recognize_reaction_context(screenshot)
+            fresh_public, recognition, metadata = self.recognize_reaction_context(screenshot, captured_at=captured_at)
         else:
             fresh_public = self.observe_public_board(screenshot, reaction_highlight=True)
         pending = self.infer_pending_discard(public_observation, fresh_public)
