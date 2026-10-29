@@ -2651,6 +2651,25 @@ class AwayDialogDetectionTest(unittest.TestCase):
             b"later", verified_match=False, include_hand_plan=True,
         )
 
+    def test_uncertain_selection_accelerates_unforced_public_scans(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(public_cache=True, public_scan_interval=2.0)
+        operator.public_recognition_server = Mock()
+        operator.last_public_scan_at = 10.0
+        operator.selection_uncertainty_latch = {"drawGeneration": 5, "riverBurstStartedMonotonic": 10.0}
+        operator.schedule_public_recognition = Mock()
+        self.assertFalse(operator.schedule_periodic_public_recognition(b"early", now=10.39))
+        self.assertTrue(operator.schedule_periodic_public_recognition(b"later", now=10.41, verified_match=True))
+        operator.schedule_public_recognition.assert_called_once_with(
+            b"later", verified_match=True, include_hand_plan=False,
+        )
+        operator.last_public_scan_at = 12.9
+        self.assertFalse(operator.schedule_periodic_public_recognition(b"expired", now=13.01))
+        self.assertTrue(operator.schedule_periodic_public_recognition(b"normal", now=14.9))
+        operator.schedule_public_recognition.assert_called_with(
+            b"normal", verified_match=False, include_hand_plan=True,
+        )
+
     def test_public_cache_scheduler_rejects_friend_room_even_when_forced(self) -> None:
         root = Path(__file__).resolve().parents[1]
         screenshot = (root / "artifacts/live/friend-room-public-cache-contamination-20260929.png").read_bytes()

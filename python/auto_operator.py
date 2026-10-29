@@ -2562,7 +2562,10 @@ class PythonAutoOperator:
         pending = getattr(self, "pending_own_discard", None)
         registered_at = pending.get("registeredMonotonic") if pending else None
         receipt_burst = isinstance(registered_at, (int, float)) and 0 <= observed_at - registered_at < 3.0
-        if receipt_burst:
+        latch = getattr(self, "selection_uncertainty_latch", None) or {}
+        candidate_at = latch.get("riverBurstStartedMonotonic")
+        uncertainty_burst = isinstance(candidate_at, (int, float)) and 0 <= observed_at - candidate_at < 3.0
+        if receipt_burst or uncertainty_burst:
             # Seek the same independently corroborated river receipt sooner,
             # while the other players act. Do not force repeated recognition
             # of the same frame: the normal frame-hash gate remains in place.
@@ -2572,7 +2575,7 @@ class PythonAutoOperator:
             return False
         self.last_public_scan_at = observed_at
         self.schedule_public_recognition(screenshot, verified_match=verified_match,
-                                         include_hand_plan=not receipt_burst)
+                                         include_hand_plan=not (receipt_burst or uncertainty_burst))
         return True
 
     def poll_public_recognition(self) -> None:
@@ -2657,6 +2660,7 @@ class PythonAutoOperator:
         elif not candidate or candidate["river"] != river:
             diagnostic("candidate_changed" if candidate else "candidate_started")
             latch.pop("confirmedOwnDiscards", None)
+            latch.setdefault("riverBurstStartedMonotonic", time.monotonic())
             latch["riverCandidate"] = {"river": list(river), "captured": captured}
         else:
             diagnostic("candidate_too_soon")
