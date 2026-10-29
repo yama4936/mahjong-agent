@@ -3188,20 +3188,27 @@ class PythonAutoOperator:
         # Turn highlights can change any of the four score panels.  The round
         # and sticks must still match; every changed score is independently
         # OCR-verified against the cache rather than ignored.
-        if any(index not in {1, 2, 3, 4} for index in changed):
+        if any(index not in {1, 2, 3, 4, 5} for index in changed):
             return None
+        refresh_round_counters = 5 in changed
+        score_changed = [index for index in changed if index in {1, 2, 3, 4}]
         refresh_wall = "remainingTiles" in cache["metadata"] and (
             cache.get("wallSignature") is None
             or wall_counter_signature(frame) != cache["wallSignature"]
         )
-        if changed or refresh_wall:
-            from board_metadata import recognize_remaining_count, recognize_right_score, recognize_score
+        if score_changed or refresh_wall or refresh_round_counters:
+            from board_metadata import recognize_remaining_count, recognize_right_score, recognize_score, recognize_round_counters
             lock = getattr(self, "board_metadata_ocr_lock", None)
             if lock is None or not lock.acquire(blocking=False):
                 return None
             try:
                 try:
-                    if changed:
+                    if refresh_round_counters:
+                        counters = recognize_round_counters(screenshot)
+                        if counters is None or counters != (cache["metadata"].get("riichiSticks"),
+                                                           cache["metadata"].get("honba")):
+                            return None
+                    if score_changed:
                         seat_order = ("east", "south", "west", "north")
                         seat = cache["metadata"].get("seat")
                         if seat not in seat_order:
@@ -3212,7 +3219,7 @@ class PythonAutoOperator:
                         # just panels crossing the image-delta threshold: a
                         # small digit change in another panel must not be
                         # hidden by its low average pixel difference.
-                        score_indices = [1, 2, 3, 4] if any(index != 2 for index in changed) else changed
+                        score_indices = [1, 2, 3, 4] if any(index != 2 for index in score_changed) else score_changed
                         for index in score_indices:
                             offset, position = positions[index]
                             score_seat = seat_order[(seat_order.index(seat) + offset) % 4]
@@ -3232,10 +3239,11 @@ class PythonAutoOperator:
             metadata = copy.deepcopy(cache["metadata"])
             if refresh_wall:
                 metadata["remainingTiles"] = remaining
-            self.log("board_metadata_partial_refreshed" if changed else "board_metadata_counter_refreshed", screenshot=str(screenshot),
+            self.log("board_metadata_partial_refreshed" if score_changed or refresh_round_counters else "board_metadata_counter_refreshed", screenshot=str(screenshot),
                      source=cache["screenshot"], ageMs=age_ms,
-                     remainingTiles=remaining, rightScoreVerified=bool(changed),
-                     scorePanelsVerified=score_indices if changed else [])
+                     remainingTiles=remaining, rightScoreVerified=bool(score_changed),
+                     scorePanelsVerified=score_indices if score_changed else [],
+                     roundCountersVerified=refresh_round_counters)
             self.board_metadata_frame_memo = (cache, frame, copy.deepcopy(metadata))
             return metadata
         self.log("board_metadata_cache_applied", screenshot=str(screenshot),

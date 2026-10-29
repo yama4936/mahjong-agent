@@ -47,6 +47,25 @@ def recognize_remaining_count(image_path: Path) -> int | None:
     return int(match.group(1))
 
 
+def recognize_round_counters(image_path: Path) -> tuple[int, int] | None:
+    """Independently verify the riichi-stick and honba counts, in that order."""
+    import numpy as np
+    from PIL import Image
+    with Image.open(image_path) as source:
+        if source.size != (1920, 1080):
+            return None
+        image = source.convert("RGB")
+    counts = []
+    for box in ((110, 132, 155, 178), (250, 132, 285, 178)):
+        result = ocr_engine()(np.array(image.crop(box).resize((180, 184))),
+                              use_det=False, use_cls=False, use_rec=True)
+        if result.txts is None or len(result.txts) != 1 or len(result.scores) != 1 \
+                or float(result.scores[0]) < 0.98 or not re.fullmatch(r"\d{1,2}", result.txts[0]):
+            return None
+        counts.append(int(result.txts[0]))
+    return counts[0], counts[1]
+
+
 def recognize_score(image_path: Path, position: str) -> int | None:
     """Read one calibrated score upright; reject ambiguous OCR."""
     import numpy as np

@@ -1543,6 +1543,47 @@ class ActionDeadlineTest(unittest.TestCase):
 
 
 class AwayDialogDetectionTest(unittest.TestCase):
+    def test_changed_round_counter_region_requires_both_verified_values(self):
+        from auto_operator import wall_counter_signature
+        root = Path(__file__).resolve().parents[1]
+        frames = root / "artifacts/practice-5plus20-b2cdcb6-retry-20261029/frames"
+        before_path = frames / "2026-10-29T04-42-44.910715+00-00.board-cache.jpg"
+        after = frames / "2026-10-29T04-42-46.897127+00-00.jpg"
+        if not before_path.exists() or not after.exists():
+            self.skipTest("live regression artifacts unavailable")
+        if importlib.util.find_spec("rapidocr") is None:
+            self.skipTest("rapidocr unavailable")
+        before = before_path.read_bytes()
+        metadata = {"verified": True, "seat": "west", "round": "east_1",
+                    "honba": 0, "riichiSticks": 0, "remainingTiles": 60,
+                    "scores": {seat: 25000 for seat in ("east", "south", "west", "north")}}
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.board_metadata_lock = threading.Lock()
+        operator.board_metadata_ocr_lock = threading.Lock()
+        operator.board_metadata_result = None
+        operator.log = Mock()
+        operator.board_metadata_cache = {"metadata": metadata, "signature": board_state_signature(before),
+                                         "wallSignature": wall_counter_signature(before),
+                                         "capturedAt": 10.0, "screenshot": str(before_path)}
+        with patch("auto_operator.time.monotonic", return_value=11):
+            result = operator.cached_board_metadata(after)
+            self.assertIsNotNone(result)
+            self.assertEqual(result["remainingTiles"], 59)
+            for counters in (None, (1, 0), (0, 1)):
+                operator.board_metadata_frame_memo = None
+                with patch("board_metadata.recognize_round_counters", return_value=counters):
+                    self.assertIsNone(operator.cached_board_metadata(after))
+            operator.board_metadata_frame_memo = None
+            with operator.board_metadata_ocr_lock:
+                self.assertIsNone(operator.cached_board_metadata(after))
+            with tempfile.TemporaryDirectory() as directory:
+                with Image.open(after) as source:
+                    changed = source.convert("RGB")
+                ImageDraw.Draw(changed).rectangle((900, 385, 1020, 425), fill="white")
+                path = Path(directory) / "other-hud.png"
+                changed.save(path)
+                self.assertIsNone(operator.cached_board_metadata(path))
+
     def test_actual_multi_panel_highlights_reuse_only_verified_scores(self):
         from auto_operator import wall_counter_signature
         if importlib.util.find_spec("rapidocr") is None:

@@ -6,10 +6,36 @@ from types import SimpleNamespace
 from unittest.mock import patch
 from pathlib import Path
 from PIL import Image
-from board_metadata import parse_board_tokens, recognize_board, recognize_remaining_count, recognize_right_score, recognize_score, recognize_riichi_sticks, remap_seats, reconcile_riichi_metadata
+from board_metadata import parse_board_tokens, recognize_board, recognize_remaining_count, recognize_right_score, recognize_score, recognize_round_counters, recognize_riichi_sticks, remap_seats, reconcile_riichi_metadata
 
 
 class BoardMetadataTest(unittest.TestCase):
+    def test_round_counter_ocr_requires_one_confident_numeric_reading_each(self):
+        frame = Path(__file__).resolve().parents[1] / "test/fixtures/board-right-highlight-after-20261029.jpg"
+        for readings, expected in [([("0", .99), ("0", .99)], (0, 0)),
+                                   ([("1", .99), ("0", .99)], (1, 0)),
+                                   ([("0", .99), ("1", .99)], (0, 1)),
+                                   ([("0", .97)], None), ([("?", .99)], None),
+                                   ([("0", .99), ("0", .97)], None),
+                                   ([("0", .99), ("?", .99)], None)]:
+            with self.subTest(readings=readings), patch("board_metadata.ocr_engine") as engine:
+                engine.return_value.side_effect = [SimpleNamespace(txts=[text], scores=[confidence])
+                                                   for text, confidence in readings]
+                self.assertEqual(recognize_round_counters(frame), expected)
+
+    @unittest.skipUnless(importlib.util.find_spec("rapidocr"), "rapidocr unavailable")
+    def test_round_counter_occlusion_fails_closed(self):
+        frame = Path(__file__).resolve().parents[1] / "test/fixtures/board-right-highlight-after-20261029.jpg"
+        with Image.open(frame) as source:
+            original = source.convert("RGB")
+        with tempfile.TemporaryDirectory() as directory:
+            for box in ((110, 132, 155, 178), (250, 132, 285, 178)):
+                obscured = original.copy()
+                obscured.paste((20, 20, 20), box)
+                path = Path(directory) / "obscured.png"
+                obscured.save(path)
+                self.assertIsNone(recognize_round_counters(path))
+
     @unittest.skipUnless(importlib.util.find_spec("rapidocr"), "rapidocr unavailable")
     def test_actual_score_images_detect_changes_and_occlusion(self):
         root = Path(__file__).resolve().parents[1] / "test/fixtures"
