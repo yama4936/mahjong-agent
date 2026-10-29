@@ -77,6 +77,11 @@ FORCE_AUTO_MIN_RECOGNITION_WINDOW_MS = 1800
 # This keeps the ranked fast path distinct from 300+0 friend-match regression
 # runs, whose 8000ms budget may safely wait for synchronous metadata work.
 FORCE_AUTO_SHORT_CLICK_BUDGET_MAX_MS = 2600
+# A verified unchanged draw may continue into the game's additional time.
+# We do not read the remaining 20-second bank, so never assume it is full:
+# bound the observed turn to ten seconds and retain the 2600ms image limit.
+FORCE_AUTO_SAME_DRAW_ACTION_BUDGET_MS = 10000
+FORCE_AUTO_NORMAL_TURN_BUDGET_MS = 5000
 # A discard is a two-input gesture: the first click only raises the selected
 # physical tile and a later, observed raised hitbox receives the confirmation
 # click.  Do not start that gesture with so little of the short-clock budget
@@ -2077,6 +2082,7 @@ class PythonAutoOperator:
             )
         self.action_evidence_started_at = seen_at
         self.action_budget_started_at = budget_observed_at if budget_observed_at is not None else seen_at
+        self.action_budget_draw_generation = getattr(self, "screencast_draw_generation", None)
         self.action_evidence_kind = kind
         self.action_evidence_generation = gate_generation
         self.action_evidence_last_seen_at = budget_observed_at if budget_observed_at is not None else seen_at
@@ -2210,14 +2216,30 @@ class PythonAutoOperator:
             return None
         return max(0, round((time.monotonic() - captured_at) * 1000))
 
+    def force_auto_same_draw_grace_ms(self, captured_at: float | None) -> int:
+        """Extend only a verified current draw, never stale frame freshness."""
+        budget = self.force_auto_click_budget_ms()
+        generation = getattr(self, "action_budget_draw_generation", None)
+        if (budget is None or budget > FORCE_AUTO_SHORT_CLICK_BUDGET_MAX_MS
+                or captured_at is None or generation is None
+                or generation != getattr(self, "screencast_draw_generation", None)
+                or getattr(self, "screencast_draw_occupied", None) is not True
+                or getattr(self, "action_evidence_kind", None) != "discard"
+                or getattr(self, "selection_uncertainty_latch", None)):
+            return 0
+        return max(0, FORCE_AUTO_SAME_DRAW_ACTION_BUDGET_MS - budget)
+
     def force_auto_action_evidence_age_ms(self) -> int | None:
         """Age of the current self-action, when the turn gate observed one.
 
         A fresh screencast receipt is not a fresh Mahjong Soul turn.  In
         particular, an expensive metadata refresh can produce a recent hand
         frame several seconds after the self-turn gate first opened.  The
-        short click budget must include that earlier observation or a 5+20
-        client can auto-tsumogiri while we are confirming a selected tile.
+        action clock includes that earlier observation, even when a verified
+        unchanged draw receives the bounded additional-time allowance. Image
+        freshness remains a separate short budget. The game timer is not
+        observed, so an unchanged generation never proves how much of the
+        additional 20 seconds remains.
         """
         started = getattr(self, "action_budget_started_at", None)
         if started is None:
@@ -2267,7 +2289,27 @@ class PythonAutoOperator:
             if capture_age_ms is not None or action_evidence_age_ms is not None else None
         if elapsed_ms is None:
             return
-        if elapsed_ms < budget:
+        effective_budget = budget + (self.force_auto_same_draw_grace_ms(captured_at)
+                                     if include_action_evidence else 0)
+        capture_valid = capture_age_ms is None or capture_age_ms < budget
+        evidence_valid = action_evidence_age_ms is None or action_evidence_age_ms < effective_budget
+        if capture_valid and evidence_valid:
+            if elapsed_ms >= budget:
+                self.log("force_auto_same_draw_grace_applied", phase=phase,
+                         clickBudgetMs=budget, effectiveActionBudgetMs=effective_budget,
+                         actionEvidenceAgeMs=action_evidence_age_ms,
+                         captureAgeBeforeDecisionMs=capture_age_ms,
+                         drawGeneration=getattr(self, "screencast_draw_generation", None))
+                if action_evidence_age_ms is not None \
+                        and action_evidence_age_ms > FORCE_AUTO_NORMAL_TURN_BUDGET_MS:
+                    self.log("force_auto_same_draw_additional_time_used", phase=phase,
+                             clickBudgetMs=budget, effectiveActionBudgetMs=effective_budget,
+                             normalTurnBudgetMs=FORCE_AUTO_NORMAL_TURN_BUDGET_MS,
+                             actionEvidenceAgeMs=action_evidence_age_ms,
+                             captureAgeBeforeDecisionMs=capture_age_ms,
+                             drawGeneration=getattr(self, "screencast_draw_generation", None),
+                             remainingGameExtraTimeMs=None,
+                             reason="remaining_game_timer_not_observed")
             return
         timing_payload = {
             "phase": phase,
@@ -2277,6 +2319,8 @@ class PythonAutoOperator:
         }
         if action_evidence_age_ms is not None:
             timing_payload["actionEvidenceAgeMs"] = action_evidence_age_ms
+        if effective_budget != budget:
+            timing_payload["effectiveActionBudgetMs"] = effective_budget
         self.log(
             "force_auto_click_budget_expired",
             **timing_payload,
@@ -2297,6 +2341,7 @@ class PythonAutoOperator:
                     "ranked_click_budget_safety_stop",
                     expiryStreak=streak,
                     clickBudgetMs=budget,
+                    effectiveActionBudgetMs=effective_budget,
                     captureAgeBeforeDecisionMs=capture_age_ms,
                     **({"actionEvidenceAgeMs": action_evidence_age_ms}
                        if action_evidence_age_ms is not None else {}),
@@ -2324,16 +2369,22 @@ class PythonAutoOperator:
         elapsed_ms = max(age for age in (capture_age_ms, action_evidence_age_ms)
                          if age is not None) \
             if capture_age_ms is not None or action_evidence_age_ms is not None else None
-        if elapsed_ms is None or budget - elapsed_ms >= FORCE_AUTO_DISCARD_SELECTION_RESERVE_MS:
+        effective_budget = budget + self.force_auto_same_draw_grace_ms(captured_at)
+        remaining_ms = min(
+            budget - capture_age_ms if capture_age_ms is not None else budget,
+            effective_budget - action_evidence_age_ms if action_evidence_age_ms is not None else budget,
+        )
+        if elapsed_ms is None or remaining_ms >= FORCE_AUTO_DISCARD_SELECTION_RESERVE_MS:
             return
         self.log(
             "force_auto_discard_selection_window_insufficient",
             clickBudgetMs=budget,
+            **({"effectiveActionBudgetMs": effective_budget} if effective_budget != budget else {}),
             reserveMs=FORCE_AUTO_DISCARD_SELECTION_RESERVE_MS,
             captureAgeBeforeSelectionMs=capture_age_ms,
             **({"actionEvidenceAgeMs": action_evidence_age_ms}
                if action_evidence_age_ms is not None else {}),
-            remainingMs=max(0, budget - elapsed_ms),
+            remainingMs=max(0, remaining_ms),
         )
         raise RetryableSafetyAbort(
             "force-auto discard selection lacks time for confirmed second click; reobserve current hand"
@@ -3094,6 +3145,14 @@ class PythonAutoOperator:
         if self.board_metadata_thread and self.board_metadata_thread.is_alive():
             return
         now = time.monotonic()
+        # Let the foreground validate the newest score/counter pixels before
+        # a second full OCR takes the shared lock again. Otherwise changing
+        # turn highlights can starve partial verification for an entire turn.
+        cache = getattr(self, "board_metadata_cache", None)
+        if (getattr(self, "board_metadata_partial_retry_pending", False)
+                and cache and now - cache["capturedAt"] <= 8.0):
+            return
+        self.board_metadata_partial_retry_pending = False
         signature = board_state_signature(frame)
         wall_signature = wall_counter_signature(frame)
         previous_signature = getattr(self, "board_metadata_last_scan_signature", None)
@@ -3174,27 +3233,29 @@ class PythonAutoOperator:
         self.poll_board_metadata()
         cache = self.board_metadata_cache
         if not cache:
-            return None
+            return self.board_metadata_cache_miss("missing_cache")
         age_ms = round((time.monotonic() - cache["capturedAt"]) * 1000)
         if age_ms > 8000:
-            return None
+            return self.board_metadata_cache_miss("expired_cache")
         frame = screenshot.read_bytes()
         memo = getattr(self, "board_metadata_frame_memo", None)
         if memo is not None and memo[0] is cache and memo[1] == frame:
+            self.board_metadata_partial_retry_pending = False
+            self.board_metadata_cache_miss_reason = None
             self.log("board_metadata_frame_memo_applied", screenshot=str(screenshot),
                      source=cache["screenshot"], ageMs=age_ms)
             return copy.deepcopy(memo[2])
         signature = board_state_signature(frame)
         previous = cache["signature"]
         if len(signature) != len(BOARD_STATE_REGIONS) or len(previous) != len(BOARD_STATE_REGIONS):
-            return None
+            return self.board_metadata_cache_miss("invalid_signature")
         changed = [index for index, (a, b) in enumerate(zip(signature, previous))
                    if sum(ImageStat.Stat(ImageChops.difference(a, b)).mean) / 3 > 3.0]
         # Turn highlights can change any of the four score panels.  The round
         # and sticks must still match; every changed score is independently
         # OCR-verified against the cache rather than ignored.
         if any(index not in {1, 2, 3, 4, 5} for index in changed):
-            return None
+            return self.board_metadata_cache_miss("round_changed")
         refresh_round_counters = 5 in changed
         score_changed = [index for index in changed if index in {1, 2, 3, 4}]
         refresh_wall = "remainingTiles" in cache["metadata"] and (
@@ -3205,19 +3266,20 @@ class PythonAutoOperator:
             from board_metadata import recognize_remaining_count, recognize_right_score, recognize_score, recognize_round_counters
             lock = getattr(self, "board_metadata_ocr_lock", None)
             if lock is None or not lock.acquire(blocking=False):
-                return None
+                return self.board_metadata_cache_miss("partial_ocr_lock_busy", retry_partial=True)
+            self.board_metadata_partial_retry_pending = False
             try:
                 try:
                     if refresh_round_counters:
                         counters = recognize_round_counters(screenshot)
                         if counters is None or counters != (cache["metadata"].get("riichiSticks"),
                                                            cache["metadata"].get("honba")):
-                            return None
+                            return self.board_metadata_cache_miss("counters_unreadable_or_changed")
                     if score_changed:
                         seat_order = ("east", "south", "west", "north")
                         seat = cache["metadata"].get("seat")
                         if seat not in seat_order:
-                            return None
+                            return self.board_metadata_cache_miss("unknown_seat")
                         positions = {1: (0, "own"), 2: (1, "right"),
                                      3: (2, "opposite"), 4: (3, "left")}
                         # The new multi-panel path rechecks every score, not
@@ -3231,16 +3293,16 @@ class PythonAutoOperator:
                             score = recognize_right_score(screenshot) if position == "right" \
                                 else recognize_score(screenshot, position)
                             if score is None or score != cache["metadata"].get("scores", {}).get(score_seat):
-                                return None
+                                return self.board_metadata_cache_miss("score_unreadable_or_changed")
                     remaining = recognize_remaining_count(screenshot) if refresh_wall else None
                 except Exception as error:
                     self.log("board_metadata_counter_refresh_failed", screenshot=str(screenshot),
                              error=str(error))
-                    return None
+                    return self.board_metadata_cache_miss("partial_ocr_failed")
             finally:
                 lock.release()
             if refresh_wall and remaining is None:
-                return None
+                return self.board_metadata_cache_miss("remaining_tiles_unreadable")
             metadata = copy.deepcopy(cache["metadata"])
             if refresh_wall:
                 metadata["remainingTiles"] = remaining
@@ -3250,10 +3312,21 @@ class PythonAutoOperator:
                      scorePanelsVerified=score_indices if score_changed else [],
                      roundCountersVerified=refresh_round_counters)
             self.board_metadata_frame_memo = (cache, frame, copy.deepcopy(metadata))
+            self.board_metadata_cache_miss_reason = None
             return metadata
         self.log("board_metadata_cache_applied", screenshot=str(screenshot),
                  source=cache["screenshot"], ageMs=age_ms)
+        self.board_metadata_partial_retry_pending = False
+        self.board_metadata_cache_miss_reason = None
         return cache["metadata"]
+
+    def board_metadata_cache_miss(self, reason: str, *, retry_partial: bool = False) -> None:
+        """Report a changed miss reason once, without flooding the live log."""
+        self.board_metadata_partial_retry_pending = retry_partial
+        if getattr(self, "board_metadata_cache_miss_reason", None) != reason:
+            self.log("board_metadata_cache_miss", reason=reason, partialRetryPending=retry_partial)
+            self.board_metadata_cache_miss_reason = reason
+        return None
 
     def reset_post_riichi_safety(self) -> None:
         self.post_riichi_safety_generation = getattr(self, "post_riichi_safety_generation", 0) + 1

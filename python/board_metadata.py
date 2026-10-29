@@ -83,13 +83,30 @@ def recognize_score(image_path: Path, position: str) -> int | None:
             return None
         box, angle = geometry[position]
         upright = source.convert("RGB").crop(box).rotate(angle, expand=True)
-    result = ocr_engine()(np.array(upright.resize((412, 128))), use_det=False, use_cls=False, use_rec=True)
-    if result.txts is None or len(result.txts) != 1 or float(result.scores[0]) < 0.98:
-        return None
-    text = result.txts[0]
-    if not re.fullmatch(r"-?\d{3,6}", text):
-        return None
-    return int(text)
+    def read(width: int) -> int | None:
+        result = ocr_engine()(np.array(upright.resize((width, 128))),
+                              use_det=False, use_cls=False, use_rec=True)
+        if (result.txts is None or len(result.txts) != 1
+                or result.scores is None or len(result.scores) != 1):
+            return None
+        try:
+            confidence = float(result.scores[0])
+        except (TypeError, ValueError, OverflowError):
+            return None
+        text = result.txts[0]
+        if (not 0.98 <= confidence <= 1.0 or not isinstance(text, str)
+                or not re.fullmatch(r"-?\d{3,6}", text)):
+            return None
+        return int(text)
+
+    primary = read(412)
+    if primary is not None or position != "left":
+        return primary
+    # Turn highlights can lower the left crop's confidence at one aspect
+    # ratio. Recover only when two bounded retries independently agree at
+    # the original confidence threshold; never substitute a cached number.
+    retries = [read(width) for width in (360, 480)]
+    return retries[0] if retries[0] is not None and retries[0] == retries[1] else None
 
 
 def recognize_right_score(image_path: Path) -> int | None:
