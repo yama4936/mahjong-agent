@@ -33,7 +33,7 @@ Linuxのhost networkでループバックのCDP（9222）へ接続し、HTTPは1
 
 末尾の404ルールより前に置き、`cloudflared tunnel --config /etc/cloudflared/config.yml ingress validate`で検証してconnectorを再起動します。DNSは同Tunnelのcfargotunnel.com宛のproxied CNAMEです。CDPポートをTunnelに公開しないでください。既存ホストのルールを保持してください。
 
-公開APIはGET `/health`と受信専用`/ws`のみ。ファイル配信は3つの固定アセットのみで、リクエストからCDPメソッドや対象URLを指定できません。WebSocketはブラウザOriginを許可リストで確認し、最大16接続、各接続1フレームのキュー、送信期限3秒です。未知のOriginやクライアントからのデータ送信を拒否します。一般公開の閲覧サービスであり、Originチェックはユーザー認証ではありません。
+公開APIはGET `/health`、受信専用`/ws`、GET `/results/data.json`です。ファイル配信はプレイヤーの3アセットと、公開用に書き出した24桁ハッシュ名のWebP画像に限定し、リクエストからCDPメソッドや対象URLを指定できません。WebSocketはブラウザOriginを許可リストで確認し、最大16接続、各接続1フレームのキュー、送信期限3秒です。未知のOriginやクライアントからのデータ送信を拒否します。一般公開の閲覧サービスであり、Originチェックはユーザー認証ではありません。
 
 WebSocketはmetadata JSONとJPEGバイナリの順で送信します。状態・撮影時刻・連番のみを公開し、生のCDP応答やエラー内容は送りません。待機状態・切断・4秒以上の映像停止でプレイヤーは画像を隠します。古い画像を新規閲覧者へ再送しません。非表示タブでは接続を閉じ、再表示で接続します。
 
@@ -53,3 +53,5 @@ docker run --rm --network none -v "$PWD/web/live:/app/web/live:ro" jantama-live:
 停止・撤去時はcompose stop/downを実行し、このホストのDNSとingressだけを削除します。他のTunnelルールやサービスは保持します。
 
 参照: [aiohttp WebSocketResponse](https://docs.aiohttp.org/en/stable/web_reference.html#aiohttp.web.WebSocketResponse)、[CDP Page.captureScreenshot](https://chromedevtools.github.io/devtools-protocol/tot/Page/#method-captureScreenshot)、[Cloudflareのローカル設定](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/do-more-with-tunnels/local-management/configuration-file/)。
+
+対局一覧の自動更新には `../results/README.md` のsystemdタイマーを使用します。コンテナには `.runtime/public-results` だけを読み取り専用でマウントし、元のログは公開しません。

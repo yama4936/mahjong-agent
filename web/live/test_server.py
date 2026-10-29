@@ -1,6 +1,8 @@
 import asyncio
 import io
 import unittest
+import tempfile
+from pathlib import Path
 from aiohttp import WSMsgType, WSServerHandshakeError
 from aiohttp.test_utils import TestClient, TestServer
 from PIL import Image, UnidentifiedImageError
@@ -44,11 +46,32 @@ class FrameTests(unittest.TestCase):
 
 class TransportTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
-        self.relay=Relay();self.client=TestClient(TestServer(create_app(self.relay,capture=False)))
+        self.results = tempfile.TemporaryDirectory()
+        self.relay=Relay();self.client=TestClient(TestServer(create_app(self.relay,capture=False,results_dir=self.results.name)))
         await self.client.start_server()
 
     async def asyncTearDown(self):
         await self.client.close()
+        self.results.cleanup()
+
+    async def test_only_exported_results_and_images_are_public(self):
+        root = Path(self.results.name)
+        (root / 'data.json').write_text('{"records":[]}')
+        (root / 'data.json.tmp').write_text('incomplete')
+        (root / 'images').mkdir()
+        name = 'images/' + 'a'*24 + '.webp'
+        (root / name).write_bytes(b'image')
+        response = await self.client.get('/results/data.json', headers={'Origin':'https://jantama.yama.asia'})
+        self.assertEqual(response.status, 200)
+        self.assertEqual(await response.json(), {'records':[]})
+        self.assertEqual(response.headers['Access-Control-Allow-Origin'], 'https://jantama.yama.asia')
+        self.assertEqual(response.headers['Cache-Control'], 'no-store')
+        image = await self.client.get('/results/' + name)
+        self.assertEqual(image.status, 200)
+        self.assertEqual(image.headers['Content-Type'], 'image/webp')
+        for name in ['data.json.tmp', 'server.py', '.env', 'images/other.webp']:
+            self.assertEqual((await self.client.get('/results/' + name)).status, 404)
+        self.assertEqual((await self.client.post('/results/data.json')).status, 405)
 
     async def test_stream_and_hide_and_no_control(self):
         ws=await self.client.ws_connect('/ws',origin='https://jantama.yama.asia')

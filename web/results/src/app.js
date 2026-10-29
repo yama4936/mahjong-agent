@@ -1,3 +1,4 @@
+import {watchResults} from './results-feed.js';
 const $=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const date=r=>new Date(r.at).toLocaleDateString('sv-SE',{timeZone:'Asia/Tokyo'}),time=r=>new Date(r.at).toLocaleTimeString('ja-JP',{timeZone:'Asia/Tokyo',hour:'2-digit',minute:'2-digit'}),kind=r=>r.category==='ranked'?'段位戦':r.category==='friend'?'友人戦・練習':'種別未確認';
 let data,mode='ranked',limit=50,filtered=[];
@@ -17,4 +18,10 @@ for(const b of document.querySelectorAll('[data-mode]'))b.onclick=()=>{mode=b.da
 for(const id of ['rank','date','search'])$('#'+id).addEventListener('input',()=>{limit=50;render();});
 $('#reset').onclick=()=>{$('#rank').value='all';$('#date').value='';$('#search').value='';limit=50;render();};$('#more').onclick=()=>{limit+=50;render();};$('#close').onclick=()=>{location.hash='';};$('#detail').addEventListener('cancel',()=>{location.hash='';});window.addEventListener('hashchange',detail);
 $('#download').onclick=()=>{if(!data)return;const cell=x=>'"'+String(x??'').replace(/"/g,'""')+'"',text='\ufeff'+[['日時(JST)','種別','順位','点数','状態','実行記録'],...filtered.map(r=>[date(r)+' '+time(r),kind(r),r.rank,r.points,r.status,r.run])].map(row=>row.map(cell).join(',')).join('\r\n'),url=URL.createObjectURL(new Blob([text],{type:'text/csv;charset=utf-8'})),a=document.createElement('a');a.href=url;a.download='jantama-results.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
-try{const res=await fetch('data.json');if(!res.ok)throw Error(res.status);data=await res.json();$('#updated').textContent='更新 '+new Date(data.generatedAt).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'})+' JST';render();detail();}catch(e){$('#list').textContent='記録を読み込めませんでした。ページを再読み込みしてください。';console.error(e);}
+watchResults(next=>{
+  data=next;
+  $('#updated').textContent='更新 '+new Date(data.generatedAt).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'})+' JST';
+  render();
+  // Do not reset a reader's scroll position in an open result dialog.
+  if(!$('#detail').open) detail();
+},message=>{$('#refresh-status').textContent=message;});

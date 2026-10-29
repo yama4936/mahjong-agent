@@ -6,7 +6,7 @@ import sharp from 'sharp';
 const root=path.resolve(process.argv[2]||'.');
 const here=path.dirname(new URL(import.meta.url).pathname), out=path.resolve(process.argv[3]||path.join(here,'dist'));
 fs.mkdirSync(path.join(out,'images'),{recursive:true});
-for(const f of ['index.html','app.js','style.css','analysis.html','analysis.js','charts.html','charts.js','charts.css','chart-data.mjs','how-it-works.html','how-it-works.css','live.html','live-view.js','live-view.css','shell.js','shell.css'])fs.copyFileSync(path.join(here,'src',f),path.join(out,f));
+for(const f of ['index.html','app.js','style.css','analysis.html','analysis.js','charts.html','charts.js','charts.css','chart-data.mjs','how-it-works.html','how-it-works.css','live.html','live-view.js','live-view.css','shell.js','shell.css','results-feed.js'])fs.copyFileSync(path.join(here,'src',f),path.join(out,f));
 fs.cpSync(path.join(here,'src/vendor'),path.join(out,'vendor'),{recursive:true});
 function walk(dir,depth=0){return fs.readdirSync(dir,{withFileTypes:true}).flatMap(e=>e.isDirectory() ? (['frames','replays','node_modules','.git'].includes(e.name)||depth>4 ? []:walk(path.join(dir,e.name),depth+1)):[path.join(dir,e.name)]);}
 const files=walk(path.join(root,'artifacts')), labels=new Map();
@@ -54,4 +54,4 @@ for(const f of files.filter(f=>path.basename(f)==='python-operator.jsonl').sort(
  }
 }
 records.sort((a,b)=>String(b.at).localeCompare(String(a.at)));
-const data={generatedAt:new Date().toISOString(),logs,malformed,records};fs.writeFileSync(path.join(out,'data.json'),JSON.stringify(data));console.log(JSON.stringify({logs,malformed,records:records.length,completed:records.filter(r=>r.status==='complete').length,rankedKnown:records.filter(r=>r.category==='ranked'&&r.rank).length}));
+const data={generatedAt:new Date().toISOString(),logs,malformed,records};fs.writeFileSync(path.join(out,'data.json.tmp'),JSON.stringify(data));fs.renameSync(path.join(out,'data.json.tmp'),path.join(out,'data.json'));console.log(JSON.stringify({logs,malformed,records:records.length,completed:records.filter(r=>r.status==='complete').length,rankedKnown:records.filter(r=>r.category==='ranked'&&r.rank).length}));

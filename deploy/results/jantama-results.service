@@ -1,0 +1,10 @@
+[Unit]
+Description=Export public Mahjong Soul results
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/projects/jantama-auto
+ExecStart=/usr/bin/node web/results/export.mjs . .runtime/public-results
+TimeoutStartSec=10min
+Nice=10
+UMask=0022

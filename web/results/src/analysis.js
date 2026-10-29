@@ -1,3 +1,4 @@
+import {watchResults} from './results-feed.js';
 const $=id=>document.getElementById(id),esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const names={ranked:'段位戦',friend:'友人戦・練習',unknown:'種別未確認'};
 const date=at=>new Date(at).toLocaleDateString('sv-SE',{timeZone:'Asia/Tokyo'});
@@ -17,4 +18,12 @@ $('download').onclick=()=>{
  const csv=[header,...filtered.map(w=>[w.id,w.matchId,w.at,w.category,w.round,w.action,w.status,w.yaku?.map(v=>`${v.name}:${v.han}`).join('|'),w.bonus?.map(v=>`${v.name}:${v.han}`).join('|'),w.observedTotalHan,w.observedFu,w.points,w.image?new URL(w.image,location.href).href:'',w.imageHash])].map(row=>row.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(',')).join('\r\n');
  const url=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'})),a=document.createElement('a');a.href=url;a.download='jantama-yaku-analysis.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
 };
-try{const res=await fetch('data.json');if(!res.ok)throw Error(res.status);const data=await res.json();all=data.records.flatMap(r=>(r.winHistory||[]).map(w=>({...w,matchId:r.id,category:r.category}))).sort((a,b)=>b.at.localeCompare(a.at));for(const name of [...new Set(all.flatMap(w=>(w.yaku||[]).map(v=>v.name)))].sort()){const o=document.createElement('option');o.value=o.textContent=name;$('yaku').append(o);}$('updated').textContent=' 更新: '+time(data.generatedAt);render();}catch{$('coverage').textContent='データの読み込みに失敗しました。再読み込みしてください。';}
+watchResults(data=>{
+  all=data.records.flatMap(r=>(r.winHistory||[]).map(w=>({...w,matchId:r.id,category:r.category}))).sort((a,b)=>b.at.localeCompare(a.at));
+  const existing=new Set([...$('yaku').options].map(o=>o.value));
+  for(const name of [...new Set(all.flatMap(w=>(w.yaku||[]).map(v=>v.name)))].sort()){
+    if(existing.has(name)) continue;
+    const o=document.createElement('option');o.value=o.textContent=name;$('yaku').append(o);
+  }
+  $('updated').textContent=' 更新: '+time(data.generatedAt);render();
+},message=>{$('refresh-status').textContent=message;});

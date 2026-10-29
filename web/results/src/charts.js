@@ -1,3 +1,4 @@
+import {watchResults} from './results-feed.js';
 import {summarize} from './chart-data.mjs';
 const d3=window.d3,$=id=>document.getElementById(id),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let records=[];
@@ -17,4 +18,10 @@ function render(){const from=$('from').value,to=$('to').value;if(from&&to&&from>
  bars('rank-chart',m.ranks,'順位別の対局数');trend(m.trend);bars('daily-chart',m.daily,'日本時間の日別対局数');bars('role-chart',m.roles,'画像で部分確認できた役の最低件数');table('rank-table',m.ranks);table('daily-table',m.daily);table('role-table',m.roles);table('trend-table',m.trend.map(r=>({...r,label:r.label+' / '+r.date})));
  $('coverage').textContent=`和了操作 ${m.wins.length}件のうち一部確認 ${m.partial}件、役未確認 ${m.wins.length-m.partial}件。未確認を0件扱いしません。`;}
 for(const id of ['category','from','to'])$(id).addEventListener('change',render);$('reset').onclick=()=>{$('from').value=$('to').value='';render();};
-try{const r=await fetch('data.json');if(!r.ok)throw Error(r.status);const data=await r.json();records=data.records;$('updated').textContent=' 更新: '+new Date(data.generatedAt).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'});render();let timer;new ResizeObserver(()=>{clearTimeout(timer);timer=setTimeout(render,120);}).observe(document.querySelector('main'));}catch{$('status').textContent='データを読み込めませんでした。再読み込みしてください。';}
+watchResults(data=>{
+  records=data.records;
+  $('updated').textContent=' 更新: '+new Date(data.generatedAt).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo'});
+  render();
+},message=>{$('refresh-status').textContent=message;});
+let timer;
+new ResizeObserver(()=>{clearTimeout(timer);timer=setTimeout(()=>{if(records.length)render();},120);}).observe(document.querySelector('main'));

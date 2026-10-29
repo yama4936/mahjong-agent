@@ -10,6 +10,8 @@ services:
     environment:
       CDP_URL: http://127.0.0.1:9222
       LIVE_FPS: '3'
+    volumes:
+      - ../../.runtime/public-results:/app/results:ro
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]

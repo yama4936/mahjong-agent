@@ -5,6 +5,7 @@ import contextlib
 import io
 import json
 import os
+import re
 import time
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -149,11 +150,15 @@ class Relay:
         return ws
 
 
-def create_app(relay=None, capture=True):
+def create_app(relay=None, capture=True, results_dir=None):
+    results_dir = Path(results_dir or os.environ.get("RESULTS_DIR", "/app/results"))
     relay = relay or Relay()
     @web.middleware
     async def headers(request, handler):
         response = await handler(request)
+        if request.path.startswith('/results/') and request.headers.get('Origin') in ALLOWED_ORIGINS:
+            response.headers['Access-Control-Allow-Origin'] = request.headers['Origin']
+            response.headers['Vary'] = 'Origin'
         response.headers['Cache-Control'] = 'no-store'
         response.headers['X-Content-Type-Options'] = 'nosniff'
         response.headers['Referrer-Policy'] = 'no-referrer'
@@ -169,6 +174,15 @@ def create_app(relay=None, capture=True):
         if name not in {'live.html', 'live.js', 'live.css'}:
             raise web.HTTPNotFound()
         return web.FileResponse(ROOT / name)
+    async def results(request):
+        name = request.match_info['name']
+        if name != 'data.json' and not re.fullmatch(r'images/[0-9a-f]{24}\.webp', name):
+            raise web.HTTPNotFound()
+        target = results_dir / name
+        if target.is_symlink() or not target.is_file():
+            raise web.HTTPNotFound()
+        return web.FileResponse(target, headers={'Content-Type': 'application/json' if name == 'data.json' else 'image/webp'})
+    app.router.add_get('/results/{name:.*}', results)
     app.router.add_get('/health', health)
     app.router.add_get('/ws', relay.websocket)
     app.router.add_get('/', static)
