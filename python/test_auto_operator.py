@@ -3669,6 +3669,9 @@ class AwayDialogDetectionTest(unittest.TestCase):
         """Never apply the pre-Riichi target after a changing selection row."""
         project = Path(__file__).resolve().parents[1]
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        operator.frames = Path(directory.name)
         operator.args = argparse.Namespace(
             mode="force-auto", allow_local_discard=False, stability_pixel_delta=1.5,
             force_auto_click_budget_ms=2600,
@@ -3705,6 +3708,12 @@ class AwayDialogDetectionTest(unittest.TestCase):
                 operator.execute(page, evaluation, crop_screenshot(frame, operator.hand_clip), frame, 4, 10.0)
         # The declaration can be sent, but the unsafe second tile click cannot.
         page.mouse.click.assert_called_once_with(1263, 816.5)
+        evidence = [call.kwargs for call in operator.log.call_args_list
+                    if call.args[0] == "riichi_settle_mismatch_evidence"]
+        self.assertEqual(len(evidence), 1)
+        self.assertEqual(Path(evidence[0]["before"]).read_bytes(), selection)
+        self.assertEqual(Path(evidence[0]["after"]).read_bytes(), selection)
+        self.assertEqual(evidence[0]["pixelDelta"], 2.0)
 
     def test_reaction_call_never_clicks_a_stale_ranked_capture(self) -> None:
         operator = PythonAutoOperator.__new__(PythonAutoOperator)

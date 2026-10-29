@@ -5895,6 +5895,16 @@ class PythonAutoOperator:
             target_settled = crop_screenshot(settled_riichi_full, post_riichi_target)
             target_delta = stable_hand_delta(target_before, target_settled, 0)
             if target_delta > self.args.stability_pixel_delta:
+                evidence_stamp = utc_stamp()
+                before_path = self.frames / f"{evidence_stamp}.riichi-settle-before.png"
+                settled_path = self.frames / f"{evidence_stamp}.riichi-settle-after.png"
+                before_path.write_bytes(post_riichi_full)
+                settled_path.write_bytes(settled_riichi_full)
+                before_path.chmod(0o600)
+                settled_path.chmod(0o600)
+                self.log("riichi_settle_mismatch_evidence", before=str(before_path),
+                         after=str(settled_path), target=post_riichi_target,
+                         pixelDelta=target_delta)
                 raise RetryableSafetyAbort(
                     f"riichi selection target changed while settling (pixel delta={target_delta:.3f})"
                 )
