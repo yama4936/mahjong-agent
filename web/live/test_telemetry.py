@@ -44,6 +44,26 @@ class TelemetryTests(unittest.TestCase):
         self.assertEqual(state['updatedAt'], STAMP)
         self.assertEqual(state, self.telemetry.snapshot())
 
+    def test_alternatives_use_jev_selection_probabilities_not_win_probability(self):
+        self.write(decision(jev={'probabilities': {'a': .7, 'b': .3}}))
+        choices = self.telemetry.snapshot()['decision']['candidates']
+        self.assertEqual(len(choices), 2)
+        self.assertEqual(choices[0]['selectionProbability'], .7)
+        self.assertEqual(choices[0]['winProbability'], .9)
+        self.assertFalse(choices[0]['selected'])
+        self.assertTrue(choices[1]['selected'])
+        self.assertEqual(choices[1]['selectionProbability'], .3)
+
+    def test_alternative_missing_and_invalid_probabilities_remain_unknown(self):
+        self.write(decision(jev={'probabilities': {'a': 2, 'b': float('nan')}}))
+        self.assertTrue(all(c['selectionProbability'] is None for c in self.telemetry.snapshot()['decision']['candidates']))
+        self.write(decision(candidates=[], legalActions=[{'id': 'b', 'action': 'discard', 'tile': 'E'}]))
+        choices = self.telemetry.snapshot()['decision']['candidates']
+        self.assertTrue(choices[0]['selected'])
+        self.assertIsNone(choices[0]['selectionProbability'])
+        self.write(decision(candidates=[], legalActions={'secret': 'never public'}))
+        self.assertEqual(self.telemetry.snapshot()['decision']['candidates'], [])
+
     def test_no_first_candidate_fallback(self):
         self.write(decision(selectedActionId='missing'))
         self.assertIsNone(self.telemetry.snapshot()['decision']['winProbability'])

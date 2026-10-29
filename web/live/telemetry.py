@@ -74,6 +74,29 @@ def public_decision(record):
     candidate = matches[0] if len(matches) == 1 else {}
     source = decision.get('source')
     shanten = candidate.get('shanten')
+    probabilities = mapping(mapping(decision.get('jev')).get('probabilities'))
+    alternatives = []
+    choices = candidates or decision.get('legalActions', [])
+    for choice in (choices if isinstance(choices, list) else [])[:64]:
+        if not isinstance(choice, dict):
+            continue
+        choice_action = choice.get('action')
+        choice_tile = tile(choice.get('tile'))
+        if not isinstance(choice_action, str) or choice_action not in ACTIONS:
+            continue
+        if choice.get('tile') is not None and choice_tile is None:
+            continue
+        choice_id = choice.get('actionId', choice.get('id'))
+        choice_shanten = choice.get('shanten')
+        alternatives.append({
+            'action': choice_action, 'tile': choice_tile,
+            'selected': (choice_id == selected_id if selected_id is not None
+                         else len(matches) == 1 and choice is matches[0]),
+            'selectionProbability': probability(probabilities.get(choice_id)) if isinstance(choice_id, str) else None,
+            'winProbability': probability(choice.get('winProbability')),
+            'dealInProbability': probability(choice.get('dealInProbability')),
+            'shanten': choice_shanten if type(choice_shanten) is int and -1 <= choice_shanten <= 13 else None,
+        })
     return {
         'timestamp': timestamp(record.get('timestamp')),
         'action': action, 'tile': chosen_tile,
@@ -83,6 +106,7 @@ def public_decision(record):
         'recognitionConfidence': probability(recognition.get('confidence')),
         'recognitionSafe': recognition.get('safe') if type(recognition.get('safe')) is bool else None,
         'shanten': shanten if type(shanten) is int and -1 <= shanten <= 13 else None,
+        'candidates': alternatives,
     }
 
 

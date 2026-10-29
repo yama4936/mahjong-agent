@@ -14,6 +14,7 @@ class Element {
   get scrollHeight() { return this.children.length * 20; }
   get firstElementChild() { return this.children[0]; }
   append(...children: Element[]) { children.forEach(child => { child.parent = this; this.children.push(child); }); }
+  replaceChildren(...children: Element[]) { this.children = []; this.append(...children); }
   remove() { this.parent!.children = this.parent!.children.filter(child => child !== this); }
   removeAttribute(name: string) { if (name === 'src') this.src = ''; }
   getBoundingClientRect() { return { height: 20 }; }
@@ -58,6 +59,46 @@ function viewer(extra: Record<string, unknown> = {}) {
   };
 }
 const decision = () => ({ timestamp: new Date().toISOString(), action: 'discard', tile: '2p', source: 'jev', winProbability: 0.1234, dealInProbability: 0, recognitionConfidence: 0.9, recognitionSafe: false, shanten: 1 });
+
+test('candidate strip shows tile images, Jev selection probabilities, selection and estimate details', () => {
+  const v = viewer();
+  const candidates = [
+    { action: 'discard', tile: 'E', selected: true, selectionProbability: 0.7, winProbability: 0.2, dealInProbability: 0.1, shanten: 1 },
+    { action: 'discard', tile: '0p', selected: false, selectionProbability: 0.3 },
+  ];
+  v.send({ decision: { ...decision(), candidates } });
+  const list = v.element('#decision-options');
+  assert.equal(list.hidden, false);
+  assert.equal(v.element('#decision-options-empty').hidden, true);
+  assert.equal(list.children.length, 2);
+  const first = list.children[0];
+  assert.equal(first.dataset.selected, 'true');
+  assert.equal(first.children[0].textContent, '打牌');
+  assert.equal(first.children[1].children[0].alt, '東');
+  assert.equal(first.children[2].textContent, '70.0%');
+  assert.equal(first.children[3].textContent, '選択');
+  assert.match(first.title, /推定和了率 20.0%.*推定放銃率 10.0%.*シャンテン数 1/);
+  assert.equal(list.children[1].children[1].dataset.red, 'true');
+  v.send({ decision: { ...decision(), candidates } });
+  assert.equal(list.children[0], first, 'unchanged snapshots preserve DOM and scroll position');
+  v.send({ decision: { ...decision(), candidates: [{ action: 'ron', tile: null, selected: false, selectionProbability: null }] } });
+  assert.equal(list.children.length, 1);
+  assert.equal(list.children[0].children[0].textContent, 'ロン');
+  assert.equal(list.children[0].children[1].textContent, '—');
+  v.send({ decision: null });
+  assert.equal(list.children.length, 0);
+  assert.equal(list.hidden, true);
+  assert.equal(v.element('#decision-options-empty').hidden, false);
+});
+
+test('candidate strip limits entries and does not interpret unknown tile paths as images', () => {
+  const v = viewer();
+  v.send({ decision: { ...decision(), candidates: Array.from({ length: 80 }, () => ({ action: 'discard', tile: '../other', selectionProbability: 2 })) } });
+  const list = v.element('#decision-options');
+  assert.equal(list.children.length, 64);
+  assert.equal(list.children[0].children[1].textContent, '牌不明');
+  assert.equal(list.children[0].children[2].textContent, '—');
+});
 
 test('live viewer displays probabilities independently from recognition confidence and flags old decisions', () => {
   const v = viewer();

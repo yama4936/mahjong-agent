@@ -16,7 +16,12 @@ try {
     page.on('request', request => { if (request.url().includes('/tiles/E.png')) tileFetches++; });
     await page.routeWebSocket('**/*', ws => {
       if (ws.url().endsWith('/events')) ws.send(JSON.stringify({ type: 'telemetry', telemetry: {
-        decision: { action: 'discard', tile: 'E', timestamp: new Date().toISOString() }, logs: [],
+        decision: { action: 'discard', tile: 'E', timestamp: new Date().toISOString(),
+          candidates: ['1m','2m','3m','4m','5m','6m','7m','8m','9m','E','S','W','N','P'].map(tile => ({
+            action: 'discard', tile, selected: tile === 'E', selectionProbability: tile === 'E' ? .4 : .6 / 13,
+            winProbability: .2, dealInProbability: .03, shanten: 1,
+          })),
+        }, logs: [],
       } }));
     });
     for (const [width, height] of [[1440, 900], [1366, 768], [1280, 720], [1024, 768], [390, 844], [844, 390]]) {

@@ -133,12 +133,60 @@ function updateFreshness(reason) {
   if (decisionPanel.dataset.current !== String(current)) decisionPanel.dataset.current = String(current);
   text('#decision-freshness', !lastDecision ? '判断データ待ち' : current ? '直近の判断（15秒以内）' : '過去の判断 · ' + (reason || '更新待ち'));
 }
+let candidateSignature;
+function renderCandidates(candidates) {
+  const values = (Array.isArray(candidates) ? candidates : []).filter(value => value && typeof value === 'object').slice(0, 64).map(value => ({
+    action: typeof value.action === 'string' ? value.action : '—',
+    tile: typeof value.tile === 'string' ? value.tile : null,
+    selected: value.selected === true,
+    selectionProbability: probability(value.selectionProbability),
+    winProbability: probability(value.winProbability),
+    dealInProbability: probability(value.dealInProbability),
+    shanten: Number.isInteger(value.shanten) ? String(value.shanten) : '—',
+  }));
+  const signature = JSON.stringify(values);
+  if (signature === candidateSignature) return;
+  candidateSignature = signature;
+  const list = document.querySelector('#decision-options');
+  list.replaceChildren();
+  list.hidden = values.length === 0;
+  document.querySelector('#decision-options-empty').hidden = values.length > 0;
+  for (const value of values) {
+    const item = document.createElement('li');
+    item.className = 'decision-option';
+    item.dataset.selected = String(value.selected);
+    item.title = '推定和了率 ' + value.winProbability + ' / 推定放銃率 ' + value.dealInProbability + ' / シャンテン数 ' + value.shanten;
+    const action = document.createElement('span');
+    action.textContent = actionLabels[value.action] || value.action;
+    item.append(action);
+    const info = tileInfo(value.tile);
+    if (info) appendLogTile(item, info);
+    else if (value.tile !== null) {
+      const unknown = document.createElement('span');
+      unknown.textContent = '牌不明';
+      item.append(unknown);
+    }
+    const chance = document.createElement('span');
+    chance.className = 'option-probability';
+    chance.textContent = value.selectionProbability;
+    item.append(chance);
+    if (value.selected) {
+      const selected = document.createElement('span');
+      selected.className = 'option-selected';
+      selected.textContent = '選択';
+      item.append(selected);
+    }
+    list.append(item);
+  }
+  list.scrollLeft = 0;
+}
 function renderTelemetry(telemetry) {
   lastDecision = telemetry?.decision && typeof telemetry.decision === 'object' ? telemetry.decision : null;
   const d = lastDecision;
   const action = typeof d?.action === 'string' ? (actionLabels[d.action] || d.action) : '—';
   text('#decision-action-label', action);
   renderTile(d?.tile);
+  renderCandidates(d?.candidates);
   text('#decision-win', probability(d?.winProbability));
   text('#decision-deal-in', probability(d?.dealInProbability));
   text('#decision-confidence', probability(d?.recognitionConfidence));
