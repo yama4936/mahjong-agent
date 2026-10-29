@@ -76,8 +76,12 @@ class TransportTests(unittest.IsolatedAsyncioTestCase):
     async def test_stream_and_hide_and_no_control(self):
         ws=await self.client.ws_connect('/ws',origin='https://jantama.yama.asia')
         self.assertEqual((await ws.receive_json())['state'],'waiting')
+        self.relay.telemetry = {'updatedAt': '2026-10-29T06:00:00+00:00',
+                                'decision': None, 'logs': [{'id': '1', 'event': 'click_sent'}]}
         self.relay.broadcast('live',b'jpeg-test',123)
-        self.assertEqual((await ws.receive_json())['capturedAt'],123)
+        packet = await ws.receive_json()
+        self.assertEqual(packet['capturedAt'],123)
+        self.assertEqual(packet['telemetry'], self.relay.telemetry)
         self.assertEqual((await ws.receive()).data,b'jpeg-test')
         self.relay.broadcast('waiting')
         self.assertIsNone((await ws.receive_json())['capturedAt'])

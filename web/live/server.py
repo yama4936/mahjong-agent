@@ -12,6 +12,7 @@ from urllib.parse import urlsplit
 
 from aiohttp import ClientSession, ClientTimeout, WSMsgType, web
 from PIL import Image
+from telemetry import Telemetry
 
 ALLOWED_ORIGINS = {
     'https://jantama.yama.asia', 'https://jantama-live.yama.asia',
@@ -44,6 +45,16 @@ class Relay:
         self.state = 'waiting'
         self.last_capture = None
         self.last_tick = time.monotonic()
+        self.telemetry = {'updatedAt': None, 'decision': None, 'logs': []}
+
+    async def follow_telemetry(self):
+        reader = Telemetry(os.environ.get('OPERATOR_ARTIFACTS_DIR', '/app/artifacts'))
+        while True:
+            try:
+                self.telemetry = await asyncio.to_thread(reader.snapshot)
+            except (OSError, ValueError):
+                self.telemetry = {'updatedAt': None, 'decision': None, 'logs': []}
+            await asyncio.sleep(1)
 
     def broadcast(self, state, frame=None, captured_at=None):
         self.sequence += 1
@@ -51,7 +62,8 @@ class Relay:
         self.last_tick = time.monotonic()
         self.last_capture = captured_at if frame else None
         packet = ({'state': state, 'sequence': self.sequence,
-                   'capturedAt': self.last_capture, 'fpsLimit': FPS}, frame)
+                   'capturedAt': self.last_capture, 'fpsLimit': FPS,
+                   'telemetry': self.telemetry}, frame)
         for queue in tuple(self.clients):
             if queue.full():
                 queue.get_nowait()  # Never accumulate an old video backlog.
@@ -190,10 +202,14 @@ def create_app(relay=None, capture=True, results_dir=None):
     if capture:
         async def lifecycle(app):
             task = asyncio.create_task(relay.capture())
+            telemetry_task = asyncio.create_task(relay.follow_telemetry())
             yield
             task.cancel()
+            telemetry_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await task
+            with contextlib.suppress(asyncio.CancelledError):
+                await telemetry_task
         app.cleanup_ctx.append(lifecycle)
     return app
 

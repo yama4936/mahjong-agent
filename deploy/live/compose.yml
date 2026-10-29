@@ -10,8 +10,10 @@ services:
     environment:
       CDP_URL: http://127.0.0.1:9222
       LIVE_FPS: '3'
+      OPERATOR_ARTIFACTS_DIR: /app/artifacts
     volumes:
       - ../../.runtime/public-results:/app/results:ro
+      - ../../artifacts:/app/artifacts:ro
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]

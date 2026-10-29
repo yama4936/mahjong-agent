@@ -6,6 +6,66 @@ const updated = document.querySelector('#updated');
 const toggle = document.querySelector('#toggle');
 let socket, retry, paused = false, lastFrame = 0, metadata = null, objectUrl = null, generation = 0;
 const states = {live:'雀魂画面 · LIVE',match:'対局中 · LIVE',round_result:'局結果 · LIVE',match_result:'対局結果 · LIVE'};
+const decisionPanel = document.querySelector('.decision-panel');
+const logs = document.querySelector('#logs');
+const logIds = new Set();
+let lastDecision = null;
+const actionLabels = {discard:'打牌',riichi:'リーチ',ron:'ロン',tsumo:'ツモ',chi:'チー',pon:'ポン',kan:'カン',pass:'見送り',skip:'見送り'};
+function text(selector, value) { document.querySelector(selector).textContent = value; }
+function probability(value) { return Number.isFinite(value) && value >= 0 && value <= 1 ? (value * 100).toFixed(1) + '%' : '—'; }
+function timeLabel(value) {
+  const time = typeof value === 'string' ? Date.parse(value) : NaN;
+  return Number.isFinite(time) ? new Date(time).toLocaleString('ja-JP',{timeZone:'Asia/Tokyo',hour12:false}) + ' JST' : '時刻不明';
+}
+function updateFreshness(reason) {
+  const age = lastDecision ? Date.now() - Date.parse(lastDecision.timestamp) : NaN;
+  const current = !reason && !screen.hidden && !paused && !document.hidden &&
+    Number.isFinite(age) && age >= -5000 && age < 15000 && ['live', 'match'].includes(metadata?.state);
+  decisionPanel.dataset.current = String(current);
+  text('#decision-freshness', !lastDecision ? '判断データ待ち' : current ? '直近の判断（15秒以内）' : '過去の判断 · ' + (reason || '更新待ち'));
+}
+function renderTelemetry(telemetry) {
+  lastDecision = telemetry?.decision && typeof telemetry.decision === 'object' ? telemetry.decision : null;
+  const d = lastDecision;
+  const action = typeof d?.action === 'string' ? (actionLabels[d.action] || d.action) : '—';
+  text('#decision-action', action + (typeof d?.tile === 'string' ? ' ' + d.tile : ''));
+  text('#decision-win', probability(d?.winProbability));
+  text('#decision-deal-in', probability(d?.dealInProbability));
+  text('#decision-confidence', probability(d?.recognitionConfidence));
+  text('#decision-shanten', Number.isInteger(d?.shanten) ? String(d.shanten) : '—');
+  text('#decision-source', '判断元 ' + (typeof d?.source === 'string' ? d.source : '—'));
+  text('#decision-safety', '認識安全判定 ' + (d?.recognitionSafe === true ? 'safe=true' : d?.recognitionSafe === false ? 'safe=false（要確認）' : '—'));
+  text('#decision-time', d ? '判断 ' + timeLabel(d.timestamp) : '判断受信前');
+  updateFreshness();
+  const follow = logs.scrollHeight - logs.scrollTop - logs.clientHeight < 32;
+  let removedHeight = 0;
+  for (const entry of Array.isArray(telemetry?.logs) ? telemetry.logs : []) {
+    if (!entry || typeof entry.id !== 'string' || logIds.has(entry.id)) continue;
+    logIds.add(entry.id);
+    const row = document.createElement('li');
+    row.dataset.id = entry.id;
+    const time = document.createElement('time');
+    time.textContent = timeLabel(entry.timestamp);
+    if (typeof entry.timestamp === 'string' && Number.isFinite(Date.parse(entry.timestamp))) time.dateTime = entry.timestamp;
+    const event = document.createElement('span');
+    event.className = 'log-event';
+    event.textContent = typeof entry.event === 'string' ? entry.event : 'ログ';
+    const message = document.createElement('span');
+    message.className = 'log-message';
+    message.textContent = typeof entry.message === 'string' ? entry.message : '';
+    row.append(time, event, message);
+    logs.append(row);
+    while (logs.children.length > 100) {
+      removedHeight += logs.firstElementChild.getBoundingClientRect().height;
+      logs.firstElementChild.remove();
+    }
+  }
+  // Retain a bounded history beyond the visible rows to ignore reconnect snapshots.
+  while (logIds.size > 1000) logIds.delete(logIds.values().next().value);
+  document.querySelector('#log-empty').hidden = logs.children.length > 0;
+  if (follow) logs.scrollTop = logs.scrollHeight;
+  else if (removedHeight) logs.scrollTop = Math.max(0, logs.scrollTop - removedHeight);
+}
 function hide(message, detail='雀魂タブの映像を受信できたら、自動で表示します。') {
   generation++;
   screen.hidden = true;
@@ -16,6 +76,7 @@ function hide(message, detail='雀魂タブの映像を受信できたら、自�
   placeholder.querySelector('strong').textContent = message;
   placeholder.querySelector('p').textContent = detail;
   status.textContent = message;
+  updateFreshness(message);
 }
 function connect() {
   if(paused || document.hidden) return;
@@ -28,6 +89,8 @@ function connect() {
     if(socket !== ws || paused) return;
     if(typeof event.data === 'string') {
       try {metadata = JSON.parse(event.data);} catch {ws.close();return;}
+      if (!metadata || typeof metadata !== 'object') {ws.close();return;}
+      renderTelemetry(metadata.telemetry);
       if(!states[metadata.state]) hide(metadata.state==='offline'?'配信元に再接続しています':'雀魂タブの映像を待っています');
       return;
     }
@@ -46,6 +109,7 @@ function connect() {
       lastFrame = performance.now();
       status.textContent = states[meta.state];
       updated.textContent = '撮影 '+new Date(meta.capturedAt*1000).toLocaleTimeString('ja-JP',{timeZone:'Asia/Tokyo'})+' JST';
+      updateFreshness();
     };
     frame.onerror = () => URL.revokeObjectURL(incoming);
     frame.src = incoming;
@@ -69,6 +133,6 @@ document.querySelector('#fullscreen').onclick = async () => {
   catch {status.textContent='このブラウザは全画面表示に対応していません';}
 };
 document.addEventListener('visibilitychange',()=>{if(document.hidden)disconnect('観戦は非表示のため停止中');else if(!paused)connect();});
-setInterval(()=>{if(!screen.hidden && performance.now()-lastFrame>4000)hide('映像の更新が止まっています','最新の映像を受信すると再開します。');},1000);
+setInterval(()=>{if(!screen.hidden && performance.now()-lastFrame>4000)hide('映像の更新が止まっています','最新の映像を受信すると再開します。');else updateFreshness(screen.hidden ? status.textContent : undefined);},1000);
 window.addEventListener('pagehide',()=>disconnect('観戦を終了しました'));
 connect();
