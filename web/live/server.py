@@ -11,9 +11,7 @@ from urllib.parse import urlsplit
 
 from aiohttp import ClientSession, ClientTimeout, WSMsgType, web
 from PIL import Image
-from screen_state import classify_screen
 
-ALLOWED_STATES = {'match', 'round_result', 'match_result'}
 ALLOWED_ORIGINS = {
     'https://jantama.yama.asia', 'https://jantama-live.yama.asia',
     'https://jantama-results-yama-20261027.arcane-krill-4260.chatgpt.site',
@@ -30,17 +28,12 @@ def is_game_url(url):
 
 
 def public_frame(raw):
-    # No nearest-reference fallback: ambiguous/unsupported screens stay hidden.
-    state, confidence = classify_screen(raw, {})
-    if state not in ALLOWED_STATES or confidence < 1:
-        return 'waiting', None
+    # All screens within the selected game tab are public.
     image = Image.open(io.BytesIO(raw)).convert('RGB')
-    if image.size != (1920, 1080):
-        return 'waiting', None
     image.thumbnail((1280, 720))
     output = io.BytesIO()
     image.save(output, 'JPEG', quality=65)
-    return state, output.getvalue()
+    return 'live', output.getvalue()
 
 
 class Relay:
@@ -102,6 +95,9 @@ class Relay:
                             captured_at = time.time()
                             shot = await call('Page.captureScreenshot', {'format': 'jpeg', 'quality': 80,
                                                                         'captureBeyondViewport': False})
+                            tree = await call('Page.getFrameTree')
+                            if not is_game_url(tree['frameTree']['frame']['url']):
+                                break
                             state, frame = await asyncio.to_thread(public_frame, base64.b64decode(shot['data']))
                             # If capture stalls, do not label a delayed image as live.
                             if time.monotonic() - start > 2.5:

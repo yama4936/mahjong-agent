@@ -2,15 +2,6 @@
 !deploy/
 !deploy/live/
 !deploy/live/requirements.txt
-!python/
-!python/screen_state.py
-!templates/
-!templates/screens/
-!templates/screens/**
-!artifacts/
-!artifacts/live/
-!artifacts/live/session-conflict.png
-!artifacts/live/connection-error.png
 !web/
 !web/live/
 !web/live/**

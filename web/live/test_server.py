@@ -1,10 +1,9 @@
 import asyncio
 import io
 import unittest
-from unittest.mock import patch
 from aiohttp import WSMsgType, WSServerHandshakeError
 from aiohttp.test_utils import TestClient, TestServer
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 from server import Relay, create_app, is_game_url, public_frame
 
 
@@ -18,22 +17,26 @@ class FrameTests(unittest.TestCase):
         for url in ['https://game.mahjongsoul.com.evil.test/index.html','https://evil.test/','http://game.mahjongsoul.com/index.html']:
             self.assertFalse(is_game_url(url))
 
-    def test_private_and_unknown_states_never_publish(self):
-        for state in ['login','account_modal','lobby','unknown','session_conflict','connection_error']:
-            with patch('server.classify_screen',return_value=(state,1)):
-                self.assertEqual(public_frame(png()),('waiting',None))
-        with patch('server.classify_screen',return_value=('match',.99)):
-            self.assertIsNone(public_frame(png())[1])
+    def test_all_content_is_published_without_classification(self):
+        state, frame = public_frame(png())
+        self.assertEqual(state, 'live')
+        image = Image.open(io.BytesIO(frame))
+        self.assertEqual(image.format, 'JPEG')
+        self.assertEqual(image.size, (1280, 720))
 
-    def test_dimensions_and_public_encoding(self):
-        with patch('server.classify_screen',return_value=('match',1)):
-            self.assertIsNone(public_frame(png((100,100)))[1])
-            state,frame=public_frame(png());self.assertEqual(state,'match')
-            self.assertEqual(Image.open(io.BytesIO(frame)).size,(1280,720))
+    def test_other_viewports_preserve_aspect_ratio(self):
+        for size, expected in [((100,100),(100,100)), ((800,1200),(480,720))]:
+            state, frame = public_frame(png(size))
+            self.assertEqual(state, 'live')
+            self.assertEqual(Image.open(io.BytesIO(frame)).size, expected)
+
+    def test_invalid_capture_is_not_published(self):
+        with self.assertRaises(UnidentifiedImageError):
+            public_frame(b'not an image')
 
     def test_latest_packet_replaces_backlog_and_clears_frame(self):
         relay=Relay();queue=asyncio.Queue(maxsize=1);relay.clients.add(queue)
-        relay.broadcast('match',b'old',1);relay.broadcast('match',b'new',2)
+        relay.broadcast('live',b'old',1);relay.broadcast('live',b'new',2)
         self.assertEqual(queue.qsize(),1);self.assertEqual(queue.get_nowait()[1],b'new')
         relay.broadcast('waiting');self.assertIsNone(relay.last_capture)
         self.assertIsNone(queue.get_nowait()[1])
@@ -50,7 +53,7 @@ class TransportTests(unittest.IsolatedAsyncioTestCase):
     async def test_stream_and_hide_and_no_control(self):
         ws=await self.client.ws_connect('/ws',origin='https://jantama.yama.asia')
         self.assertEqual((await ws.receive_json())['state'],'waiting')
-        self.relay.broadcast('match',b'jpeg-test',123)
+        self.relay.broadcast('live',b'jpeg-test',123)
         self.assertEqual((await ws.receive_json())['capturedAt'],123)
         self.assertEqual((await ws.receive()).data,b'jpeg-test')
         self.relay.broadcast('waiting')
@@ -70,7 +73,7 @@ class TransportTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn('CDP',await response.text())
 
     async def test_capacity_and_new_viewer_has_no_old_frame(self):
-        self.relay.broadcast('match',b'old',1)
+        self.relay.broadcast('live',b'old',1)
         clients=[await self.client.ws_connect('/ws') for _ in range(16)]
         for ws in clients:self.assertEqual((await ws.receive_json())['state'],'waiting')
         with self.assertRaises(WSServerHandshakeError) as error:await self.client.ws_connect('/ws')

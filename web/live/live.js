@@ -5,8 +5,8 @@ const status = document.querySelector('#status');
 const updated = document.querySelector('#updated');
 const toggle = document.querySelector('#toggle');
 let socket, retry, paused = false, lastFrame = 0, metadata = null, objectUrl = null, generation = 0;
-const states = {match:'対局中 · LIVE',round_result:'局結果 · LIVE',match_result:'対局結果 · LIVE'};
-function hide(message, detail='対局画面を確認できたら、自動で表示します。') {
+const states = {live:'雀魂画面 · LIVE',match:'対局中 · LIVE',round_result:'局結果 · LIVE',match_result:'対局結果 · LIVE'};
+function hide(message, detail='雀魂タブの映像を受信できたら、自動で表示します。') {
   generation++;
   screen.hidden = true;
   screen.removeAttribute('src');
@@ -23,12 +23,12 @@ function connect() {
   const ws = new WebSocket('wss://jantama-live.yama.asia/ws');
   socket = ws;
   ws.binaryType = 'blob';
-  ws.onopen = () => {if(socket===ws) hide('対局画面を待っています');};
+  ws.onopen = () => {if(socket===ws) hide('雀魂タブの映像を待っています');};
   ws.onmessage = event => {
     if(socket !== ws || paused) return;
     if(typeof event.data === 'string') {
       try {metadata = JSON.parse(event.data);} catch {ws.close();return;}
-      if(!states[metadata.state]) hide(metadata.state==='offline'?'配信元に再接続しています':'対局画面を待っています');
+      if(!states[metadata.state]) hide(metadata.state==='offline'?'配信元に再接続しています':'雀魂タブの映像を待っています');
       return;
     }
     if(!metadata || !states[metadata.state] || !Number.isFinite(metadata.capturedAt)) return;
