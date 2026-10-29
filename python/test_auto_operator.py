@@ -501,6 +501,66 @@ class ResidentPublicRecognitionTest(unittest.TestCase):
             operator.recognize_reaction_context(frame, captured_at=99)
             self.assertIs(operator.board_metadata_cache, promoted)
 
+    def test_startup_prewarm_is_match_only_and_never_changes_action_clock(self):
+        operator = self.operator()
+        operator.args = argparse.Namespace(board_metadata=True, public_cache=True)
+        operator.schedule_board_metadata = Mock()
+        operator.schedule_public_recognition = Mock()
+        operator.action_evidence_started_at = 10.0
+        image = io.BytesIO()
+        Image.new("RGB", (1920, 1080)).save(image, "PNG")
+        frame = image.getvalue()
+        operator.prewarm_startup_context(frame, verified_match=False)
+        operator.prewarm_startup_context(b"bad", verified_match=True)
+        small = io.BytesIO()
+        Image.new("RGB", (20, 10)).save(small, "PNG")
+        operator.prewarm_startup_context(small.getvalue(), verified_match=True)
+        operator.schedule_board_metadata.assert_not_called()
+        operator.schedule_public_recognition.assert_not_called()
+        operator.prewarm_startup_context(frame, verified_match=True)
+        operator.schedule_board_metadata.assert_called_once_with(frame)
+        operator.schedule_public_recognition.assert_called_once_with(
+            frame, verified_match=True, include_hand_plan=False,
+        )
+        self.assertEqual(operator.action_evidence_started_at, 10.0)
+
+    def test_startup_public_scan_omits_unverified_hand_plan_context(self):
+        operator = self.operator()
+        operator.public_recognition_thread = None
+        operator.public_cache_last_frame_hash = None
+        operator.public_cache_generation = 2
+        operator.public_recognition_lock = threading.Lock()
+        operator.cached_concealed_tiles = ["1m"] * 13
+        operator.cached_open_melds = 0
+        operator.request_public_recognition = Mock(return_value={"capturedAt": "2026-01-01T00:00:00Z"})
+        image = io.BytesIO()
+        Image.new("RGB", (1920, 1080)).save(image, "PNG")
+        with tempfile.TemporaryDirectory() as directory:
+            operator.frames = Path(directory)
+            operator.schedule_public_recognition(image.getvalue(), verified_match=True, include_hand_plan=False)
+            operator.public_recognition_thread.join(timeout=2)
+        request = operator.request_public_recognition.call_args.args[0]
+        self.assertNotIn("concealedTiles", request)
+        self.assertNotIn("seat", request)
+        self.assertNotIn("round", request)
+        self.assertEqual(operator.public_recognition_result["generation"], 2)
+
+    def test_unverified_startup_board_scan_does_not_throttle_fresh_retry(self):
+        operator = self.operator()
+        operator.board_metadata_lock = threading.Lock()
+        operator.board_metadata_last_scan_at = 10.0
+        operator.board_metadata_last_scan_signature = "old"
+        operator.board_metadata_result = {"metadata": {"verified": False}, "screenshot": "transition"}
+        operator.poll_board_metadata()
+        self.assertEqual(operator.board_metadata_last_scan_at, 0.0)
+        self.assertIsNone(operator.board_metadata_last_scan_signature)
+        operator.board_metadata_last_scan_at = 11.0
+        operator.board_metadata_last_scan_signature = "old"
+        operator.board_metadata_result = {"error": "transient", "screenshot": "transition"}
+        operator.poll_board_metadata()
+        self.assertEqual(operator.board_metadata_last_scan_at, 0.0)
+        self.assertIsNone(operator.board_metadata_last_scan_signature)
+
     def test_reaction_uses_exact_prompt_and_seat_without_starting_cli(self):
         operator = self.operator()
         result = {"ownDiscards": ["1m"], "highlightedDiscard": {"tile": "3p", "fromSeat": "west"}}

@@ -2235,6 +2235,7 @@ class PythonAutoOperator:
 
     def schedule_public_recognition(
         self, screenshot: bytes, *, force: bool = False, verified_match: bool = False,
+        include_hand_plan: bool = True,
     ) -> None:
         server = self.public_recognition_server
         if not server or server.poll() is not None:
@@ -2269,10 +2270,11 @@ class PythonAutoOperator:
             try:
                 result = self.request_public_recognition({
                     "id": request_id, "screenshot": str(frame_path), "capturedAt": captured_at,
-                    "concealedTiles": self.cached_concealed_tiles,
-                    "openMelds": self.cached_open_melds,
-                    "seat": self.public_state.get("seat", "east"),
-                    "round": self.public_state.get("round", "unknown"),
+                    **({"concealedTiles": self.cached_concealed_tiles,
+                        "openMelds": self.cached_open_melds,
+                        "seat": self.public_state.get("seat", "east"),
+                        "round": self.public_state.get("round", "unknown")}
+                       if include_hand_plan else {}),
                 })
                 envelope = {"generation": generation, "result": result}
             except Exception as error:
@@ -2282,6 +2284,26 @@ class PythonAutoOperator:
 
         self.public_recognition_thread = threading.Thread(target=recognize, daemon=True)
         self.public_recognition_thread.start()
+
+    def prewarm_startup_context(self, frame: bytes | None, *, verified_match: bool) -> None:
+        """Overlap verified startup frames with independent context workers.
+
+        This does not authorize a turn or alter its clock.  Room/transition
+        frames must never populate public caches, and a prewarm must not build
+        a hand plan using a seat or round that OCR has not verified yet.
+        """
+        if not verified_match or not frame:
+            return
+        try:
+            with Image.open(io.BytesIO(frame)) as image:
+                if image.size != (1920, 1080):
+                    return
+        except Exception:
+            return
+        if getattr(self.args, "board_metadata", False):
+            self.schedule_board_metadata(frame)
+        if getattr(self.args, "public_cache", False):
+            self.schedule_public_recognition(frame, verified_match=True, include_hand_plan=False)
 
     def schedule_periodic_public_recognition(
         self, screenshot: bytes, *, now: float | None = None, verified_match: bool = False,
@@ -2938,6 +2960,10 @@ class PythonAutoOperator:
             self.board_metadata_result = None
         if result and result.get("error"):
             self.log("board_metadata_cache_failed", screenshot=result["screenshot"], error=result["error"])
+            # A transitional startup frame may not yet contain readable HUD
+            # text.  Do not suppress a subsequent valid scan for six seconds.
+            self.board_metadata_last_scan_at = 0.0
+            self.board_metadata_last_scan_signature = None
         elif result and result["metadata"].get("verified"):
             current = getattr(self, "board_metadata_cache", None)
             if current and result["capturedAt"] < current["capturedAt"]:
@@ -2947,6 +2973,10 @@ class PythonAutoOperator:
             self.log("board_metadata_cache_updated", screenshot=result["screenshot"],
                      round=result["metadata"].get("round"),
                      scores=result["metadata"].get("scores"))
+        elif result:
+            self.board_metadata_last_scan_at = 0.0
+            self.board_metadata_last_scan_signature = None
+            self.log("board_metadata_cache_unverified", screenshot=result["screenshot"])
 
     def current_board_metadata(self, screenshot: Path) -> dict[str, Any]:
         from board_metadata import recognize_board
@@ -6104,6 +6134,8 @@ class PythonAutoOperator:
                         # Its result OR any orange button is therefore exactly
                         # this predicate; do not decode and scan them again.
                         quick_reaction_win = bool(quick_self_actions)
+                    if not startup_turn_guard.ready:
+                        self.prewarm_startup_context(gate_frame, verified_match=early_state == "match")
                     startup_guard_state = startup_turn_guard.observe(
                         verified_match=early_state == "match",
                         action_visible=bool(quick_draw or quick_pass or quick_calls or quick_reaction_win),
