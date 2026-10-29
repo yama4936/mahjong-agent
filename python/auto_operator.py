@@ -5796,6 +5796,7 @@ class PythonAutoOperator:
             self.log("action_click_sent", action=button_action, clickPoint=point)
             self.last_action_clicked_at = time.monotonic()
             page.mouse.click(point["x"], point["y"])
+            riichi_stage_started = time.monotonic() if selected_action == "riichi" else None
             action_receipt = self.confirm_action_button(
                 page, button_action, button_before, hand_before, meld_before,
                 region_override=region if force_auto else None,
@@ -5807,16 +5808,24 @@ class PythonAutoOperator:
                     self.round_terminal_result_observed = False
                 return {"clicked": True, "policy": "certified_auto", "action": selected_action,
                         "clickPoint": point, **action_receipt}
+            self.log("riichi_stage_timing", stage="action_confirmation",
+                     durationMs=round((time.monotonic() - riichi_stage_started) * 1000))
             # A successful Riichi declaration enters a dimmed tile-selection
             # state before the actual discard.  Establish a new baseline so
             # its visual transition cannot be mistaken for confirmation of
             # the following tile click.
+            riichi_stage_started = time.monotonic()
             post_riichi_full = page.screenshot(animations="disabled")
             post_riichi_captured_at = time.monotonic()
+            self.log("riichi_stage_timing", stage="post_selection_capture",
+                     durationMs=round((post_riichi_captured_at - riichi_stage_started) * 1000))
+            riichi_stage_started = time.monotonic()
             post_riichi_hand = crop_screenshot(post_riichi_full, self.hand_clip)
             post_riichi_state, _ = classify_screen(
                 post_riichi_full, getattr(self, "screen_references", {}),
             )
+            self.log("riichi_stage_timing", stage="post_selection_classification",
+                     durationMs=round((time.monotonic() - riichi_stage_started) * 1000))
             if post_riichi_state != "match" or not riichi_selection_is_visible(post_riichi_hand):
                 raise RetryableSafetyAbort("riichi selection state disappeared before discard click")
             post_riichi_target = riichi_selection_target_region(
@@ -5832,13 +5841,22 @@ class PythonAutoOperator:
             # issuing the discard click.  This specifically prevents a
             # pre-Riichi coordinate from selecting a neighbouring tile after
             # the dimmed row has relaid out.
+            riichi_stage_started = time.monotonic()
             page.wait_for_timeout(120)
+            self.log("riichi_stage_timing", stage="selection_settle_wait",
+                     durationMs=round((time.monotonic() - riichi_stage_started) * 1000))
+            riichi_stage_started = time.monotonic()
             settled_riichi_full = page.screenshot(animations="disabled")
             settled_riichi_captured_at = time.monotonic()
+            self.log("riichi_stage_timing", stage="settled_selection_capture",
+                     durationMs=round((settled_riichi_captured_at - riichi_stage_started) * 1000))
+            riichi_stage_started = time.monotonic()
             settled_riichi_hand = crop_screenshot(settled_riichi_full, self.hand_clip)
             settled_riichi_state, _ = classify_screen(
                 settled_riichi_full, getattr(self, "screen_references", {}),
             )
+            self.log("riichi_stage_timing", stage="settled_selection_classification",
+                     durationMs=round((time.monotonic() - riichi_stage_started) * 1000))
             if (settled_riichi_state != "match"
                     or not riichi_selection_is_visible(settled_riichi_hand)):
                 raise RetryableSafetyAbort("riichi selection state changed while settling before discard click")

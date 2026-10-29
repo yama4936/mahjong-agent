@@ -3571,6 +3571,13 @@ class AwayDialogDetectionTest(unittest.TestCase):
             )
 
         self.assertTrue(receipt["clicked"])
+        timing = [call.kwargs for call in operator.log.call_args_list
+                  if call.args and call.args[0] == "riichi_stage_timing"]
+        self.assertEqual([entry["stage"] for entry in timing], [
+            "action_confirmation", "post_selection_capture", "post_selection_classification",
+            "selection_settle_wait", "settled_selection_capture", "settled_selection_classification",
+        ])
+        self.assertTrue(all(set(entry) == {"stage", "durationMs"} for entry in timing))
         self.assertEqual(discard_click.call_args.args[4], selection)
         # send_discard_click may issue its normal focus/click sequence after
         # the declaration; both phases reached the mouse without a budget
