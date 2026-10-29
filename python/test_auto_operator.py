@@ -1339,6 +1339,23 @@ class RecordingMouse:
 
 
 class ActionDeadlineTest(unittest.TestCase):
+    def test_riichi_selection_with_many_bright_legal_discards(self) -> None:
+        project = Path(__file__).resolve().parents[1]
+        selection = project / "test/fixtures/riichi-many-candidates-selection-20261029.png"
+        hand_clip = {"x": 223, "y": 926, "width": 1355, "height": 146}
+        self.assertTrue(riichi_selection_is_visible(crop_screenshot(selection.read_bytes(), hand_clip)))
+        for name in ("open-post-chi-20261020.jpg", "post-pon-white-discard-20261023.jpg",
+                     "initial-draw-20261029.jpg", "hand-nine-sou-before-glare-20261021.jpg"):
+            with self.subTest(frame=name):
+                frame = (project / "test/fixtures" / name).read_bytes()
+                self.assertFalse(riichi_selection_is_visible(crop_screenshot(frame, hand_clip)))
+
+        image = Image.new("RGB", (1355, 146), (230, 230, 230))
+        ImageDraw.Draw(image).rectangle((1000, 0, 1300, 145), fill=(110, 110, 110))
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG")
+        self.assertFalse(riichi_selection_is_visible(buffer.getvalue()))
+
     def test_riichi_selection_accepts_two_bright_candidates_but_not_ordinary_hand(self) -> None:
         project = Path(__file__).resolve().parents[1]
         hand_clip = {"x": 223, "y": 926, "width": 1355, "height": 146}

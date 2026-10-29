@@ -305,7 +305,8 @@ def riichi_selection_is_visible(hand: bytes) -> bool:
     pixel movement (which could be the next player's animation).
     """
     with Image.open(io.BytesIO(hand)) as image:
-        pixels = list(image.convert("RGB").getdata())
+        row = image.convert("RGB")
+        pixels = list(row.getdata())
     if not pixels:
         return False
     total = len(pixels)
@@ -320,7 +321,34 @@ def riichi_selection_is_visible(hand: bytes) -> bool:
     # Multiple legal discards remain bright in this UI.  A fixed bright-face
     # ceiling rejects real selections with two candidates; require the muted
     # unavailable faces to dominate the bright selectable faces instead.
-    return muted >= 0.45 and muted > bright_tile_faces
+    if muted >= 0.45 and muted > bright_tile_faces:
+        return True
+    # A hand can have many legal declaration discards: in that case the
+    # selectable tiles dominate the row and the global muted ratio is small.
+    # Require two adjacent, predominantly dim tile-sized bands instead of
+    # admitting an arbitrary dark patch.  Ignore the upper/lower margins,
+    # which include borders and may vary with the selected tile animation.
+    width, height = row.size
+    if width < 280 or height < 60:
+        return False
+    dim_bands = []
+    bright_bands = 0
+    for index in range(14):
+        band = row.crop((round(index * width / 14), round(height * 0.10),
+                         round((index + 1) * width / 14), round(height * 0.89)))
+        band_pixels = list(band.getdata())
+        band_muted = sum(1 for red, green, blue in band_pixels
+                         if 60 <= min(red, green, blue) <= 160
+                         and max(red, green, blue) - min(red, green, blue) < 25) / len(band_pixels)
+        band_bright = sum(1 for red, green, blue in band_pixels
+                          if min(red, green, blue) > 180
+                          and max(red, green, blue) - min(red, green, blue) < 60) / len(band_pixels)
+        # Actual tiles retain glyphs and borders when dimmed. A uniformly grey
+        # overlay or rectangle is not sufficient evidence of tile selection.
+        textured = ImageStat.Stat(band.convert("L")).stddev[0] >= 15
+        dim_bands.append(band_muted >= 0.48 and band_bright < 0.05 and textured)
+        bright_bands += band_bright >= 0.40
+    return bright_bands >= 3 and any(left and right for left, right in zip(dim_bands, dim_bands[1:]))
 
 
 def perceptual_hash(data: bytes) -> str:
