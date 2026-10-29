@@ -5960,10 +5960,17 @@ class PythonAutoOperator:
         self.log("initial_action_dealing_candidate", source="verified_match_stream")
         request_started_at = time.monotonic()
         try:
-            frame = page.screenshot(animations="disabled")
+            session = self.screencast_session
+            if session is None:
+                raise RuntimeError("screencast session unavailable")
+            capture = session.send("Page.captureScreenshot", {
+                "format": "jpeg", "quality": 50, "fromSurface": True,
+            })
+            frame = base64.b64decode(capture["data"], validate=True)
             observed_at = time.monotonic()
             duration_ms = round((observed_at - request_started_at) * 1000)
-            self.log("initial_action_dealing_capture", screenshotDurationMs=duration_ms)
+            self.log("initial_action_dealing_capture", screenshotDurationMs=duration_ms,
+                     source="cdp_jpeg")
             state, _ = classify_screen(frame, self.screen_references)
             if state != "match":
                 self.log("initial_action_dealing_rejected", reason="capture_not_match",

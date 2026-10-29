@@ -1,4 +1,5 @@
 import io
+import base64
 import hashlib
 import importlib.util
 import unittest
@@ -465,6 +466,11 @@ class InitialDealingBoundTest(unittest.TestCase):
         drawn = (root / "test/fixtures/initial-draw-20261029.jpg").read_bytes()
         self.assertTrue(initial_dealing_frame_visible(partial, layout))
         self.assertFalse(initial_dealing_frame_visible(drawn, layout))
+        for raw, expected in ((partial, True), (drawn, False)):
+            with Image.open(io.BytesIO(raw)) as source:
+                output = io.BytesIO()
+                source.convert("RGB").save(output, "JPEG", quality=50)
+            self.assertEqual(initial_dealing_frame_visible(output.getvalue(), layout), expected)
         with Image.open(io.BytesIO(partial)) as source:
             original = source.convert("RGB")
         for box in ((800, 950, 1200, 1050), (735, 5, 770, 50), (1275, 5, 1310, 50),
@@ -485,17 +491,22 @@ class InitialDealingBoundTest(unittest.TestCase):
         operator.layout = load_json(root / "config/layout-300-regression.json")
         operator.screen_references = {}
         operator.log = Mock()
+        operator.screencast_session = Mock()
         page = Mock()
         for direct, screen, expected in [(partial, "match", True), (drawn, "match", False),
                                          (partial, "unknown", False)]:
             with self.subTest(screen=screen, expected=expected):
                 guard = StartupTurnGuard()
                 guard.record_verified_start_click(clicked_at=10)
-                page.screenshot.return_value = direct
+                operator.screencast_session.send.return_value = {"data": base64.b64encode(direct).decode()}
                 with patch("auto_operator.classify_screen", return_value=(screen, 1.0)), \
                      patch("auto_operator.time.monotonic", side_effect=[20.0, 21.0]):
                     self.assertEqual(operator.bound_initial_action_from_dealing(page, guard, partial), expected)
                 self.assertEqual(guard.start_click_at, 20.0 if expected else 10)
+                operator.screencast_session.send.assert_called_with("Page.captureScreenshot", {
+                    "format": "jpeg", "quality": 50, "fromSurface": True,
+                })
+                page.screenshot.assert_not_called()
                 events = [item.args[0] for item in operator.log.call_args_list]
                 self.assertIn("initial_action_dealing_candidate", events)
                 self.assertIn("initial_action_dealing_capture", events)
@@ -510,14 +521,21 @@ class InitialDealingBoundTest(unittest.TestCase):
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
         operator.layout = load_json(root / "config/layout-300-regression.json")
         operator.log = Mock()
+        operator.screencast_session = Mock()
         page = Mock()
-        page.screenshot.side_effect = RuntimeError("capture failed")
+        operator.screencast_session.send.side_effect = RuntimeError("capture failed")
         guard = StartupTurnGuard()
         guard.record_verified_start_click(clicked_at=10)
         with patch("auto_operator.time.monotonic", return_value=20):
             self.assertFalse(operator.bound_initial_action_from_dealing(page, guard, partial))
         self.assertEqual(guard.start_click_at, 10)
         self.assertEqual(operator.log.call_args.kwargs["reason"], "capture_or_validation_failed")
+        operator.screencast_session.send.side_effect = None
+        for response in ({}, {"data": "%%%"}, {"data": base64.b64encode(b"bad image").decode()}):
+            operator.screencast_session.send.return_value = response
+            with patch("auto_operator.time.monotonic", return_value=20):
+                self.assertFalse(operator.bound_initial_action_from_dealing(page, guard, partial))
+            self.assertEqual(guard.start_click_at, 10)
 
 
 class ResidentPublicRecognitionTest(unittest.TestCase):
