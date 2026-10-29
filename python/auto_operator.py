@@ -1928,6 +1928,9 @@ def merge_public_observations(
         opponents.append({
             **latest,
             "discards": river,
+            # A retained historical prefix is not a complete observation of
+            # this frame, even if the rejected latest crop was itself safe.
+            **({"discardsObserved": False} if river != latest_river else {}),
             "riichiDeclared": bool(prior.get("riichiDeclared") or latest.get("riichiDeclared")),
             "melds": merged_melds,
         })
@@ -1984,6 +1987,7 @@ def merge_public_observations(
         **current,
         "doraIndicators": dora,
         "ownDiscards": own_discards,
+        **({"ownDiscardsObserved": False} if own_discards != current.get("ownDiscards", []) else {}),
         "_ownRiverCallWitnesses": withdrawal["witnesses"],
         "_ownRiverWithdrawalCandidate": withdrawal["candidate"],
         "ownRiverWithdrawals": withdrawal["repairs"],
@@ -2933,6 +2937,7 @@ class PythonAutoOperator:
                     # Do not let a single false tile identity alter safety,
                     # remaining-tile counts, or a later discard decision.
                     merged["ownDiscards"] = list(prior_own)
+                    merged["ownDiscardsObserved"] = False
                     self.log("public_own_river_append_pending", expected=pending_discard.get("tile"),
                              observed=merged_own, capturedAt=merged.get("capturedAt"))
             elif (getattr(self, "pending_own_river_confirmation", None) is not None
@@ -4715,7 +4720,62 @@ class PythonAutoOperator:
                 pending_discard["fromSeat"], ",".join(available_ui_actions),
             ]
         evaluation_env = self.evaluator_env
-        if captured_at is not None and self.args.mode == "force-auto":
+        if self.args.mode == "force-auto" and pending_discard:
+            # A newer image does not start a new reaction. Match the clocks
+            # used by the final click guards, without adding self-draw grace
+            # or changing any latched clock. A short-budget call needs its
+            # original action clock as well as a receipt: otherwise each new
+            # image could lend the same unknown reaction a fresh window.
+            now = time.monotonic()
+            click_budget = self.force_auto_click_budget_ms()
+            action_started = getattr(self, "action_evidence_started_at", None)
+            budget_started = getattr(self, "action_budget_started_at", None)
+            if budget_started is None:
+                budget_started = action_started
+            clocks = {"capturedAt": captured_at, "actionStartedAt": action_started,
+                      "actionBudgetStartedAt": budget_started}
+            invalid = [name for name, value in clocks.items()
+                       if value is not None and (isinstance(value, bool)
+                           or not isinstance(value, (int, float))
+                           or not isfinite(value) or value > now)]
+            unknown_required_clock = click_budget is not None and (
+                captured_at is None or budget_started is None)
+            if invalid or unknown_required_clock:
+                self.log("reaction_decision_budget_rejected", reason="invalid_or_unknown_clock",
+                         invalidClocks=invalid, missingCaptureClock=captured_at is None,
+                         missingActionBudgetClock=budget_started is None)
+                raise RetryableSafetyAbort("reaction decision has no valid timing evidence")
+            remaining_by_clock = {}
+            if click_budget is not None:
+                remaining_by_clock["captureRemainingMs"] = (
+                    click_budget - round((now - captured_at) * 1000))
+                if budget_started is not None:
+                    remaining_by_clock["actionBudgetRemainingMs"] = (
+                        click_budget - round((now - budget_started) * 1000))
+            deadline = self.configured_action_deadline_ms()
+            if action_started is not None and deadline is not None:
+                if (isinstance(deadline, bool) or not isinstance(deadline, (int, float))
+                        or not isfinite(deadline) or deadline <= 0):
+                    raise RetryableSafetyAbort("reaction decision has an invalid action deadline")
+                remaining_by_clock["actionDeadlineRemainingMs"] = (
+                    deadline - round((now - action_started) * 1000))
+            remaining = min(remaining_by_clock.values()) if remaining_by_clock else None
+            reserve = FORCE_AUTO_DISCARD_SELECTION_RESERVE_MS
+            # Do not lend even a one-millisecond solver run to an expired
+            # candidate. This is local to optional-call evaluation: fresh
+            # ron/tsumo validation remains ahead of this path in run().
+            if remaining is not None and remaining <= reserve:
+                self.log("reaction_decision_budget_rejected", reason="insufficient_remaining_window",
+                         remainingMs=remaining, preClickAndLaunchReserveMs=reserve,
+                         **remaining_by_clock)
+                raise RetryableSafetyAbort("reaction decision budget lacks launch and click reserve")
+            decision_budget = max(1, int(self.evaluator_env.get("JEV_FORCE_AUTO_DEADLINE_MS", "2300")))
+            if remaining is not None:
+                decision_budget = min(decision_budget, remaining - reserve)
+            evaluation_env = {**self.evaluator_env, "JEV_FORCE_AUTO_DEADLINE_MS": str(decision_budget)}
+            self.log("reaction_decision_budget", remainingMs=remaining, decisionBudgetMs=decision_budget,
+                     preClickAndLaunchReserveMs=reserve, **remaining_by_clock)
+        elif captured_at is not None and self.args.mode == "force-auto":
             # The CLI has launch/serialization work in addition to the normal
             # 350ms click guard reserve. Age the original prompt, never reset it.
             remaining = self.force_auto_click_budget_ms() - round((time.monotonic() - captured_at) * 1000)
@@ -4802,8 +4862,10 @@ class PythonAutoOperator:
                 return None
             return {"capturedAt": observation.get("capturedAt"),
                     "ownDiscards": observation.get("ownDiscards", []),
+                    "ownDiscardsObserved": observation.get("ownDiscardsObserved"),
                     "opponentDiscards": [{"seat": item.get("seat"),
-                                          "discards": item.get("discards", [])}
+                                          "discards": item.get("discards", []),
+                                          "discardsObserved": item.get("discardsObserved")}
                                          for item in observation.get("opponentDiscards", [])]}
         # Always recognize this prompt before rejecting stale cache history.
         # Prefer the newest baseline; the older one is useful only if the
@@ -4814,10 +4876,19 @@ class PythonAutoOperator:
             fresh_public, recognition, metadata = self.recognize_reaction_context(screenshot, captured_at=captured_at)
         else:
             fresh_public = self.observe_public_board(screenshot, reaction_highlight=True)
-        pending = self.infer_pending_discard(public_observation, fresh_public)
+        pending = self.pending_reaction_discard(public_observation, fresh_public)
         baseline = "cached"
-        if not pending:
-            pending = self.infer_pending_discard(self.previous_public_observation, fresh_public)
+        cached_signature = self.complete_reaction_river_signature(public_observation)
+        fresh_signature = self.complete_reaction_river_signature(fresh_public)
+        cached_capture = public_capture_seconds((public_observation or {}).get("capturedAt"))
+        fresh_capture = public_capture_seconds((fresh_public or {}).get("capturedAt"))
+        if (not pending and cached_signature is not None and cached_signature == fresh_signature
+                and cached_capture is not None and fresh_capture is not None
+                and cached_capture <= fresh_capture):
+            # The older baseline is useful only when the newest complete
+            # capture already contains exactly this board. Never jump over a
+            # partial/newer cache to reinterpret recognition recovery as play.
+            pending = self.pending_reaction_discard(self.previous_public_observation, fresh_public)
             baseline = "previous"
         highlighted = self.pending_highlighted_discard(fresh_public, call_action,
                                                        self.public_state.get("seat", "east"))
@@ -5487,7 +5558,43 @@ class PythonAutoOperator:
         return {"tile": tile, "fromSeat": seat}
 
     @staticmethod
+    def complete_reaction_river_signature(observation: dict[str, Any] | None) -> tuple | None:
+        """Distinguish directly observed rivers from history filled by cache."""
+        if not observation or observation.get("ownDiscardsObserved") is not True:
+            return None
+        opponents = observation.get("opponentDiscards", [])
+        seats = [item.get("seat") for item in opponents]
+        if (len(seats) != 3 or len(set(seats)) != 3
+                or not set(seats) <= {"east", "south", "west", "north"}
+                or any(item.get("discardsObserved") is not True for item in opponents)):
+            return None
+        return (tuple(observation.get("ownDiscards", [])),
+                tuple(observation.get("doraIndicators", [])),
+                tuple(sorted((item["seat"], tuple(item.get("discards", []))) for item in opponents)))
+
+    @classmethod
+    def pending_reaction_discard(cls, previous: dict[str, Any] | None,
+                                 current: dict[str, Any] | None) -> dict[str, str] | None:
+        """Certify an append, never a partial river becoming readable again.
+
+        A list prefix alone proves no event: a cached four-tile prefix can
+        become five when an already present tile finally recognizes safely.
+        Both independent captures must fully observe all rivers and retain
+        the same dora baseline. No earlier highlighted target is reused here.
+        """
+        before = cls.complete_reaction_river_signature(previous)
+        after = cls.complete_reaction_river_signature(current)
+        if before is None or after is None or before[1] != after[1]:
+            return None
+        earlier = public_capture_seconds(previous.get("capturedAt"))
+        later = public_capture_seconds(current.get("capturedAt"))
+        if earlier is None or later is None or earlier >= later:
+            return None
+        return cls.infer_pending_discard(previous, current)
+
+    @staticmethod
     def infer_pending_discard(previous: dict[str, Any] | None, current: dict[str, Any] | None) -> dict[str, str] | None:
+        """Compare lists only; live call verification uses pending_reaction_discard."""
         if not previous or not current:
             return None
         if previous.get("ownDiscards", []) != current.get("ownDiscards", []):

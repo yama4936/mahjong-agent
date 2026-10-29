@@ -122,6 +122,14 @@ class PublicHistoryTest(unittest.TestCase):
         fresh = {"capturedAt": "2026-10-22T19:32:02+00:00", "opponentDiscards": [
             {"seat": "south", "discards": ["E", "P"], "discardsObserved": True},
         ]}
+        for observation in (prior, fresh):
+            observation["ownDiscardsObserved"] = True
+            observation["opponentDiscards"].extend([
+                {"seat": "west", "discards": [], "discardsObserved": True},
+                {"seat": "north", "discards": [], "discardsObserved": True},
+            ])
+            for row in observation["opponentDiscards"]:
+                row["discardsObserved"] = True
         op.cached_public_observation = prior
         op.observe_public_board = Mock(return_value=fresh)
         op.recognize_reaction_hand = Mock(return_value={"tiles": ["1m"] * 13})

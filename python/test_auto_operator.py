@@ -889,6 +889,12 @@ class EvaluatorClickBudgetTest(unittest.TestCase):
         current["opponentDiscards"].append({"seat": "east", "discards": ["W", "1m"]})
         operator.cached_public_observation = {"opponentDiscards": [
             {"seat": "west", "discards": ["P", "2s"]}, {"seat": "east", "discards": ["W"]}]}
+        for observation, stamp in ((operator.cached_public_observation, "2026-10-29T00:00:00+00:00"),
+                                   (current, "2026-10-29T00:00:01+00:00")):
+            observation.update(capturedAt=stamp, ownDiscardsObserved=True)
+            observation["opponentDiscards"].append({"seat": "south", "discards": []})
+            for row in observation["opponentDiscards"]:
+                row["discardsObserved"] = True
         operator.evaluate.reset_mock()
         self.assertIsNone(operator.evaluate_force_auto_call_policy(Path("prompt.png"), "chi"))
         operator.evaluate.assert_not_called()
@@ -4128,6 +4134,11 @@ class AwayDialogDetectionTest(unittest.TestCase):
             {"seat": "east", "discards": []}, {"seat": "west", "discards": []},
             {"seat": "north", "discards": []},
         ]}
+        for observation, stamp in ((operator.previous_public_observation, "2026-10-29T00:00:00+00:00"),
+                                   (operator.cached_public_observation, "2026-10-29T00:00:01+00:00")):
+            observation.update(capturedAt=stamp, ownDiscardsObserved=True)
+            for row in observation["opponentDiscards"]:
+                row["discardsObserved"] = True
         operator.cached_open_melds = 0
         operator.log = Mock()
         operator.observe_public_board = Mock(return_value=operator.cached_public_observation)

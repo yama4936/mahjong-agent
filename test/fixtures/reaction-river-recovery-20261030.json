@@ -1,0 +1,43 @@
+{
+  "sourceCommit": "b1028b0",
+  "sourceRun": "artifacts/practice-5plus20-b1028b0-20261030",
+  "sourceFrames": [
+    "frames/2026-10-29T20-47-27.750034+00-00.png",
+    "frames/2026-10-29T20-47-29.969499+00-00.png"
+  ],
+  "sourceObservations": [
+    "frames/2026-10-29T20-47-28.741781+00-00.public-observation.json",
+    "frames/2026-10-29T20-47-30.857755+00-00.public-observation.json"
+  ],
+  "coordinateSystem": "Raw worker coordinates with configured own seat east. Saved observation JSONs use verified own north; this fixture inversely remaps seat/fromSeat only. Raw south=screen-right=actual east; raw west=screen-top=actual south.",
+  "remainingTiles": 49,
+  "availableUiActions": ["pon", "pass"],
+  "hand": ["1m", "1m", "3m", "4m", "5m", "0p", "5p", "6p", "1s", "1s", "1s", "F", "F"],
+  "correctPending": {"tile": "5p", "fromSeat": "south"},
+  "oldFalsePending": {"tile": "5s", "fromSeat": "west"},
+  "cachedPartial": {
+    "capturedAt": "2026-10-29T20:47:27.750252+00:00",
+    "doraIndicators": ["9m"],
+    "ownDiscards": ["8s", "3s", "7m", "W", "8m"],
+    "ownDiscardsObserved": true,
+    "opponentDiscards": [
+      {"seat": "south", "discards": ["C", "6m", "P", "N", "3p", "5p"], "discardsObserved": true},
+      {"seat": "west", "discards": ["N", "1p", "6m", "2m"], "discardsObserved": false},
+      {"seat": "north", "discards": ["7s", "N", "E", "1s", "C"], "discardsObserved": true}
+    ],
+    "highlightedDiscard": {"tile": "5p", "fromSeat": "south"}
+  },
+  "cachedPartialDerivation": "Prompt's raw west river is []/discardsObserved=false. merge retains the known four-tile prefix, also present in the preceding decision state. This is the minimal merged cache reproducer, not a separately persisted cache dump.",
+  "recoveredPrompt": {
+    "capturedAt": "2026-10-29T20:47:29.969996+00:00",
+    "doraIndicators": ["9m"],
+    "ownDiscards": ["8s", "3s", "7m", "W", "8m"],
+    "ownDiscardsObserved": true,
+    "opponentDiscards": [
+      {"seat": "south", "discards": ["C", "6m", "P", "N", "3p", "5p"], "discardsObserved": true},
+      {"seat": "west", "discards": ["N", "1p", "6m", "2m", "5s"], "discardsObserved": true},
+      {"seat": "north", "discards": ["7s", "N", "E", "1s", "C"], "discardsObserved": true}
+    ]
+  },
+  "scope": "Same pon prompt and hand, no game advancement inferred. Recovery of an already present fifth top-river tile must not replace verified 5p with 5s. The repair abstains without a new current highlight; it never reuses an old highlighted pending across opportunities."
+}
