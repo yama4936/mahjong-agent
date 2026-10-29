@@ -6991,20 +6991,43 @@ class PythonAutoOperator:
                  screenshotDurationMs=duration_ms)
         return True
 
+    def reviewed_friend_initial_budget_origin(
+        self, reviewed_start: bytes | None, *, initial_anchor: float | None,
+        original_gate_captured_at: float | None, gate_processing_started_at: float | None,
+    ) -> float | None:
+        """Separate only a verified 300+0 first-action processing allowance.
+
+        ``reviewed_start`` is supplied by run only after this process verified
+        the room and clicked start. The original conservative action anchor
+        still bounds its 300-second deadline. The one-shot guard anchor, not
+        a newer image, makes this unavailable on reconnects or later turns.
+        Keep the earlier receipt/processing bound so classification, startup
+        prewarm and synchronous replacement captures cannot become free work.
+        """
+        if (reviewed_start is None or initial_anchor is None
+                or self.args.mode != "force-auto" or getattr(self.args, "ranked_loop", False)
+                or self.configured_action_deadline_ms() != 300000
+                or self.force_auto_click_budget_ms() not in {2600, 8000}):
+            return None
+        now = time.monotonic()
+        stamps = (initial_anchor, original_gate_captured_at, gate_processing_started_at)
+        if (any(isinstance(stamp, bool) or not isinstance(stamp, (int, float))
+                or not isfinite(stamp) or not 0 <= stamp <= now for stamp in stamps)
+                or original_gate_captured_at < initial_anchor
+                or gate_processing_started_at < initial_anchor
+                or not reviewed_friend_clock_is_300_plus_zero(reviewed_start)):
+            return None
+        return min(original_gate_captured_at, gate_processing_started_at)
+
     def run(self, page: Page) -> None:
         self.ensure_viewport(page, force=True)
         startup_turn_guard = StartupTurnGuard()
-        long_friend_initial_clock = False
+        reviewed_friend_start: bytes | None = None
         preflight_path = getattr(self.args, "start_reviewed_friend_room", None)
         if preflight_path:
             if self.args.mode != "force-auto" or getattr(self.args, "ranked_loop", False):
                 raise RuntimeError("reviewed friend start requires non-ranked force-auto")
             reviewed = Path(preflight_path).read_bytes()
-            long_friend_initial_clock = (
-                self.configured_action_deadline_ms() == 300000
-                and self.force_auto_click_budget_ms() == 8000
-                and reviewed_friend_clock_is_300_plus_zero(reviewed)
-            )
             def save_friend_start_capture(index: int, frame: bytes, matched: bool) -> None:
                 path = self.frames / f"{utc_stamp()}.friend-start-{index}.png"
                 path.write_bytes(frame)
@@ -7026,6 +7049,7 @@ class PythonAutoOperator:
             started_at = time.monotonic()
             page.mouse.click(1140, 998)
             startup_turn_guard.record_verified_start_click(clicked_at=started_at)
+            reviewed_friend_start = reviewed
             self.log("reviewed_friend_start_clicked", preflight=str(preflight_path),
                      captures=captures, point={"x": 1140, "y": 998})
         if self.args.mode == "force-auto":
@@ -7270,18 +7294,20 @@ class PythonAutoOperator:
                         continue
                     initial_anchor = startup_turn_guard.initial_action_anchor
                     startup_turn_guard.initial_action_anchor = None
-                    initial_budget_observed = (
-                        gate_captured_at
-                        if long_friend_initial_clock and initial_anchor is not None
-                        and gate_captured_at is not None
-                        and initial_anchor <= gate_captured_at <= time.monotonic()
-                        else None
+                    initial_budget_observed = self.reviewed_friend_initial_budget_origin(
+                        reviewed_friend_start, initial_anchor=initial_anchor,
+                        original_gate_captured_at=startup_candidate_observed_at,
+                        gate_processing_started_at=gate_processing_started_at,
                     )
                     if initial_budget_observed is not None:
                         self.log("friend_initial_budget_clock_separated",
                                  elapsedSinceStartMs=round((initial_budget_observed - initial_anchor) * 1000),
                                  deadlineMs=self.configured_action_deadline_ms(),
-                                 clickBudgetMs=self.force_auto_click_budget_ms())
+                                 clickBudgetMs=self.force_auto_click_budget_ms(),
+                                 originalActionStartedAt=initial_anchor,
+                                 budgetStartedAt=initial_budget_observed,
+                                 originalGateCapturedAt=startup_candidate_observed_at,
+                                 gateProcessingStartedAt=gate_processing_started_at)
                     draw_gate_streak = draw_gate_streak + 1 if quick_draw else 0
                     pass_gate_streak = pass_gate_streak + 1 if quick_pass else 0
                     call_gate_streak = call_gate_streak + 1 if quick_calls else 0
