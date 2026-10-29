@@ -1,5 +1,4 @@
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { createInterface } from "node:readline";
+import { PredictionWorker } from "./predictionWorker.js";
 import path from "node:path";
 import sharp from "sharp";
 import { parseGameTile, type GameTile } from "../game/tiles.js";
@@ -32,73 +31,22 @@ export function mapVisionLabel(label: string): GameTile {
 
 export class VitTileRecognizer {
   readonly backend = "vit" as const;
-  private child: ChildProcessWithoutNullStreams | undefined;
-  private ready: Promise<void> | undefined;
-  private sequence = 0;
-  private pending = new Map<number, { resolve: (value: WorkerPrediction[]) => void; reject: (error: Error) => void; timer: NodeJS.Timeout }>();
+  private readonly worker: PredictionWorker<WorkerPrediction>;
 
   constructor(
-    private readonly python = path.resolve(".runtime/vision-venv/bin/python"),
-    private readonly modelDirectory = path.resolve(".runtime/mahjong-vision/vision_transformer_local"),
-    private readonly workerScript = path.resolve("scripts/vision_worker.py"),
-  ) {}
-
-  private ensureWorker(): Promise<void> {
-    if (this.ready) return this.ready;
-    this.ready = new Promise((resolve, reject) => {
-      const child = spawn(this.python, [this.workerScript, this.modelDirectory], { stdio: ["pipe", "pipe", "pipe"] });
-      this.child = child;
-      let settled = false;
-      const lines = createInterface({ input: child.stdout });
-      lines.on("line", (line) => {
-        let message: any;
-        try { message = JSON.parse(line); } catch { return; }
-        if (message.ready === true && !settled) {
-          settled = true;
-          resolve();
-          return;
-        }
-        if (!Number.isInteger(message.id)) return;
-        const request = this.pending.get(message.id);
-        if (!request) return;
-        clearTimeout(request.timer);
-        this.pending.delete(message.id);
-        if (typeof message.error === "string") request.reject(new Error(`Vision worker: ${message.error}`));
-        else request.resolve(message.predictions as WorkerPrediction[]);
-      });
-      let stderr = "";
-      child.stderr.on("data", (chunk) => { stderr = `${stderr}${String(chunk)}`.slice(-4000); });
-      child.once("error", (error) => {
-        if (!settled) { settled = true; reject(error); }
-      });
-      child.once("exit", (code) => {
-        const error = new Error(`Vision worker exited with code ${code}${stderr ? `: ${stderr.trim()}` : ""}`);
-        if (!settled) { settled = true; reject(error); }
-        for (const request of this.pending.values()) {
-          clearTimeout(request.timer);
-          request.reject(error);
-        }
-        this.pending.clear();
-        this.child = undefined;
-        this.ready = undefined;
-      });
+    python = path.resolve(".runtime/vision-venv/bin/python"),
+    modelDirectory = path.resolve(".runtime/mahjong-vision/vision_transformer_local"),
+    workerScript = path.resolve("scripts/vision_worker.py"),
+  ) {
+    this.worker = new PredictionWorker({
+      executable: python,
+      args: [workerScript, modelDirectory],
+      name: "Vision worker",
     });
-    return this.ready;
   }
 
-  private async predict(images: Buffer[]): Promise<WorkerPrediction[]> {
-    await this.ensureWorker();
-    const child = this.child;
-    if (!child) throw new Error("Vision worker is unavailable");
-    const id = ++this.sequence;
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.pending.delete(id);
-        reject(new Error("Vision worker timed out"));
-      }, 15_000);
-      this.pending.set(id, { resolve, reject, timer });
-      child.stdin.write(`${JSON.stringify({ id, images: images.map((image) => image.toString("base64")) })}\n`);
-    });
+  private predict(images: Buffer[]): Promise<WorkerPrediction[]> {
+    return this.worker.predict(images);
   }
 
   async classifyTileImages(images: Buffer[]): Promise<VitTilePrediction[]> {
@@ -152,10 +100,6 @@ export class VitTileRecognizer {
   }
 
   async close(): Promise<void> {
-    const child = this.child;
-    this.child = undefined;
-    this.ready = undefined;
-    if (!child || child.exitCode !== null) return;
-    child.kill("SIGTERM");
+    this.worker.close();
   }
 }

@@ -1,5 +1,4 @@
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { createInterface } from "node:readline";
+import { PredictionWorker } from "./predictionWorker.js";
 import path from "node:path";
 import sharp from "sharp";
 import { parseGameTile, type GameTile } from "../game/tiles.js";
@@ -41,82 +40,25 @@ export function mapHybridLabel(label: string): GameTile {
 
 export class HybridTileRecognizer {
   readonly backend = "hybrid" as const;
-  private child: ChildProcessWithoutNullStreams | undefined;
-  private ready: Promise<void> | undefined;
-  private sequence = 0;
-  private pending = new Map<number, { resolve: (value: WorkerPrediction[]) => void; reject: (error: Error) => void; timer: NodeJS.Timeout }>();
+  private readonly worker: PredictionWorker<WorkerPrediction>;
 
   constructor(
-    private readonly python = path.resolve(process.platform === "win32"
+    python = path.resolve(process.platform === "win32"
       ? ".runtime/vision-venv/Scripts/python.exe"
       : ".runtime/vision-venv/bin/python"),
-    private readonly cvmajWeights = path.resolve(".runtime/hybrid-vision/cvmaj-pretrained.tar"),
-    private readonly autoMajsoulWeights = path.resolve(".runtime/hybrid-vision/automajsoul-best-model.pt"),
-    private readonly workerScript = path.resolve("scripts/hybrid_vision_worker.py"),
-  ) {}
-
-  private ensureWorker(): Promise<void> {
-    if (this.ready) return this.ready;
-    this.ready = new Promise((resolve, reject) => {
-      const child = spawn(this.python, [this.workerScript, this.cvmajWeights, this.autoMajsoulWeights], { stdio: ["pipe", "pipe", "pipe"] });
-      this.child = child;
-      let settled = false;
-      const lines = createInterface({ input: child.stdout });
-      lines.on("line", (line) => {
-        let message: any;
-        try { message = JSON.parse(line); } catch { return; }
-        if (message.ready === true && !settled) {
-          settled = true;
-          resolve();
-          return;
-        }
-        if (!Number.isInteger(message.id)) return;
-        const request = this.pending.get(message.id);
-        if (!request) return;
-        clearTimeout(request.timer);
-        this.pending.delete(message.id);
-        if (typeof message.error === "string") request.reject(new Error(`Hybrid vision worker: ${message.error}`));
-        else request.resolve(message.predictions as WorkerPrediction[]);
-      });
-      let stderr = "";
-      child.stderr.on("data", (chunk) => { stderr = `${stderr}${String(chunk)}`.slice(-4000); });
-      child.once("error", (error) => {
-        if (!settled) { settled = true; reject(error); }
-        if (this.child === child) {
-          this.child = undefined;
-          this.ready = undefined;
-        }
-      });
-      child.once("exit", (code) => {
-        const error = new Error(`Hybrid vision worker exited with code ${code}${stderr ? `: ${stderr.trim()}` : ""}`);
-        if (!settled) { settled = true; reject(error); }
-        for (const request of this.pending.values()) {
-          clearTimeout(request.timer);
-          request.reject(error);
-        }
-        this.pending.clear();
-        if (this.child === child) {
-          this.child = undefined;
-          this.ready = undefined;
-        }
-      });
+    cvmajWeights = path.resolve(".runtime/hybrid-vision/cvmaj-pretrained.tar"),
+    autoMajsoulWeights = path.resolve(".runtime/hybrid-vision/automajsoul-best-model.pt"),
+    workerScript = path.resolve("scripts/hybrid_vision_worker.py"),
+  ) {
+    this.worker = new PredictionWorker({
+      executable: python,
+      args: [workerScript, cvmajWeights, autoMajsoulWeights],
+      name: "Hybrid vision worker",
     });
-    return this.ready;
   }
 
-  private async predict(images: Buffer[]): Promise<WorkerPrediction[]> {
-    await this.ensureWorker();
-    const child = this.child;
-    if (!child) throw new Error("Hybrid vision worker is unavailable");
-    const id = ++this.sequence;
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.pending.delete(id);
-        reject(new Error("Hybrid vision worker timed out"));
-      }, 15_000);
-      this.pending.set(id, { resolve, reject, timer });
-      child.stdin.write(`${JSON.stringify({ id, images: images.map((image) => image.toString("base64")) })}\n`);
-    });
+  private predict(images: Buffer[]): Promise<WorkerPrediction[]> {
+    return this.worker.predict(images);
   }
 
   async classifyTileImages(images: Buffer[]): Promise<HybridTilePrediction[]> {
@@ -182,10 +124,6 @@ export class HybridTileRecognizer {
   }
 
   async close(): Promise<void> {
-    const child = this.child;
-    this.child = undefined;
-    this.ready = undefined;
-    if (!child || child.exitCode !== null) return;
-    child.kill("SIGTERM");
+    this.worker.close();
   }
 }
