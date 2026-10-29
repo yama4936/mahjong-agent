@@ -15,6 +15,13 @@ export interface RecognizedPublicTile extends RegionCandidate {
   ambiguityMargin: number;
   safe: boolean;
   redNumeralEvidence?: RedManNumeralEvidence;
+  whitePonRotationEvidence?: {
+    scope: "left_sideways_white_pon_only";
+    additionalRotation: 180;
+    originalConfidence: number;
+    originalRunnerUpConfidence: number;
+    originalAmbiguityMargin: number;
+  };
 }
 
 export interface PublicTileRecognitionRegion {
@@ -29,6 +36,7 @@ export interface PublicTileRecognitionOptions extends RegionDetectionOptions {
   retryDiscardBoundaries?: boolean;
   retryRightRedMeld?: boolean;
   retryRightChiMeld?: boolean;
+  retryLeftWhitePon?: boolean;
   minimumConfidence?: number;
   minimumMargin?: number;
 }
@@ -429,6 +437,59 @@ export async function recognizeConfiguredPublicTilesWithVit(
       rotationToUpright: region.rotationToUpright,
     }] as const;
   }));
+  // One reviewed sideways white face includes enough grey side/table to read
+  // P at .482, while the same pixels rotated 180 degrees read P at .999.
+  // White is 180-degree symmetric, but a blank patch also scores as P. Require
+  // two separately strong upright white anchors and a unique complete pon
+  // partition before this single-image retry. Never infer a fourth white/kan.
+  const leftWhite = result.leftMelds;
+  const leftWhiteRegion = layout.publicTileRegions?.leftMelds;
+  if (options.retryLeftWhitePon !== false && classifier.backend === "hybrid"
+    && leftWhite?.rotationToUpright === 270 && leftWhiteRegion?.rotationToUpright === 270
+    && detections.leftMelds?.gridValid !== false
+    && !leftWhite.classificationSafe && leftWhite.candidateCount === leftWhite.recognized.length) {
+    const uncertain = leftWhite.recognized.filter(tile => !tile.safe);
+    const target = uncertain.length === 1 ? uncertain[0] : undefined;
+    const whites = leftWhite.recognized.filter(tile => tile.tile === "P");
+    const ordered = [...leftWhite.recognized].sort((a, b) => b.y - a.y || b.x - a.x);
+    const whitePositions = whites.map(tile => ordered.indexOf(tile)).sort((a, b) => a - b);
+    const contiguousWhitePon = whites.length === 3 && whitePositions[2]! - whitePositions[0]! === 2;
+    const anchored = target && whites.filter(tile => tile !== target && tile.safe && tile.sideways === false
+      && tile.confidence >= 0.99 && tile.ambiguityMargin >= 0.99).length === 2;
+    if (target && target.tile === "P" && target.sideways === true && target.width > target.height
+      && target.height >= 20 && target.confidence >= 0.4 && target.confidence < 0.5
+      && target.ambiguityMargin >= Math.max(0.05, minimumMargin) && contiguousWhitePon && anchored) {
+      // This hypothetical partition is only an admission check. Its weak
+      // target is never published without the subsequent image evidence.
+      const provisional = { ...leftWhite, classificationSafe: true,
+        recognized: leftWhite.recognized.map(tile => tile === target ? { ...tile, safe: true } : tile) };
+      const partition = recognizeExposedMelds(provisional);
+      if (partition.reduce((sum, meld) => sum + meld.tiles.length, 0) === leftWhite.candidateCount
+        && partition.some(meld => meld.type === "pon" && meld.tiles.every(tile => tile === "P"))) {
+        const original = await normalizedCandidateImage(screenshot, target, leftWhiteRegion);
+        const retryImage = await sharp(original).rotate(180).png().toBuffer();
+        const retried = await classifier.classifyTileImages([retryImage]);
+        if (retried.length !== 1) throw new Error("Model left white pon retry returned the wrong prediction count");
+        const retry = retried[0]!;
+        const margin = retry.confidence - retry.runnerUpConfidence;
+        if (retry.tile === "P" && retry.confidence >= Math.max(0.99, minimumConfidence)
+          && retry.confidence <= 1 && retry.runnerUpConfidence >= 0
+          && margin >= Math.max(0.99, minimumMargin) && retry.confidence - target.confidence >= 0.45) {
+          const refined = { ...leftWhite, classificationSafe: true,
+            recognized: leftWhite.recognized.map(tile => tile === target ? { ...tile,
+              confidence: retry.confidence, runnerUpConfidence: retry.runnerUpConfidence,
+              ambiguityMargin: margin, safe: true,
+              whitePonRotationEvidence: { scope: "left_sideways_white_pon_only" as const,
+                additionalRotation: 180 as const, originalConfidence: tile.confidence,
+                originalRunnerUpConfidence: tile.runnerUpConfidence, originalAmbiguityMargin: tile.ambiguityMargin },
+            } : tile) };
+          const melds = recognizeExposedMelds(refined);
+          if (melds.reduce((sum, meld) => sum + meld.tiles.length, 0) === leftWhite.candidateCount
+            && melds.some(meld => meld.type === "pon" && meld.tiles.every(tile => tile === "P"))) result.leftMelds = refined;
+        }
+      }
+    }
+  }
   // Two reviewed upside-down chi frames lose the 7m as a weak 6m in a
   // tight face crop. Padding only the original top edge restores its glyph
   // without adding the grey 3D side below it. Do not force a legal meld from

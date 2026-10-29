@@ -50,7 +50,7 @@ test("default runtime scans the native omitted left melds and preserves the weak
     left: fixture.region.left, top: fixture.region.top }]).png().toBuffer();
   const classifier = new HybridTileRecognizer();
   try {
-    const result = await recognizeConfiguredPublicTilesWithVit(screenshot, layout, classifier);
+    const result = await recognizeConfiguredPublicTilesWithVit(screenshot, layout, classifier, { retryLeftWhitePon: false });
     assert.equal(result.leftMelds?.candidateCount, 6);
     assert.deepEqual(result.leftMelds?.recognized.map(tile => tile.tile), ["0s", "4s", "6s", "P", "P", "P"]);
     // Enabling the missing region cannot certify a weak white tile as safe.

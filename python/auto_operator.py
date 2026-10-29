@@ -5436,7 +5436,7 @@ class PythonAutoOperator:
                 # CDP captures serialize behind Mahjong Soul's WebGL renderer.
                 # Capture once and derive both evidence regions locally so the
                 # confirmation loop cannot consume the next short-clock turn.
-                full_after = page.screenshot(animations="disabled")
+                full_after = self.capture_full_action_frame(page, "discard_confirmation").png
                 hand_after = crop_screenshot(full_after, self.hand_clip)
                 river_after = crop_screenshot(full_after, self.river_clip)
             else:

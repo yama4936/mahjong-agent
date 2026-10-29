@@ -4462,6 +4462,8 @@ class AwayDialogDetectionTest(unittest.TestCase):
                 action_pixel_delta=1, river_pixel_delta=1,
             )
             operator.frames = Path(directory)
+            operator.layout = {"viewport": {"width": 20, "height": 10}}
+            operator.log = Mock()
             operator.hand_clip = {"x": 0, "y": 0, "width": 10, "height": 10}
             operator.river_clip = {"x": 10, "y": 0, "width": 10, "height": 10}
             operator.verify_post_discard = Mock(side_effect=AssertionError("must not re-recognize"))
@@ -4471,6 +4473,10 @@ class AwayDialogDetectionTest(unittest.TestCase):
             Image.new("RGB", (10, 10), "white").save(white, format="PNG")
             full = io.BytesIO()
             Image.new("RGB", (20, 10), "navy").save(full, format="PNG")
+            operator.screencast_session = Mock()
+            operator.screencast_session.send.return_value = {
+                "data": base64.b64encode(full.getvalue()).decode(),
+            }
             page = Mock()
             page.screenshot.side_effect = lambda **kwargs: white.getvalue() if kwargs.get("clip") else full.getvalue()
 
@@ -4480,6 +4486,8 @@ class AwayDialogDetectionTest(unittest.TestCase):
 
             self.assertEqual(receipt["confirmation"], "hand_and_own_river_changed")
             self.assertTrue(Path(receipt["screenshot"]).exists())
+            self.assertEqual(Path(receipt["screenshot"]).read_bytes(), full.getvalue())
+            page.screenshot.assert_not_called()
             operator.verify_post_discard.assert_not_called()
 
     def test_terminal_reveal_waits_for_result_instead_of_rejecting_empty_slots(self) -> None:
