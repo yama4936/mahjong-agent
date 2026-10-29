@@ -496,6 +496,28 @@ class InitialDealingBoundTest(unittest.TestCase):
                      patch("auto_operator.time.monotonic", side_effect=[20.0, 21.0]):
                     self.assertEqual(operator.bound_initial_action_from_dealing(page, guard, partial), expected)
                 self.assertEqual(guard.start_click_at, 20.0 if expected else 10)
+                events = [item.args[0] for item in operator.log.call_args_list]
+                self.assertIn("initial_action_dealing_candidate", events)
+                self.assertIn("initial_action_dealing_capture", events)
+                if not expected:
+                    self.assertEqual(operator.log.call_args.kwargs["reason"],
+                                     "capture_not_match" if screen == "unknown" else "capture_not_dealing")
+                operator.log.reset_mock()
+
+    def test_failed_direct_screenshot_is_logged_and_never_changes_clock(self):
+        root = Path(__file__).resolve().parents[1]
+        partial = (root / "test/fixtures/initial-dealing-20261029.jpg").read_bytes()
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.layout = load_json(root / "config/layout-300-regression.json")
+        operator.log = Mock()
+        page = Mock()
+        page.screenshot.side_effect = RuntimeError("capture failed")
+        guard = StartupTurnGuard()
+        guard.record_verified_start_click(clicked_at=10)
+        with patch("auto_operator.time.monotonic", return_value=20):
+            self.assertFalse(operator.bound_initial_action_from_dealing(page, guard, partial))
+        self.assertEqual(guard.start_click_at, 10)
+        self.assertEqual(operator.log.call_args.kwargs["reason"], "capture_or_validation_failed")
 
 
 class ResidentPublicRecognitionTest(unittest.TestCase):

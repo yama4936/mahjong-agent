@@ -5957,25 +5957,40 @@ class PythonAutoOperator:
         if (guard.ready or guard.quarantined or guard.start_click_at is None
                 or not gate_frame or not initial_dealing_frame_visible(gate_frame, self.layout)):
             return False
+        self.log("initial_action_dealing_candidate", source="verified_match_stream")
         request_started_at = time.monotonic()
         try:
             frame = page.screenshot(animations="disabled")
             observed_at = time.monotonic()
+            duration_ms = round((observed_at - request_started_at) * 1000)
+            self.log("initial_action_dealing_capture", screenshotDurationMs=duration_ms)
             state, _ = classify_screen(frame, self.screen_references)
-            if state != "match" or not initial_dealing_frame_visible(frame, self.layout):
+            if state != "match":
+                self.log("initial_action_dealing_rejected", reason="capture_not_match",
+                         screenState=state, screenshotDurationMs=duration_ms)
+                return False
+            if not initial_dealing_frame_visible(frame, self.layout):
+                self.log("initial_action_dealing_rejected", reason="capture_not_dealing",
+                         screenshotDurationMs=duration_ms)
                 return False
             pass_region = self.layout.get("actionButtonRegions", {}).get("pass")
             if ((pass_region and is_force_auto_pass_clip(crop_screenshot(frame, pass_region)))
                     or force_auto_call_buttons(frame, self.layout["viewport"])
                     or force_auto_self_action_buttons(frame, self.layout["viewport"])):
+                self.log("initial_action_dealing_rejected", reason="action_button_visible",
+                         screenshotDurationMs=duration_ms)
                 return False
             if not guard.record_verified_dealing_bound(
                     request_started_at=request_started_at, observed_at=observed_at):
+                self.log("initial_action_dealing_rejected", reason="start_guard_rejected",
+                         screenshotDurationMs=duration_ms)
                 return False
-        except Exception:
+        except Exception as error:
+            self.log("initial_action_dealing_rejected", reason="capture_or_validation_failed",
+                     error=str(error))
             return False
         self.log("initial_action_dealing_bound", source="direct_screenshot_request_started",
-                 screenshotDurationMs=round((observed_at - request_started_at) * 1000))
+                 screenshotDurationMs=duration_ms)
         return True
 
     def run(self, page: Page) -> None:
@@ -6132,6 +6147,10 @@ class PythonAutoOperator:
                             return
                         page.wait_for_timeout(max(20, round(self.args.poll * 1000)))
                         continue
+                    # Capture a short-lived dealing frame before launching OCR
+                    # workers or running the other gameplay signal scans.
+                    if not startup_turn_guard.ready and early_state == "match":
+                        self.bound_initial_action_from_dealing(page, startup_turn_guard, gate_frame)
                     gameplay_reactions_allowed = early_state == "match"
                     restart_open_melds = self.verified_visible_open_melds(
                         self.cached_public_observation,
@@ -6223,8 +6242,6 @@ class PythonAutoOperator:
                         quick_reaction_win = bool(quick_self_actions)
                     if not startup_turn_guard.ready:
                         self.prewarm_startup_context(gate_frame, verified_match=early_state == "match")
-                        if early_state == "match":
-                            self.bound_initial_action_from_dealing(page, startup_turn_guard, gate_frame)
                     startup_guard_state = startup_turn_guard.observe(
                         verified_match=early_state == "match",
                         action_visible=bool(quick_draw or quick_pass or quick_calls or quick_reaction_win),
