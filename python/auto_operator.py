@@ -47,6 +47,10 @@ class ReactionWinPromptChangedAbort(RetryableSafetyAbort):
     """A streamed win candidate vanished or became ambiguous before input."""
 
 
+class OptionalReactionBudgetExhausted(RetryableSafetyAbort):
+    """An optional call cannot fit; only a separately verified pass may follow."""
+
+
 class SelectionStateUncertainAbort(RetryableSafetyAbort):
     """The first discard click may have selected a tile, but not provably.
 
@@ -607,6 +611,8 @@ def selected_chi_choice_point(
 
 def should_retry_call_policy(error: Exception, elapsed_ms: int) -> bool:
     """Retry transient call conflicts briefly, then prefer a safe pass."""
+    if isinstance(error, OptionalReactionBudgetExhausted):
+        return False
     return str(error) != "reaction_tile_count_conflict" or elapsed_ms < 20000
 
 
@@ -4856,7 +4862,7 @@ class PythonAutoOperator:
                 self.log("reaction_decision_budget_rejected", reason="insufficient_remaining_window",
                          remainingMs=remaining, preClickAndLaunchReserveMs=reserve,
                          **remaining_by_clock)
-                raise RetryableSafetyAbort("reaction decision budget lacks launch and click reserve")
+                raise OptionalReactionBudgetExhausted("reaction decision budget lacks launch and click reserve")
             decision_budget = max(1, int(self.evaluator_env.get("JEV_FORCE_AUTO_DEADLINE_MS", "2300")))
             if remaining is not None:
                 decision_budget = min(decision_budget, remaining - reserve)
@@ -6475,6 +6481,7 @@ class PythonAutoOperator:
     def execute_reaction_pass(
         self, page: Page, evaluation: dict[str, Any], *,
         evaluated_captured_at: float | None = None,
+        expired_optional_call: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Dismiss any reaction prompt without guessing its discarded tile.
 
@@ -6507,7 +6514,19 @@ class PythonAutoOperator:
             and 0 <= time.monotonic() - current_at <= 0.250
         )
         riichi_kan_pass = observed.get("source") == "force_auto_riichi_kan_pass"
-        if riichi_kan_pass:
+        optional_pass_started_at = None
+        if expired_optional_call is not None:
+            # A budget-exhausted optional call must not hide a newer win that
+            # appeared after the evaluated full frame. The ordinary skip-only
+            # pair cannot rule that out. Keep this certificate local to this
+            # one pass, and do not change either original action clock.
+            first_full, second_full, optional_pass_started_at = self.confirm_expired_optional_call_pass(
+                page, expired_optional_call,
+            )
+            before = crop_screenshot(first_full, button_clip)
+            confirmed = crop_screenshot(second_full, button_clip)
+            stream_guard = False
+        elif riichi_kan_pass:
             # Revalidate the complete prompt twice. A stable skip-shaped clip
             # alone cannot prove that a newer tsumo opportunity is absent.
             first_full = page.screenshot(animations="disabled")
@@ -6535,11 +6554,33 @@ class PythonAutoOperator:
             # Verify the affordance in both frames, including the stylized
             # skip variant only when a green call button is independently found.
             stream_guard = verified_pass(evaluated_full, before) and verified_pass(current_full, confirmed)
-        if not stream_guard and not riichi_kan_pass:
+        if not stream_guard and not riichi_kan_pass and expired_optional_call is None:
             before = page.screenshot(clip=button_clip, animations="disabled")
             page.wait_for_timeout(120)
             confirmed = page.screenshot(clip=button_clip, animations="disabled")
-        if mean_pixel_delta(before, confirmed) > self.args.stability_pixel_delta:
+        button_delta = mean_pixel_delta(before, confirmed)
+        if button_delta > self.args.stability_pixel_delta:
+            evidence = {}
+            save_errors = {}
+            if getattr(self, "frames", None) is not None:
+                stamp = utc_stamp()
+                for name, pixels in (("before", before), ("confirmed", confirmed)):
+                    path = self.frames / f"{stamp}.pass-{name}.png"
+                    try:
+                        path.write_bytes(pixels)
+                        path.chmod(0o600)
+                        evidence[f"{name}Screenshot"] = str(path)
+                    except Exception as error:
+                        # Diagnostics must not replace the safety abort or
+                        # accidentally turn a failed comparison into input.
+                        save_errors[name] = str(error)
+            self.log("reaction_pass_stability_rejected", buttonPixelDelta=button_delta,
+                     stabilityPixelDelta=self.args.stability_pixel_delta,
+                     verificationSource=("expired_optional_full_pair" if expired_optional_call is not None else
+                                         "stream_pair" if stream_guard else
+                                         "riichi_kan_full_pair" if riichi_kan_pass else "button_capture_pair"),
+                     evaluatedCapturedAt=evaluated_captured_at,
+                     currentStreamCapturedAt=current_at, **evidence, evidenceSaveErrors=save_errors)
             # A reaction prompt can be withdrawn while its button is being
             # animated (for example when another player has already acted).
             # No mouse event has been sent at this point.  Do not treat that
@@ -6556,7 +6597,8 @@ class PythonAutoOperator:
         # independent, current UI confirmation rather than to the stale
         # evaluator frame.  Calls and ron deliberately retain their strict
         # evaluated-frame budget checks.
-        pass_confirmed_at = current_at if stream_guard else time.monotonic()
+        pass_confirmed_at = (optional_pass_started_at if expired_optional_call is not None else
+                             current_at if stream_guard else time.monotonic())
         point = observed["center"]
         if self.args.mode == "force-auto":
             self.require_force_auto_click_budget(
@@ -6573,6 +6615,68 @@ class PythonAutoOperator:
                                             screen_before=Path(reaction_frame).read_bytes() if reaction_frame else None)
         return {"clicked": True, "policy": "force_auto" if self.args.mode == "force-auto" else "certified_auto", "action": "pass",
                 "clickPoint": point, **receipt}
+
+    def confirm_expired_optional_call_pass(
+        self, page: Page, expected_call: dict[str, Any],
+    ) -> tuple[bytes, bytes, float]:
+        """Prove a current non-win optional prompt twice, without lending call time.
+
+        Absence of *all* orange controls also excludes every named ron/tsumo
+        recognized by startup_terminal_win_button, whose mandatory first cue
+        is a single orange control. Unknown/changed prompts abstain instead.
+        This proves present skip UI, not when the original reaction began.
+        """
+        if self.args.mode != "force-auto" or expected_call.get("action") not in {"chi", "pon", "minkan"}:
+            raise RetryableSafetyAbort("expired optional pass has no known call candidate")
+        original_clock = tuple(getattr(self, field, None) for field in (
+            "action_evidence_started_at", "action_budget_started_at", "action_evidence_kind"))
+        original_start, original_budget, original_kind = original_clock
+        effective_budget_start = original_start if original_budget is None else original_budget
+        now = time.monotonic()
+        if (original_kind != "reaction"
+                or any(isinstance(stamp, bool) or not isinstance(stamp, (int, float))
+                       or not isfinite(stamp) for stamp in (original_start, effective_budget_start))
+                or not 0 <= original_start <= effective_budget_start <= now):
+            raise RetryableSafetyAbort("expired optional pass has no valid original reaction clock")
+        viewport = self.layout["viewport"]
+        region = self.layout["actionButtonRegions"]["pass"]
+        receipts = []
+        requested_at = time.monotonic()
+        for ordinal in ("first", "second"):
+            self.require_action_deadline()
+            if receipts:
+                page.wait_for_timeout(120)
+                requested_at = time.monotonic()
+            receipt = self.capture_full_action_frame(page, f"expired_optional_pass_{ordinal}")
+            stamps = (receipt.attempt_started_at, receipt.started_at, receipt.completed_at)
+            if (any(isinstance(stamp, bool) or not isinstance(stamp, (int, float))
+                    or not isfinite(stamp) for stamp in stamps)
+                    or not requested_at <= stamps[0] <= stamps[1] <= stamps[2] <= time.monotonic()
+                    or (receipts and stamps[0] <= receipts[0].completed_at)):
+                raise RetryableSafetyAbort("expired optional pass capture times are not ordered")
+            with Image.open(io.BytesIO(receipt.png)) as image:
+                complete_png = image.format == "PNG" and image.size == (viewport["width"], viewport["height"])
+            if (not complete_png or (receipt.width, receipt.height) != (viewport["width"], viewport["height"])
+                    or classify_screen(receipt.png, self.screen_references)[0] != "match"
+                    or self_turn_draw_visible(receipt.png, self.layout, self.cached_open_melds)
+                    or force_auto_self_action_buttons(receipt.png, viewport)):
+                raise RetryableSafetyAbort("expired optional pass full frame may contain a win or changed screen")
+            calls = force_auto_call_buttons(receipt.png, viewport)
+            if (len(calls) != 1 or calls[0].get("action") != expected_call["action"]
+                    or any(abs(calls[0]["center"][axis] - expected_call["center"][axis]) > 12 for axis in ("x", "y"))
+                    or not (is_force_auto_pass_prompt(receipt.png, region)
+                            or is_contextual_reaction_pass(receipt.png, region, 1))):
+                raise RetryableSafetyAbort("expired optional pass call or skip prompt changed")
+            if original_clock != tuple(getattr(self, field, None) for field in (
+                    "action_evidence_started_at", "action_budget_started_at", "action_evidence_kind")):
+                raise RetryableSafetyAbort("expired optional pass original clock changed")
+            receipts.append(receipt)
+            self.require_force_auto_click_budget(
+                receipts[0].attempt_started_at, phase="expired_optional_pass_confirmation",
+                include_action_evidence=False,
+            )
+            self.require_action_deadline()
+        return receipts[0].png, receipts[1].png, receipts[0].attempt_started_at
 
     def execute_force_auto_call(
         self, page: Page, screenshot: bytes, button: dict[str, Any],
@@ -7687,6 +7791,7 @@ class PythonAutoOperator:
                             self.log("reaction_win", screenshot=str(screenshot_path), execution=receipt)
                             time.sleep(self.args.poll)
                             continue
+                        expired_optional_call = None
                         if getattr(self.args, "accept_single_call", False) and len(call_buttons) == 1:
                             call_action = call_buttons[0].get("action")
                             try:
@@ -7700,8 +7805,12 @@ class PythonAutoOperator:
                                     page.wait_for_timeout(max(100, round(self.args.poll * 1000)))
                                     continue
                                 self.log("reaction_call_policy_rejected", action=call_action,
-                                         reason="persistent_tile_count_conflict_safe_pass",
+                                         reason=("optional_call_budget_exhausted_safe_pass"
+                                                 if isinstance(error, OptionalReactionBudgetExhausted)
+                                                 else "persistent_tile_count_conflict_safe_pass"),
                                          elapsedMs=elapsed_ms)
+                                if isinstance(error, OptionalReactionBudgetExhausted):
+                                    expired_optional_call = call_buttons[0]
                                 policy = None
                             if policy:
                                 decision = policy.get("decision", {})
@@ -7744,6 +7853,8 @@ class PythonAutoOperator:
                             try:
                                 receipt = self.execute_reaction_pass(
                                     page, reaction, evaluated_captured_at=full_screen_captured_at,
+                                    **({"expired_optional_call": expired_optional_call}
+                                       if expired_optional_call is not None else {}),
                                 )
                             except RetryableSafetyAbort as error:
                                 self.log("reaction_pass_deferred", screenshot=str(screenshot_path), error=str(error))
