@@ -4,13 +4,17 @@ import json
 import queue
 import threading
 import time
+import tempfile
 from pathlib import Path
 
 
 class ScreencastDiagnostic:
     def __init__(self, directory, *, capacity=64, duration=30.0):
-        self.directory = Path(directory)
-        self.directory.mkdir(parents=True, exist_ok=True)
+        root = Path(directory)
+        root.mkdir(parents=True, exist_ok=True)
+        # Each run gets its own exclusive directory. Reusing the configured
+        # root must never append to old receipts or overwrite old frames.
+        self.directory = Path(tempfile.mkdtemp(prefix="session-", dir=root))
         self.queue = queue.Queue(maxsize=capacity)
         self.duration = duration
         self.first_receipt = None
@@ -20,22 +24,23 @@ class ScreencastDiagnostic:
         self.worker = threading.Thread(target=self._run, daemon=True)
         self.worker.start()
 
-    def offer(self, sequence, receipt, metadata, frame):
+    def offer(self, sequence, receipt, metadata, frame, *, receipt_wall=None):
         if self.first_receipt is None:
             self.first_receipt = receipt
         if receipt - self.first_receipt > self.duration or self.closed.is_set():
             return
         try:
-            self.queue.put_nowait((sequence, receipt, metadata, frame))
+            self.queue.put_nowait((sequence, receipt, metadata, frame, receipt_wall))
         except queue.Full:
             self.dropped.append(sequence)
 
     def _write(self, item):
-        sequence, receipt, metadata, frame = item
+        sequence, receipt, metadata, frame, receipt_wall = item
         name = f"{sequence:08d}.jpg"
         (self.directory / name).write_bytes(frame)
         with (self.directory / "receipts.jsonl").open("a", encoding="utf-8") as stream:
             stream.write(json.dumps({"sequence": sequence, "receiptMonotonic": receipt,
+                                     "receiptWallTime": receipt_wall,
                                      "cdpMetadata": metadata, "file": name}) + "\n")
 
     def _run(self):
@@ -55,4 +60,5 @@ class ScreencastDiagnostic:
         self.closed.set()
         self.worker.join(timeout)
         return {"droppedSequences": list(self.dropped), "writeErrors": list(self.errors),
-                "pending": self.queue.qsize(), "workerAlive": self.worker.is_alive()}
+                "pending": self.queue.qsize(), "workerAlive": self.worker.is_alive(),
+                "directory": str(self.directory)}

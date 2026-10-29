@@ -2804,12 +2804,14 @@ class PythonAutoOperator:
         def receive_frame(event: dict[str, Any]) -> None:
             try:
                 receipt = time.monotonic()
+                receipt_wall = time.time() if self.screencast_diagnostic is not None else None
                 frame = base64.b64decode(event["data"])
                 self.accept_screencast_frame(frame)
                 if self.screencast_diagnostic is not None:
                     try:
                         self.screencast_diagnostic.offer(self.screencast_sequence, receipt,
-                                                         event.get("metadata", {}), frame)
+                                                         event.get("metadata", {}), frame,
+                                                         receipt_wall=receipt_wall)
                     except Exception as error:
                         self.log("screencast_diagnostic_offer_failed", error=str(error))
             finally:
