@@ -203,6 +203,45 @@ class RoundTerminalRecoveryTest(unittest.TestCase):
         self.assertTrue(op.round_terminal_latched)
         op.current_board_metadata.assert_not_called()
 
+    def test_self_win_away_dialog_arms_only_independently_verified_recovery(self):
+        op = self.operator
+        op.self_win_capture = {'id': 'win', 'action': 'ron', 'started': 100,
+            'frames': [{'screenState': 'matchmaking', 'awayDialogObserved': True}], 'sawOverlay': False}
+        with patch('auto_operator.time.monotonic', return_value=120):
+            self.assertFalse(op.capture_self_win_result(self.page))
+            self.assertTrue(op.wait_for_round_terminal(self.page, self.frames[0], 'match'))
+            self.assertFalse(op.wait_for_round_terminal(self.page, self.frames[1], 'match'))
+        self.page.mouse.click.assert_not_called()
+        self.assertFalse(op.round_terminal_latched)
+
+    def test_real_self_win_away_capture_requires_verified_advanced_round(self):
+        op = self.operator
+        self.page.screenshot.return_value = (FIXTURES / 'self-win-away-overlay-20261030.png').read_bytes()
+        with patch('auto_operator.time.monotonic', return_value=100):
+            op.start_self_win_capture('ron')
+        with patch('auto_operator.classify_screen', return_value=('matchmaking', 1)), \
+                patch('auto_operator.time.monotonic', return_value=101):
+            self.assertTrue(op.capture_self_win_result(self.page))
+        self.assertTrue(op.self_win_capture['frames'][0]['awayDialogObserved'])
+        with patch('auto_operator.time.monotonic', return_value=116):
+            self.assertFalse(op.capture_self_win_result(self.page))
+        self.assertEqual(op.round_terminal_recovery['source'], 'self_win_capture')
+        op.current_board_metadata.return_value = {'verified': False}
+        with patch('auto_operator.time.monotonic', return_value=117):
+            for frame in self.frames:
+                self.assertTrue(op.wait_for_round_terminal(self.page, frame, 'match'))
+        self.assertTrue(op.round_terminal_latched)
+        op.current_board_metadata.return_value = {**self.metadata,
+            **{k: self.evidence['previousState'][k] for k in ('round', 'seat', 'honba')}}
+        with patch('auto_operator.time.monotonic', return_value=118):
+            self.assertTrue(op.wait_for_round_terminal(self.page, self.frames[1], 'match'))
+        self.assertTrue(op.round_terminal_latched)
+        op.current_board_metadata.return_value = copy.deepcopy(self.metadata)
+        with patch('auto_operator.time.monotonic', return_value=119):
+            self.assertFalse(op.wait_for_round_terminal(self.page, self.frames[1], 'match'))
+        self.assertFalse(op.round_terminal_latched)
+        self.page.mouse.click.assert_not_called()
+
     def test_missing_previous_hand_cannot_unlock_a_visible_later_table(self):
         self.old_replay.unlink()
         self.reload()

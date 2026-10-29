@@ -3788,7 +3788,9 @@ class PythonAutoOperator:
                     snapshot.chmod(0o600)
                     evidence = {"observedAt": datetime.now(timezone.utc).isoformat(),
                                 "screenshot": str(snapshot), "screenState": state,
-                                "elapsedMs": round(elapsed * 1000)}
+                                "elapsedMs": round(elapsed * 1000),
+                                "awayDialogObserved": bool(self.layout.get("viewport")) and
+                                    is_away_resume_dialog(frame, self.layout["viewport"])}
                     capture["frames"].append(evidence)
                     self.log("self_win_frame", winId=capture["id"],
                              action=capture["action"], evidence=evidence)
@@ -3810,7 +3812,8 @@ class PythonAutoOperator:
             if (getattr(self, "round_terminal_latched", False)
                     and not getattr(self, "round_terminal_result_observed", False)
                     and getattr(self, "round_terminal_recovery", None) is None
-                    and any(item.get("screenState") == "round_result" for item in capture["frames"])):
+                    and any(item.get("screenState") == "round_result"
+                            or item.get("awayDialogObserved") is True for item in capture["frames"])):
                 previous = self.round_terminal_previous_state()
                 self.round_terminal_recovery = {"previous": previous, "since": None,
                                                 "source": "self_win_capture"}
