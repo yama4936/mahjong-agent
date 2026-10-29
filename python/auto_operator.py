@@ -1846,6 +1846,10 @@ class PythonAutoOperator:
     def __init__(self, args: argparse.Namespace) -> None:
         self.args = args
         self.root = Path(args.project).resolve()
+        reference_directory = getattr(args, "screen_references", None)
+        self.screen_references = load_references(
+            Path(reference_directory) if reference_directory else self.root / "artifacts" / "live"
+        )
         self.layout_path = Path(args.layout).resolve()
         self.templates = Path(args.templates).resolve()
         self.state_path = Path(args.state).resolve()
@@ -1885,7 +1889,6 @@ class PythonAutoOperator:
         self.ranked_match_in_progress = False
         self.ranked_match_finished = False
         self.last_ranked_navigation_deferred_state = None
-        self.screen_references = load_references(self.root / "artifacts" / "live")
         self.recognition_request_id = 0
         self.recognition_server = subprocess.Popen(
             ["node", "dist/src/recognition/recognitionServer.js", str(self.layout_path), str(self.templates), str(self.state_path)],
@@ -7387,6 +7390,8 @@ def find_mahjong_page(browser: Browser) -> Page:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Python-owned Mahjong Soul advisor/Auto operator")
     parser.add_argument("--project", default=Path(__file__).resolve().parents[1])
+    parser.add_argument("--screen-references", type=Path,
+                        help="calibrated screen-state PNG directory (default: PROJECT/artifacts/live)")
     parser.add_argument("--cdp", default="http://127.0.0.1:9222")
     parser.add_argument("--layout", required=True)
     parser.add_argument("--templates", required=True)

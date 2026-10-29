@@ -42,7 +42,7 @@ Status values: `todo`, `doing`, `done`, `blocked`.
 - [x] `done` Obtain one live discard with `tileMultisetVerification.verified=true`.
 - [x] `done` Recognize login, account, lobby, ranked menu/room, matchmaking, match, away, round result, match result and exit-confirm screens; safely advance through one ranked East match and return to the lobby.
 - [x] `done` Serve a read-only live browser dashboard with the current Mahjong Soul frame and classified screen state at localhost:8787.
-- [ ] `todo` Package or explicitly configure the screen-state reference set and fail at startup with a clear diagnostic when it is empty; the current operator otherwise classifies every screen as `unknown` forever.
+- [x] `done` Configure screen-state reference images with `--screen-references` for the operator and dashboard; fail before operator resources/browser startup when no recognized PNGs exist or a reference is unreadable. Document the default directory, filename mapping and custom directory setup; cover missing, empty, unrelated, corrupt and valid reference sets with startup regression tests.
 - [ ] `todo` Validate the live CDP viewport before every clipped capture and recover or stop cleanly when docked DevTools or window resizing changes the calibrated 1920×1080 geometry.
 - [ ] `todo` Add a Windows-native Python operator setup command and npm script; the documented venv paths and setup script currently assume POSIX `bin/python` and Bash.
 
@@ -112,5 +112,5 @@ Status values: `todo`, `doing`, `done`, `blocked`.
 - [x] `done` Handle the second ranked result confirmation screen. The first result confirmation succeeded at 20:31:42+09, revealing a rank-progress overlay (初心 badge, 10/20 progress, another yellow 確認 button), but the operator immediately classified it as `matchmaking` and waited instead of clicking the second confirmation (`artifacts/ranked-infinite/python-operator.jsonl`, screenshot `artifacts/ranked-after-confirm.png`). Add a distinct post-result/rank-progress state, click its confirmation exactly once, and prove the complete two-step result flow reaches lobby and starts a new reservation.
 - [x] `done` Handle the post-ranked achievement/reward confirmation after rank progress. After correctly advancing `rank_progress` at 20:36:30+09, Mahjong Soul displayed a third overlay for the completed Bronze Room placement mission (coin 1800 reward, green 完了 stamp, yellow 確認 and blue もう一局), but the operator again classified it as `matchmaking` and waited (`artifacts/ranked-infinite/python-operator.jsonl`, screenshot `artifacts/ranked-after-progress-confirm.png`). Add a fail-closed `post_match_reward` state, click the yellow confirmation exactly once, and continue inspecting/advancing bounded post-match screens until lobby or a verified new reservation is reached.
 
-All tasks above are `done`; full Auto remains fail-closed whenever any recognition,
+Unfinished and blocked tasks remain above; full Auto remains fail-closed whenever any recognition,
 state, legal-action, Jev, click-target or post-action verification gate is uncertain.

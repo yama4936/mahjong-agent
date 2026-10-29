@@ -47,11 +47,20 @@ const artifacts = artifactsIndex >= 0 && operatorArgs[artifactsIndex + 1]
   : artifactsEquals?.slice("--artifacts=".length) || "artifacts/python-auto";
 const operatorLog = path.resolve(root, artifacts, "python-operator.jsonl");
 
+let references;
+for (let index = 0; index < operatorArgs.length; index += 1) {
+  if (operatorArgs[index] === "--screen-references") references = operatorArgs[++index];
+  else if (operatorArgs[index].startsWith("--screen-references=")) {
+    references = operatorArgs[index].slice("--screen-references=".length);
+  }
+}
+
 let dashboard;
 if (!dashboardDisabled) {
   dashboard = spawn(python, [
     path.join(root, "python", "dashboard.py"),
     "--operator-log", operatorLog,
+    ...(references ? ["--screen-references", references] : []),
   ], { cwd: root, stdio: "inherit", windowsHide: true });
   dashboard.on("error", (error) => console.error(`Dashboard failed to start: ${error.message}`));
 }

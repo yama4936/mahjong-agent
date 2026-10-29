@@ -273,13 +273,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--port", type=int, default=8787)
     parser.add_argument("--interval", type=float, default=0.1)
     parser.add_argument("--operator-log")
+    parser.add_argument("--screen-references", type=Path,
+                        help="calibrated screen-state PNG directory (default: artifacts/live)")
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
     root = Path(__file__).resolve().parents[1]
-    references = load_references(root / "artifacts" / "live")
+    references = load_references(getattr(args, "screen_references", None) or root / "artifacts" / "live")
     shared = SharedFrame()
     operator_log = Path(args.operator_log).resolve() if args.operator_log else None
     server = ThreadingHTTPServer((args.host, args.port), handler_for(shared, operator_log))

@@ -283,11 +283,24 @@ def _is_account_modal(image: Image.Image) -> bool:
 
 
 def load_references(directory: Path) -> dict[str, tuple[ScreenState, Image.Image]]:
-    return {
-        f"{state}:{index}": (state, _open(directory / filename))
-        for index, (state, filename) in enumerate(REFERENCE_FILES)
-        if (directory / filename).exists()
-    }
+    directory = directory.resolve()
+    references = {}
+    for index, (state, filename) in enumerate(REFERENCE_FILES):
+        path = directory / filename
+        if not path.exists():
+            continue
+        try:
+            references[f"{state}:{index}"] = (state, _open(path))
+        except (OSError, ValueError) as error:
+            raise RuntimeError(f"Invalid screen-state reference image: {path}: {error}") from error
+    if not references:
+        expected = ", ".join(filename for _, filename in REFERENCE_FILES)
+        raise RuntimeError(
+            f"No screen-state reference images found in {directory}. "
+            "Set --screen-references to a directory containing calibrated reference PNGs. "
+            f"Recognized filenames: {expected}"
+        )
+    return references
 
 
 def classify_screen(

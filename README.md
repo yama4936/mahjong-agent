@@ -287,6 +287,16 @@ npm run operator:auto
 npm run force:auto
 ```
 
+画面状態の参照画像は既定で `artifacts/live` から読み込みます。参照画像がない
+環境では、対象画面に対応する校正済みPNGを用意してください。
+`python/screen_state.py` の `REFERENCE_FILES` に状態とファイル名の対応があります
+（例: ロビーは `lobby-ready.png`、対局中は `ranked-live-match.png`）。
+認識対象のPNGがゼロ、または画像が壊れている場合は起動時に停止し、参照先と理由を表示します。
+一部の画像だけで起動できても、全画面の認識精度を保証するものではありません。
+別の保存先は `npm run operator:observe -- --screen-references=/path/to/references` で指定でき、
+同時起動するモニターにも引き継がれます。モニター単独では
+`npm run dashboard -- --screen-references=/path/to/references` を使います。
+
 `force-auto`はローカルの決定論判断を先に確保し、`.env.local`またはシェル環境に
 `TYPESAFE_API_KEY`がある場合だけJevを最大2300ms待ちます。Jevが期限内に
 合法な判断を返せば採用し、期限超過・通信失敗・不正応答では即座にローカル判断へ
