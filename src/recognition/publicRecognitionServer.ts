@@ -4,7 +4,7 @@ import { HybridTileRecognizer } from "./hybridTileRecognizer.js";
 import { layoutSchema } from "./layout.js";
 import { recognizeConfiguredPublicTilesWithVit, toPublicTileObservation } from "./publicTileRecognizer.js";
 import { recognizeHighlightedDiscard } from "./highlightedDiscard.js";
-import { JevClient, type JevHandPlan } from "../jev/client.js";
+import { handPlanInputCacheKey, JevClient, type HandPlanInput, type JevHandPlan } from "../jev/client.js";
 
 const [layoutPath, ownSeatArgument = "east"] = process.argv.slice(2);
 if (!layoutPath) throw new Error("Usage: publicRecognitionServer <layout.json> [seat]");
@@ -36,17 +36,19 @@ if (!Number.isFinite(planDeadlineMs) || planDeadlineMs <= 0) throw new Error("In
 let cachedPlanKey: string | undefined;
 let cachedPlan: JevHandPlan | undefined;
 
-async function choosePlan(request: { concealedTiles?: string[]; openMelds?: number; seat?: string; round?: string }): Promise<JevHandPlan | undefined> {
+type PlanRequest = Omit<HandPlanInput, "hand" | "openMelds"> & { concealedTiles?: string[]; openMelds?: number };
+
+async function choosePlan(request: PlanRequest): Promise<JevHandPlan | undefined> {
   if (!jev || !request.concealedTiles || request.openMelds === undefined) return undefined;
-  const key = `${request.openMelds}:${[...request.concealedTiles].sort().join(",")}`;
+  const input: HandPlanInput = { hand: request.concealedTiles, openMelds: request.openMelds,
+    ...(request.melds ? { melds: request.melds } : {}),
+    ...(request.seat ? { seat: request.seat } : {}), ...(request.round ? { round: request.round } : {}) };
+  const key = handPlanInputCacheKey(input);
   if (key === cachedPlanKey && cachedPlan) return cachedPlan;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), planDeadlineMs);
   try {
-    const plan = await jev.chooseHandPlan({
-      hand: request.concealedTiles, openMelds: request.openMelds,
-      ...(request.seat ? { seat: request.seat } : {}), ...(request.round ? { round: request.round } : {}),
-    }, controller.signal);
+    const plan = await jev.chooseHandPlan(input, controller.signal);
     cachedPlanKey = key;
     cachedPlan = plan;
     return plan;
@@ -66,8 +68,7 @@ for await (const line of lines) {
     const request = JSON.parse(line) as {
       id: unknown; screenshot: string; capturedAt?: string;
       reactionHighlight?: boolean; observationSeat?: string;
-      concealedTiles?: string[]; openMelds?: number; seat?: string; round?: string;
-    };
+    } & PlanRequest;
     id = request.id;
     const observationSeat = request.observationSeat ?? ownSeat;
     if (!( ["east", "south", "west", "north"] as string[]).includes(observationSeat)) {

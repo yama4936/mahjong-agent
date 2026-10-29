@@ -1,0 +1,970 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "1ecb24e",
+  "source": "artifacts/friend-300-1ecb24e-20261030/replays/decisions.jsonl",
+  "sourceSha256": "b35742b15245e52a7395c774c7446aca6cdf7ca9cf7dade241f8a38844877551",
+  "scope": "Real decision states for fixed-meld plan feasibility only; E1 lines12-14 actually applied cached efficient_standard, so the impossible local plan is not proof of a harmful Jev choice.",
+  "cases": [
+    {
+      "name": "closed_legacy_positive",
+      "sourceLine": 2,
+      "replayId": "2c725987-816b-4e13-bca8-1a5b184f4bdf",
+      "screenshot": "/home/yama1/projects/jantama-auto/artifacts/friend-300-1ecb24e-20261030/frames/2026-10-29T21-55-51.001900+00-00.jpg",
+      "state": {
+        "round": "east_1",
+        "honba": 0,
+        "riichiSticks": 0,
+        "seat": "south",
+        "scores": {
+          "south": 25000,
+          "west": 25000,
+          "north": 25000,
+          "east": 25000
+        },
+        "hand": [
+          "2m",
+          "6m",
+          "8m",
+          "3s",
+          "4s",
+          "5s",
+          "5s",
+          "6s",
+          "8s",
+          "9s",
+          "S",
+          "W",
+          "P"
+        ],
+        "draw": "P",
+        "doraIndicators": [
+          "3p"
+        ],
+        "ownDiscards": [
+          "5p"
+        ],
+        "melds": [],
+        "visibleTiles": [],
+        "openMelds": 0,
+        "turn": 1,
+        "remainingTiles": 64,
+        "phase": "self_turn",
+        "recognitionConfidence": 0,
+        "publicStateConfidence": 0,
+        "riichiDeclared": false,
+        "availableUiActions": [],
+        "opponents": [
+          {
+            "seat": "west",
+            "discards": [
+              "N"
+            ],
+            "riichi": false,
+            "openMelds": 0,
+            "openMeldsObserved": true,
+            "melds": []
+          },
+          {
+            "seat": "north",
+            "discards": [
+              "9p"
+            ],
+            "riichi": false,
+            "openMelds": 0,
+            "openMeldsObserved": true,
+            "melds": []
+          },
+          {
+            "seat": "east",
+            "discards": [
+              "C",
+              "1p"
+            ],
+            "riichi": false,
+            "openMelds": 0,
+            "openMeldsObserved": true,
+            "melds": []
+          }
+        ]
+      },
+      "loggedLocalPlan": {
+        "primaryTarget": "yakuhai:P",
+        "secondaryTarget": "riichi/efficient_standard",
+        "callsAllowed": true,
+        "requiredTiles": [
+          "7m",
+          "4s",
+          "7s"
+        ],
+        "estimatedPoints": 2000,
+        "phase": "early_efficiency",
+        "placement": {
+          "rank": 1,
+          "scoreGapToLeader": 0,
+          "allLast": false
+        },
+        "changeReason": "1-6巡目はシャンテンと受入枚数を優先"
+      }
+    },
+    {
+      "name": "chi_other_suit_honitsu",
+      "sourceLine": 4,
+      "replayId": "e911313e-d73e-4c71-8da0-d8221fe51905",
+      "screenshot": "/home/yama1/projects/jantama-auto/artifacts/friend-300-1ecb24e-20261030/frames/2026-10-29T21-56-11.144190+00-00.jpg",
+      "state": {
+        "round": "east_1",
+        "honba": 0,
+        "riichiSticks": 0,
+        "seat": "south",
+        "scores": {
+          "south": 25000,
+          "west": 25000,
+          "north": 25000,
+          "east": 25000
+        },
+        "hand": [
+          "3s",
+          "4s",
+          "5s",
+          "5s",
+          "6s",
+          "8s",
+          "9s",
+          "S",
+          "W",
+          "P"
+        ],
+        "draw": "P",
+        "doraIndicators": [
+          "3p"
+        ],
+        "ownDiscards": [
+          "5p",
+          "2m",
+          "C"
+        ],
+        "melds": [
+          {
+            "type": "chi",
+            "tiles": [
+              "7m",
+              "6m",
+              "8m"
+            ]
+          }
+        ],
+        "visibleTiles": [],
+        "openMelds": 1,
+        "turn": 3,
+        "remainingTiles": 57,
+        "phase": "self_turn",
+        "recognitionConfidence": 0,
+        "publicStateConfidence": 0,
+        "riichiDeclared": false,
+        "availableUiActions": [],
+        "opponents": [
+          {
+            "seat": "west",
+            "discards": [
+              "N",
+              "E",
+              "1m"
+            ],
+            "riichi": false,
+            "openMelds": 0,
+            "openMeldsObserved": true,
+            "melds": []
+          },
+          {
+            "seat": "north",
+            "discards": [
+              "9p",
+              "1m",
+              "C"
+            ],
+            "riichi": false,
+            "openMelds": 0,
+            "openMeldsObserved": true,
+            "melds": []
+          },
+          {
+            "seat": "east",
+            "discards": [
+              "C",
+              "1p",
+              "F"
+            ],
+            "riichi": false,
+            "openMelds": 0,
+            "openMeldsObserved": true,
+            "melds": []
+          }
+        ]
+      },
+      "loggedLocalPlan": {
+        "primaryTarget": "yakuhai:P",
+        "secondaryTarget": "honitsu_s",
+        "callsAllowed": true,
+        "requiredTiles": [
+          "4s",
+          "7s"
+        ],
+        "estimatedPoints": 2000,
+        "phase": "early_efficiency",
+        "placement": {
+          "rank": 1,
+          "scoreGapToLeader": 0,
+          "allLast": false
+        },
+        "changeReason": "1-6巡目はシャンテンと受入枚数を優先"
+      }
+    },
+    {
+      "name": "chi_toitoi_secondary",
+      "sourceLine": 10,
+      "replayId": "bea25ea5-ba34-4370-a2e5-89eaa0b0083f",
+      "screenshot": "/home/yama1/projects/jantama-auto/artifacts/friend-300-1ecb24e-20261030/frames/2026-10-29T21-57-11.249348+00-00.jpg",
+      "state": {
+        "round": "east_1",
+        "honba": 0,
+        "riichiSticks": 0,
+        "seat": "south",
+        "scores": {
+          "south": 25000,
+          "west": 25000,
+          "north": 25000,
+          "east": 25000
+        },
+        "hand": [
+          "2s",
+          "3s",
+          "4s",
+          "5s",
+          "5s",
+          "6s",
+          "9s",
+          "9s",
+          "P",
+          "P"
+        ],
+        "draw": "6s",
+        "doraIndicators": [
+          "3p",
+          "1p"
+        ],
+        "ownDiscards": [
+          "5p",
+          "2m",
+          "C",
+          "W",
+          "5p",
+          "6p",
+          "8s",
+          "7p",
+          "S"
+        ],
+        "melds": [
+          {
+            "type": "chi",
+            "tiles": [
+              "7m",
+              "6m",
+              "8m"
+            ]
+          }
+        ],
+        "visibleTiles": [],
+        "openMelds": 1,
+        "turn": 9,
+        "remainingTiles": 32,
+        "phase": "self_turn",
+        "recognitionConfidence": 0,
+        "publicStateConfidence": 0,
+        "riichiDeclared": false,
+        "availableUiActions": [],
+        "opponents": [
+          {
+            "seat": "west",
+            "discards": [
+              "N",
+              "E",
+              "1m",
+              "F",
+              "9m",
+              "9p",
+              "C",
+              "9p",
+              "9m"
+            ],
+            "riichi": false,
+            "openMelds": 0,
+            "openMeldsObserved": true,
+            "melds": []
+          },
+          {
+            "seat": "north",
+            "discards": [
+              "9p",
+              "1m",
+              "C",
+              "F",
+              "6p",
+              "8m",
+              "P",
+              "7m",
+              "F"
+            ],
+            "riichi": false,
+            "openMelds": 0,
+            "openMeldsObserved": false,
+            "melds": []
+          },
+          {
+            "seat": "east",
+            "discards": [
+              "C",
+              "1p",
+              "F",
+              "E",
+              "N",
+              "1s",
+              "1s",
+              "3s",
+              "9p"
+            ],
+            "riichi": false,
+            "openMelds": 0,
+            "openMeldsObserved": true,
+            "melds": []
+          }
+        ]
+      },
+      "loggedLocalPlan": {
+        "primaryTarget": "yakuhai:P",
+        "secondaryTarget": "toitoi",
+        "callsAllowed": true,
+        "requiredTiles": [
+          "1s",
+          "4s",
+          "6s",
+          "7s",
+          "9s",
+          "P"
+        ],
+        "estimatedPoints": 2000,
+        "phase": "middle_balance",
+        "placement": {
+          "rank": 1,
+          "scoreGapToLeader": 0,
+          "allLast": false
+        },
+        "changeReason": "7-11巡目は速度・打点・安全度を均衡"
+      }
+    },
+    {
+      "name": "chi_toitoi_primary",
+      "sourceLine": 12,
+      "replayId": "2d8ea756-37fe-440f-bbda-20259112a0c2",
+      "screenshot": "/home/yama1/projects/jantama-auto/artifacts/friend-300-1ecb24e-20261030/frames/2026-10-29T21-57-33.500475+00-00.jpg",
+      "state": {
+        "round": "east_1",
+        "honba": 0,
+        "riichiSticks": 0,
+        "seat": "south",
+        "scores": {
+          "south": 25000,
+          "west": 25000,
+          "north": 25000,
+          "east": 25000
+        },
+        "hand": [
+          "7p",
+          "2s",
+          "3s",
+          "4s",
+          "5s",
+          "5s",
+          "6s",
+          "6s",
+          "9s",
+          "9s"
+        ],
+        "draw": "4s",
+        "doraIndicators": [
+          "3p",
+          "1p"
+        ],
+        "ownDiscards": [
+          "5p",
+          "2m",
+          "C",
+          "W",
+          "5p",
+          "6p",
+          "8s",
+          "7p",
+          "S",
+          "P",
+          "P"
+        ],
+        "melds": [
+          {
+            "type": "chi",
+            "tiles": [
+              "7m",
+              "6m",
+              "8m"
+            ]
+          }
+        ],
+        "visibleTiles": [],
+        "openMelds": 1,
+        "turn": 11,
+        "remainingTiles": 24,
+        "phase": "self_turn",
+        "recognitionConfidence": 0.9434484721608073,
+        "publicStateConfidence": 0,
+        "riichiDeclared": false,
+        "availableUiActions": [],
+        "opponents": [
+          {
+            "seat": "west",
+            "discards": [
+              "N",
+              "E",
+              "1m",
+              "F",
+              "9m",
+              "9p",
+              "C",
+              "9p",
+              "9m",
+              "S",
+              "4m"
+            ],
+            "riichi": false,
+            "openMelds": 0,
+            "openMeldsObserved": true,
+            "melds": []
+          },
+          {
+            "seat": "north",
+            "discards": [
+              "9p",
+              "1m",
+              "C",
+              "F",
+              "6p",
+              "8m",
+              "P",
+              "7m",
+              "F",
+              "9s"
+            ],
+            "riichi": false,
+            "openMelds": 0,
+            "openMeldsObserved": false,
+            "melds": []
+          },
+          {
+            "seat": "east",
+            "discards": [
+              "C",
+              "1p",
+              "F",
+              "E",
+              "N",
+              "1s",
+              "1s",
+              "3s",
+              "9p",
+              "8m",
+              "7m"
+            ],
+            "riichi": false,
+            "openMelds": 0,
+            "openMeldsObserved": true,
+            "melds": []
+          }
+        ]
+      },
+      "loggedLocalPlan": {
+        "primaryTarget": "toitoi",
+        "secondaryTarget": "tanyao",
+        "callsAllowed": true,
+        "requiredTiles": [
+          "1s",
+          "4s",
+          "7s"
+        ],
+        "estimatedPoints": 1000,
+        "phase": "middle_balance",
+        "placement": {
+          "rank": 1,
+          "scoreGapToLeader": 0,
+          "allLast": false
+        },
+        "changeReason": "7-11巡目は速度・打点・安全度を均衡"
+      }
+    },
+    {
+      "name": "chi_cached_candidate",
+      "sourceLine": 13,
+      "replayId": "e24cbebb-3ab6-42ba-baa4-e8755a5d3de3",
+      "screenshot": "/home/yama1/projects/jantama-auto/artifacts/friend-300-1ecb24e-20261030/frames/2026-10-29T21-57-51.810948+00-00.jpg",
+      "state": {
+        "round": "east_1",
+        "honba": 0,
+        "riichiSticks": 0,
+        "seat": "south",
+        "scores": {
+          "south": 25000,
+          "west": 25000,
+          "north": 25000,
+          "east": 25000
+        },
+        "hand": [
+          "2s",
+          "3s",
+          "4s",
+          "4s",
+          "5s",
+          "5s",
+          "6s",
+          "6s",
+          "9s",
+          "9s"
+        ],
+        "draw": "5p",
+        "doraIndicators": [
+          "3p",
+          "1p"
+        ],
+        "ownDiscards": [
+          "5p",
+          "2m",
+          "C",
+          "W",
+          "5p",
+          "6p",
+          "8s",
+          "7p",
+          "S",
+          "P",
+          "P",
+          "7p"
+        ],
+        "melds": [
+          {
+            "type": "chi",
+            "tiles": [
+              "7m",
+              "6m",
+              "8m"
+            ]
+          }
+        ],
+        "visibleTiles": [],
+        "openMelds": 1,
+        "turn": 12,
+        "remainingTiles": 20,
+        "phase": "self_turn",
+        "recognitionConfidence": 0.9435171748978136,
+        "publicStateConfidence": 0,
+        "riichiDeclared": false,
+        "availableUiActions": [],
+        "opponents": [
+          {
+            "seat": "west",
+            "discards": [
+              "N",
+              "E",
+              "1m",
+              "F",
+              "9m",
+              "9p",
+              "C",
+              "9p",
+              "9m",
+              "S",
+              "4m",
+              "1p"
+            ],
+            "riichi": false,
+            "openMelds": 0,
+            "openMeldsObserved": true,
+            "melds": []
+          },
+          {
+            "seat": "north",
+            "discards": [
+              "9p",
+              "1m",
+              "C",
+              "F",
+              "6p",
+              "8m",
+              "P",
+              "7m",
+              "F",
+              "9s",
+              "8p",
+              "5s"
+            ],
+            "riichi": false,
+            "openMelds": 0,
+            "openMeldsObserved": false,
+            "melds": []
+          },
+          {
+            "seat": "east",
+            "discards": [
+              "C",
+              "1p",
+              "F",
+              "E",
+              "N",
+              "1s",
+              "1s",
+              "3s",
+              "9p",
+              "8m",
+              "7m",
+              "1s"
+            ],
+            "riichi": false,
+            "openMelds": 0,
+            "openMeldsObserved": true,
+            "melds": []
+          }
+        ]
+      },
+      "loggedLocalPlan": {
+        "primaryTarget": "toitoi",
+        "secondaryTarget": "tanyao",
+        "callsAllowed": false,
+        "requiredTiles": [
+          "1s",
+          "4s",
+          "7s"
+        ],
+        "estimatedPoints": 1000,
+        "phase": "late_tenpai_defense",
+        "placement": {
+          "rank": 1,
+          "scoreGapToLeader": 0,
+          "allLast": false
+        },
+        "changeReason": "終盤のトップ目なので放銃回避を強化"
+      }
+    },
+    {
+      "name": "red_pon_other_suit_honitsu",
+      "sourceLine": 49,
+      "replayId": "9094f9d4-0dec-4ed6-80ce-cbdab596c296",
+      "screenshot": "/home/yama1/projects/jantama-auto/artifacts/friend-300-1ecb24e-20261030/frames/2026-10-29T22-06-02.176725+00-00.jpg",
+      "state": {
+        "round": "east_3",
+        "honba": 2,
+        "riichiSticks": 1,
+        "seat": "north",
+        "scores": {
+          "north": 26500,
+          "east": 25500,
+          "south": 24500,
+          "west": 22500
+        },
+        "hand": [
+          "2m",
+          "2m",
+          "3m",
+          "3m",
+          "4m",
+          "4s",
+          "0s",
+          "S",
+          "S",
+          "N"
+        ],
+        "draw": "9m",
+        "doraIndicators": [
+          "6s"
+        ],
+        "ownDiscards": [
+          "9p",
+          "6s",
+          "1s",
+          "C",
+          "1s",
+          "P",
+          "5s",
+          "P",
+          "7p",
+          "N"
+        ],
+        "melds": [
+          {
+            "type": "pon",
+            "tiles": [
+              "0p",
+              "5p",
+              "5p"
+            ]
+          }
+        ],
+        "visibleTiles": [],
+        "openMelds": 1,
+        "turn": 10,
+        "remainingTiles": 29,
+        "phase": "self_turn",
+        "recognitionConfidence": 0.8513192893777392,
+        "publicStateConfidence": 0,
+        "riichiDeclared": false,
+        "availableUiActions": [],
+        "opponents": [
+          {
+            "seat": "east",
+            "discards": [
+              "9p",
+              "N",
+              "F",
+              "8p",
+              "3p",
+              "E",
+              "6m",
+              "2m",
+              "E",
+              "C",
+              "W"
+            ],
+            "riichi": false,
+            "openMelds": 0,
+            "openMeldsObserved": true,
+            "melds": []
+          },
+          {
+            "seat": "south",
+            "discards": [
+              "W",
+              "1m",
+              "1m",
+              "C",
+              "S",
+              "3m",
+              "2s",
+              "8s",
+              "1p"
+            ],
+            "riichi": false,
+            "openMelds": 0,
+            "openMeldsObserved": true,
+            "melds": []
+          },
+          {
+            "seat": "west",
+            "discards": [
+              "9m",
+              "2p",
+              "7p",
+              "1s",
+              "8m",
+              "P",
+              "C",
+              "7s",
+              "2s",
+              "E"
+            ],
+            "riichi": false,
+            "openMelds": 1,
+            "openMeldsObserved": true,
+            "melds": [
+              {
+                "type": "chi",
+                "tiles": [
+                  "7m",
+                  "0m",
+                  "6m"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "loggedLocalPlan": {
+        "primaryTarget": "efficient_standard",
+        "secondaryTarget": "honitsu_m",
+        "callsAllowed": true,
+        "requiredTiles": [
+          "1m",
+          "4m",
+          "3s",
+          "6s"
+        ],
+        "estimatedPoints": 1000,
+        "phase": "middle_balance",
+        "placement": {
+          "rank": 1,
+          "scoreGapToLeader": 0,
+          "allLast": false
+        },
+        "changeReason": "7-11巡目は速度・打点・安全度を均衡"
+      }
+    },
+    {
+      "name": "red_pon_toitoi_positive",
+      "sourceLine": 50,
+      "replayId": "73524ffe-992f-4974-8a46-2dea70d0f5f6",
+      "screenshot": "/home/yama1/projects/jantama-auto/artifacts/friend-300-1ecb24e-20261030/frames/2026-10-29T22-06-11.017841+00-00.jpg",
+      "state": {
+        "round": "east_3",
+        "honba": 2,
+        "riichiSticks": 1,
+        "seat": "north",
+        "scores": {
+          "north": 26500,
+          "east": 25500,
+          "south": 24500,
+          "west": 22500
+        },
+        "hand": [
+          "2m",
+          "2m",
+          "3m",
+          "3m",
+          "4m",
+          "9m",
+          "4s",
+          "0s",
+          "S",
+          "S"
+        ],
+        "draw": "9m",
+        "doraIndicators": [
+          "6s"
+        ],
+        "ownDiscards": [
+          "9p",
+          "6s",
+          "1s",
+          "C",
+          "1s",
+          "P",
+          "5s",
+          "P",
+          "7p",
+          "N",
+          "N"
+        ],
+        "melds": [
+          {
+            "type": "pon",
+            "tiles": [
+              "0p",
+              "5p",
+              "5p"
+            ]
+          }
+        ],
+        "visibleTiles": [],
+        "openMelds": 1,
+        "turn": 11,
+        "remainingTiles": 25,
+        "phase": "self_turn",
+        "recognitionConfidence": 0.8464541507302635,
+        "publicStateConfidence": 0,
+        "riichiDeclared": false,
+        "availableUiActions": [],
+        "opponents": [
+          {
+            "seat": "east",
+            "discards": [
+              "9p",
+              "N",
+              "F",
+              "8p",
+              "3p",
+              "E",
+              "6m",
+              "2m",
+              "E",
+              "C",
+              "W",
+              "3s"
+            ],
+            "riichi": false,
+            "openMelds": 0,
+            "openMeldsObserved": true,
+            "melds": []
+          },
+          {
+            "seat": "south",
+            "discards": [
+              "W",
+              "1m",
+              "1m",
+              "C",
+              "S",
+              "3m",
+              "2s",
+              "8s",
+              "1p",
+              "8p"
+            ],
+            "riichi": false,
+            "openMelds": 0,
+            "openMeldsObserved": true,
+            "melds": []
+          },
+          {
+            "seat": "west",
+            "discards": [
+              "9m",
+              "2p",
+              "7p",
+              "1s",
+              "8m",
+              "P",
+              "C",
+              "7s",
+              "2s",
+              "E",
+              "7m"
+            ],
+            "riichi": false,
+            "openMelds": 1,
+            "openMeldsObserved": true,
+            "melds": [
+              {
+                "type": "chi",
+                "tiles": [
+                  "7m",
+                  "0m",
+                  "6m"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "loggedLocalPlan": {
+        "primaryTarget": "toitoi",
+        "secondaryTarget": "efficient_standard",
+        "callsAllowed": true,
+        "requiredTiles": [
+          "1m",
+          "4m",
+          "3s",
+          "6s"
+        ],
+        "estimatedPoints": 1000,
+        "phase": "middle_balance",
+        "placement": {
+          "rank": 1,
+          "scoreGapToLeader": 0,
+          "allLast": false
+        },
+        "changeReason": "7-11巡目は速度・打点・安全度を均衡"
+      }
+    }
+  ]
+}

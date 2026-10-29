@@ -2733,17 +2733,28 @@ class PythonAutoOperator:
         self.public_recognition_request_id += 1
         request_id = self.public_recognition_request_id
         generation = self.public_cache_generation
+        # The worker may wait behind another exchange. Freeze the concealed
+        # row and typed meld context together, not from a later call's state.
+        hand_plan_input: dict[str, Any] = {}
+        if include_hand_plan:
+            hand_plan_input = {
+                "concealedTiles": copy.deepcopy(self.cached_concealed_tiles),
+                "openMelds": self.cached_open_melds,
+                "seat": self.public_state.get("seat", "east"),
+                "round": self.public_state.get("round", "unknown"),
+            }
+            public = getattr(self, "cached_public_observation", None) or {}
+            melds = public.get("ownMelds")
+            if (public.get("ownMeldsObserved") is True and isinstance(melds, list)
+                    and len(melds) == self.cached_open_melds):
+                hand_plan_input["melds"] = copy.deepcopy(melds)
 
         def recognize() -> None:
             envelope: dict[str, Any]
             try:
                 result = self.request_public_recognition({
                     "id": request_id, "screenshot": str(frame_path), "capturedAt": captured_at,
-                    **({"concealedTiles": self.cached_concealed_tiles,
-                        "openMelds": self.cached_open_melds,
-                        "seat": self.public_state.get("seat", "east"),
-                        "round": self.public_state.get("round", "unknown")}
-                       if include_hand_plan else {}),
+                    **hand_plan_input,
                 })
                 envelope = {"generation": generation, "result": result}
             except Exception as error:
@@ -3235,6 +3246,36 @@ class PythonAutoOperator:
         self.stop_screencast_gate()
         self.start_screencast_gate(page)
 
+    def resident_self_turn_budget_fields(self, captured_at: float | None) -> dict[str, Any]:
+        """Bound solver waiting by the same original clocks as its tile click.
+
+        This is sent only for an explicit force-auto self-turn evaluation.
+        The resident server separately reserves IPC/pixel work plus the
+        unchanged 650ms first-gesture window; no clock or grace is refreshed.
+        """
+        budget = self.force_auto_click_budget_ms()
+        if getattr(self.args, "mode", None) != "force-auto" or budget is None:
+            return {}
+        started = getattr(self, "action_evidence_started_at", None)
+        budget_started = getattr(self, "action_budget_started_at", None)
+        if budget_started is None:
+            budget_started = started
+        now = time.monotonic()
+        clocks = (captured_at, started, budget_started)
+        deadline = self.configured_action_deadline_ms()
+        if (any(isinstance(stamp, bool) or not isinstance(stamp, (int, float))
+                or not isfinite(stamp) or not 0 <= stamp <= now for stamp in clocks)
+                or not started <= budget_started
+                or getattr(self, "action_evidence_kind", None) != "discard"
+                or isinstance(deadline, bool) or not isinstance(deadline, (int, float))
+                or not isfinite(deadline) or deadline <= 0):
+            raise RetryableSafetyAbort("resident self-turn decision lacks valid original timing evidence")
+        effective_budget = budget + self.force_auto_same_draw_grace_ms(captured_at)
+        return {
+            "actionBudgetRemainingMs": effective_budget - round((now - budget_started) * 1000),
+            "discardSelectionReserveMs": FORCE_AUTO_DISCARD_SELECTION_RESERVE_MS,
+        }
+
     def recognize_resident(
         self, screenshot: Path, *, concealed_only: bool = False, draw_only: bool = False,
         concealed_tiles: list[str] | None = None, evaluate_force_auto: bool = False,
@@ -3258,6 +3299,7 @@ class PythonAutoOperator:
             )
         elif frame_public_state is None and evaluate_force_auto:
             frame_public_state = getattr(self, "public_state", None)
+        self_turn_budget = self.resident_self_turn_budget_fields(captured_at) if evaluate_force_auto else {}
         self.recognition_server.stdin.write(json.dumps({
             "id": request_id,
             "screenshot": str(screenshot),
@@ -3276,6 +3318,7 @@ class PythonAutoOperator:
             **({"publicState": frame_public_state} if frame_public_state is not None else {}),
             "forceAutoActionButtons": force_auto_action_buttons,
             "actionDeadlineRemainingMs": self.action_deadline_remaining_ms(),
+            **self_turn_budget,
         }) + "\n")
         self.recognition_server.stdin.flush()
         response_line = self.recognition_server.stdout.readline()

@@ -1,7 +1,7 @@
 import { readFile, stat } from "node:fs/promises";
 import { createHash, randomUUID } from "node:crypto";
 import { createInterface } from "node:readline";
-import { decideForceAutoWithJevDeadline } from "../agent/decision.js";
+import { decideSelfTurnWithinBudget, selfTurnDecisionBudget } from "./selfTurnDecisionBudget.js";
 import { cachedPublicStatePatch, type CachedPublicObservation } from "../agent/publicCache.js";
 import { isHandPlanCompatible, JevClient } from "../jev/client.js";
 import { parseGameState, parsePublicGameState } from "../game/state.js";
@@ -33,9 +33,6 @@ const forceAutoClickBudgetMs = Number(process.env.FORCE_AUTO_CLICK_BUDGET_MS ?? 
 if (!Number.isFinite(forceAutoClickBudgetMs) || forceAutoClickBudgetMs <= 0) {
   throw new Error(`Invalid force-auto click budget: ${process.env.FORCE_AUTO_CLICK_BUDGET_MS}`);
 }
-// Live 2600ms trials need ~200–270ms after decision for IPC and pixel guards.
-// Reserve 350ms so Jev yields to the local decision before those checks.
-const preClickReserveMs = 350;
 const maximumPublicCacheAgeMs = Number(process.env.FORCE_AUTO_PUBLIC_CACHE_MAX_AGE_MS ?? 15_000);
 if (!Number.isFinite(maximumPublicCacheAgeMs) || maximumPublicCacheAgeMs <= 0) {
   throw new Error(`Invalid force-auto public cache age: ${process.env.FORCE_AUTO_PUBLIC_CACHE_MAX_AGE_MS}`);
@@ -88,6 +85,8 @@ for await (const line of lines) {
       publicState?: unknown;
       forceAutoActionButtons?: Array<{ x: number; y: number; width: number; height: number; center: { x: number; y: number } }>;
       actionDeadlineRemainingMs?: number;
+      actionBudgetRemainingMs?: number;
+      discardSelectionReserveMs?: number;
       stageForceAutoRecognition?: boolean;
       forceAutoRecognitionId?: string;
     };
@@ -182,8 +181,6 @@ for await (const line of lines) {
       }
       const concealed = recognition.tiles;
       const handPlan = request.publicObservation?.handPlan;
-      const compatibleHandPlan = handPlan && isHandPlanCompatible(handPlan, concealed, inferredOpenMelds)
-        ? handPlan : undefined;
       const capturedAtMs = request.publicObservation ? Date.parse(request.publicObservation.capturedAt) : undefined;
       const cacheAgeMs = capturedAtMs !== undefined && Number.isFinite(capturedAtMs)
         ? Math.max(0, Date.now() - capturedAtMs)
@@ -232,19 +229,19 @@ for await (const line of lines) {
           () => verifyOpenDraw(request.screenshot, activeLayout.drawSlot!));
       }
       // Include any consensus work in the remaining decision-to-click budget.
+      const compatibleHandPlan = handPlan && isHandPlanCompatible(handPlan, concealed, inferredOpenMelds, state.melds)
+        ? handPlan : undefined;
       const captureAgeBeforeDecisionMs = Math.max(0, Date.now() - frameCapturedAtMs);
-      const availableDecisionMs = Math.max(
-        1,
-        Math.floor(forceAutoClickBudgetMs - captureAgeBeforeDecisionMs - preClickReserveMs),
-      );
-      const actionDeadlineRemainingMs = Number.isFinite(request.actionDeadlineRemainingMs)
-        ? Math.max(1, Math.floor(request.actionDeadlineRemainingMs! - preClickReserveMs))
-        : forceAutoDeadlineMs;
-      const decisionBudgetMs = Math.min(forceAutoDeadlineMs, availableDecisionMs, actionDeadlineRemainingMs);
-      const decision = await decideForceAutoWithJevDeadline(state, {
+      const budget = selfTurnDecisionBudget({
+        clickBudgetMs: forceAutoClickBudgetMs, captureAgeBeforeDecisionMs, forceAutoDeadlineMs,
+        processingElapsedMs: Math.max(0, performance.now() - processingStartedAt),
+        actionDeadlineRemainingMs: request.actionDeadlineRemainingMs,
+        actionBudgetRemainingMs: request.actionBudgetRemainingMs,
+        discardSelectionReserveMs: request.discardSelectionReserveMs,
+      });
+      const decision = await decideSelfTurnWithinBudget(state, budget, {
         ...(jev ? { jev } : {}),
         ...(compatibleHandPlan ? { handPlan: compatibleHandPlan } : {}),
-        deadlineMs: decisionBudgetMs,
       });
       const clickIndex = decision.selectedAction.action === "discard" || decision.selectedAction.action === "riichi"
         ? [...state.hand, ...(state.draw ? [state.draw] : [])].map(String).lastIndexOf(decision.selectedAction.tile)
@@ -297,8 +294,7 @@ for await (const line of lines) {
         turnTiming: {
           clickBudgetMs: forceAutoClickBudgetMs,
           captureAgeBeforeDecisionMs: Math.round(captureAgeBeforeDecisionMs),
-          preClickReserveMs,
-          decisionBudgetMs,
+          ...budget,
         },
         handPlan: {
           applied: Boolean(compatibleHandPlan),

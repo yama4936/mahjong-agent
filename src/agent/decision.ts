@@ -8,6 +8,7 @@ import { isTerminalOrHonor, normalizeTile, tileIndex, type GameTile } from "../g
 import { standardWaitShapes, type WaitShape } from "../game/winningShapes.js";
 import { scoreClosedWaits, type ClosedWaitReport } from "../evaluation/closedWaitScorer.js";
 import { openTenpaiYaku, type OpenTenpaiYaku } from "../evaluation/openTenpaiYaku.js";
+import { isHandPlanFeasible } from "./handPlanFeasibility.js";
 
 export type AgentMode = "observer" | "advisor" | "auto" | "force-auto";
 
@@ -111,7 +112,8 @@ function inferPlanTargets(state: GameState): Array<{ id: string; score: number }
     const suited = tiles.filter((tile) => tile.endsWith(suit)).length;
     if (suited + honors.length >= tiles.length - 2) plans.push({ id: `honitsu_${suit}`, score: suited + honors.length });
   }
-  return plans.sort((left, right) => right.score - left.score);
+  return plans.filter(plan => isHandPlanFeasible(plan.id, state.openMelds, state.melds))
+    .sort((left, right) => right.score - left.score);
 }
 
 export function buildStrategyHandPlan(state: GameState): StrategyHandPlan {

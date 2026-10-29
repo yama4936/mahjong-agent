@@ -4,6 +4,7 @@ import type { LegalAction } from "../game/actions.js";
 import { normalizeTile, parseGameTile } from "../game/tiles.js";
 import type { ClosedWaitReport } from "../evaluation/closedWaitScorer.js";
 import type { OpenTenpaiScore } from "../evaluation/openTenpaiScore.js";
+import { handPlanMeldSignature, isHandPlanFeasible, type HandPlanMeld } from "../agent/handPlanFeasibility.js";
 
 export interface JevDecision {
   actionId: string;
@@ -21,12 +22,14 @@ export interface JevHandPlan extends JevDecision {
   planId: string;
   sourceHand: string[];
   openMelds: number;
+  melds?: HandPlanMeld[];
   createdAt: string;
 }
 
 export interface HandPlanInput {
   hand: readonly string[];
   openMelds: number;
+  melds?: readonly HandPlanMeld[];
   seat?: string;
   round?: string;
 }
@@ -124,13 +127,16 @@ export class JevClient {
   async chooseHandPlan(input: HandPlanInput, signal?: AbortSignal): Promise<JevHandPlan> {
     if (!this.apiKey) throw new Error("TYPESAFE_API_KEY is required");
     const canonicalHand = input.hand.map((tile) => parseGameTile(tile));
-    const request = buildJevHandPlanRequest({ ...input, hand: canonicalHand }, this.model);
+    const canonicalMelds = input.melds?.map(meld => ({ type: meld.type, tiles: meld.tiles.map(parseGameTile) }));
+    const request = buildJevHandPlanRequest({ ...input, hand: canonicalHand,
+      ...(canonicalMelds ? { melds: canonicalMelds } : {}) }, this.model);
     const decision = await this.choose(request, "mahjong-hand-plan-v1", signal);
     return {
       ...decision,
       planId: decision.actionId,
       sourceHand: canonicalHand,
       openMelds: input.openMelds,
+      ...(canonicalMelds ? { melds: canonicalMelds } : {}),
       createdAt: new Date().toISOString(),
     };
   }
@@ -324,8 +330,8 @@ export function buildJevRequest(
       } } : {}),
     },
   ]));
-  const compatiblePlan = handPlan && isHandPlanCompatible(handPlan, commonState.hand, state.openMelds)
-    ? summarizeHandPlan(handPlan)
+  const compatiblePlan = handPlan && isHandPlanCompatible(handPlan, commonState.hand, state.openMelds, state.melds)
+    ? summarizeHandPlan(handPlan, state.openMelds, state.melds)
     : undefined;
   return {
     model,
@@ -422,10 +428,13 @@ function handPlanCandidates(input: HandPlanInput): Array<[HandPlanId, Record<str
   const pairTypes = [...counts.values()].filter((count) => count >= 2).length;
   const tripletTypes = [...counts.values()].filter((count) => count >= 3).length;
   const candidates: Array<[HandPlanId, Record<string, unknown>]> = [];
-  const add = (id: HandPlanId, fit: Record<string, unknown>) => candidates.push([id, {
-    ...HAND_PLAN_DEFINITIONS[id], fit_evidence: fit,
-    commitment_rule: "This is a soft direction, never a reason to accept a material shanten, ukeire, safety, or EV loss.",
-  }]);
+  const add = (id: HandPlanId, fit: Record<string, unknown>) => {
+    if (!isHandPlanFeasible(id, input.openMelds, input.melds)) return;
+    candidates.push([id, {
+      ...HAND_PLAN_DEFINITIONS[id], fit_evidence: fit,
+      commitment_rule: "This is a soft direction, never a reason to accept a material shanten, ukeire, safety, or EV loss.",
+    }]);
+  };
   add("efficient_standard", { pair_types: pairTypes, triplet_types: tripletTypes, open_melds: input.openMelds });
   if (input.openMelds === 0) add("closed_sequence", { honors: honors.length, pair_types: pairTypes });
   if (honors.length + terminals.length <= 5) add("tanyao", { simple_tiles: hand.length - honors.length - terminals.length, blockers: honors.length + terminals.length });
@@ -464,6 +473,7 @@ export function buildJevHandPlanRequest(input: HandPlanInput, model: string): Je
       task: "Choose a soft offensive direction for a Japanese Mahjong hand before the next draw",
       hand: input.hand,
       openMelds: input.openMelds,
+      ...(input.melds ? { melds: input.melds } : {}),
       seat: input.seat ?? "unknown",
       round: input.round ?? "unknown",
       board_information_intentionally_omitted: true,
@@ -481,9 +491,10 @@ export function buildJevHandPlanRequest(input: HandPlanInput, model: string): Je
   };
 }
 
-function summarizeHandPlan(plan: JevHandPlan): Record<string, unknown> {
+function summarizeHandPlan(plan: JevHandPlan, openMelds: number, melds?: readonly HandPlanMeld[]): Record<string, unknown> {
   const definition = HAND_PLAN_DEFINITIONS[plan.planId as HandPlanId];
   const alternatives = Object.entries(plan.probabilities)
+    .filter(([id]) => isHandPlanFeasible(id, openMelds, melds))
     .sort(([, left], [, right]) => right - left)
     .slice(0, 3)
     .map(([id, probability]) => ({ id, probability }));
@@ -496,8 +507,18 @@ function summarizeHandPlan(plan: JevHandPlan): Record<string, unknown> {
   };
 }
 
-export function isHandPlanCompatible(plan: JevHandPlan, currentHand: readonly string[], openMelds: number): boolean {
+export function isHandPlanCompatible(
+  plan: JevHandPlan, currentHand: readonly string[], openMelds: number, melds?: readonly HandPlanMeld[],
+): boolean {
   if (plan.openMelds !== openMelds || currentHand.length !== plan.sourceHand.length + 1) return false;
+  const sourceSignature = handPlanMeldSignature(plan.openMelds, plan.melds);
+  const currentSignature = handPlanMeldSignature(openMelds, melds);
+  if (plan.melds !== undefined && sourceSignature === undefined) return false;
+  if (sourceSignature !== undefined && currentSignature !== undefined && sourceSignature !== currentSignature) return false;
+  // Legacy open plans have no immutable-group provenance. Preserve their
+  // generic prior, but never certify a named yaku from missing evidence.
+  if (openMelds > 0 && sourceSignature === undefined && plan.planId !== "efficient_standard") return false;
+  if (!isHandPlanFeasible(plan.planId, openMelds, melds)) return false;
   const available = new Map<string, number>();
   for (const tile of currentHand.map(normalizeTile)) available.set(tile, (available.get(tile) ?? 0) + 1);
   for (const tile of plan.sourceHand.map(normalizeTile)) {
@@ -506,6 +527,12 @@ export function isHandPlanCompatible(plan: JevHandPlan, currentHand: readonly st
     available.set(tile, count - 1);
   }
   return true;
+}
+
+export function handPlanInputCacheKey(input: HandPlanInput): string {
+  return JSON.stringify({ hand: [...input.hand].map(parseGameTile).sort(), openMelds: input.openMelds,
+    melds: handPlanMeldSignature(input.openMelds, input.melds) ?? null,
+    seat: input.seat ?? null, round: input.round ?? null });
 }
 
 async function readBoundedJson(response: Response): Promise<any> {

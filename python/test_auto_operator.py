@@ -2737,6 +2737,11 @@ class AwayDialogDetectionTest(unittest.TestCase):
         operator.public_cache_last_frame_hash = None
         operator.public_recognition_request_id = 0
         operator.public_cache_generation = 3
+        # Scheduling now snapshots plan input before the delayed worker starts.
+        # Mirror the unconditional constructor defaults in this __new__ fixture.
+        operator.cached_concealed_tiles = None
+        operator.cached_open_melds = 0
+        operator.public_state = {}
         with tempfile.TemporaryDirectory() as directory:
             operator.frames = Path(directory)
             with patch("auto_operator.threading.Thread") as worker:
@@ -2756,6 +2761,9 @@ class AwayDialogDetectionTest(unittest.TestCase):
         operator.public_cache_last_frame_hash = None
         operator.public_recognition_request_id = 0
         operator.public_cache_generation = 3
+        operator.cached_concealed_tiles = None
+        operator.cached_open_melds = 0
+        operator.public_state = {}
         with tempfile.TemporaryDirectory() as directory:
             operator.frames = Path(directory)
             with patch("auto_operator.classify_screen", side_effect=AssertionError("duplicate classification")):

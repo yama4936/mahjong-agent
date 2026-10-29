@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "1ecb24e",
+  "sourceLog": "artifacts/friend-300-1ecb24e-20261030/python-operator.jsonl",
+  "scope": "Raw reported millisecond values are rounded independently; arithmetic can differ by 1ms. No elapsed-time profile or original clock is changed.",
+  "clickBudgetMs": 2600,
+  "legacyIpcAndPixelReserveMs": 350,
+  "requiredFirstGestureReserveMs": 650,
+  "cases": [
+    {
+      "replay": "6e8e62e5-d524-4a1e-a435-ebd396273b49",
+      "timestamp": "2026-10-29T22:02:51.871017+00:00",
+      "captureAgeBeforeDecisionMs": 1378,
+      "legacyDecisionBudgetMs": 872,
+      "decisionElapsedMs": 874,
+      "actionEvidenceAgeBeforeClickMs": 6173,
+      "imageAgeBeforeClickMs": 2357,
+      "remainingBeforeClickMs": 243,
+      "parallelHandRecognitionMs": 651,
+      "parallelBoardMetadataMs": 31,
+      "recognitionAndDecisionMs": 1528
+    },
+    {
+      "replay": "a5a1d2fa-1d7b-4f79-a808-d57bf53f264c",
+      "timestamp": "2026-10-29T22:02:54.383243+00:00",
+      "captureAgeBeforeDecisionMs": 1025,
+      "legacyDecisionBudgetMs": 1224,
+      "decisionElapsedMs": 1224,
+      "actionEvidenceAgeBeforeClickMs": 8685,
+      "imageAgeBeforeClickMs": 2361,
+      "remainingBeforeClickMs": 239,
+      "parallelHandRecognitionMs": 645,
+      "parallelBoardMetadataMs": 38,
+      "recognitionAndDecisionMs": 1871
+    },
+    {
+      "replay": "d7304795-7f0d-4ff5-add9-a910caf7f791",
+      "timestamp": "2026-10-29T22:02:56.759698+00:00",
+      "captureAgeBeforeDecisionMs": 987,
+      "legacyDecisionBudgetMs": 1263,
+      "decisionElapsedMs": 1264,
+      "actionEvidenceAgeBeforeValidationMs": 11060,
+      "imageAgeBeforeValidationMs": 2260,
+      "parallelHandRecognitionMs": 685,
+      "parallelBoardMetadataMs": 31,
+      "recognitionAndDecisionMs": 1952
+    }
+  ],
+  "state": {
+    "round": "east_3", "honba": 2, "riichiSticks": 1, "seat": "north",
+    "scores": {"north": 26500, "east": 25500, "south": 24500, "west": 22500},
+    "hand": ["2m", "3m", "4m", "0p", "5p", "1s", "0s", "5s", "S", "S", "N", "N", "P"],
+    "draw": "4s", "doraIndicators": ["6s"], "ownDiscards": ["9p", "6s", "1s", "C"],
+    "melds": [], "visibleTiles": [], "openMelds": 0, "turn": 4, "remainingTiles": 50,
+    "phase": "self_turn", "recognitionConfidence": 0, "publicStateConfidence": 0,
+    "riichiDeclared": false, "availableUiActions": [],
+    "opponents": [
+      {"seat": "east", "discards": ["9p", "N", "F", "8p", "3p"], "riichi": false, "openMelds": 0, "openMeldsObserved": true, "melds": []},
+      {"seat": "south", "discards": ["W", "1m", "1m", "C", "S"], "riichi": false, "openMelds": 0, "openMeldsObserved": true, "melds": []},
+      {"seat": "west", "discards": ["9m", "2p", "7p", "1s", "8m"], "riichi": false, "openMelds": 0, "openMeldsObserved": true, "melds": []}
+    ]
+  }
+}
