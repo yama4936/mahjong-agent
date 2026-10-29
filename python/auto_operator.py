@@ -1700,6 +1700,13 @@ def send_discard_click(
             # as for an unproven receipt, while preserving the actual guard
             # failure in the error text.
             mouse.move(viewport["width"] / 2, viewport["height"] * 0.72)
+            if on_unverified_selection is not None:
+                try:
+                    on_unverified_selection(selection_before, last_receipt)
+                except Exception:
+                    # A failed evidence write cannot authorize the pending
+                    # second click or turn this into an ordinary retry.
+                    pass
             raise SelectionStateUncertainAbort(
                 f"discard confirmation withheld after tile selection: {error}"
             ) from error
@@ -2526,6 +2533,44 @@ class PythonAutoOperator:
         raise RetryableSafetyAbort(
             "force-auto click budget expired before safe click; reobserve current hand"
         )
+
+    def require_riichi_confirmation_receipt(
+        self, certificate: _RiichiSelectionBudget, receipt: bytes | None,
+    ) -> None:
+        """Keep the strict second-click guard, but expose which proof failed.
+
+        A raised face is not sufficient evidence that the declaration UI and
+        river still agree. In particular, a waits preview can obscure this
+        river ROI; it remains a rejection, not an excuse to relax the .1%
+        comparison. send_discard_click saves the exact receipt on any guard
+        failure so the original pixels, rather than later proxies, survive.
+        """
+        evidence: dict[str, Any] = {
+            "riverStructureLimitPercent": RIICHI_SELECTION_RIVER_STRUCTURE_LIMIT_PERCENT,
+        }
+
+        def reject(reason: str) -> None:
+            self.log("riichi_discard_confirmation_rejected", reason=reason, **evidence)
+            raise RetryableSafetyAbort(
+                "riichi selection or own river changed before discard confirmation "
+                f"({reason})"
+            )
+
+        if receipt is None:
+            reject("receipt_missing")
+        state, confidence = classify_screen(receipt, getattr(self, "screen_references", {}))
+        evidence.update(screenState=state, screenConfidence=confidence)
+        if state != "match":
+            reject("non_match")
+        visible = riichi_selection_is_visible(crop_screenshot(receipt, self.hand_clip))
+        evidence["selectionUiVisible"] = visible
+        if not visible:
+            reject("selection_ui_missing")
+        delta = river_structure_delta(certificate.own_river, crop_screenshot(receipt, self.river_clip))
+        evidence["riverStructureDeltaPercent"] = delta if isfinite(delta) else None
+        evidence["riverStructureDeltaFinite"] = isfinite(delta)
+        if not isfinite(delta) or delta > RIICHI_SELECTION_RIVER_STRUCTURE_LIMIT_PERCENT:
+            reject("river_changed")
 
     def riichi_selection_grace_ms(
         self, certificate: _RiichiSelectionBudget | None, captured_at: float | None, phase: str,
@@ -6342,13 +6387,7 @@ class PythonAutoOperator:
 
         def before_confirmation_click() -> None:
             if riichi_selection_budget is not None:
-                if (last_selection_receipt is None
-                        or classify_screen(last_selection_receipt, getattr(self, "screen_references", {}))[0] != "match"
-                        or not riichi_selection_is_visible(crop_screenshot(last_selection_receipt, self.hand_clip))
-                        or river_structure_delta(riichi_selection_budget.own_river,
-                            crop_screenshot(last_selection_receipt, self.river_clip))
-                        > RIICHI_SELECTION_RIVER_STRUCTURE_LIMIT_PERCENT):
-                    raise RetryableSafetyAbort("riichi selection or own river changed before discard confirmation")
+                self.require_riichi_confirmation_receipt(riichi_selection_budget, last_selection_receipt)
             self.require_force_auto_click_budget(
                 evaluated_captured_at, phase="before_discard_confirmation_click",
                 **({"include_action_evidence": False} if selection_local_budget else {}),
