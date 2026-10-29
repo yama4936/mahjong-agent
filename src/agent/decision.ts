@@ -193,6 +193,8 @@ async function decideWithAnalysis(
   let confidence = base.confidence;
   let source: "deterministic" | "jev" = "deterministic";
   let jev: JevDecision | undefined;
+  const closedWaitReports = new Map<string, ClosedWaitReport>();
+  const attemptedClosedWaitReports = new Set<string>();
   const safetyReasons = [...base.safety.reasons];
 
   if (options.mode === "auto" && state.publicStateConfidence < 0.98) {
@@ -211,12 +213,43 @@ async function decideWithAnalysis(
         ? base.candidates.filter((candidate) => candidate.shanten <= minimumShanten + 1)
         : [];
       const safestDanger = Math.min(...defensible.map((candidate) => candidate.danger ?? 1));
+      // A defensive prefilter must not hide a legal tenpai declaration from
+      // the decision maker: its risk is still visible and it can be folded.
+      const riichiTiles = new Set(legalActions.filter((action) => action.action === "riichi").map((action) => action.tile));
       const jevCandidates = underThreat && defensible.length
-        ? defensible.filter((candidate) => (candidate.danger ?? 1) <= safestDanger + 0.02)
+        ? defensible.filter((candidate) => (candidate.danger ?? 1) <= safestDanger + 0.02
+          || (riichiTiles.has(candidate.tile) && candidate.shanten === 0 && candidate.ukeire > 0
+            && (state.remainingTiles === undefined || state.remainingTiles >= 4)))
         : options.mode === "force-auto" && minimumShanten !== undefined
           ? base.candidates.filter((candidate) => candidate.shanten === minimumShanten)
           : base.candidates;
-      jev = await options.jev.chooseDiscard(state, jevCandidates, options.signal, options.handPlan);
+      // Compare the actual dama/riichi scoring evidence with defensive discards
+      // before selecting a tile, not only after a declaration tile wins.
+      const scoringController = new AbortController();
+      const abortScoring = () => scoringController.abort();
+      options.signal?.addEventListener("abort", abortScoring, { once: true });
+      if (options.signal?.aborted) scoringController.abort();
+      const scoring = Promise.all(jevCandidates.map(async (candidate) => {
+        if (!riichiTiles.has(candidate.tile) || candidate.shanten !== 0 || candidate.ukeire <= 0
+          || (state.remainingTiles !== undefined && state.remainingTiles < 4)) return candidate;
+        attemptedClosedWaitReports.add(candidate.tile);
+        try {
+          const report = await (options.riichiScorer ?? scoreClosedWaits)(state, candidate.tile,
+            candidate.effectiveTiles.map((wait) => wait.tile), { signal: scoringController.signal, timeoutMs: 200 });
+          if (scoringController.signal.aborted) return candidate;
+          closedWaitReports.set(candidate.tile, report);
+          return { ...candidate, closedWaitScore: report };
+        } catch { return candidate; }
+      }));
+      let scoringTimer: ReturnType<typeof setTimeout> | undefined;
+      const scoredCandidates = await Promise.race([
+        scoring,
+        new Promise<typeof jevCandidates>((resolve) => { scoringTimer = setTimeout(() => resolve(jevCandidates), 200); }),
+      ]);
+      if (scoringTimer) clearTimeout(scoringTimer);
+      scoringController.abort();
+      options.signal?.removeEventListener("abort", abortScoring);
+      jev = await options.jev.chooseDiscard(state, scoredCandidates, options.signal, options.handPlan);
       const candidate = base.candidates.find((item) => item.actionId === jev!.actionId);
       if (!candidate) throw new Error("Jev selected an unknown candidate");
       selected = candidate;
@@ -251,7 +284,10 @@ async function decideWithAnalysis(
     let comparisonReport: ClosedWaitReport | undefined;
     let comparisonDecision: JevDecision | undefined;
     try {
-      const report = await (options.riichiScorer ?? scoreClosedWaits)(state, selected.tile,
+      if (!closedWaitReports.has(selected.tile) && attemptedClosedWaitReports.has(selected.tile)) {
+        throw new Error("Preselection declaration scoring unavailable within budget");
+      }
+      const report = closedWaitReports.get(selected.tile) ?? await (options.riichiScorer ?? scoreClosedWaits)(state, selected.tile,
         selected.effectiveTiles.map((wait) => wait.tile), options.signal ? { signal: options.signal } : {});
       comparisonReport = report;
       const discard = legalActions.find((action) => action.action === "discard" && action.tile === selected.tile)!;

@@ -61,7 +61,7 @@ test("declaration comparison can choose dama and invalid/scorer failures retain 
   assert.ok(dama.riichiAssessment?.reasons.includes("declaration_comparison_selected_dama"));
   const failed = await decide(live, { mode: "advisor", jev, riichiScorer: async () => { throw new Error("scorer unavailable"); } });
   assert.equal(failed.selectedAction.action, "riichi");
-  assert.equal(failed.declarationComparison?.reason, "scorer unavailable");
+  assert.equal(failed.declarationComparison?.reason, "Preselection declaration scoring unavailable within budget");
   const invalid = { ...jev, chooseDeclaration: async () => choice("discard_1m") } as unknown as JevClient;
   const rejected = await decide(live, { mode: "advisor", jev: invalid, riichiScorer: async () => report });
   assert.equal(rejected.selectedAction.action, "riichi");
@@ -246,7 +246,8 @@ test("force-auto gives Jev only non-worsening shanten choices when not under thr
   assert.ok(offered.every((candidate) => candidate.shanten === Math.min(...offered.map((item) => item.shanten))));
 });
 
-test("force-auto adopts a valid Jev decision before its deadline", async () => {
+test("force-auto adopts a valid Jev decision before its deadline", async (t) => {
+  t.mock.method(performance, "now", () => 0);
   const local = await decide(state, { mode: "force-auto" });
   const jev = { chooseDiscard: async (_state: unknown, candidates: any[]) => {
     const selected = candidates.find((candidate) => candidate.actionId !== local.selectedActionId) ?? candidates[0];
@@ -265,9 +266,11 @@ test("force-auto adopts a valid Jev decision before its deadline", async () => {
   assert.equal(result.arbitration?.deadlineMs, 1_000);
 });
 
-test("force-auto falls back locally when Jev exceeds its deadline", async () => {
+test("force-auto falls back locally when Jev exceeds its deadline", async (t) => {
+  t.mock.method(performance, "now", () => 0);
+  let aborted = false;
   const jev = { chooseDiscard: async (_state: unknown, _candidates: any[], signal: AbortSignal) => (
-    new Promise((_resolve, reject) => signal.addEventListener("abort", () => reject(new Error("aborted")), { once: true }))
+    new Promise((_resolve, reject) => signal.addEventListener("abort", () => { aborted = true; reject(new Error("aborted")); }, { once: true }))
   ) } as any;
 
   const result = await decideForceAutoWithJevDeadline(state, { jev, deadlineMs: 5 });
@@ -275,9 +278,11 @@ test("force-auto falls back locally when Jev exceeds its deadline", async () => 
   assert.equal(result.source, "deterministic");
   assert.equal(result.arbitration?.selectedSource, "local");
   assert.equal(result.arbitration?.fallbackReason, "deadline_exceeded");
+  assert.equal(aborted, true);
 });
 
-test("force-auto falls back locally when Jev fails", async () => {
+test("force-auto falls back locally when Jev fails", async (t) => {
+  t.mock.method(performance, "now", () => 0);
   const jev = { chooseDiscard: async () => { throw new Error("offline"); } } as any;
 
   const result = await decideForceAutoWithJevDeadline(state, { jev, deadlineMs: 1_000 });
@@ -407,6 +412,84 @@ test("force-auto restricts Jev to safer tiles under threat", async () => {
   const eligible = result.candidates.filter((candidate) => candidate.shanten <= Math.min(...result.candidates.map((item) => item.shanten)) + 1);
   const safest = Math.min(...eligible.map((candidate) => candidate.danger ?? 1));
   assert.ok(offered.every((candidate) => (candidate.danger ?? 1) <= safest + 0.02));
+});
+
+test("threat filtering retains live riichi discard for declaration comparison", async () => {
+  const live = parseGameState({
+    round: "east_1", seat: "east", turn: 6, remainingTiles: 41,
+    scores: { east: 25000, south: 25000, west: 25000, north: 25000 },
+    hand: ["4m", "5m", "2p", "3p", "4p", "6p", "6p", "4s", "0s", "5s", "6s", "7s", "W"],
+    draw: "3m", doraIndicators: ["8p"], availableUiActions: ["riichi"],
+    ownDiscards: ["9s", "5p", "1s", "3p", "7m", "1m"],
+    opponents: [
+      { seat: "south", discards: ["7s", "E", "3m", "2p", "8m", "E", "9p", "3s"], openMelds: 2 },
+      { seat: "west", discards: ["S", "2p", "9s", "S", "3m", "C", "9p"], openMelds: 0 },
+      { seat: "north", discards: ["1p", "S", "C", "E", "2s", "8p", "8m"], openMelds: 0 },
+    ],
+  });
+  const report: ClosedWaitReport = { library: "mahjong==2.0.0", discard: "W",
+    scope: "closed_hand_scoring_not_policy_ev", assumptions: { furiten_not_checked: true }, rows: [] };
+  for (const actionId of ["riichi_discard_W", "discard_W"]) {
+    let offered: string[] = [];
+    const choice = (id: string) => ({ actionId: id, confidence: 1, probabilities: { [id]: 1 }, model: "test", promptVersion: "test", latencyMs: 0 });
+    const jev = { chooseDiscard: async (_state: unknown, candidates: any[]) => {
+      offered = candidates.map((candidate) => candidate.actionId);
+      assert.equal(candidates.find((candidate) => candidate.actionId === "discard_W")?.closedWaitScore, report);
+      assert.equal(candidates.find((candidate) => candidate.actionId === "discard_3m")?.closedWaitScore, undefined);
+      return choice("discard_W");
+    }, chooseDeclaration: async (_state: unknown, actions: any[]) => {
+      assert.deepEqual(actions.map((action) => action.id), ["discard_W", "riichi_discard_W"]);
+      return choice(actionId);
+    } } as unknown as JevClient;
+    const result = await decide(live, { mode: "force-auto", jev, riichiScorer: async () => report });
+    assert.ok(offered.includes("discard_W"));
+    assert.ok(offered.includes("discard_3m"));
+    assert.equal(result.selectedAction.id, actionId);
+    assert.equal(result.declarationComparison?.status, "selected");
+  }
+  let observedAbort = false;
+  let jevCalled = false;
+  const slowScorer: typeof import("../src/evaluation/closedWaitScorer.js").scoreClosedWaits = async (_state, _discard, _waits, options) => {
+    options?.signal?.addEventListener("abort", () => { observedAbort = true; }, { once: true });
+    return new Promise(() => {});
+  };
+  const safeJev = { chooseDiscard: async (_state: unknown, candidates: any[]) => {
+    jevCalled = true;
+    assert.equal(candidates.find((candidate) => candidate.actionId === "discard_W")?.closedWaitScore, undefined);
+    return { actionId: "discard_3m", confidence: 1, probabilities: { discard_3m: 1 }, model: "test", promptVersion: "test", latencyMs: 0 };
+  } } as unknown as JevClient;
+  const started = performance.now();
+  const fallback = await decide(live, { mode: "force-auto", jev: safeJev, riichiScorer: slowScorer });
+  assert.ok(performance.now() - started < 1500, "slow scorer must not block discard decision");
+  assert.equal(jevCalled, true);
+  assert.equal(observedAbort, true);
+  assert.equal(fallback.selectedAction.id, "discard_3m");
+  let scorerCalls = 0;
+  const hangingScorer: typeof slowScorer = async () => { scorerCalls++; return new Promise(() => {}); };
+  const riichiJev = { chooseDiscard: async () => ({ actionId: "discard_W", confidence: 1,
+    probabilities: { discard_W: 1 }, model: "test", promptVersion: "test", latencyMs: 0 }),
+    chooseDeclaration: async () => { throw new Error("must not compare without scoring"); } } as unknown as JevClient;
+  const retryStarted = performance.now();
+  const retryFallback = await decide(live, { mode: "force-auto", jev: riichiJev, riichiScorer: hangingScorer });
+  assert.ok(performance.now() - retryStarted < 1500, "timed-out scoring must not be retried after tile selection");
+  assert.equal(scorerCalls, 1);
+  assert.equal(retryFallback.selectedAction.id, "riichi_discard_W");
+  assert.equal(retryFallback.declarationComparison?.status, "fallback");
+  let lateCalls = 0;
+  let declarationCalled = false;
+  const lateScorer: typeof slowScorer = async () => {
+    lateCalls++;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    return report;
+  };
+  const delayedJev = { chooseDiscard: async () => {
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    return { actionId: "discard_W", confidence: 1, probabilities: { discard_W: 1 }, model: "test", promptVersion: "test", latencyMs: 0 };
+  }, chooseDeclaration: async () => { declarationCalled = true; throw new Error("late result used"); } } as unknown as JevClient;
+  const lateFallback = await decide(live, { mode: "force-auto", jev: delayedJev, riichiScorer: lateScorer });
+  assert.equal(lateCalls, 1);
+  assert.equal(declarationCalled, false);
+  assert.equal(lateFallback.declarationComparison?.status, "fallback");
 });
 
 test("reaction policy certifies a strict-improvement yakuhai pon", async () => {

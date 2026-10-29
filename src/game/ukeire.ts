@@ -1,6 +1,7 @@
 import { calculateShanten } from "./shanten.js";
 import { TILE_NAMES, isRedTile, normalizeTile, parseGameTile, tileFromIndex, tileIndex, toCounts, type GameTile, type Tile } from "./tiles.js";
 import type { OpenTenpaiScore } from "../evaluation/openTenpaiScore.js";
+import type { ClosedWaitReport } from "../evaluation/closedWaitScorer.js";
 
 export interface EffectiveTile {
   tile: Tile;
@@ -24,6 +25,7 @@ export interface DiscardEvaluation {
   evaluationModel?: string;
   openTenpaiScore?: OpenTenpaiScore;
   openTenpaiScoreApplied?: boolean;
+  closedWaitScore?: ClosedWaitReport;
 }
 
 export function evaluateDiscards(

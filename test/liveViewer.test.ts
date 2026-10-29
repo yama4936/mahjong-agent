@@ -21,6 +21,17 @@ class Element {
   querySelector(selector: string) { return this.children[selector === 'strong' ? 0 : 1]; }
 }
 
+function child(element: Element, index: number): Element {
+  const result = element.children[index];
+  assert.ok(result, `missing child ${index}`);
+  return result;
+}
+
+function callback(value: (() => void) | undefined): () => void {
+  assert.ok(value, 'missing callback');
+  return value;
+}
+
 function viewer(extra: Record<string, unknown> = {}) {
   const elements = new Map<string, Element>();
   const element = (selector: string) => {
@@ -71,20 +82,20 @@ test('candidate strip shows tile images, Jev selection probabilities, selection 
   assert.equal(list.hidden, false);
   assert.equal(v.element('#decision-options-empty').hidden, true);
   assert.equal(list.children.length, 2);
-  const first = list.children[0];
+  const first = child(list, 0);
   assert.equal(first.dataset.selected, 'true');
-  assert.equal(first.children[0].textContent, '打牌');
-  assert.equal(first.children[1].children[0].alt, '東');
-  assert.equal(first.children[2].textContent, '70.0%');
-  assert.equal(first.children[3].textContent, '選択');
+  assert.equal(child(first, 0).textContent, '打牌');
+  assert.equal(child(child(first, 1), 0).alt, '東');
+  assert.equal(child(first, 2).textContent, '70.0%');
+  assert.equal(child(first, 3).textContent, '選択');
   assert.match(first.title, /推定和了率 20.0%.*推定放銃率 10.0%.*シャンテン数 1/);
-  assert.equal(list.children[1].children[1].dataset.red, 'true');
+  assert.equal(child(child(list, 1), 1).dataset.red, 'true');
   v.send({ decision: { ...decision(), candidates } });
   assert.equal(list.children[0], first, 'unchanged snapshots preserve DOM and scroll position');
   v.send({ decision: { ...decision(), candidates: [{ action: 'ron', tile: null, selected: false, selectionProbability: null }] } });
   assert.equal(list.children.length, 1);
-  assert.equal(list.children[0].children[0].textContent, 'ロン');
-  assert.equal(list.children[0].children[1].textContent, '—');
+  assert.equal(child(child(list, 0), 0).textContent, 'ロン');
+  assert.equal(child(child(list, 0), 1).textContent, '—');
   v.send({ decision: null });
   assert.equal(list.children.length, 0);
   assert.equal(list.hidden, true);
@@ -96,8 +107,8 @@ test('candidate strip limits entries and does not interpret unknown tile paths a
   v.send({ decision: { ...decision(), candidates: Array.from({ length: 80 }, () => ({ action: 'discard', tile: '../other', selectionProbability: 2 })) } });
   const list = v.element('#decision-options');
   assert.equal(list.children.length, 64);
-  assert.equal(list.children[0].children[1].textContent, '牌不明');
-  assert.equal(list.children[0].children[2].textContent, '—');
+  assert.equal(child(child(list, 0), 1).textContent, '牌不明');
+  assert.equal(child(child(list, 0), 2).textContent, '—');
 });
 
 test('live viewer displays probabilities independently from recognition confidence and flags old decisions', () => {
@@ -142,14 +153,14 @@ test('logs deduplicate snapshots, retain 100 rows, keep text inert and preserve 
   v.send({ logs: entries });
   const logs = v.element('#logs');
   assert.equal(logs.children.length, 100);
-  assert.equal(logs.children[0].children[2].textContent, '<img src=x onerror=alert(1)>');
+  assert.equal(child(child(logs, 0), 2).textContent, '<img src=x onerror=alert(1)>');
   assert.equal(logs.scrollTop, logs.scrollHeight);
   v.send({ logs: entries });
   assert.equal(logs.children.length, 100);
   logs.scrollTop = 500;
   v.send({ logs: [...entries.slice(1), { ...entries[0], id: '100' }] });
   assert.equal(logs.children.length, 100);
-  assert.equal(logs.children[0].dataset.id, '1');
+  assert.equal(child(logs, 0).dataset.id, '1');
   assert.equal(logs.scrollTop, 480);
   assert.equal(v.element('#logs-latest').hidden, false);
   v.element('#logs-latest').onclick!();
@@ -191,12 +202,12 @@ test('event reconnect and viewer lifecycle close both sockets and cancel pending
   v.element('#toggle').onclick!();
   assert.equal(v.sockets.length, 5);
   v.context.document.hidden = true;
-  v.visibility.visibilitychange();
+  callback(v.visibility.visibilitychange)();
   assert.ok(v.sockets.every(socket => socket.closed));
   v.context.document.hidden = false;
-  v.visibility.visibilitychange();
+  callback(v.visibility.visibilitychange)();
   assert.equal(v.sockets.length, 7);
-  v.lifecycle.pagehide();
+  callback(v.lifecycle.pagehide)();
   assert.ok(v.sockets.every(socket => socket.closed));
 });
 
@@ -207,7 +218,7 @@ test('decision tiles use local allowlisted images, Japanese alt text, and red-fi
   assert.equal(v.element('#decision-tile').alt, '東');
   assert.equal(v.element('#decision-tile-wrap').title, '東');
   assert.equal(v.element('#decision-tile-wrap').hidden, false);
-  for (const [tile, name] of [['0m', '赤五萬'], ['0p', '赤五筒'], ['0s', '赤五索']]) {
+  for (const [tile, name] of [['0m', '赤五萬'], ['0p', '赤五筒'], ['0s', '赤五索']] as const) {
     v.send({ decision: { ...decision(), tile } });
     assert.equal(v.element('#decision-tile').src, `tiles/5${tile[1]}.png?v=8c0f22e7`);
     assert.equal(v.element('#decision-tile').alt, name);
@@ -246,14 +257,18 @@ test('decision log entries show tile images while other logs retain their text',
   const entry = { id: 'decision-1', timestamp: new Date().toISOString(), event: 'decision', action: 'discard', tile: 'E', message: '判断を更新: discard E' };
   v.send({ logs: [entry, { ...entry, id: 'other-1', event: 'click_sent' }] });
   const rows = v.element('#logs').children;
-  const message = rows[0].children[2];
+  const row = rows[0];
+  assert.ok(row);
+  const message = child(row, 2);
   assert.equal(message.textContent, '判断を更新: 打牌 ');
-  assert.equal(message.children[0].children[0].src, 'tiles/E.png?v=8c0f22e7');
-  assert.equal(message.children[0].children[0].alt, '東');
-  message.children[0].children[0].onerror!();
-  assert.equal(message.children[0].children[1].hidden, false);
-  assert.equal(rows[1].children[2].textContent, entry.message);
-  assert.equal(rows[1].children[2].children.length, 0);
+  assert.equal(child(child(message, 0), 0).src, 'tiles/E.png?v=8c0f22e7');
+  assert.equal(child(child(message, 0), 0).alt, '東');
+  callback(child(child(message, 0), 0).onerror)();
+  assert.equal(child(child(message, 0), 1).hidden, false);
+  const other = rows[1];
+  assert.ok(other);
+  assert.equal(child(other, 2).textContent, entry.message);
+  assert.equal(child(other, 2).children.length, 0);
 });
 
 const flush = () => new Promise<void>(resolve => setImmediate(resolve));
@@ -286,7 +301,7 @@ test('tile cache fetches lazily once, shares red five images and persists across
   await flush();
   assert.equal(fetches, 1);
   assert.match(second.element('#decision-tile').src, /^blob:/);
-  v.lifecycle.pagehide();
+  callback(v.lifecycle.pagehide)();
   assert.deepEqual(revoked, [first]);
 });
 
@@ -318,7 +333,7 @@ test('late cached images cannot overwrite a newer tile or survive page exit', as
   await flush();
   assert.equal(v.element('#decision-tile').src, '');
   assert.equal(v.element('#decision-tile-wrap').hidden, true);
-  v.lifecycle.pagehide();
+  callback(v.lifecycle.pagehide)();
   assert.deepEqual(revoked, ['blob:late']);
   const exiting = viewer({
     caches: { async open() { return { async match() {}, async put() {} }; } },
@@ -327,7 +342,7 @@ test('late cached images cannot overwrite a newer tile or survive page exit', as
   });
   exiting.send({ decision: { ...decision(), tile: 'E' } });
   await flush();
-  exiting.lifecycle.pagehide();
+  callback(exiting.lifecycle.pagehide)();
   finishEast(imageResponse());
   await flush();
   assert.equal(exiting.element('#decision-tile').src, '');

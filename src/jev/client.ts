@@ -315,6 +315,7 @@ export function buildJevRequest(
         deal_in_probability: candidate.dealInProbability ?? candidate.danger ?? "unknown",
         expected_round_points: candidate.expectedRoundValue ?? "unknown",
         estimate_source: candidate.evaluationModel ?? "unknown",
+        ...(candidate.closedWaitScore ? { closed_wait_scoring: candidate.closedWaitScore } : {}),
         ...(candidate.openTenpaiScore ? { ordinary_open_waits: compactOpenScoring(candidate.openTenpaiScore, candidate.openTenpaiScoreApplied) } : {}),
       },
       ...(profile === "hierarchical-v3" ? { comparison_to_best: {
@@ -349,6 +350,7 @@ export function buildJevRequest(
             "Use the supplied candidate estimates; do not recompute exact arithmetic or invent missing facts.",
             "Preserve lower shanten unless a supplied expected-round-points or safety difference justifies another option.",
             "Compare ukeire quality, hand value, win chance and tenpai chance for offense.",
+            "For closed tenpai, compare supplied riichi and dama scoring outcomes with other discards' danger; scoring is not a policy EV and does not establish furiten safety.",
             "Ordinary open waits distinguish scoring wins from structural ukeire; null scoring points mean no ordinary yaku for that mode. Situational yaku and UI win legality are outside that scoring scope.",
             "When an opponent is riichi or pressure is otherwise visible, give deal-in probability substantially more weight.",
             "Use round, scores, seat, honba, riichi sticks, turn and remaining tiles for placement and urgency.",
@@ -359,6 +361,7 @@ export function buildJevRequest(
           use_evidence: [
             "First preserve minimum shanten; deviate only for a material supplied safety or expected-round-points advantage.",
             "Second compare ukeire quality, hand value, win chance and tenpai chance using the supplied estimates.",
+            "For closed tenpai, compare supplied riichi and dama scoring outcomes against defensive choices; scoring is not policy EV and does not establish furiten safety.",
             "Ordinary open waits distinguish scoring wins from structural ukeire; null scoring points mean no ordinary yaku for that mode. Situational yaku and UI win legality are outside that scoring scope.",
             "Third, when riichi or two-or-more open meld pressure is visible, prioritize avoiding deal-in unless placement urgency clearly warrants pushing.",
             "Treat cached_hand_plan only as a soft tie-breaker among tactically close choices; abandon it when current safety, shanten, ukeire or EV disagrees.",

@@ -5306,6 +5306,28 @@ class AwayDialogDetectionTest(unittest.TestCase):
         image.save(output, format="PNG")
         self.assertFalse(is_away_resume_dialog(output.getvalue(), viewport))
 
+    def test_startup_away_real_frame_requires_fresh_confirmation(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(resume_away=True)
+        operator.layout = {"viewport": {"width": 1920, "height": 1080}}
+        operator.log = Mock()
+        away = (Path(__file__).resolve().parents[1] / "test/fixtures/startup-away-20261029.jpg").read_bytes()
+        self.assertTrue(is_away_resume_dialog(away, operator.layout["viewport"]))
+        normal_image = Image.new("RGB", (1920, 1080), (20, 40, 70))
+        encoded = io.BytesIO()
+        normal_image.save(encoded, format="PNG")
+        normal = encoded.getvalue()
+        page = Mock()
+        page.screenshot.return_value = normal
+        self.assertFalse(operator.resume_startup_away(page, away))
+        page.mouse.click.assert_not_called()
+        page.screenshot.reset_mock()
+        self.assertFalse(operator.resume_startup_away(page, normal))
+        page.screenshot.assert_not_called()
+        page.screenshot.side_effect = [away, normal]
+        self.assertTrue(operator.resume_startup_away(page, away))
+        page.mouse.click.assert_called_once()
+
     def test_terminal_latch_allows_verified_away_resume_before_unknown_wait(self) -> None:
         """A terminal result latch cannot hide the strict away-dialog recovery."""
         operator = PythonAutoOperator.__new__(PythonAutoOperator)

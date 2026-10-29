@@ -3521,6 +3521,18 @@ class PythonAutoOperator:
             if getattr(self, "screencast_session", None) is not None:
                 self.restart_screencast_gate(page)
 
+    def resume_startup_away(self, page: Page, screenshot: bytes | None) -> bool:
+        """Recover a verified away dialog without authorizing a gameplay turn.
+
+        The stream is only a cue: resume_if_away captures and checks the current
+        screen independently, so a stale dialog cannot cause a later click.
+        """
+        if not getattr(self.args, "resume_away", False) or not screenshot:
+            return False
+        if not is_away_resume_dialog(screenshot, self.layout["viewport"]):
+            return False
+        return self.resume_if_away(page)
+
     def resume_if_away(self, page: Page, screenshot: bytes | None = None) -> bool:
         if not self.args.resume_away:
             return False
@@ -6477,6 +6489,9 @@ class PythonAutoOperator:
                         # Its result OR any orange button is therefore exactly
                         # this predicate; do not decode and scan them again.
                         quick_reaction_win = bool(quick_self_actions)
+                    if not startup_turn_guard.ready and self.resume_startup_away(page, gate_frame):
+                        page.wait_for_timeout(max(20, round(self.args.poll * 1000)))
+                        continue
                     if not startup_turn_guard.ready:
                         self.prewarm_startup_context(gate_frame, verified_match=early_state == "match")
                     startup_guard_state = startup_turn_guard.observe(
