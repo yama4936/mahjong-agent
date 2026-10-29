@@ -19,6 +19,8 @@ from screen_state import classify_screen, load_references
 from auto_operator import geometric_reaction_open_meld_count, draw_slots_occupied
 from auto_operator import configure_evaluator_click_budget, with_match_length
 from auto_operator import board_state_signature, board_state_signature_matches
+from auto_operator import initial_dealing_frame_visible
+from startup_turn_guard import StartupTurnGuard
 from auto_operator import verified_post_call_white_discard
 
 FRAME_FIXTURES = Path(__file__).resolve().parents[1] / "test/fixtures"
@@ -453,6 +455,47 @@ class ConnectionRecoveryTest(unittest.TestCase):
                     )
         self.page.mouse.click.assert_not_called()
         self.page.screenshot.assert_not_called()
+
+
+class InitialDealingBoundTest(unittest.TestCase):
+    def test_real_dealing_frame_and_unsafe_or_incomplete_frames(self):
+        root = Path(__file__).resolve().parents[1]
+        layout = load_json(root / "config/layout-300-regression.json")
+        partial = (root / "test/fixtures/initial-dealing-20261029.jpg").read_bytes()
+        drawn = (root / "test/fixtures/initial-draw-20261029.jpg").read_bytes()
+        self.assertTrue(initial_dealing_frame_visible(partial, layout))
+        self.assertFalse(initial_dealing_frame_visible(drawn, layout))
+        with Image.open(io.BytesIO(partial)) as source:
+            original = source.convert("RGB")
+        for box in ((800, 950, 1200, 1050), (735, 5, 770, 50), (1275, 5, 1310, 50),
+                    (1550, 950, 1850, 1050)):
+            with self.subTest(box=box):
+                image = original.copy()
+                ImageDraw.Draw(image).rectangle(box, fill="white")
+                output = io.BytesIO()
+                image.save(output, "PNG")
+                self.assertFalse(initial_dealing_frame_visible(output.getvalue(), layout))
+        self.assertFalse(initial_dealing_frame_visible(b"not an image", layout))
+
+    def test_direct_screenshot_must_still_show_dealing_and_match(self):
+        root = Path(__file__).resolve().parents[1]
+        partial = (root / "test/fixtures/initial-dealing-20261029.jpg").read_bytes()
+        drawn = (root / "test/fixtures/initial-draw-20261029.jpg").read_bytes()
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.layout = load_json(root / "config/layout-300-regression.json")
+        operator.screen_references = {}
+        operator.log = Mock()
+        page = Mock()
+        for direct, screen, expected in [(partial, "match", True), (drawn, "match", False),
+                                         (partial, "unknown", False)]:
+            with self.subTest(screen=screen, expected=expected):
+                guard = StartupTurnGuard()
+                guard.record_verified_start_click(clicked_at=10)
+                page.screenshot.return_value = direct
+                with patch("auto_operator.classify_screen", return_value=(screen, 1.0)), \
+                     patch("auto_operator.time.monotonic", side_effect=[20.0, 21.0]):
+                    self.assertEqual(operator.bound_initial_action_from_dealing(page, guard, partial), expected)
+                self.assertEqual(guard.start_click_at, 20.0 if expected else 10)
 
 
 class ResidentPublicRecognitionTest(unittest.TestCase):

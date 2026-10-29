@@ -743,6 +743,55 @@ def closed_concealed_row_visible(screenshot: bytes, layout: dict[str, Any]) -> b
     return len(slots) == 13 and all(draw_slots_occupied(screenshot, slots))
 
 
+def initial_dealing_frame_visible(screenshot: bytes, layout: dict[str, Any]) -> bool:
+    """Recognize only a narrow, unmistakable initial dealing animation.
+
+    Both our incomplete 4/8-tile prefix and the opposite player's incomplete
+    tile-back row must be visible, with unobscured felt in the missing slots.
+    Anything ambiguous stays on the original conservative start-click clock.
+    """
+    slots = layout.get("handSlots", [])
+    draw = layout.get("drawSlot")
+    if len(slots) != 13 or not draw or layout.get("viewport") != {"width": 1920, "height": 1080}:
+        return False
+    try:
+        import numpy as np
+        with Image.open(io.BytesIO(screenshot)) as source:
+            if source.size != (1920, 1080):
+                return False
+            pixels = np.asarray(source.convert("RGB"))
+            def felt(box):
+                x1, y1, x2, y2 = map(int, box)
+                region = pixels[y1:y2, x1:x2]
+                return bool(((region[:, :, 0] < 100) & (region[:, :, 1] < 135)
+                             & (region[:, :, 2] > 70)).mean() >= 0.85)
+            def slot_box(slot):
+                return (slot["x"], slot["y"], slot["x"] + slot["width"], slot["y"] + slot["height"])
+            def ivory(slot):
+                x1, y1, x2, y2 = map(int, slot_box(slot))
+                region = pixels[y1:y2, x1:x2]
+                return bool(((region[:, :, 0] > 145) & (region[:, :, 1] > 145)
+                             & (region[:, :, 2] > 135)).mean() >= 0.20)
+            occupied = [ivory(slot) for slot in [*slots, draw]]
+            count = next((n for n in (4, 8) if occupied[:n] == [True] * n
+                          and not any(occupied[n:])), None)
+            if count is None or not all(felt(slot_box(slot)) for slot in [*slots[count:], draw]):
+                return False
+            # Opposite player's leftmost backs have not appeared yet, while
+            # rightmost backs are present; a normal table has a full row.
+            if not felt((735, 5, 770, 50)):
+                return False
+            back = pixels[5:50, 1275:1310]
+            if ((back[:, :, 0] > 150) & (back[:, :, 1] > 100) & (back[:, :, 2] < 130)).mean() < 0.35:
+                return False
+            meld = pixels[907:1080, 1536:1882]
+            if ((meld[:, :, 0] > 145) & (meld[:, :, 1] > 145) & (meld[:, :, 2] > 135)).mean() >= 0.12:
+                return False
+    except Exception:
+        return False
+    return True
+
+
 def open_hand_draw_slot(layout: dict[str, Any], open_melds: int) -> dict[str, float] | None:
     """Return the compact-row draw tile, which replaces the closed-row gap."""
     draw_slot = layout.get("drawSlot")
@@ -5902,6 +5951,33 @@ class PythonAutoOperator:
             ocr_engine()
         return True
 
+    def bound_initial_action_from_dealing(self, page: Page, guard: StartupTurnGuard,
+                                          gate_frame: bytes | None) -> bool:
+        """Use a fresh direct capture, never a late screencast receipt, as a bound."""
+        if (guard.ready or guard.quarantined or guard.start_click_at is None
+                or not gate_frame or not initial_dealing_frame_visible(gate_frame, self.layout)):
+            return False
+        request_started_at = time.monotonic()
+        try:
+            frame = page.screenshot(animations="disabled")
+            observed_at = time.monotonic()
+            state, _ = classify_screen(frame, self.screen_references)
+            if state != "match" or not initial_dealing_frame_visible(frame, self.layout):
+                return False
+            pass_region = self.layout.get("actionButtonRegions", {}).get("pass")
+            if ((pass_region and is_force_auto_pass_clip(crop_screenshot(frame, pass_region)))
+                    or force_auto_call_buttons(frame, self.layout["viewport"])
+                    or force_auto_self_action_buttons(frame, self.layout["viewport"])):
+                return False
+            if not guard.record_verified_dealing_bound(
+                    request_started_at=request_started_at, observed_at=observed_at):
+                return False
+        except Exception:
+            return False
+        self.log("initial_action_dealing_bound", source="direct_screenshot_request_started",
+                 screenshotDurationMs=round((observed_at - request_started_at) * 1000))
+        return True
+
     def run(self, page: Page) -> None:
         self.ensure_viewport(page, force=True)
         startup_turn_guard = StartupTurnGuard()
@@ -6147,6 +6223,8 @@ class PythonAutoOperator:
                         quick_reaction_win = bool(quick_self_actions)
                     if not startup_turn_guard.ready:
                         self.prewarm_startup_context(gate_frame, verified_match=early_state == "match")
+                        if early_state == "match":
+                            self.bound_initial_action_from_dealing(page, startup_turn_guard, gate_frame)
                     startup_guard_state = startup_turn_guard.observe(
                         verified_match=early_state == "match",
                         action_visible=bool(quick_draw or quick_pass or quick_calls or quick_reaction_win),

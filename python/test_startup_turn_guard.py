@@ -31,6 +31,23 @@ class StartupTurnGuardTests(unittest.TestCase):
         self.assertEqual(guard.observe(verified_match=True, action_visible=True, now=20), "ready")
         self.assertEqual(guard.initial_action_anchor, 10)
 
+    def test_dealing_bound_uses_request_start_not_capture_completion(self):
+        guard = StartupTurnGuard()
+        guard.record_verified_start_click(clicked_at=10)
+        self.assertTrue(guard.record_verified_dealing_bound(request_started_at=20, observed_at=22))
+        self.assertEqual(guard.observe(verified_match=True, action_visible=True, now=23), "ready")
+        self.assertEqual(guard.initial_action_anchor, 20)
+        self.assertFalse(guard.record_verified_dealing_bound(request_started_at=24, observed_at=25))
+
+    def test_dealing_bound_cannot_authorize_unknown_or_stale_start(self):
+        guard = StartupTurnGuard()
+        self.assertFalse(guard.record_verified_dealing_bound(request_started_at=20, observed_at=21))
+        guard.record_verified_start_click(clicked_at=10)
+        self.assertFalse(guard.record_verified_dealing_bound(request_started_at=9, observed_at=20))
+        self.assertFalse(guard.record_verified_dealing_bound(request_started_at=20, observed_at=41))
+        self.assertTrue(guard.record_verified_dealing_bound(request_started_at=20, observed_at=21))
+        self.assertEqual(guard.observe(verified_match=True, action_visible=True, now=41), "quarantine")
+
     def test_stale_or_reversed_start_and_existing_quarantine_fail_closed(self):
         for now in (9, 41):
             guard = StartupTurnGuard()
