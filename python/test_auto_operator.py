@@ -5523,6 +5523,41 @@ class AwayDialogDetectionTest(unittest.TestCase):
         self.assertEqual(confirmation, {"x": 1312.5, "y": 968.0, "lift": 31.0,
                                         "faceStructureDelta": 0.0})
 
+    def test_native_seven_pin_selection_requires_physical_rim_and_glyph(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        layout = load_json(root / "config/layout-300-regression.json")
+        before = (root / "test/fixtures/selection-7p-before-20261029.png").read_bytes()
+        after = (root / "test/fixtures/selection-7p-receipt-20261029.png").read_bytes()
+        point = layout["clickPoints"][8]
+        result = raised_tile_confirmation_point(before, after, layout, 8, point, 1.5)
+        self.assertEqual((result["x"], result["y"], result["lift"]), (1027.5, 951.0, 48.0))
+        self.assertEqual(result["verification"], "translated_rim_glyph_and_stable_neighbour")
+        self.assertIsNone(raised_tile_confirmation_point(before, before, layout, 8, point, 1.5))
+        # The neighbouring identical 7p did not move: its identity is not a
+        # substitute for movement of the physical slot that was clicked.
+        self.assertIsNone(raised_tile_confirmation_point(before, after, layout, 7,
+                                                        layout["clickPoints"][7], 1.5))
+        # A plausible rim with a different but visually similar pinzu face
+        # cannot establish that the originally clicked tile was lifted.
+        with Image.open(io.BytesIO(after)) as image:
+            wrong_face = image.convert("RGB")
+        with Image.open(io.BytesIO(before)) as image:
+            other = image.convert("RGB").crop((1086, 936, 1159, 1044))
+        wrong_face.paste(other, (991, 888))
+        output = io.BytesIO()
+        wrong_face.save(output, format="PNG")
+        self.assertIsNone(raised_tile_confirmation_point(before, output.getvalue(),
+                                                        layout, 8, point, 1.5))
+        for rectangle in ((981, 868, 1074, 904), (991, 888, 1064, 996)):
+            with self.subTest(occlusion=rectangle):
+                with Image.open(io.BytesIO(after)) as image:
+                    altered = image.convert("RGB")
+                ImageDraw.Draw(altered).rectangle(rectangle, fill=(180, 180, 180))
+                output = io.BytesIO()
+                altered.save(output, format="PNG")
+                self.assertIsNone(raised_tile_confirmation_point(before, output.getvalue(),
+                                                                layout, 8, point, 1.5))
+
     def test_native_9p_lift_with_click_sparkle_requires_unique_glyph_match(self) -> None:
         root = Path(__file__).resolve().parents[1]
         layout = load_json(root / "config/layout-300-regression.json")
@@ -5532,7 +5567,8 @@ class AwayDialogDetectionTest(unittest.TestCase):
                                                 layout["clickPoints"][13], 1.5)
         self.assertEqual((result["x"], result["y"], result["lift"]),
                          (1532.0, 951.0, 48.0))
-        self.assertIn(result.get("verification"), {None, "dark_glyph_overlap"})
+        self.assertIn(result.get("verification"), {None, "dark_glyph_overlap",
+                                                  "translated_rim_glyph_and_stable_neighbour"})
         self.assertIsNone(raised_tile_confirmation_point(before, before, layout, 13,
                                                         layout["clickPoints"][13], 1.5))
         self.assertIsNone(raised_tile_confirmation_point(before, after, layout, 12,
@@ -5678,7 +5714,8 @@ class AwayDialogDetectionTest(unittest.TestCase):
         after = (root / "test/fixtures/selection-8s-sparkle-lift-20261028.png").read_bytes()
         result = raised_tile_confirmation_point(before, after, layout, 13, point, 1.5)
         self.assertEqual(result["lift"], 48.0)
-        self.assertEqual(result["verification"], "sparkle_masked_unique_glyph_and_stable_neighbour")
+        self.assertIn(result["verification"], {"sparkle_masked_unique_glyph_and_stable_neighbour",
+                                               "translated_rim_glyph_and_stable_neighbour"})
         self.assertIsNone(raised_tile_confirmation_point(before, before, layout, 13, point, 1.5))
         self.assertIsNone(raised_tile_confirmation_point(before, after, layout, 12,
                                                         layout["clickPoints"][12], 1.5))

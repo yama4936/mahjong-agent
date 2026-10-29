@@ -1026,6 +1026,64 @@ def blank_tile_raised_confirmation(
         return None
 
 
+def raised_rim_and_glyph_confirmation(
+    before: bytes, after: bytes, slots: list[dict[str, Any]], click_index: int,
+    point: dict[str, float], face: dict[str, float],
+) -> dict[str, float] | None:
+    """Combine a translated physical rim, stable neighbour and visible glyph.
+
+    Selection lighting can wash out the glyph, but cannot substitute for a
+    uniquely translated rim.  Both observations must describe the same lift.
+    """
+    edge = blank_tile_raised_confirmation(before, after, slots, click_index, point)
+    if edge is None:
+        return None
+    try:
+        with Image.open(io.BytesIO(before)) as image:
+            first = image.convert("RGB")
+        with Image.open(io.BytesIO(after)) as image:
+            second = image.convert("RGB")
+        slot = slots[click_index]
+        left, right = int(slot["x"]) + 5, int(slot["x"] + slot["width"]) - 5
+        top = int(slot["y"]) - 5
+        if left >= right or top < 80:
+            return None
+        rim = first.crop((left, top, right, top + 13))
+        def rim_delta(lift: int) -> float:
+            shifted = second.crop((left, top - lift, right, top + 13 - lift))
+            return sum(ImageStat.Stat(ImageChops.difference(rim, shifted)).mean) / 3
+        lift = int(edge["lift"])
+        delta = rim_delta(lift)
+        if delta > 5 or min(rim_delta(offset) for offset in range(8, 81)
+                            if abs(offset - lift) > 2) - delta < 10:
+            return None
+        lookup = [255 if value < 120 else 0 for value in range(256)]
+        first_mask = first.convert("L").point(lookup)
+        second_mask = second.convert("L").point(lookup)
+        x, y, w, h = (int(face[key]) for key in ("x", "y", "width", "height"))
+        baseline = first_mask.crop((x, y, x + w, y + h))
+        shifted = second_mask.crop((x, y - lift, x + w, y + h - lift))
+        count = lambda mask: ImageStat.Stat(mask).sum[0] / 255
+        glyph, observed = count(baseline), count(shifted)
+        if glyph < 100 or not 0.7 <= observed / glyph <= 1.4:
+            return None
+        if count(ImageChops.multiply(baseline, shifted)) / glyph < 0.5:
+            return None
+        neighbour = slots[click_index - 1]
+        nx, ny, nw, nh = (int(neighbour[key]) for key in ("x", "y", "width", "height"))
+        neighbour_rect = (nx + 10, ny + 10, nx + nw - 10, ny + nh - 28)
+        neighbour_before = first_mask.crop(neighbour_rect)
+        neighbour_after = second_mask.crop(neighbour_rect)
+        neighbour_glyph = count(neighbour_before)
+        if (neighbour_glyph < 100
+                or not 0.7 <= count(neighbour_after) / neighbour_glyph <= 1.4
+                or count(ImageChops.multiply(neighbour_before, neighbour_after)) / neighbour_glyph < 0.5):
+            return None
+        return {**edge, "verification": "translated_rim_glyph_and_stable_neighbour"}
+    except Exception:
+        return None
+
+
 def raised_glyph_overlap_confirmation(
     baseline: Image.Image, after_mask: Image.Image, face: dict[str, float],
     point: dict[str, float],
@@ -1180,6 +1238,11 @@ def raised_tile_confirmation_point(
         return None
     delta, lift = min(candidates)
     if delta > threshold:
+        rim_confirmation = raised_rim_and_glyph_confirmation(
+            before, after, slots, click_index, point, face,
+        )
+        if rim_confirmation is not None:
+            return rim_confirmation
         sparkle_confirmation = sparkle_masked_lift_confirmation(
             before, after, slots, click_index, face, point, lift, threshold,
         )
