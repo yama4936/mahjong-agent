@@ -3452,6 +3452,52 @@ class AwayDialogDetectionTest(unittest.TestCase):
             operator.mark_action_evidence("win")
         self.assertEqual(operator.action_evidence_started_at, 10.0)
 
+    def test_open_hand_gate_ignores_occupied_closed_draw_slot(self) -> None:
+        # The closed slot overlaps the exposed meld, including on an
+        # opponent's turn.  Only the shifted slot is a self-draw signal.
+        self.assertFalse(PythonAutoOperator.quick_draw_occupied(
+            open_melds=1, closed_slot_occupied=True, open_slot_occupied=False,
+        ))
+        self.assertTrue(PythonAutoOperator.quick_draw_occupied(
+            open_melds=1, closed_slot_occupied=False, open_slot_occupied=True,
+        ))
+        self.assertTrue(PythonAutoOperator.quick_draw_occupied(
+            open_melds=0, closed_slot_occupied=True, open_slot_occupied=False,
+        ))
+
+    def test_restart_probe_only_applies_before_open_hand_is_known(self) -> None:
+        self.assertTrue(PythonAutoOperator.restart_open_hand_probe_needed(
+            frame_hash="new", last_hash="old", cached_open_melds=0,
+        ))
+        self.assertFalse(PythonAutoOperator.restart_open_hand_probe_needed(
+            frame_hash="new", last_hash="old", cached_open_melds=1,
+        ))
+        self.assertFalse(PythonAutoOperator.restart_open_hand_probe_needed(
+            frame_hash="same", last_hash="same", cached_open_melds=0,
+        ))
+
+    def test_verified_opponent_turn_clears_only_discard_clock(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(force_auto_click_budget_ms=2600)
+        operator.log = Mock()
+        operator.mark_action_evidence("discard", observed_at=10.0)
+        # Repeated evidence from the same draw must never reset its clock.
+        operator.mark_action_evidence("discard", observed_at=11.0)
+        self.assertEqual(operator.action_evidence_started_at, 10.0)
+        operator.clear_discard_evidence_on_confirmed_opponent_turn()
+        self.assertIsNone(operator.action_evidence_started_at)
+        self.assertIsNone(operator.action_budget_started_at)
+        operator.mark_action_evidence("discard", observed_at=12.0)
+        self.assertEqual(operator.action_evidence_started_at, 12.0)
+        operator.mark_action_evidence("reaction", observed_at=13.0, supersede=True)
+        operator.clear_discard_evidence_on_confirmed_opponent_turn()
+        self.assertEqual(operator.action_evidence_started_at, 13.0)
+        self.assertEqual(operator.action_evidence_kind, "reaction")
+        operator.mark_action_evidence("win", observed_at=14.0, supersede=True)
+        operator.clear_discard_evidence_on_confirmed_opponent_turn()
+        self.assertEqual(operator.action_evidence_started_at, 14.0)
+        self.assertEqual(operator.action_evidence_kind, "win")
+
     def test_different_gate_does_not_refresh_reaction_during_frame_drop_grace(self) -> None:
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
         operator.action_evidence_started_at = 10.0

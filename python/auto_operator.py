@@ -1987,6 +1987,24 @@ class PythonAutoOperator:
             self.action_evidence_last_seen_at = None
         return timing
 
+    def clear_discard_evidence_on_confirmed_opponent_turn(self) -> None:
+        """Forget an earlier false draw gate only after a verified empty draw slot."""
+        if getattr(self, "action_evidence_kind", None) != "discard":
+            return
+        self.action_timing(clear=True)
+        self.log("discard_deadline_cleared", reason="confirmed_opponent_turn")
+
+    @staticmethod
+    def quick_draw_occupied(*, open_melds: int, closed_slot_occupied: bool,
+                            open_slot_occupied: bool) -> bool:
+        """The fixed closed-hand slot is not a draw slot after a call."""
+        return open_slot_occupied if open_melds > 0 else closed_slot_occupied
+
+    @staticmethod
+    def restart_open_hand_probe_needed(*, frame_hash: str | None,
+                                       last_hash: str | None, cached_open_melds: int) -> bool:
+        return frame_hash is not None and frame_hash != last_hash and cached_open_melds == 0
+
     def supersede_reaction_on_verified_draw(
         self, *, draw_occupied: bool, exact_open_melds: int | None,
         geometric_open_melds: int | None,
@@ -6049,10 +6067,20 @@ class PythonAutoOperator:
                     )
                     restart_probe_hash = perceptual_hash(crop_screenshot(gate_frame, self.hand_clip)) \
                         if gate_frame and restart_open_melds is not None else None
-                    restart_open_hand_probe = restart_probe_hash is not None \
-                        and restart_probe_hash != self.restart_open_hand_probe_hash
-                    quick_draw = self.screencast_draw_occupied is True \
-                        or dynamic_draw_occupied \
+                    restart_open_hand_probe = self.restart_open_hand_probe_needed(
+                        frame_hash=restart_probe_hash,
+                        last_hash=self.restart_open_hand_probe_hash,
+                        cached_open_melds=self.cached_open_melds,
+                    )
+                    # The fixed closed-hand draw slot overlaps our own melds.
+                    # Once an open count is known it must not create a draw
+                    # signal that persists throughout every opponent turn.
+                    known_open_melds = gate_open_melds or self.cached_open_melds
+                    quick_draw = self.quick_draw_occupied(
+                        open_melds=known_open_melds,
+                        closed_slot_occupied=self.screencast_draw_occupied is True,
+                        open_slot_occupied=dynamic_draw_occupied,
+                    ) \
                         or self.pending_post_call_discard or restart_open_hand_probe
                     pass_region = self.layout.get("actionButtonRegions", {}).get("pass")
                     if gate_frame and pass_region and gameplay_reactions_allowed \
@@ -6688,6 +6716,7 @@ class PythonAutoOperator:
                             self.log("opponent_turn_confirmed", screenshot=str(screenshot_path),
                                      source="evaluated_frame_draw_slot_pixels",
                                      priorHeuristicOccupied=draw_slot_heuristic_occupied)
+                            self.clear_discard_evidence_on_confirmed_opponent_turn()
                             time.sleep(self.args.poll)
                             continue
                     if not draw_slot_heuristic_occupied:
