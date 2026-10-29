@@ -20,9 +20,11 @@
   <div class="statusbar"><strong id="status" role="status" aria-live="polite">接続中</strong><span id="updated">映像受信前</span></div>
   <div class="controls"><button id="toggle" type="button">観戦を一時停止</button><button id="fullscreen" type="button">全画面で見る</button></div>
 </div><aside class="log-panel" aria-labelledby="log-title">
-  <div class="log-heading"><h2 id="log-title">操作ログ</h2><span>最新100件 · JST</span></div>
+  <div class="log-heading"><h2 id="log-title">ライブ操作ログ</h2><span id="events-status" role="status">接続中</span></div>
+  <p class="log-received"><span id="events-received">データ受信前</span><span id="log-latest">ログ受信前</span></p>
   <p id="log-empty">ログを受信するとここに表示します。</p>
   <ol id="logs" tabindex="0" aria-label="時刻順の操作ログ"></ol>
+  <button id="logs-latest" type="button" hidden>↓ 最新へ</button>
   <p class="log-help">末尾を表示中は新着に追従します。上にスクロールすると過去のログを読めます。</p>
 </aside></div>
 <p class="note">雀魂タブ内のロビー・ログイン・設定・対局・結果画面をすべて配信します。PCや接続が停止すると映像を隠し、自動で再接続します。これはライブ映像です。<a href="https://jantama.yama.asia/">保存済みの対局成績はこちら →</a></p>

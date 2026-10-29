@@ -3,6 +3,7 @@ import io
 import unittest
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 from aiohttp import WSMsgType, WSServerHandshakeError
 from aiohttp.test_utils import TestClient, TestServer
 from PIL import Image, UnidentifiedImageError
@@ -106,5 +107,42 @@ class TransportTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(WSServerHandshakeError) as error:await self.client.ws_connect('/ws')
         self.assertEqual(error.exception.status,503)
         for ws in clients:await ws.close()
+
+    async def test_events_arrive_without_video_and_reject_control(self):
+        ws = await self.client.ws_connect('/events', origin='https://jantama.yama.asia')
+        initial = await ws.receive_json()
+        self.assertEqual(initial['type'], 'telemetry')
+        snapshot = {'updatedAt': '2026-10-29T06:00:00+00:00', 'decision': None,
+                    'logs': [{'id': 'one', 'event': 'action_aborted'}]}
+        self.relay.publish_telemetry(snapshot)
+        async with asyncio.timeout(.5):
+            self.assertEqual((await ws.receive_json())['telemetry'], snapshot)
+        self.assertIsNone(self.relay.last_capture)
+        self.assertEqual(len(self.relay.clients), 0)
+        self.relay.publish_telemetry(snapshot)
+        self.assertTrue(next(iter(self.relay.event_clients)).empty())
+        await ws.send_json({'method': 'Input.dispatchMouseEvent'})
+        self.assertEqual((await ws.receive()).type, WSMsgType.CLOSE)
+        await ws.close()
+
+    async def test_jsonl_append_pushes_to_events_within_subsecond(self):
+        root = Path(self.results.name)
+        log = root / 'operator' / 'python-operator.jsonl'
+        log.parent.mkdir()
+        log.write_text('')
+        ws = await self.client.ws_connect('/events')
+        await ws.receive_json()
+        with patch.dict('os.environ', {'OPERATOR_ARTIFACTS_DIR': str(root)}):
+            follower = asyncio.create_task(self.relay.follow_telemetry())
+            try:
+                log.write_text('{"event":"action_aborted","timestamp":"2026-10-29T06:00:00+00:00"}\n')
+                async with asyncio.timeout(.75):
+                    packet = await ws.receive_json()
+                self.assertEqual(packet['telemetry']['logs'][-1]['event'], 'action_aborted')
+            finally:
+                follower.cancel()
+                with self.assertRaises(asyncio.CancelledError):
+                    await follower
+        await ws.close()
 
 if __name__=='__main__':unittest.main()

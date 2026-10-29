@@ -10,8 +10,10 @@ const decisionPanel = document.querySelector('.decision-panel');
 const logs = document.querySelector('#logs');
 const logIds = new Set();
 let lastDecision = null;
+let eventSocket = null, eventRetry, eventsOpen = false;
+const latestButton = document.querySelector('#logs-latest');
 const actionLabels = {discard:'打牌',riichi:'リーチ',ron:'ロン',tsumo:'ツモ',chi:'チー',pon:'ポン',kan:'カン',pass:'見送り',skip:'見送り'};
-function text(selector, value) { document.querySelector(selector).textContent = value; }
+function text(selector, value) { const target = document.querySelector(selector); if (target.textContent !== value) target.textContent = value; }
 function probability(value) { return Number.isFinite(value) && value >= 0 && value <= 1 ? (value * 100).toFixed(1) + '%' : '—'; }
 function timeLabel(value) {
   const time = typeof value === 'string' ? Date.parse(value) : NaN;
@@ -19,9 +21,10 @@ function timeLabel(value) {
 }
 function updateFreshness(reason) {
   const age = lastDecision ? Date.now() - Date.parse(lastDecision.timestamp) : NaN;
-  const current = !reason && !screen.hidden && !paused && !document.hidden &&
-    Number.isFinite(age) && age >= -5000 && age < 15000 && ['live', 'match'].includes(metadata?.state);
-  decisionPanel.dataset.current = String(current);
+  const connected = eventsOpen || (!screen.hidden && socket && ['live', 'match'].includes(metadata?.state));
+  const current = !reason && connected && !paused && !document.hidden &&
+    Number.isFinite(age) && age >= -5000 && age < 15000 && !['round_result', 'match_result'].includes(metadata?.state);
+  if (decisionPanel.dataset.current !== String(current)) decisionPanel.dataset.current = String(current);
   text('#decision-freshness', !lastDecision ? '判断データ待ち' : current ? '直近の判断（15秒以内）' : '過去の判断 · ' + (reason || '更新待ち'));
 }
 function renderTelemetry(telemetry) {
@@ -42,6 +45,7 @@ function renderTelemetry(telemetry) {
   for (const entry of Array.isArray(telemetry?.logs) ? telemetry.logs : []) {
     if (!entry || typeof entry.id !== 'string' || logIds.has(entry.id)) continue;
     logIds.add(entry.id);
+    text('#log-latest', '最新ログ ' + timeLabel(entry.timestamp));
     const row = document.createElement('li');
     row.dataset.id = entry.id;
     const time = document.createElement('time');
@@ -65,6 +69,45 @@ function renderTelemetry(telemetry) {
   document.querySelector('#log-empty').hidden = logs.children.length > 0;
   if (follow) logs.scrollTop = logs.scrollHeight;
   else if (removedHeight) logs.scrollTop = Math.max(0, logs.scrollTop - removedHeight);
+  updateLogFollow();
+}
+function updateLogFollow() {
+  latestButton.hidden = logs.scrollHeight - logs.scrollTop - logs.clientHeight < 32;
+}
+logs.addEventListener('scroll', updateLogFollow, { passive: true });
+latestButton.onclick = () => { logs.scrollTop = logs.scrollHeight; updateLogFollow(); };
+function eventStatus(label) {
+  text('#events-status', label);
+  document.querySelector('#events-status').dataset.live = String(eventsOpen);
+}
+function connectEvents() {
+  if (paused || document.hidden || eventSocket) return;
+  clearTimeout(eventRetry);
+  const ws = new WebSocket('wss://jantama-live.yama.asia/events');
+  eventSocket = ws;
+  ws.onopen = () => {
+    if (eventSocket !== ws) return;
+    eventsOpen = true;
+    eventStatus('LIVE');
+    updateFreshness();
+  };
+  ws.onmessage = event => {
+    if (eventSocket !== ws || paused || document.hidden) return;
+    let message;
+    try { message = JSON.parse(event.data); } catch { ws.close(); return; }
+    if (message?.type !== 'telemetry') return;
+    text('#events-received', 'データ受信 ' + timeLabel(new Date().toISOString()));
+    renderTelemetry(message.telemetry);
+  };
+  ws.onclose = () => {
+    if (eventSocket !== ws) return;
+    eventSocket = null;
+    eventsOpen = false;
+    eventStatus(paused || document.hidden ? '停止' : '再接続中');
+    updateFreshness('ログ接続待ち');
+    if (!paused && !document.hidden) eventRetry = setTimeout(connectEvents, 3000);
+  };
+  ws.onerror = () => ws.close();
 }
 function hide(message, detail='雀魂タブの映像を受信できたら、自動で表示します。') {
   generation++;
@@ -76,7 +119,7 @@ function hide(message, detail='雀魂タブの映像を受信できたら、自�
   placeholder.querySelector('strong').textContent = message;
   placeholder.querySelector('p').textContent = detail;
   status.textContent = message;
-  updateFreshness(message);
+  updateFreshness(eventsOpen && !paused && !document.hidden ? undefined : message);
 }
 function connect() {
   if(paused || document.hidden) return;
@@ -90,7 +133,8 @@ function connect() {
     if(typeof event.data === 'string') {
       try {metadata = JSON.parse(event.data);} catch {ws.close();return;}
       if (!metadata || typeof metadata !== 'object') {ws.close();return;}
-      renderTelemetry(metadata.telemetry);
+      if (!eventsOpen) renderTelemetry(metadata.telemetry);
+      else updateFreshness();
       if(!states[metadata.state]) hide(metadata.state==='offline'?'配信元に再接続しています':'雀魂タブの映像を待っています');
       return;
     }
@@ -122,17 +166,22 @@ function connect() {
   ws.onerror = () => ws.close();
 }
 function disconnect(message) {
+  clearTimeout(eventRetry);
+  const oldEvents = eventSocket; eventSocket = null; eventsOpen = false;
+  if (oldEvents) oldEvents.close();
+  eventStatus('停止');
   clearTimeout(retry);const old=socket;socket=null;metadata=null;if(old)old.close();hide(message);
 }
 toggle.onclick = () => {
   paused = !paused;toggle.textContent=paused?'観戦を再開':'観戦を一時停止';
-  if(paused) disconnect('観戦を一時停止中');else connect();
+  if(paused) disconnect('観戦を一時停止中');else { connect(); connectEvents(); }
 };
 document.querySelector('#fullscreen').onclick = async () => {
   try {if(document.fullscreenElement) await document.exitFullscreen();else await document.querySelector('.player').requestFullscreen();}
   catch {status.textContent='このブラウザは全画面表示に対応していません';}
 };
-document.addEventListener('visibilitychange',()=>{if(document.hidden)disconnect('観戦は非表示のため停止中');else if(!paused)connect();});
-setInterval(()=>{if(!screen.hidden && performance.now()-lastFrame>4000)hide('映像の更新が止まっています','最新の映像を受信すると再開します。');else updateFreshness(screen.hidden ? status.textContent : undefined);},1000);
+document.addEventListener('visibilitychange',()=>{if(document.hidden)disconnect('観戦は非表示のため停止中');else if(!paused){connect();connectEvents();}});
+setInterval(()=>{if(!screen.hidden && performance.now()-lastFrame>4000)hide('映像の更新が止まっています','最新の映像を受信すると再開します。');else updateFreshness(screen.hidden && !eventsOpen ? status.textContent : undefined);},1000);
 window.addEventListener('pagehide',()=>disconnect('観戦を終了しました'));
 connect();
+connectEvents();

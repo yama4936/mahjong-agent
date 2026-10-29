@@ -24,5 +24,10 @@ dd{margin:0;font-size:clamp(18px,2vw,26px);font-variant-numeric:tabular-nums;ove
 #logs time{display:block;color:var(--muted);font-variant-numeric:tabular-nums;font-size:11px}
 .log-event{display:block;color:#d7e8ba;font-weight:500}
 .log-message{white-space:pre-wrap}
+.log-received{display:flex;flex-direction:column;gap:4px;color:var(--muted);font-size:10px;margin:10px 0}
+#events-status[data-live="true"]{color:#d7e8ba}
+#events-status[data-live="true"]::before{content:"● ";color:#9bcc6d}
+#logs-latest{display:block;margin:10px auto 0;padding:8px 16px;border-radius:22px;font-size:12px;min-height:36px}
+#logs-latest[hidden]{display:none}
 @media(max-width:1000px){.decision-metrics{grid-template-columns:repeat(3,1fr)}.chosen-action{grid-column:span 2}.watch-layout{grid-template-columns:minmax(0,1fr)}#logs{height:300px}}
 @media(max-width:500px){.decision-panel{padding:14px}.decision-metrics{grid-template-columns:repeat(2,1fr);gap:16px}.chosen-action{grid-column:span 2}.decision-heading{align-items:flex-start;flex-direction:column}.log-panel{padding:14px}}

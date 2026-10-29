@@ -41,6 +41,7 @@ def public_frame(raw):
 class Relay:
     def __init__(self):
         self.clients = set()
+        self.event_clients = set()
         self.sequence = 0
         self.state = 'waiting'
         self.last_capture = None
@@ -51,10 +52,21 @@ class Relay:
         reader = Telemetry(os.environ.get('OPERATOR_ARTIFACTS_DIR', '/app/artifacts'))
         while True:
             try:
-                self.telemetry = await asyncio.to_thread(reader.snapshot)
+                snapshot = await asyncio.to_thread(reader.snapshot)
             except (OSError, ValueError):
-                self.telemetry = {'updatedAt': None, 'decision': None, 'logs': []}
-            await asyncio.sleep(1)
+                snapshot = {'updatedAt': None, 'decision': None, 'logs': []}
+            self.publish_telemetry(snapshot)
+            await asyncio.sleep(.1)
+
+    def publish_telemetry(self, snapshot):
+        if snapshot == self.telemetry:
+            return
+        self.telemetry = snapshot
+        packet = ({'type': 'telemetry', 'telemetry': snapshot}, None)
+        for queue in tuple(self.event_clients):
+            if queue.full():
+                queue.get_nowait()
+            queue.put_nowait(packet)
 
     def broadcast(self, state, frame=None, captured_at=None):
         self.sequence += 1
@@ -127,18 +139,25 @@ class Relay:
                 finally:
                     self.broadcast('waiting')
 
-    async def websocket(self, request):
+    async def events(self, request):
+        return await self.websocket(request, events=True)
+
+    async def websocket(self, request, events=False):
         origin = request.headers.get('Origin')
         if origin and origin not in ALLOWED_ORIGINS:
             raise web.HTTPForbidden()
-        if len(self.clients) >= MAX_VIEWERS:
+        clients = self.event_clients if events else self.clients
+        if len(clients) >= MAX_VIEWERS:
             raise web.HTTPServiceUnavailable(text='Viewer limit reached')
         ws = web.WebSocketResponse(heartbeat=15, max_msg_size=1024, compress=False)
         await ws.prepare(request)
         queue = asyncio.Queue(maxsize=1)
-        self.clients.add(queue)
+        clients.add(queue)
         # New viewers never receive a cached image from a previous session.
-        await ws.send_json({'state': 'waiting', 'capturedAt': None, 'fpsLimit': FPS})
+        if events:
+            await ws.send_json({'type': 'telemetry', 'telemetry': self.telemetry})
+        else:
+            await ws.send_json({'state': 'waiting', 'capturedAt': None, 'fpsLimit': FPS})
         async def send():
             while True:
                 metadata, frame = await queue.get()
@@ -155,7 +174,7 @@ class Relay:
                 if msg.type in {WSMsgType.TEXT, WSMsgType.BINARY}:
                     await ws.close(code=1008, message=b'Read-only stream')
         finally:
-            self.clients.discard(queue)
+            clients.discard(queue)
             sender.cancel()
             with contextlib.suppress(asyncio.CancelledError, TimeoutError, ConnectionError):
                 await sender
@@ -197,6 +216,7 @@ def create_app(relay=None, capture=True, results_dir=None):
     app.router.add_get('/results/{name:.*}', results)
     app.router.add_get('/health', health)
     app.router.add_get('/ws', relay.websocket)
+    app.router.add_get('/events', relay.events)
     app.router.add_get('/', static)
     app.router.add_get('/{name}', static)
     if capture:

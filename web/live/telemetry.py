@@ -105,7 +105,7 @@ class Telemetry:
         now = time.monotonic()
         if now < self.discover_at:
             return
-        self.discover_at = now + 10
+        self.discover_at = now + 1
         best = None
         if self.root:
             for pattern in ('*/python-operator.jsonl', '*/*/python-operator.jsonl'):
