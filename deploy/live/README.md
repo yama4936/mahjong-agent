@@ -49,6 +49,10 @@ WebSocketはmetadata JSONとJPEGバイナリの順で送信します。状態・
 
 ## 検証
 
+観戦UIは画面高に合わせて判断・映像・ログ・操作ボタンを配置します。通常のPCと縦長スマートフォンではページ全体のスクロールを不要とし、ログ履歴は欄内でスクロールできます。説明は「表示の見方・配信について」に集約。高さの低い画面や拡大表示では、内容を切らず自然なページスクロールを許容します。
+
+レイアウト実寸テスト: リポジトリを `python3 -m http.server 8769 --bind 127.0.0.1` で配信し、ブラウザ依存がある環境で `node web/live/layout.test.mjs` を実行します。`LIVE_PREVIEW_URL` で配信先、`LIVE_SCREENSHOT_DIR` で保存先、`LIVE_PREVIEW_FRAME` で保存JPEGを指定可能です。テストは独立ブラウザを使い、公開WebSocketや対局ブラウザには接続しません。
+
 ```sh
 node --check web/live/live.js
 docker run --rm --network none -v "$PWD/web/live:/app/web/live:ro" jantama-live:local python -m unittest discover -s web/live -p test_server.py -v

@@ -1,6 +1,7 @@
 <!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="雀魂自動対局をライブ観戦。対局PCからの映像をリアルタイムで確認できます。"><title>ライブ観戦 — JANTAMA AUTO</title><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="shell.css"><script src="shell.js" defer></script><link rel="stylesheet" href="live-view.css"><script src="live-view.js" defer></script></head><body><a class="skip-link" href="#main-content">本文へ移動</a>
 <div class="mobile-bar"><a href="index.html">JANTAMA AUTO</a><button id="nav-toggle" type="button" aria-expanded="false" aria-controls="site-sidebar">メニュー</button></div>
-<aside id="site-sidebar" class="site-sidebar"><a class="brand" href="index.html"><span class="tile">發</span><span>JANTAMA <b>AUTO</b></span></a><p class="sidebar-label">対局アーカイブ</p><nav class="site-nav" aria-label="メインナビゲーション"><a href="index.html"><span aria-hidden="true">01</span>対局一覧</a><a href="live.html" aria-current="page"><span aria-hidden="true">02</span>ライブ観戦</a><a href="analysis.html"><span aria-hidden="true">03</span>役の分析</a><a href="charts.html"><span aria-hidden="true">04</span>グラフ分析</a><a href="how-it-works.html"><span aria-hidden="true">05</span>仕組みと読み方</a></nav></aside><main id="main-content" tabindex="-1"><h1>ライブ観戦</h1><p class="muted">保存済みの対局記録とは別に、雀魂タブ全体を配信しています。対局・結果画面に加え、ロビー・ログイン・設定画面も表示します。</p><section class="decision-panel" aria-labelledby="decision-title" data-current="false">
+<aside id="site-sidebar" class="site-sidebar"><a class="brand" href="index.html"><span class="tile">發</span><span>JANTAMA <b>AUTO</b></span></a><p class="sidebar-label">対局アーカイブ</p><nav class="site-nav" aria-label="メインナビゲーション"><a href="index.html"><span aria-hidden="true">01</span>対局一覧</a><a href="live.html" aria-current="page"><span aria-hidden="true">02</span>ライブ観戦</a><a href="analysis.html"><span aria-hidden="true">03</span>役の分析</a><a href="charts.html"><span aria-hidden="true">04</span>グラフ分析</a><a href="how-it-works.html"><span aria-hidden="true">05</span>仕組みと読み方</a></nav></aside><main id="main-content" class="live-page" tabindex="-1"><div class="live-titlebar"><h1>ライブ観戦</h1><details class="live-help"><summary>表示の見方・配信について</summary><div class="live-help-content"><p>雀魂タブの画面を最大3fpsでライブ配信。音声なし・観戦専用です。</p><p>確率は判断時点の推定値です。認識信頼度は牌の読み取りの確かさで、和了率とは異なります。</p><p>雀魂タブ内のロビー・ログイン・設定・対局・結果画面をすべて配信します。PCや接続が停止すると映像を隠し、自動で再接続します。</p><p><a href="https://jantama.yama.asia/">保存済みの対局成績はこちら →</a></p></div></details></div>
+<section class="decision-panel" aria-labelledby="decision-title" data-current="false">
   <div class="decision-heading"><h2 id="decision-title">エージェントの判断</h2><span id="decision-freshness" role="status">判断データ待ち</span></div>
   <dl class="decision-metrics">
     <div class="chosen-action"><dt>選択した行動</dt><dd id="decision-action">—</dd></div>
@@ -10,7 +11,6 @@
     <div><dt>シャンテン数</dt><dd id="decision-shanten">—</dd></div>
   </dl>
   <p class="decision-detail"><span id="decision-source">判断元 —</span><span id="decision-safety">認識安全判定 —</span><span id="decision-time">判断受信前</span></p>
-  <p class="metric-note">確率は判断時点の推定値です。認識信頼度は牌の読み取りの確かさで、和了率とは異なります。</p>
 </section>
 <div class="watch-layout"><div class="video-column">
   <section class="player" aria-label="雀魂のライブ映像"><img id="screen" alt="配信中の雀魂タブの画面" hidden><div id="placeholder"><strong>接続しています…</strong><p>雀魂タブの映像を受信するまでお待ちください。</p></div></section>
@@ -22,6 +22,6 @@
   <p id="log-empty">ログを受信するとここに表示します。</p>
   <ol id="logs" tabindex="0" aria-label="時刻順の操作ログ"></ol>
   <button id="logs-latest" type="button" hidden>↓ 最新へ</button>
-  <p class="log-help">末尾を表示中は新着に追従します。上にスクロールすると過去のログを読めます。</p>
+  <p class="log-help" title="末尾を表示中は新着に追従します。上にスクロールすると過去のログを読めます。">末尾で新着に追従 · 上へスクロールで履歴</p>
 </aside></div>
-<p class="note">別画面で観戦する場合は<a href="https://jantama-live.yama.asia/" target="_blank" rel="noopener noreferrer">ライブ観戦を別のタブで開く ↗</a>。音声なし・最大3fps。回線やPCの負荷によって更新間隔は変わります。</p><footer>観戦専用です。このページから対局の操作はできません。<br><a href="index.html">対局成績・結果画像へ戻る</a></footer></main></body></html>
+</main></body></html>
