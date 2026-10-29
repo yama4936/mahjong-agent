@@ -3561,14 +3561,18 @@ class AwayDialogDetectionTest(unittest.TestCase):
         )
         operator.layout = load_json(project / "config/layout-300-regression.json")
         operator.hand_clip = {"x": 223, "y": 926, "width": 1355, "height": 146}
-        operator.river_clip = {"x": 10, "y": 0, "width": 10, "height": 10}
+        operator.river_clip = operator.layout["publicTileRegions"]["ownDiscards"]
         frame = (project / "test/fixtures/riichi-before-selection-20261020.jpg").read_bytes()
         selection = (project / "test/fixtures/riichi-two-candidates-selection-20261020.jpg").read_bytes()
+        operator.fresh_screencast_selection_receipt = Mock(return_value=selection)
         operator.capture_full_action_frame = Mock(side_effect=lambda *_args: argparse.Namespace(
             png=selection, attempt_started_at=time.monotonic(), completed_at=time.monotonic()))
         operator.screencast_session = Mock()
         operator.latest_screencast_frame = frame
         operator.screencast_draw_generation = 4
+        operator.action_evidence_started_at = 10.0
+        operator.action_budget_started_at = 10.0
+        operator.action_evidence_kind = "discard"
         operator.cached_open_melds = 0
         operator.confirm_action_button = Mock(return_value={"confirmation": "riichi_selection_hand_changed"})
         operator.confirm_discard = Mock(return_value={"confirmation": "hand_and_own_river_changed"})
@@ -3691,7 +3695,8 @@ class AwayDialogDetectionTest(unittest.TestCase):
                         receipt = operator.execute(page, evaluation, crop_screenshot(frame, operator.hand_clip), frame, 4, 10.0)
                         self.assertTrue(receipt["clicked"])
                     else:
-                        with self.assertRaisesRegex(RetryableSafetyAbort, "click budget expired"):
+                        with self.assertRaisesRegex(RetryableSafetyAbort,
+                            "click budget expired|riichi selection lacks unchanged original turn"):
                             operator.execute(page, evaluation, crop_screenshot(frame, operator.hand_clip), frame, 4, 10.0)
                         page.mouse.click.assert_called_once_with(1263, 816.5)
 
@@ -3716,6 +3721,9 @@ class AwayDialogDetectionTest(unittest.TestCase):
         operator.screencast_session = Mock()
         operator.latest_screencast_frame = frame
         operator.screencast_draw_generation = 4
+        operator.action_evidence_started_at = 10.0
+        operator.action_budget_started_at = 10.0
+        operator.action_evidence_kind = "discard"
         operator.cached_open_melds = 0
         operator.confirm_action_button = Mock(return_value={"confirmation": "riichi_selection_hand_changed"})
         operator.refresh_discard_reconciliation_before_click = Mock(return_value=False)

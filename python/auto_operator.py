@@ -22,13 +22,14 @@ import threading
 import time
 import uuid
 from collections import Counter
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from math import ceil, isfinite
 from pathlib import Path
 from typing import Any, Callable
 
 from playwright.sync_api import Browser, CDPSession, Page, sync_playwright
-from PIL import Image, ImageChops, ImageStat
+from PIL import Image, ImageChops, ImageFilter, ImageStat
 from screen_state import _rgb_fraction, classify_screen, load_references
 from synchronous_capture import CaptureReceipt, capture_full_png
 from operator_lock import OperatorAlreadyRunning, endpoint_key, operator_lease
@@ -53,6 +54,15 @@ class SelectionStateUncertainAbort(RetryableSafetyAbort):
     The caller must therefore disarm this hand until an independently observed
     state transition, instead of treating this like an ordinary stale frame.
     """
+
+
+@dataclass(frozen=True)
+class _RiichiSelectionBudget:
+    """Execute-local proof; never retained on the operator or another turn."""
+    action_started_at: float
+    budget_started_at: float
+    captured_at: float
+    own_river: bytes
 
 
 def utc_stamp() -> str:
@@ -92,6 +102,10 @@ FORCE_AUTO_NORMAL_TURN_BUDGET_MS = 5000
 # click.  Do not start that gesture with so little of the short-clock budget
 # left that its second input can race the client auto-tsumogiri.
 FORCE_AUTO_DISCARD_SELECTION_RESERVE_MS = 650
+# Only the new execute-local riichi proof uses this comparison. JPEG ringing
+# may move a threshold edge by two pixels; changed tile interiors must remain
+# below 0.1% of the calibrated river, far smaller than an appended river tile.
+RIICHI_SELECTION_RIVER_STRUCTURE_LIMIT_PERCENT = 0.1
 # Once a possible selected tile has survived into a later observed draw, wait
 # briefly for the public worker to corroborate the own river.  If it cannot,
 # stop rather than treating draw-slot animation as permission to click again.
@@ -191,6 +205,25 @@ def mean_pixel_delta(first: bytes, second: bytes) -> float:
     with Image.open(io.BytesIO(first)) as first_image, Image.open(io.BytesIO(second)) as second_image:
         difference = ImageChops.difference(first_image.convert("RGB"), second_image.convert("RGB"))
         return sum(ImageStat.Stat(difference).mean) / 3
+
+
+def river_structure_delta(first: bytes, second: bytes) -> float:
+    """Percent of river structure unmatched outside a two-pixel JPEG edge.
+
+    Compare both directions so removal, addition and changed glyph interiors
+    all count. The native bright/felt boundary uses a fixed luminance mask;
+    dilation tolerates codec ringing at that boundary, not a changed tile's
+    interior. This is a bounded image comparison, not tile recognition.
+    """
+    with Image.open(io.BytesIO(first)) as a, Image.open(io.BytesIO(second)) as b:
+        if a.size != b.size or min(a.size) <= 0:
+            return float("inf")
+        masks = [image.convert("L").point([0] * 161 + [255] * 95) for image in (a, b)]
+        changed = ImageChops.lighter(
+            ImageChops.subtract(masks[0], masks[1].filter(ImageFilter.MaxFilter(5))),
+            ImageChops.subtract(masks[1], masks[0].filter(ImageFilter.MaxFilter(5))),
+        )
+        return ImageStat.Stat(changed).mean[0] / 255 * 100
 
 
 def tile_face_structure_delta(first: bytes, second: bytes, threshold: int = 120) -> float:
@@ -2330,6 +2363,7 @@ class PythonAutoOperator:
     def require_force_auto_click_budget(
         self, captured_at: float | None, *, phase: str,
         include_action_evidence: bool = True,
+        riichi_selection: _RiichiSelectionBudget | None = None,
     ) -> None:
         """Fail closed when a force-auto decision is based on an old frame.
 
@@ -2341,6 +2375,9 @@ class PythonAutoOperator:
         budget = self.force_auto_click_budget_ms()
         if budget is None:
             return
+        if riichi_selection is not None and not include_action_evidence:
+            raise RetryableSafetyAbort("riichi selection cannot bypass its original action evidence clock")
+        selection_grace = self.riichi_selection_grace_ms(riichi_selection, captured_at, phase)
         capture_age_ms = self.force_auto_capture_age_ms(captured_at)
         # The self-turn gate bounds tile choices, but it does not bound a
         # reaction PASS.  PASS is re-certified immediately from its own
@@ -2354,12 +2391,21 @@ class PythonAutoOperator:
             if capture_age_ms is not None or action_evidence_age_ms is not None else None
         if elapsed_ms is None:
             return
-        effective_budget = budget + (self.force_auto_same_draw_grace_ms(captured_at)
+        effective_budget = budget + (max(self.force_auto_same_draw_grace_ms(captured_at), selection_grace)
                                      if include_action_evidence else 0)
         capture_valid = capture_age_ms is None or capture_age_ms < budget
         evidence_valid = action_evidence_age_ms is None or action_evidence_age_ms < effective_budget
         if capture_valid and evidence_valid:
             if elapsed_ms >= budget:
+                if selection_grace:
+                    self.log("riichi_selection_budget_grace_applied", phase=phase,
+                             originalActionStartedAt=riichi_selection.action_started_at,
+                             originalBudgetStartedAt=riichi_selection.budget_started_at,
+                             captureAgeBeforeDecisionMs=capture_age_ms,
+                             actionEvidenceAgeMs=action_evidence_age_ms,
+                             effectiveActionBudgetMs=effective_budget,
+                             remainingGameExtraTimeMs=None,
+                             reason="confirmed_selection_same_turn_game_timer_not_observed")
                 self.log("force_auto_same_draw_grace_applied", phase=phase,
                          clickBudgetMs=budget, effectiveActionBudgetMs=effective_budget,
                          actionEvidenceAgeMs=action_evidence_age_ms,
@@ -2416,7 +2462,32 @@ class PythonAutoOperator:
             "force-auto click budget expired before safe click; reobserve current hand"
         )
 
-    def require_force_auto_discard_selection_window(self, captured_at: float | None) -> None:
+    def riichi_selection_grace_ms(
+        self, certificate: _RiichiSelectionBudget | None, captured_at: float | None, phase: str,
+    ) -> int:
+        if certificate is None:
+            return 0
+        budget = self.force_auto_click_budget_ms()
+        current_start = getattr(self, "action_evidence_started_at", None)
+        current_budget_start = getattr(self, "action_budget_started_at", None)
+        if current_budget_start is None:
+            current_budget_start = current_start
+        now = time.monotonic()
+        if (budget is None or budget > FORCE_AUTO_SHORT_CLICK_BUDGET_MAX_MS
+                or phase not in {"before_discard_click", "before_discard_confirmation_click"}
+                or getattr(self, "action_evidence_kind", None) != "discard"
+                or current_start != certificate.action_started_at
+                or current_budget_start != certificate.budget_started_at
+                or captured_at != certificate.captured_at
+                or not isfinite(certificate.captured_at) or certificate.captured_at > now
+                or getattr(self, "selection_uncertainty_latch", None)
+                or getattr(self, "pending_post_call_discard", False)):
+            raise RetryableSafetyAbort("confirmed riichi selection budget certificate is no longer valid")
+        return max(0, FORCE_AUTO_SAME_DRAW_ACTION_BUDGET_MS - budget)
+
+    def require_force_auto_discard_selection_window(
+        self, captured_at: float | None, *, riichi_selection: _RiichiSelectionBudget | None = None,
+    ) -> None:
         """Reserve time for the observed second click of a discard gesture.
 
         Checking the ordinary budget immediately before the *first* click is
@@ -2434,10 +2505,15 @@ class PythonAutoOperator:
         elapsed_ms = max(age for age in (capture_age_ms, action_evidence_age_ms)
                          if age is not None) \
             if capture_age_ms is not None or action_evidence_age_ms is not None else None
-        effective_budget = budget + self.force_auto_same_draw_grace_ms(captured_at)
+        effective_budget = budget + max(self.force_auto_same_draw_grace_ms(captured_at),
+            self.riichi_selection_grace_ms(riichi_selection, captured_at, "before_discard_click"))
+        deadline_remaining = self.action_deadline_remaining_ms() if riichi_selection is not None else budget
+        if riichi_selection is not None:
+            self.require_action_deadline()
         remaining_ms = min(
             budget - capture_age_ms if capture_age_ms is not None else budget,
             effective_budget - action_evidence_age_ms if action_evidence_age_ms is not None else budget,
+            deadline_remaining if riichi_selection is not None else effective_budget,
         )
         if elapsed_ms is None or remaining_ms >= FORCE_AUTO_DISCARD_SELECTION_RESERVE_MS:
             return
@@ -5633,6 +5709,17 @@ class PythonAutoOperator:
         selected_action = selected.get("action")
         force_auto = self.args.mode == "force-auto"
         selection_local_budget = False
+        riichi_selection_budget: _RiichiSelectionBudget | None = None
+        original_action_start = getattr(self, "action_evidence_started_at", None)
+        original_budget_start = getattr(self, "action_budget_started_at", None)
+        if original_budget_start is None:
+            original_budget_start = original_action_start
+        if (force_auto and selected_action == "riichi" and self.force_auto_click_budget_ms() is not None
+                and self.force_auto_click_budget_ms() <= FORCE_AUTO_SHORT_CLICK_BUDGET_MAX_MS):
+            if (any(not isinstance(value, (int, float)) or isinstance(value, bool) or not isfinite(value)
+                    for value in (original_action_start, original_budget_start))
+                    or not original_action_start <= original_budget_start <= time.monotonic()):
+                raise RetryableSafetyAbort("riichi declaration lacks a valid original action clock")
         certified_auto = self.args.mode == "auto" and decision.get("executable") is True
         local_auto = local_discard_allowed(self.args, evaluation)
         if not force_auto and not certified_auto and not local_auto:
@@ -5863,6 +5950,7 @@ class PythonAutoOperator:
             self.require_action_deadline()
             self.log("action_click_sent", action=button_action, clickPoint=point)
             self.last_action_clicked_at = time.monotonic()
+            declaration_clicked_at = self.last_action_clicked_at
             page.mouse.click(point["x"], point["y"])
             riichi_stage_started = time.monotonic() if selected_action == "riichi" else None
             action_receipt = self.confirm_action_button(
@@ -5955,13 +6043,64 @@ class PythonAutoOperator:
             # confirmation/classification work.  Do not do this for an
             # unconfirmed declaration or any other action path.
             if force_auto:
+                short_budget = self.force_auto_click_budget_ms()
+                if short_budget is not None and short_budget <= FORCE_AUTO_SHORT_CLICK_BUDGET_MAX_MS:
+                    # Dimming the drawn tile can close the ordinary draw gate.
+                    # Two verified selection screens and an unchanged river
+                    # prove this execute is still finishing its declaration.
+                    # Refresh image freshness only; keep the original turn,
+                    # deadline and existing ten-second action ceiling.
+                    timestamps = (original_action_start, original_budget_start, declaration_clicked_at,
+                                  post_riichi_captured_at, post_riichi_capture.completed_at,
+                                  settled_riichi_captured_at, settled_riichi_capture.completed_at)
+                    now = time.monotonic()
+                    if (any(not isinstance(value, (int, float)) or isinstance(value, bool)
+                            or not isfinite(value) for value in timestamps)
+                            or not original_action_start <= declaration_clicked_at <= post_riichi_captured_at
+                            <= post_riichi_capture.completed_at < settled_riichi_captured_at
+                            <= settled_riichi_capture.completed_at <= now
+                            or not original_action_start <= original_budget_start <= declaration_clicked_at
+                            or getattr(self, "action_evidence_started_at", None) != original_action_start
+                            or getattr(self, "action_evidence_kind", None) != "discard"
+                            or getattr(self, "selection_uncertainty_latch", None)
+                            or getattr(self, "pending_post_call_discard", False)):
+                        raise RetryableSafetyAbort("riichi selection lacks unchanged original turn and capture timestamps")
+                    selection_river = crop_screenshot(post_riichi_full, self.river_clip)
+                    settled_river = crop_screenshot(settled_riichi_full, self.river_clip)
+                    river_deltas = [river_structure_delta(river_before, selection_river),
+                                    river_structure_delta(river_before, settled_river),
+                                    river_structure_delta(selection_river, settled_river)]
+                    if (not isfinite(target_delta) or any(not isfinite(delta)
+                                                         or delta > RIICHI_SELECTION_RIVER_STRUCTURE_LIMIT_PERCENT
+                                                         for delta in river_deltas)):
+                        raise RetryableSafetyAbort("own river changed during confirmed riichi selection")
+                    riichi_selection_budget = _RiichiSelectionBudget(
+                        original_action_start, original_budget_start, settled_riichi_captured_at, settled_river,
+                    )
+                    evaluated_captured_at = settled_riichi_captured_at
+                    evidence_paths = {}
+                    if hasattr(self, "frames"):
+                        stamp = utc_stamp()
+                        for label, frame in (("first", post_riichi_full), ("settled", settled_riichi_full)):
+                            path = self.frames / f"{stamp}.riichi-budget-{label}.png"
+                            path.write_bytes(frame)
+                            path.chmod(0o600)
+                            evidence_paths[label] = str(path)
+                    self.log("riichi_selection_same_turn_certified",
+                             originalActionStartedAt=original_action_start, originalBudgetStartedAt=original_budget_start,
+                             settledCaptureStartedAt=settled_riichi_captured_at,
+                             targetPixelDelta=round(target_delta, 3), riverStructureDeltasPercent=river_deltas,
+                             screenshots=evidence_paths,
+                             effectiveActionBudgetMs=FORCE_AUTO_SAME_DRAW_ACTION_BUDGET_MS,
+                             remainingGameExtraTimeMs=None, reason="game_timer_not_observed")
                 selection_local_budget = (
                     not getattr(self.args, "ranked_loop", False)
                     and self.force_auto_click_budget_ms() is not None
                     and self.force_auto_click_budget_ms() > FORCE_AUTO_SHORT_CLICK_BUDGET_MAX_MS
                 )
-                evaluated_captured_at = (settled_riichi_captured_at if selection_local_budget
-                                         else post_riichi_captured_at)
+                if riichi_selection_budget is None:
+                    evaluated_captured_at = (settled_riichi_captured_at if selection_local_budget
+                                             else post_riichi_captured_at)
                 if selection_local_budget:
                     self.log("riichi_selection_local_budget_started",
                              clickBudgetMs=self.force_auto_click_budget_ms(),
@@ -6009,8 +6148,12 @@ class PythonAutoOperator:
             self.require_force_auto_click_budget(
                 evaluated_captured_at, phase="before_discard_click",
                 **({"include_action_evidence": False} if selection_local_budget else {}),
+                **({"riichi_selection": riichi_selection_budget} if riichi_selection_budget else {}),
             )
-            self.require_force_auto_discard_selection_window(evaluated_captured_at)
+            self.require_force_auto_discard_selection_window(
+                evaluated_captured_at,
+                **({"riichi_selection": riichi_selection_budget} if riichi_selection_budget else {}),
+            )
         self.require_action_deadline()
         self.log(
             "click_sent",
@@ -6022,22 +6165,40 @@ class PythonAutoOperator:
         self.last_action_clicked_at = time.monotonic()
         selection_sequence_before = getattr(self, "screencast_sequence", None)
 
+        last_selection_receipt: bytes | None = None
+
+        def observe_selection_receipt(first_click_at: float) -> bytes | None:
+            nonlocal last_selection_receipt
+            last_selection_receipt = self.fresh_screencast_selection_receipt(selection_sequence_before, first_click_at)
+            return last_selection_receipt
+
+        def before_confirmation_click() -> None:
+            if riichi_selection_budget is not None:
+                if (last_selection_receipt is None
+                        or classify_screen(last_selection_receipt, getattr(self, "screen_references", {}))[0] != "match"
+                        or not riichi_selection_is_visible(crop_screenshot(last_selection_receipt, self.hand_clip))
+                        or river_structure_delta(riichi_selection_budget.own_river,
+                            crop_screenshot(last_selection_receipt, self.river_clip))
+                        > RIICHI_SELECTION_RIVER_STRUCTURE_LIMIT_PERCENT):
+                    raise RetryableSafetyAbort("riichi selection or own river changed before discard confirmation")
+            self.require_force_auto_click_budget(
+                evaluated_captured_at, phase="before_discard_confirmation_click",
+                **({"include_action_evidence": False} if selection_local_budget else {}),
+                **({"riichi_selection": riichi_selection_budget} if riichi_selection_budget else {}),
+            )
+            self.require_action_deadline()
+
         selection_confirmation = send_discard_click(
             page.mouse,
             point,
             self.layout["viewport"],
             lambda milliseconds: page.wait_for_timeout(milliseconds),
             pre_click_full,
-            lambda first_click_at: self.fresh_screencast_selection_receipt(
-                selection_sequence_before, first_click_at,
-            ),
+            observe_selection_receipt,
             self.layout,
             click_index,
             self.args.stability_pixel_delta,
-            (lambda: self.require_force_auto_click_budget(
-                evaluated_captured_at, phase="before_discard_confirmation_click",
-                **({"include_action_evidence": False} if selection_local_budget else {}),
-            )) if force_auto else None,
+            before_confirmation_click if force_auto else None,
             self.record_unverified_selection if force_auto else None,
         )
         if force_auto:
