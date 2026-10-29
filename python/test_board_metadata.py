@@ -6,10 +6,39 @@ from types import SimpleNamespace
 from unittest.mock import patch
 from pathlib import Path
 from PIL import Image
-from board_metadata import parse_board_tokens, recognize_board, recognize_remaining_count, recognize_right_score, recognize_riichi_sticks, remap_seats, reconcile_riichi_metadata
+from board_metadata import parse_board_tokens, recognize_board, recognize_remaining_count, recognize_right_score, recognize_score, recognize_riichi_sticks, remap_seats, reconcile_riichi_metadata
 
 
 class BoardMetadataTest(unittest.TestCase):
+    @unittest.skipUnless(importlib.util.find_spec("rapidocr"), "rapidocr unavailable")
+    def test_actual_score_images_detect_changes_and_occlusion(self):
+        root = Path(__file__).resolve().parents[1] / "test/fixtures"
+        stable = root / "board-multipanel-after-20261029.jpg"
+        different = root / "board-multipanel-different-score-20261029.jpg"
+        boxes = {"own": (905, 456, 1015, 500), "right": (1031, 368, 1063, 471),
+                 "opposite": (905, 345, 1015, 383), "left": (859, 371, 891, 474)}
+        with tempfile.TemporaryDirectory() as directory:
+            for position, box in boxes.items():
+                with self.subTest(position=position):
+                    self.assertEqual(recognize_score(stable, position), 25000)
+                    self.assertNotEqual(recognize_score(different, position), 25000)
+                    with Image.open(stable) as source:
+                        obscured = source.convert("RGB")
+                    obscured.paste((20, 20, 20), box)
+                    path = Path(directory) / "obscured.png"
+                    obscured.save(path)
+                    self.assertIsNone(recognize_score(path, position))
+    def test_individual_score_reads_fail_closed_for_all_seats(self):
+        frame = Path(__file__).resolve().parents[1] / "test/fixtures/board-right-highlight-after-20261029.jpg"
+        for position in ("own", "right", "opposite", "left"):
+            for text, confidence, expected in [("25000", 0.99, 25000), ("24000", 0.99, 24000),
+                                               ("25000", 0.97, None), ("2S000", 0.99, None),
+                                               ("", 0.99, None)]:
+                with self.subTest(position=position, text=text, confidence=confidence), patch(
+                    "board_metadata.ocr_engine",
+                    return_value=lambda *args, **kwargs: SimpleNamespace(txts=[text], scores=[confidence]),
+                ):
+                    self.assertEqual(recognize_score(frame, position), expected)
     def test_isolated_right_score_rejects_ambiguous_or_low_confidence(self):
         frame = Path(__file__).resolve().parents[1] / "test/fixtures/board-right-highlight-after-20261029.jpg"
         for text, confidence, expected in [("25000", 0.99, 25000), ("22500", 0.99, 22500),

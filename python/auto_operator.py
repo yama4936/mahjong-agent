@@ -3020,17 +3020,17 @@ class PythonAutoOperator:
             return None
         changed = [index for index, (a, b) in enumerate(zip(signature, previous))
                    if sum(ImageStat.Stat(ImageChops.difference(a, b)).mean) / 3 > 3.0]
-        # The right player's turn highlight can brighten that score panel.
-        # All other HUD regions must still match; independently OCR the
-        # current right score rather than ignoring a potential score change.
-        if any(index != 2 for index in changed):
+        # Turn highlights can change any of the four score panels.  The round
+        # and sticks must still match; every changed score is independently
+        # OCR-verified against the cache rather than ignored.
+        if any(index not in {1, 2, 3, 4} for index in changed):
             return None
         refresh_wall = "remainingTiles" in cache["metadata"] and (
             cache.get("wallSignature") is None
             or wall_counter_signature(frame) != cache["wallSignature"]
         )
         if changed or refresh_wall:
-            from board_metadata import recognize_remaining_count, recognize_right_score
+            from board_metadata import recognize_remaining_count, recognize_right_score, recognize_score
             lock = getattr(self, "board_metadata_ocr_lock", None)
             if lock is None or not lock.acquire(blocking=False):
                 return None
@@ -3041,10 +3041,20 @@ class PythonAutoOperator:
                         seat = cache["metadata"].get("seat")
                         if seat not in seat_order:
                             return None
-                        right = seat_order[(seat_order.index(seat) + 1) % 4]
-                        score = recognize_right_score(screenshot)
-                        if score is None or score != cache["metadata"].get("scores", {}).get(right):
-                            return None
+                        positions = {1: (0, "own"), 2: (1, "right"),
+                                     3: (2, "opposite"), 4: (3, "left")}
+                        # The new multi-panel path rechecks every score, not
+                        # just panels crossing the image-delta threshold: a
+                        # small digit change in another panel must not be
+                        # hidden by its low average pixel difference.
+                        score_indices = [1, 2, 3, 4] if any(index != 2 for index in changed) else changed
+                        for index in score_indices:
+                            offset, position = positions[index]
+                            score_seat = seat_order[(seat_order.index(seat) + offset) % 4]
+                            score = recognize_right_score(screenshot) if position == "right" \
+                                else recognize_score(screenshot, position)
+                            if score is None or score != cache["metadata"].get("scores", {}).get(score_seat):
+                                return None
                     remaining = recognize_remaining_count(screenshot) if refresh_wall else None
                 except Exception as error:
                     self.log("board_metadata_counter_refresh_failed", screenshot=str(screenshot),
@@ -3059,7 +3069,8 @@ class PythonAutoOperator:
                 metadata["remainingTiles"] = remaining
             self.log("board_metadata_partial_refreshed" if changed else "board_metadata_counter_refreshed", screenshot=str(screenshot),
                      source=cache["screenshot"], ageMs=age_ms,
-                     remainingTiles=remaining, rightScoreVerified=bool(changed))
+                     remainingTiles=remaining, rightScoreVerified=bool(changed),
+                     scorePanelsVerified=score_indices if changed else [])
             self.board_metadata_frame_memo = (cache, frame, copy.deepcopy(metadata))
             return metadata
         self.log("board_metadata_cache_applied", screenshot=str(screenshot),

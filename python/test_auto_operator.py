@@ -1,5 +1,6 @@
 import io
 import hashlib
+import importlib.util
 import unittest
 from pathlib import Path
 
@@ -1459,6 +1460,80 @@ class ActionDeadlineTest(unittest.TestCase):
 
 
 class AwayDialogDetectionTest(unittest.TestCase):
+    def test_actual_multi_panel_highlights_reuse_only_verified_scores(self):
+        from auto_operator import wall_counter_signature
+        if importlib.util.find_spec("rapidocr") is None:
+            self.skipTest("rapidocr unavailable")
+        root = Path(__file__).resolve().parents[1] / "test/fixtures"
+        before = (root / "board-multipanel-before-20261029.jpg").read_bytes()
+        after = root / "board-multipanel-after-20261029.jpg"
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.board_metadata_lock = threading.Lock()
+        operator.board_metadata_ocr_lock = threading.Lock()
+        operator.board_metadata_result = None
+        operator.log = Mock()
+        scores = {seat: 25000 for seat in ("east", "south", "west", "north")}
+        operator.board_metadata_cache = {
+            "metadata": {"verified": True, "seat": "north", "scores": scores, "remainingTiles": 66},
+            "signature": board_state_signature(before), "wallSignature": wall_counter_signature(before),
+            "capturedAt": 10.0, "screenshot": "before",
+        }
+        with patch("auto_operator.time.monotonic", return_value=11):
+            result = operator.cached_board_metadata(after)
+        self.assertEqual(result["scores"], scores)
+        self.assertEqual(result["remainingTiles"], 63)
+        boxes = [(905, 456, 1015, 500), (1031, 368, 1063, 471),
+                 (905, 345, 1015, 383), (859, 371, 891, 474)]
+        with Image.open(after) as source:
+            current = source.convert("RGB")
+        with Image.open(root / "board-multipanel-different-score-20261029.jpg") as source:
+            different = source.convert("RGB")
+        with tempfile.TemporaryDirectory() as directory, patch("auto_operator.time.monotonic", return_value=11):
+            for box in boxes:
+                for obscured in (False, True):
+                    with self.subTest(box=box, obscured=obscured):
+                        modified = current.copy()
+                        modified.paste((20, 20, 20) if obscured else different.crop(box), box)
+                        path = Path(directory) / "changed.png"
+                        modified.save(path)
+                        operator.board_metadata_frame_memo = None
+                        self.assertIsNone(operator.cached_board_metadata(path))
+
+    def test_changed_score_panels_each_require_matching_independent_ocr(self):
+        from auto_operator import wall_counter_signature
+        root = Path(__file__).resolve().parents[1]
+        before = (root / "test/fixtures/board-right-highlight-before-20261029.jpg").read_bytes()
+        with Image.open(io.BytesIO(before)) as source:
+            changed = source.convert("RGB")
+        draw = ImageDraw.Draw(changed)
+        for box in ((905, 464, 1015, 495), (1035, 370, 1060, 471),
+                    (905, 350, 1015, 377), (865, 373, 888, 470)):
+            draw.rectangle(box, fill="white")
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.board_metadata_lock = threading.Lock()
+        operator.board_metadata_ocr_lock = threading.Lock()
+        operator.board_metadata_result = None
+        operator.log = Mock()
+        scores = {"north": 25000, "east": 24000, "south": 26000, "west": 25000}
+        metadata = {"verified": True, "seat": "north", "scores": scores}
+        operator.board_metadata_cache = {"metadata": metadata, "signature": board_state_signature(before),
+                                         "wallSignature": wall_counter_signature(before),
+                                         "capturedAt": 10.0, "screenshot": "before"}
+        with tempfile.TemporaryDirectory() as directory, patch("auto_operator.time.monotonic", return_value=11), \
+             patch("board_metadata.recognize_right_score", return_value=24000) as right, \
+             patch("board_metadata.recognize_score", side_effect=lambda path, pos: {
+                 "own": 25000, "opposite": 26000, "left": 25000}[pos]) as score:
+            frame = Path(directory) / "frame.png"
+            changed.save(frame)
+            self.assertEqual(operator.cached_board_metadata(frame)["scores"], scores)
+            self.assertEqual({c.args[1] for c in score.call_args_list}, {"own", "opposite", "left"})
+            right.assert_called_once()
+            for rejected in (None, 24900):
+                operator.board_metadata_frame_memo = None
+                score.side_effect = lambda path, pos: rejected if pos == "left" else {
+                    "own": 25000, "opposite": 26000}[pos]
+                self.assertIsNone(operator.cached_board_metadata(frame))
+
     def test_board_frame_memo_requires_same_bytes_cache_identity_and_freshness(self):
         from auto_operator import wall_counter_signature
         root = Path(__file__).resolve().parents[1]

@@ -47,14 +47,23 @@ def recognize_remaining_count(image_path: Path) -> int | None:
     return int(match.group(1))
 
 
-def recognize_right_score(image_path: Path) -> int | None:
-    """Read the calibrated right-hand score; reject ambiguous OCR."""
+def recognize_score(image_path: Path, position: str) -> int | None:
+    """Read one calibrated score upright; reject ambiguous OCR."""
     import numpy as np
     from PIL import Image
+    geometry = {
+        "own": ((905, 456, 1015, 500), 0),
+        "right": ((1031, 368, 1063, 471), 270),
+        "opposite": ((905, 345, 1015, 383), 180),
+        "left": ((859, 371, 891, 474), 90),
+    }
+    if position not in geometry:
+        return None
     with Image.open(image_path) as source:
         if source.size != (1920, 1080):
             return None
-        upright = source.convert("RGB").crop((1031, 368, 1063, 471)).rotate(270, expand=True)
+        box, angle = geometry[position]
+        upright = source.convert("RGB").crop(box).rotate(angle, expand=True)
     result = ocr_engine()(np.array(upright.resize((412, 128))), use_det=False, use_cls=False, use_rec=True)
     if result.txts is None or len(result.txts) != 1 or float(result.scores[0]) < 0.98:
         return None
@@ -62,6 +71,11 @@ def recognize_right_score(image_path: Path) -> int | None:
     if not re.fullmatch(r"-?\d{3,6}", text):
         return None
     return int(text)
+
+
+def recognize_right_score(image_path: Path) -> int | None:
+    """Read the calibrated right-hand score; reject ambiguous OCR."""
+    return recognize_score(image_path, "right")
 
 
 def parse_board_tokens(tokens: list[dict], expected_total_points: int = 100000) -> dict:
