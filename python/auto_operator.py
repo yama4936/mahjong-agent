@@ -2479,7 +2479,8 @@ class PythonAutoOperator:
         interval = max(0.1, float(getattr(self.args, "public_scan_interval", 2.0)))
         pending = getattr(self, "pending_own_discard", None)
         registered_at = pending.get("registeredMonotonic") if pending else None
-        if isinstance(registered_at, (int, float)) and 0 <= observed_at - registered_at < 3.0:
+        receipt_burst = isinstance(registered_at, (int, float)) and 0 <= observed_at - registered_at < 3.0
+        if receipt_burst:
             # Seek the same independently corroborated river receipt sooner,
             # while the other players act. Do not force repeated recognition
             # of the same frame: the normal frame-hash gate remains in place.
@@ -2488,7 +2489,8 @@ class PythonAutoOperator:
         if observed_at - self.last_public_scan_at < interval:
             return False
         self.last_public_scan_at = observed_at
-        self.schedule_public_recognition(screenshot, verified_match=verified_match)
+        self.schedule_public_recognition(screenshot, verified_match=verified_match,
+                                         include_hand_plan=not receipt_burst)
         return True
 
     def poll_public_recognition(self) -> None:

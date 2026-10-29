@@ -2624,10 +2624,15 @@ class AwayDialogDetectionTest(unittest.TestCase):
 
         self.assertFalse(operator.schedule_periodic_public_recognition(b"same", now=10.39))
         self.assertTrue(operator.schedule_periodic_public_recognition(b"new", now=10.41, verified_match=True))
-        operator.schedule_public_recognition.assert_called_once_with(b"new", verified_match=True)
+        operator.schedule_public_recognition.assert_called_once_with(
+            b"new", verified_match=True, include_hand_plan=False,
+        )
         operator.last_public_scan_at = 12.8
         self.assertFalse(operator.schedule_periodic_public_recognition(b"later", now=13.0))
         self.assertTrue(operator.schedule_periodic_public_recognition(b"later", now=14.8))
+        operator.schedule_public_recognition.assert_called_with(
+            b"later", verified_match=False, include_hand_plan=True,
+        )
 
     def test_public_cache_scheduler_rejects_friend_room_even_when_forced(self) -> None:
         root = Path(__file__).resolve().parents[1]
