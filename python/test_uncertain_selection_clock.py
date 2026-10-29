@@ -85,6 +85,30 @@ class UncertainSelectionClockTest(unittest.TestCase):
         self.assertFalse(self.op.selection_uncertainty_stop_due(32.99))
         self.assertTrue(self.op.selection_uncertainty_stop_due(33.0))
 
+    def test_river_diagnostics_distinguish_failure_modes_without_tile_values(self):
+        observations = [
+            self.observation(27, observed=False),
+            self.observation(5),
+            self.observation(27, river=("1m",)),
+            self.observation(27, river=("9m", "8s")),
+            self.observation(27),
+            self.observation(27),
+            self.observation(28, river=("1m", "7s")),
+            self.observation(29, river=("1m", "7s")),
+        ]
+        for observation in observations:
+            self.op.observe_uncertain_selection_river(observation)
+        calls = self.op.log.call_args_list
+        self.assertEqual([call.kwargs["reason"] for call in calls], [
+            "river_not_observed", "capture_not_after_abort", "no_extension",
+            "baseline_prefix_mismatch", "candidate_started", "candidate_too_soon",
+            "candidate_changed", "confirmed",
+        ])
+        for call in calls:
+            self.assertEqual(call.args, ("selection_uncertainty_river_observation",))
+            self.assertNotIn("river", call.kwargs)
+            self.assertNotIn("ownDiscards", call.kwargs)
+
 
 if __name__ == "__main__":
     unittest.main()

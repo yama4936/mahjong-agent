@@ -2619,25 +2619,47 @@ class PythonAutoOperator:
     def observe_uncertain_selection_river(self, current: dict[str, Any]) -> None:
         """Independently corroborate a post-abort own-river extension twice."""
         latch = getattr(self, "selection_uncertainty_latch", None)
-        if not latch or current.get("ownDiscardsObserved") is not True:
+        if not latch:
             return
         baseline = latch.get("ownDiscards")
         river = current.get("ownDiscards")
         captured = public_capture_seconds(current.get("capturedAt"))
         aborted = public_capture_seconds(latch.get("abortedAt"))
+        def diagnostic(reason: str) -> None:
+            candidate = latch.get("riverCandidate")
+            candidate_river = candidate.get("river") if isinstance(candidate, dict) else None
+            self.log("selection_uncertainty_river_observation", reason=reason,
+                     capturedAt=current.get("capturedAt"),
+                     baselineCount=len(baseline) if isinstance(baseline, list) else None,
+                     observedCount=len(river) if isinstance(river, list) else None,
+                     candidateCount=len(candidate_river) if isinstance(candidate_river, list) else None)
+        if current.get("ownDiscardsObserved") is not True:
+            diagnostic("river_not_observed")
+            return
         if captured is None or aborted is None or captured <= aborted:
+            diagnostic("capture_not_after_abort")
             return
         if (not isinstance(baseline, list) or not isinstance(river, list)
                 or len(river) <= len(baseline) or river[:len(baseline)] != baseline):
+            if not isinstance(baseline, list) or not isinstance(river, list):
+                diagnostic("river_or_baseline_missing")
+            elif len(river) <= len(baseline):
+                diagnostic("no_extension")
+            else:
+                diagnostic("baseline_prefix_mismatch")
             latch.pop("riverCandidate", None)
             latch.pop("confirmedOwnDiscards", None)
             return
         candidate = latch.get("riverCandidate")
         if candidate and candidate["river"] == river and captured - candidate["captured"] >= 0.5:
             latch["confirmedOwnDiscards"] = list(river)
+            diagnostic("confirmed")
         elif not candidate or candidate["river"] != river:
+            diagnostic("candidate_changed" if candidate else "candidate_started")
             latch.pop("confirmedOwnDiscards", None)
             latch["riverCandidate"] = {"river": list(river), "captured": captured}
+        else:
+            diagnostic("candidate_too_soon")
 
     def rearm_uncertain_selection_clock(self, draw_generation: int | None,
                                         observed_at: float | None) -> bool:
