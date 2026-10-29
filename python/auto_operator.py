@@ -6285,7 +6285,11 @@ class PythonAutoOperator:
                 self.log("friend_start_capture", screenshot=str(path),
                          capture=index, matched=matched)
 
-            captures = await_reviewed_friend_room(page, reviewed, on_capture=save_friend_start_capture)
+            # Transient animated particles can interrupt otherwise matching
+            # room frames. More attempts do not weaken the two consecutive
+            # complete matches required before the start click.
+            captures = await_reviewed_friend_room(page, reviewed, attempts=32,
+                                                   on_capture=save_friend_start_capture)
             if self.warm_reviewed_friend_board_ocr():
                 # Initialization can take seconds: revalidate the room before
                 # clicking because the reviewed state may have changed.

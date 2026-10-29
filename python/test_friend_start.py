@@ -45,6 +45,7 @@ class ReviewedFriendOcrWarmupTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "changed"):
                     op.run(page)
             self.assertEqual(verify.call_count, 2)
+            self.assertEqual(verify.call_args_list[0].kwargs["attempts"], 32)
             self.assertEqual(verify.call_args_list[1].kwargs["attempts"], 16)
             engine.assert_called_once()
             page.mouse.click.assert_not_called()
@@ -76,6 +77,19 @@ class FriendStartRetryTests(unittest.TestCase):
             with patch("friend_start.verified_friend_room", side_effect=checks):
                 with self.assertRaises(RuntimeError):
                     await_reviewed_friend_room(page, b"reviewed")
+            page.mouse.click.assert_not_called()
+
+    def test_extended_attempts_still_require_two_consecutive_matches(self):
+        for checks, expected in (([False] * 8 + [True, True], 10),
+                                 ([True, False] * 16, None),
+                                 ([False] * 32, None)):
+            page = Mock()
+            with patch("friend_start.verified_friend_room", side_effect=checks):
+                if expected is None:
+                    with self.assertRaises(RuntimeError):
+                        await_reviewed_friend_room(page, b"reviewed", attempts=32)
+                else:
+                    self.assertEqual(await_reviewed_friend_room(page, b"reviewed", attempts=32), expected)
             page.mouse.click.assert_not_called()
 
     def test_native_overlay_sequence_recovers_without_relaxing_match(self):
