@@ -2106,6 +2106,58 @@ class PythonAutoOperator:
         self.action_timing(clear=True)
         self.log("discard_deadline_cleared", reason="confirmed_opponent_turn")
 
+    def observe_post_call_timeout_river(self, observation: dict[str, Any]) -> None:
+        """Corroborate a post-call automatic discard in two newer public captures."""
+        latch = getattr(self, "post_call_timeout_recovery", None)
+        if not latch or not getattr(self, "pending_post_call_discard", False):
+            return
+        captured = public_capture_seconds(observation.get("capturedAt"))
+        river = observation.get("ownDiscards")
+        baseline = latch["baseline"]
+        if (captured is None or captured <= latch["after"]
+                or observation.get("ownDiscardsObserved") is not True
+                or not isinstance(river, list) or len(river) != len(baseline) + 1
+                or river[:len(baseline)] != baseline):
+            latch.pop("candidate", None)
+            latch.pop("candidateAt", None)
+            latch.pop("confirmedAt", None)
+            latch.pop("confirmedMonotonic", None)
+            return
+        if latch.get("candidate") == river and captured > latch.get("candidateAt", captured):
+            latch["confirmedAt"] = captured
+            latch["confirmedMonotonic"] = time.monotonic()
+        elif captured > latch.get("candidateAt", 0):
+            latch["candidate"] = list(river)
+            latch["candidateAt"] = captured
+            latch.pop("confirmedAt", None)
+            latch.pop("confirmedMonotonic", None)
+
+    def recover_post_call_timeout(self, *, frame: bytes, captured_at: float | None,
+                                  open_melds: int | None, draw_occupied: bool) -> bool:
+        """Release a post-call latch only after an independently observed discard."""
+        latch = getattr(self, "post_call_timeout_recovery", None)
+        if (not latch or not getattr(self, "pending_post_call_discard", False)
+                or getattr(self, "selection_uncertainty_latch", None)
+                or not isinstance(captured_at, (int, float))
+                or captured_at < latch.get("confirmedMonotonic", float("inf"))
+                or not latch.get("confirmedAt")
+                or open_melds != latch["openMelds"] or draw_occupied
+                or geometric_open_meld_count(frame, self.layout) != open_melds):
+            return False
+        age = self.force_auto_action_evidence_age_ms()
+        budget = self.force_auto_click_budget_ms()
+        if age is None or budget is None or age < budget:
+            return False
+        self.pending_post_call_discard = False
+        self.pending_post_call_started_at = None
+        self.post_call_timeout_recovery = None
+        self.cached_concealed_tiles = None
+        self.clear_discard_evidence_on_confirmed_opponent_turn()
+        self.log("post_call_timeout_recovered", ownDiscards=latch["candidate"],
+                 firstObservedAt=latch["candidateAt"], secondObservedAt=latch["confirmedAt"],
+                 openMelds=open_melds, reason="confirmed_river_append_and_empty_draw")
+        return True
+
     @staticmethod
     def quick_draw_occupied(*, open_melds: int, closed_slot_occupied: bool,
                             open_slot_occupied: bool) -> bool:
@@ -2548,6 +2600,7 @@ class PythonAutoOperator:
         previous_capture = public_capture_seconds((prior or {}).get("capturedAt"))
         if captured is not None and previous_capture is not None and captured <= previous_capture:
             return False
+        self.observe_post_call_timeout_river(current)
         self.observe_uncertain_selection_river(current)
         merged = merge_public_observations(prior, current, getattr(self, "cached_open_melds", 0))
         for repair in merged.get("opponentRiverRepairs", []):
@@ -5949,6 +6002,29 @@ class PythonAutoOperator:
                 self.pending_post_call_discard = transition["pendingPostCallDiscard"]
                 self.pending_post_call_started_at = time.monotonic() \
                     if self.pending_post_call_discard else None
+                self.post_call_timeout_recovery = None
+                public = getattr(self, "cached_public_observation", None) or {}
+                public_captured = public_capture_seconds(public.get("capturedAt"))
+                baseline = public.get("ownDiscards")
+                candidate = getattr(self, "pending_own_river_confirmation", None)
+                pending = getattr(self, "pending_own_discard", None)
+                if (isinstance(baseline, list) and isinstance(candidate, list)
+                        and len(candidate) == len(baseline) + 1
+                        and candidate[:len(baseline)] == baseline
+                        and pending and candidate[-1] == pending.get("tile")):
+                    baseline = candidate
+                elif pending:
+                    # A previous own discard still in flight could otherwise
+                    # look like the post-call timeout's new river tile.
+                    baseline = None
+                if (self.pending_post_call_discard and public.get("ownDiscardsObserved") is True
+                        and isinstance(baseline, list) and public_captured is not None
+                        and 0 <= time.time() - public_captured <= 3):
+                    self.post_call_timeout_recovery = {
+                        "baseline": list(baseline), "after": time.time(),
+                        "startedMonotonic": self.pending_post_call_started_at,
+                        "openMelds": self.cached_open_melds,
+                    }
                 self.closed_new_round_candidate_frames = set()
                 self.last_processed_hand = None
                 self.armed = True
@@ -6271,6 +6347,11 @@ class PythonAutoOperator:
                         gate_frame and dynamic_draw_slot
                         and is_draw_slot_occupied(gate_frame, dynamic_draw_slot)
                     )
+                    if gate_frame and gate_open_melds is not None:
+                        self.recover_post_call_timeout(
+                            frame=gate_frame, captured_at=gate_captured_at,
+                            open_melds=gate_open_melds, draw_occupied=dynamic_draw_occupied,
+                        )
                     restart_probe_hash = perceptual_hash(crop_screenshot(gate_frame, self.hand_clip)) \
                         if gate_frame and restart_open_melds is not None else None
                     restart_open_hand_probe = self.restart_open_hand_probe_needed(
