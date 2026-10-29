@@ -1122,6 +1122,31 @@ def raised_rim_and_glyph_confirmation(
         return None
 
 
+def glyph_overlap_candidates(
+    baseline: Image.Image, after_mask: Image.Image, face: dict[str, float],
+) -> list[tuple[float, float, int]]:
+    """Compute the unchanged 8..80px search using native mask operations.
+
+    The inputs are L-mode glyph masks. Counting nonzero histogram entries
+    preserves the former ``value > 0`` semantics even for nonbinary L masks.
+    Pixelwise minimum is nonzero exactly when both source pixels are nonzero;
+    unlike multiplication it cannot round small positive values down to zero.
+    """
+    glyph_pixels = baseline.width * baseline.height - baseline.histogram()[0]
+    if glyph_pixels == 0:
+        return []
+    left, top = int(face["x"]), int(face["y"])
+    right, bottom = int(face["x"] + face["width"]), int(face["y"] + face["height"])
+    candidates: list[tuple[float, float, int]] = []
+    for lift in range(8, 81):
+        shifted = after_mask.crop((left, top - lift, right, bottom - lift))
+        pixels = shifted.width * shifted.height
+        overlap = pixels - ImageChops.darker(baseline, shifted).histogram()[0]
+        shifted_count = pixels - shifted.histogram()[0]
+        candidates.append((overlap / glyph_pixels, shifted_count / glyph_pixels, lift))
+    return candidates
+
+
 def raised_glyph_overlap_confirmation(
     baseline: Image.Image, after_mask: Image.Image, face: dict[str, float],
     point: dict[str, float],
@@ -1133,19 +1158,9 @@ def raised_glyph_overlap_confirmation(
     static or neighbouring tile acceptable: require that nearly all of the
     target's *dark glyph* moves by one unique vertical offset.
     """
-    baseline_pixels = list(baseline.getdata())
-    glyph_pixels = sum(value > 0 for value in baseline_pixels)
-    if glyph_pixels == 0:
+    candidates = glyph_overlap_candidates(baseline, after_mask, face)
+    if not candidates:
         return None
-    left, top = int(face["x"]), int(face["y"])
-    right, bottom = int(face["x"] + face["width"]), int(face["y"] + face["height"])
-    candidates: list[tuple[float, float, int]] = []
-    for lift in range(8, 81):
-        shifted = after_mask.crop((left, top - lift, right, bottom - lift))
-        shifted_pixels = list(shifted.getdata())
-        overlap = sum(a > 0 and b > 0 for a, b in zip(baseline_pixels, shifted_pixels))
-        shifted_count = sum(value > 0 for value in shifted_pixels)
-        candidates.append((overlap / glyph_pixels, shifted_count / glyph_pixels, lift))
     overlap, density, lift = max(candidates)
     runner_up = max(score for score, _density, offset in candidates if offset != lift)
     # Empirical F/E receipts retain 94%+ of the dark glyph at 48px; unchanged
