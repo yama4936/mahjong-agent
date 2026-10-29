@@ -124,6 +124,8 @@ class TelemetryTests(unittest.TestCase):
         restarted = Telemetry(self.root).snapshot()['logs'][0]
         self.assertNotEqual(first['id'], restarted['id'])
         self.assertEqual(first['message'], '判断を更新: discard E')
+        self.assertEqual(first['action'], 'discard')
+        self.assertEqual(first['tile'], 'E')
 
 
 if __name__ == '__main__':

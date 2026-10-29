@@ -48,6 +48,14 @@ dd{margin:0;font-size:clamp(18px,2vw,26px);font-variant-numeric:tabular-nums;ove
 .live-page h2{font-size:14px}
 .live-page .decision-metrics{grid-template-columns:1.5fr repeat(4,1fr);gap:8px 16px;margin:9px 0 7px}
 .live-page .chosen-action{grid-column:auto}
+.live-page #decision-action{display:flex;align-items:center;gap:7px;min-height:34px}
+.decision-tile{display:inline-flex;align-items:center;position:relative;flex-shrink:0}
+.decision-tile img{display:block;width:24px;height:34px;object-fit:contain}
+.decision-tile[hidden],.decision-tile [hidden]{display:none!important}
+.decision-tile[data-red="true"]::after{content:"赤";position:absolute;right:-5px;bottom:-3px;background:#bd2638;color:#fff;border:1px solid #fff;border-radius:3px;font-size:9px;line-height:12px;padding:0 2px}
+#decision-tile-fallback{font-size:15px;white-space:nowrap}
+.log-tile{vertical-align:middle;margin:0 4px}
+.log-tile img{width:18px;height:25px}
 .live-page dt{font-size:11px;margin-bottom:3px}
 .live-page dd{font-size:20px;line-height:1.2}
 .live-page .decision-detail{font-size:11px;gap:4px 16px}
@@ -80,6 +88,8 @@ dd{margin:0;font-size:clamp(18px,2vw,26px);font-variant-numeric:tabular-nums;ove
   .live-page .decision-metrics{grid-template-columns:1.25fr repeat(4,1fr);gap:5px;margin:7px 0}
   .live-page dt{font-size:9px}
   .live-page dd{font-size:16px}
+  .live-page #decision-action{min-height:28px;gap:4px}
+  .decision-tile img{width:20px;height:28px}
   .live-page .decision-detail{font-size:10px;gap:3px 10px}
   .live-page .watch-layout{grid-template-columns:minmax(0,1fr);gap:8px}
   .live-page #logs{height:180px}

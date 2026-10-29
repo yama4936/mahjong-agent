@@ -191,6 +191,11 @@ def create_app(relay=None, capture=True, results_dir=None):
             response.headers['Access-Control-Allow-Origin'] = request.headers['Origin']
             response.headers['Vary'] = 'Origin'
         response.headers['Cache-Control'] = 'no-store'
+        if request.path.startswith('/tiles/') and request.path.endswith('.png') and response.status == 200:
+            response.headers['Cache-Control'] = (
+                'public, max-age=31536000, immutable'
+                if request.query.get('v') == '8c0f22e7' else 'public, max-age=86400'
+            )
         response.headers['X-Content-Type-Options'] = 'nosniff'
         response.headers['Referrer-Policy'] = 'no-referrer'
         response.headers['Content-Security-Policy'] = "default-src 'self'; img-src 'self' blob:; connect-src 'self' wss://jantama-live.yama.asia; style-src 'self'; script-src 'self'; frame-ancestors https://jantama.yama.asia https://jantama-results-yama-20261027.arcane-krill-4260.chatgpt.site"
@@ -205,6 +210,11 @@ def create_app(relay=None, capture=True, results_dir=None):
         if name not in {'live.html', 'live.js', 'live.css'}:
             raise web.HTTPNotFound()
         return web.FileResponse(ROOT / name)
+    async def tile_image(request):
+        name = request.match_info['name']
+        if name not in {'LICENSE', 'NOTICE.md'} and not re.fullmatch(r'(?:[1-9][mps]|[ESWNPFC])\.png', name):
+            raise web.HTTPNotFound()
+        return web.FileResponse(ROOT / 'tiles' / name)
     async def results(request):
         name = request.match_info['name']
         if name != 'data.json' and not re.fullmatch(r'images/[0-9a-f]{24}\.webp', name):
@@ -217,6 +227,7 @@ def create_app(relay=None, capture=True, results_dir=None):
     app.router.add_get('/health', health)
     app.router.add_get('/ws', relay.websocket)
     app.router.add_get('/events', relay.events)
+    app.router.add_get('/tiles/{name}', tile_image)
     app.router.add_get('/', static)
     app.router.add_get('/{name}', static)
     if capture:

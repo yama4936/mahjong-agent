@@ -154,8 +154,11 @@ class Telemetry:
             message += ': ' + self.decision['action']
             if self.decision['tile']:
                 message += ' ' + self.decision['tile']
-        self.logs.append({'id': f'{self.instance}:{self.sequence}', 'timestamp': stamp,
-                          'event': event, 'message': message})
+        entry = {'id': f'{self.instance}:{self.sequence}', 'timestamp': stamp,
+                 'event': event, 'message': message}
+        if event == 'decision':
+            entry.update(action=self.decision['action'], tile=self.decision['tile'])
+        self.logs.append(entry)
 
     def snapshot(self):
         self._discover()

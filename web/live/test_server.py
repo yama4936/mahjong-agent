@@ -100,6 +100,18 @@ class TransportTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.headers['Cache-Control'],'no-store')
         self.assertNotIn('CDP',await response.text())
 
+    async def test_tile_images_are_available_from_fixed_allowlist(self):
+        response = await self.client.get('/tiles/E.png')
+        self.assertEqual(response.status, 200)
+        self.assertEqual(response.headers['Content-Type'], 'image/png')
+        self.assertTrue((await response.read()).startswith(b'\x89PNG'))
+        self.assertEqual(response.headers['Cache-Control'], 'public, max-age=86400')
+        versioned = await self.client.get('/tiles/E.png?v=8c0f22e7')
+        self.assertEqual(versioned.headers['Cache-Control'], 'public, max-age=31536000, immutable')
+        self.assertEqual((await self.client.get('/tiles/LICENSE')).status, 200)
+        for name in ['server.py', '.env', '0m.png', 'invalid.png']:
+            self.assertEqual((await self.client.get('/tiles/' + name)).status, 404)
+
     async def test_capacity_and_new_viewer_has_no_old_frame(self):
         self.relay.broadcast('live',b'old',1)
         clients=[await self.client.ws_connect('/ws') for _ in range(16)]

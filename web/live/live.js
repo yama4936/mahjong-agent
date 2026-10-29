@@ -13,6 +13,112 @@ let lastDecision = null;
 let eventSocket = null, eventRetry, eventsOpen = false;
 const latestButton = document.querySelector('#logs-latest');
 const actionLabels = {discard:'打牌',riichi:'リーチ',ron:'ロン',tsumo:'ツモ',chi:'チー',pon:'ポン',kan:'カン',pass:'見送り',skip:'見送り'};
+const tileImage = document.querySelector('#decision-tile');
+const tileWrap = document.querySelector('#decision-tile-wrap');
+const tileFallback = document.querySelector('#decision-tile-fallback');
+const honorLabels = {E:'東',S:'南',W:'西',N:'北',P:'白',F:'發',C:'中'};
+const rankLabels = ['','一','二','三','四','五','六','七','八','九'];
+const suitLabels = {m:'萬',p:'筒',s:'索'};
+let displayedTile;
+const tileCacheName = 'jantama-tiles-8c0f22e7';
+const tileSources = new Map();
+const tileObjectUrls = new Set();
+const tileRequests = new WeakMap();
+let tileCacheGeneration = 0;
+function validTileResponse(response) {
+  return response?.ok && ['basic', 'cors', 'default'].includes(response.type) &&
+    response.headers.get('content-type')?.split(';')[0].trim().toLowerCase() === 'image/png';
+}
+function cachedTileSource(url) {
+  if (tileSources.has(url)) return tileSources.get(url);
+  const generation = tileCacheGeneration;
+  const pending = (async () => {
+    try {
+      const cache = await caches.open(tileCacheName);
+      let response = await cache.match(url);
+      if (!validTileResponse(response)) {
+        response = await fetch(url);
+        if (!validTileResponse(response)) return url;
+        try { await cache.put(url, response.clone()); } catch { /* Storage may be full or disabled. */ }
+      }
+      const blobUrl = URL.createObjectURL(await response.blob());
+      if (generation !== tileCacheGeneration) { URL.revokeObjectURL(blobUrl); return url; }
+      tileObjectUrls.add(blobUrl);
+      return blobUrl;
+    } catch { return url; }
+  })();
+  tileSources.set(url, pending);
+  return pending;
+}
+function setTileSource(img, url) {
+  const token = {};
+  const generation = tileCacheGeneration;
+  tileRequests.set(img, token);
+  if (typeof caches === 'undefined') { img.src = url; return; }
+  cachedTileSource(url).then(src => {
+    if (tileRequests.get(img) === token && generation === tileCacheGeneration) img.src = src;
+  });
+}
+function releaseTileSources() {
+  tileCacheGeneration++;
+  for (const url of tileObjectUrls) URL.revokeObjectURL(url);
+  tileObjectUrls.clear();
+  tileSources.clear();
+}
+function tileInfo(value) {
+  if (typeof value !== 'string') return null;
+  const suited = /^([0-9])([mps])$/.exec(value);
+  const honor = Object.hasOwn(honorLabels, value) ? honorLabels[value] : null;
+  if (!suited && !honor) return null;
+  const red = suited?.[1] === '0';
+  return {
+    red,
+    name: honor || (red ? '赤五' : rankLabels[Number(suited[1])]) + suitLabels[suited[2]],
+    src: 'tiles/' + (red ? '5' + suited[2] : value) + '.png?v=8c0f22e7',
+  };
+}
+function renderTile(tile) {
+  const value = typeof tile === 'string' ? tile : null;
+  if (displayedTile === value) return;
+  displayedTile = value;
+  tileRequests.set(tileImage, {});
+  tileWrap.hidden = value === null;
+  tileWrap.dataset.red = 'false';
+  tileImage.hidden = true;
+  tileImage.removeAttribute('src');
+  tileImage.alt = '';
+  tileFallback.hidden = true;
+  tileWrap.title = '';
+  if (value === null) return;
+  const info = tileInfo(value);
+  if (!info) {
+    tileFallback.textContent = '牌不明';
+    tileFallback.hidden = false;
+    return;
+  }
+  tileWrap.dataset.red = String(info.red);
+  tileWrap.title = info.name;
+  tileImage.alt = info.name;
+  tileFallback.textContent = info.name;
+  tileImage.hidden = false;
+  setTileSource(tileImage, info.src);
+}
+tileImage.onerror = () => { tileImage.hidden = true; tileFallback.hidden = false; };
+function appendLogTile(message, info) {
+  const wrap = document.createElement('span');
+  wrap.className = 'decision-tile log-tile';
+  wrap.dataset.red = String(info.red);
+  wrap.title = info.name;
+  const img = document.createElement('img');
+  img.alt = info.name;
+  const fallback = document.createElement('span');
+  fallback.textContent = info.name;
+  fallback.hidden = true;
+  img.onerror = () => { img.hidden = true; fallback.hidden = false; };
+  setTileSource(img, info.src);
+  wrap.append(img, fallback);
+  message.append(wrap);
+}
 function text(selector, value) { const target = document.querySelector(selector); if (target.textContent !== value) target.textContent = value; }
 function probability(value) { return Number.isFinite(value) && value >= 0 && value <= 1 ? (value * 100).toFixed(1) + '%' : '—'; }
 function timeLabel(value) {
@@ -31,7 +137,8 @@ function renderTelemetry(telemetry) {
   lastDecision = telemetry?.decision && typeof telemetry.decision === 'object' ? telemetry.decision : null;
   const d = lastDecision;
   const action = typeof d?.action === 'string' ? (actionLabels[d.action] || d.action) : '—';
-  text('#decision-action', action + (typeof d?.tile === 'string' ? ' ' + d.tile : ''));
+  text('#decision-action-label', action);
+  renderTile(d?.tile);
   text('#decision-win', probability(d?.winProbability));
   text('#decision-deal-in', probability(d?.dealInProbability));
   text('#decision-confidence', probability(d?.recognitionConfidence));
@@ -57,6 +164,11 @@ function renderTelemetry(telemetry) {
     const message = document.createElement('span');
     message.className = 'log-message';
     message.textContent = typeof entry.message === 'string' ? entry.message : '';
+    const logTile = entry.event === 'decision' ? tileInfo(entry.tile) : null;
+    if (logTile && typeof entry.action === 'string') {
+      message.textContent = '判断を更新: ' + (actionLabels[entry.action] || entry.action) + ' ';
+      appendLogTile(message, logTile);
+    }
     row.append(time, event, message);
     logs.append(row);
     while (logs.children.length > 100) {
@@ -182,6 +294,6 @@ document.querySelector('#fullscreen').onclick = async () => {
 };
 document.addEventListener('visibilitychange',()=>{if(document.hidden)disconnect('観戦は非表示のため停止中');else if(!paused){connect();connectEvents();}});
 setInterval(()=>{if(!screen.hidden && performance.now()-lastFrame>4000)hide('映像の更新が止まっています','最新の映像を受信すると再開します。');else updateFreshness(screen.hidden && !eventsOpen ? status.textContent : undefined);},1000);
-window.addEventListener('pagehide',()=>disconnect('観戦を終了しました'));
+window.addEventListener('pagehide',()=>{disconnect('観戦を終了しました');releaseTileSources();});
 connect();
 connectEvents();

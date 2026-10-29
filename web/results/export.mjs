@@ -8,6 +8,7 @@ const here=path.dirname(new URL(import.meta.url).pathname), out=path.resolve(pro
 fs.mkdirSync(path.join(out,'images'),{recursive:true});
 for(const f of ['index.html','app.js','style.css','analysis.html','analysis.js','charts.html','charts.js','charts.css','chart-data.mjs','how-it-works.html','how-it-works.css','live.html','live-view.js','live-view.css','shell.js','shell.css','results-feed.js'])fs.copyFileSync(path.join(here,'src',f),path.join(out,f));
 fs.cpSync(path.join(here,'src/vendor'),path.join(out,'vendor'),{recursive:true});
+fs.cpSync(path.join(here,'src/tiles'),path.join(out,'tiles'),{recursive:true});
 function walk(dir,depth=0){return fs.readdirSync(dir,{withFileTypes:true}).flatMap(e=>e.isDirectory() ? (['frames','replays','node_modules','.git'].includes(e.name)||depth>4 ? []:walk(path.join(dir,e.name),depth+1)):[path.join(dir,e.name)]);}
 const files=walk(path.join(root,'artifacts')), labels=new Map();
 function label(r){const e=r.outcomeEvidence||r.outcome||r.nativeFinal?.evidence||{};const screen=e.screenshot||r.nativePath;const v=r.result||r.finalResult||r;if(screen)labels.set(path.basename(screen),{rank:v.rank??v.finalRank??v.selfRank??v.selfPlacement??v.placement,points:v.points??v.selfPoints??v.selfScore,room:r.room,interrupted:r.operationallyInterrupted,deadline:r.actionDeadlineMs,commit:r.implementationCommit});}

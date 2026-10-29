@@ -12,12 +12,22 @@ const browser = await chromium.launch({ headless: true });
 try {
   for (const path of ['/web/results/src/live.html', '/web/live/live.html']) {
     const page = await browser.newPage();
-    await page.routeWebSocket('**/*', () => {});
+    let tileFetches = 0;
+    page.on('request', request => { if (request.url().includes('/tiles/E.png')) tileFetches++; });
+    await page.routeWebSocket('**/*', ws => {
+      if (ws.url().endsWith('/events')) ws.send(JSON.stringify({ type: 'telemetry', telemetry: {
+        decision: { action: 'discard', tile: 'E', timestamp: new Date().toISOString() }, logs: [],
+      } }));
+    });
     for (const [width, height] of [[1440, 900], [1366, 768], [1280, 720], [1024, 768], [390, 844], [844, 390]]) {
       await page.setViewportSize({ width, height });
       await page.goto(base + path);
+      await page.waitForFunction(() => {
+        const image = document.querySelector('#decision-tile');
+        return image?.alt === '東' && image.complete && image.naturalWidth > 0;
+      });
       await page.evaluate(async frame => {
-        document.querySelector('#decision-action').textContent = 'リーチ 5m';
+        document.querySelector('#decision-action-label').textContent = '打牌';
         document.querySelector('#decision-freshness').textContent = '直近の判断（15秒以内）';
         document.querySelector('#decision-time').textContent = '判断 2026/10/29 15:41:41 JST';
         document.querySelector('#decision-safety').textContent = '認識安全判定 safe=false（要確認）';
@@ -69,6 +79,8 @@ try {
         await page.screenshot({ path: `${process.env.LIVE_SCREENSHOT_DIR}/${path.includes('results') ? 'site' : 'standalone'}.png` });
       }
     }
+    assert.equal(tileFetches, 1, `${path}: tile should persist across reloads without another network request`);
+    console.log(JSON.stringify({ path, tileFetches, reloads: 6, cache: 'persistent hit' }));
     await page.close();
   }
 } finally {
