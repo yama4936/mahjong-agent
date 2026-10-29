@@ -1,0 +1,16 @@
+{
+  "sourceCommit": "1a15c17",
+  "sourceRun": "artifacts/friend-300-1a15c17-retry-20261030",
+  "sourceBefore": "frames/2026-10-29T20-11-40.030430+00-00.selection-before.png",
+  "sourceReceipt": "frames/2026-10-29T20-11-40.030430+00-00.selection-receipt.png",
+  "sourceDecodedFormats": {"before": "PNG", "receipt": "JPEG"},
+  "before": "south-riichi-raised-before-20261030.png",
+  "receipt": "south-riichi-raised-receipt-20261030.png",
+  "viewport": {"width": 1920, "height": 1080},
+  "nativeCrop": {"x": 1250, "y": 820, "width": 330, "height": 260},
+  "clickIndex": 12,
+  "clickPoint": {"x": 1407, "y": 996.5},
+  "threshold": 1.5,
+  "expectedLift": 48,
+  "note": "Unmodified decoded native pixels, losslessly stored. Crop excludes player names. Reconstruction supplies a neutral canvas outside the target, neighbour and timer evidence."
+}

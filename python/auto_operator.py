@@ -1205,6 +1205,62 @@ def raised_glyph_overlap_confirmation(
             "verification": "dark_glyph_overlap"}
 
 
+def raised_rim_cluster_glyph_confirmation(
+    before: bytes, after: bytes, slots: list[dict[str, Any]], click_index: int,
+    point: dict[str, float], face: dict[str, float], baseline: Image.Image,
+    after_mask: Image.Image, threshold: float,
+) -> dict[str, Any] | None:
+    """Resolve adjacent-pixel glyph peaks only with independent physical proof.
+
+    A countdown may overlap the blank top margin of a raised face. In the
+    recorded South receipt, PNG/JPEG glyph-edge differences then defeated
+    the ordinary face comparison, while 47px and 48px described the same
+    physical lift. Keep the existing glyph overlap/density thresholds and
+    separate distinct positions outside the existing +/-2px convention.
+    Independently require a translated rim at that position and an unchanged
+    neighbouring face; overlap alone must not gain a relaxed ambiguity gate.
+    """
+    if click_index <= 0:
+        return None
+    candidates = glyph_overlap_candidates(baseline, after_mask, face)
+    if not candidates:
+        return None
+    overlap, density, lift = max(candidates)
+    runner = max(score for score, _density, offset in candidates if offset != lift)
+    distant_runner = max(score for score, _density, offset in candidates if abs(offset - lift) > 2)
+    if (not 12 <= lift <= 80 or overlap < .90 or not .70 <= density <= 1.35
+            or overlap - runner >= .07 or overlap - distant_runner < .07):
+        return None
+    edge = blank_tile_raised_confirmation(before, after, slots, click_index, point)
+    if edge is None or abs(edge["lift"] - lift) > 2:
+        return None
+    neighbour = slots[click_index - 1]
+    neighbour_face = {"x": neighbour["x"] + 10, "y": neighbour["y"] + 10,
+                      "width": neighbour["width"] - 20, "height": neighbour["height"] - 38}
+    try:
+        if min(neighbour_face["width"], neighbour_face["height"]) <= 0:
+            return None
+        neighbour_delta = tile_face_structure_delta(
+            crop_screenshot(before, neighbour_face), crop_screenshot(after, neighbour_face),
+        )
+    except Exception:
+        return None
+    if not isfinite(neighbour_delta) or neighbour_delta > threshold:
+        return None
+    left, top = int(face["x"]), int(face["y"])
+    right, bottom = int(face["x"] + face["width"]), int(face["y"] + face["height"])
+    shifted = after_mask.crop((left, top - lift, right, bottom - lift))
+    raw_delta = ImageStat.Stat(ImageChops.difference(baseline, shifted)).mean[0] / 255 * 100
+    return {"x": float(point["x"]), "y": float(point["y"]) - lift,
+            "lift": float(lift), "faceStructureDelta": round(raw_delta, 3),
+            "verification": "translated_rim_unique_glyph_cluster_and_stable_neighbour",
+            "rimLift": edge["lift"], "glyphOverlap": overlap,
+            "glyphDensity": density, "rawFaceStructureDelta": raw_delta,
+            "adjacentGlyphRunner": runner, "adjacentGlyphMargin": overlap - runner,
+            "distantGlyphRunner": distant_runner, "distantGlyphMargin": overlap - distant_runner,
+            "neighbourFaceStructureDelta": neighbour_delta}
+
+
 def sparkle_masked_lift_confirmation(
     before: bytes, after: bytes, slots: list[dict[str, Any]], click_index: int,
     face: dict[str, float], point: dict[str, float], lift: int, threshold: float,
@@ -1363,7 +1419,12 @@ def raised_tile_confirmation_point(
                 # overlap proof is needed to survive the selection light.
                 if delta <= 1.8:
                     return None
-                return raised_glyph_overlap_confirmation(baseline, after_mask, face, point)
+                overlap_confirmation = raised_glyph_overlap_confirmation(baseline, after_mask, face, point)
+                if overlap_confirmation is not None:
+                    return overlap_confirmation
+                return raised_rim_cluster_glyph_confirmation(
+                    before, after, slots, click_index, point, face, baseline, after_mask, threshold,
+                )
             try:
                 with Image.open(io.BytesIO(after)) as image:
                     rgb = image.convert("RGB").crop((left, int(face["y"] - lift), right,
@@ -6600,6 +6661,180 @@ class PythonAutoOperator:
             ocr_engine()
         return True
 
+    def startup_terminal_win_button(self, frame: bytes, *, require_label: bool = True) -> dict[str, Any] | None:
+        """Read a reviewed native win label, never infer a win from orange alone.
+
+        Reuse the action recognizer's 64x24 RGB signature and .98 similarity
+        convention. These control-only references cover reviewed ron/tsumo
+        labels; unknown skins, multiple actions and ambiguous labels abstain.
+        """
+        with Image.open(io.BytesIO(frame)) as image:
+            expected = self.layout["viewport"]
+            if image.size != (1920, 1080) or image.size != (expected["width"], expected["height"]):
+                return None
+            rgb = image.convert("RGB")
+        if classify_screen(frame, self.screen_references)[0] != "match":
+            return None
+        buttons = force_auto_self_action_buttons(frame, self.layout["viewport"])
+        pass_region = self.layout.get("actionButtonRegions", {}).get("pass")
+        if (len(buttons) != 1 or not pass_region
+                or not (is_force_auto_pass_prompt(frame, pass_region)
+                        or is_contextual_reaction_pass(frame, pass_region, 1))
+                or getattr(self, "pending_post_call_discard", False)):
+            return None
+        if not require_label:
+            # Lossy stream boundaries can trim the gold letters. They only
+            # trigger independent captures; this unnamed cue can never click.
+            return {**buttons[0], "action": None}
+        templates = getattr(self, "_startup_win_label_templates", None)
+        if templates is None:
+            path = Path(__file__).resolve().parents[1] / "templates/screens/startup-win-buttons.json"
+            data = load_json(path)
+            if data.get("schemaVersion") != 1 or data.get("signatureSize") != [64, 24]:
+                return None
+            templates = []
+            for entry in data["buttons"]:
+                if entry["action"] not in {"ron", "tsumo"}:
+                    return None
+                with Image.open(io.BytesIO(base64.b64decode(entry["pngBase64"], validate=True))) as reference:
+                    if reference.size != (64, 24):
+                        return None
+                    templates.append((entry["action"], reference.convert("RGB")))
+            self._startup_win_label_templates = templates
+        button = buttons[0]
+        observed = rgb.crop((button["x"], button["y"],
+                             button["x"] + button["width"] + 1,
+                             button["y"] + button["height"] + 1)).resize((64, 24))
+        scores = {action: max((1 - sum(ImageStat.Stat(ImageChops.difference(observed, reference)).mean)
+                                      / (3 * 255)
+                                      for label, reference in templates if label == action), default=0)
+                  for action in ("ron", "tsumo")}
+        action = max(scores, key=scores.get)
+        other = "tsumo" if action == "ron" else "ron"
+        if scores[action] < .98 or scores[action] - scores[other] < .03:
+            return None
+        draw = self_turn_draw_visible(frame, self.layout, getattr(self, "cached_open_melds", 0))
+        if draw != (action == "tsumo"):
+            return None
+        return {**button, "action": action, "labelSimilarity": scores[action],
+                "labelMargin": scores[action] - scores[other]}
+
+    def try_startup_terminal_win(
+        self, page: Page, guard: StartupTurnGuard, frame: bytes | None,
+        observed_at: float | None,
+    ) -> bool:
+        """Accept only a currently certified win while the unknown turn stays quarantined.
+
+        Joining a table does not reveal its game-clock onset. Keep that fact
+        unchanged: the first candidate receipt only bounds processing latency,
+        not remaining game time. Two independent synchronous captures certify
+        the named terminal control. No discard clock, guard or deadline is reset.
+        """
+        if (self.args.mode != "force-auto" or guard.ready or not guard.quarantined or frame is None):
+            return False
+        candidate = getattr(self, "startup_terminal_win_candidate", None)
+        button = self.startup_terminal_win_button(frame, require_label=False)
+        if button is None:
+            if candidate is not None:
+                candidate["rejected"] = True
+            return False
+        now = time.monotonic()
+        if (not isinstance(observed_at, (int, float)) or isinstance(observed_at, bool)
+                or not isfinite(observed_at) or not 0 <= observed_at <= now):
+            # Missing metadata cannot become a fresh allowance when this
+            # same startup prompt is delivered again with a later timestamp.
+            if candidate is None:
+                self.startup_terminal_win_candidate = {"observedAt": None, "action": None,
+                    "center": button["center"], "rejected": True, "clicked": False}
+            else:
+                candidate["rejected"] = True
+            return False
+        def original_clock() -> tuple[Any, ...]:
+            return (getattr(self, "action_evidence_started_at", None),
+                    getattr(self, "action_budget_started_at", None),
+                    getattr(self, "action_evidence_kind", None),
+                    self.configured_action_deadline_ms(), self.force_auto_click_budget_ms())
+        if candidate is None:
+            candidate = {"observedAt": observed_at, "action": button["action"],
+                         "center": button["center"], "rejected": False, "clicked": False,
+                         "originalClock": original_clock()}
+            self.startup_terminal_win_candidate = candidate
+        if candidate["clicked"] or candidate["rejected"]:
+            return False
+        # An earlier receipt can only shorten the allowance; re-observation
+        # cannot restart either the local processing SLA or an existing clock.
+        candidate["observedAt"] = min(candidate["observedAt"], observed_at)
+
+        def require_budget() -> None:
+            if original_clock() != candidate["originalClock"]:
+                raise RetryableSafetyAbort("original startup action clock changed during win confirmation")
+            for stamp in candidate["originalClock"][:2]:
+                if stamp is not None and (not isinstance(stamp, (int, float)) or isinstance(stamp, bool)
+                        or not isfinite(stamp) or not 0 <= stamp <= time.monotonic()):
+                    raise RetryableSafetyAbort("startup win has an invalid original action clock")
+            self.require_force_auto_click_budget(candidate["observedAt"],
+                                                phase="before_startup_terminal_win_click")
+            self.require_action_deadline()
+            if (time.monotonic() - candidate["observedAt"]) * 1000 >= self.configured_action_deadline_ms():
+                raise RetryableSafetyAbort("startup terminal win processing deadline expired")
+
+        def same_button(current: dict[str, Any] | None) -> bool:
+            return bool(current and (candidate["action"] is None or current["action"] == candidate["action"])
+                        and all(abs(current["center"][axis] - candidate["center"][axis]) <= 6
+                                for axis in ("x", "y")))
+
+        screenshots = []
+        evidence = []
+        try:
+            require_budget()
+            if not same_button(button):
+                raise ReactionWinPromptChangedAbort("startup terminal candidate changed")
+            previous_complete = candidate["observedAt"]
+            for ordinal in ("first", "second"):
+                receipt = self.capture_full_action_frame(page, f"startup_terminal_win_{ordinal}")
+                stamps = (receipt.attempt_started_at, receipt.completed_at)
+                if (any(not isinstance(stamp, (int, float)) or isinstance(stamp, bool)
+                        or not isfinite(stamp) for stamp in stamps)
+                        or not previous_complete <= receipt.attempt_started_at <= receipt.completed_at <= time.monotonic()
+                        or (ordinal == "second" and receipt.attempt_started_at <= previous_complete)):
+                    raise ReactionWinPromptChangedAbort("startup win capture timestamps are not ordered")
+                current = self.startup_terminal_win_button(receipt.png)
+                if not same_button(current):
+                    raise ReactionWinPromptChangedAbort("startup terminal win changed between synchronous captures")
+                candidate["action"] = current["action"]
+                evidence.append({"action": current["action"], "labelSimilarity": current["labelSimilarity"],
+                                 "labelMargin": current["labelMargin"],
+                                 "captureStartedAt": receipt.attempt_started_at,
+                                 "captureCompletedAt": receipt.completed_at})
+                previous_complete = receipt.completed_at
+                if hasattr(self, "frames"):
+                    path = self.frames / f"{utc_stamp()}.startup-win-{ordinal}.png"
+                    path.write_bytes(receipt.png)
+                    path.chmod(0o600)
+                    screenshots.append(str(path))
+                require_budget()
+        except RetryableSafetyAbort as error:
+            candidate["rejected"] = True
+            self.log("startup_terminal_win_deferred", action=candidate["action"], error=str(error),
+                     firstObservedAt=candidate["observedAt"], screenshots=screenshots,
+                     evidence=evidence, startupQuarantined=guard.quarantined, gameplayClicks=0)
+            return False
+        # The final guard is immediately adjacent to the only gameplay input.
+        # Mark it before dispatch so an uncertain transport failure cannot
+        # cause a duplicate click on the next pass through the startup loop.
+        candidate["clicked"] = True
+        self.log("action_click_sent", action=candidate["action"], clickPoint=candidate["center"],
+                 source="startup_two_synchronous_named_win", firstObservedAt=candidate["observedAt"],
+                 screenshots=screenshots, evidence=evidence, gameActionStartedAt=None)
+        self.last_action_clicked_at = time.monotonic()
+        page.mouse.click(candidate["center"]["x"], candidate["center"]["y"])
+        self.round_terminal_latched = True
+        self.round_terminal_result_observed = False
+        self.start_self_win_capture(candidate["action"])
+        self.log("startup_terminal_win", action=candidate["action"], confirmation="clicked_waiting_result",
+                 startupQuarantined=guard.quarantined, gameActionStartedAt=None)
+        return True
+
     def bound_initial_action_from_dealing(self, page: Page, guard: StartupTurnGuard,
                                           gate_frame: bytes | None) -> bool:
         """Use a fresh direct capture, never a late screencast receipt, as a bound."""
@@ -6791,6 +7026,7 @@ class PythonAutoOperator:
                     # reaction/draw gate and never run gameplay clicks there.
                     early_state, early_confidence = classify_screen(gate_frame, self.screen_references) \
                         if gate_frame else ("unknown", 0.0)
+                    startup_candidate_observed_at = gate_captured_at
                     early_state, early_confidence, verified_gate_frame, non_gameplay_rejected = \
                         self.verify_screencast_non_gameplay_state(
                             page, early_state, early_confidence, gate_frame,
@@ -6922,6 +7158,7 @@ class PythonAutoOperator:
                     if startup_guard_state != "ready":
                         # The first visible action may already be near the game
                         # deadline. Do not manufacture a new clock for it.
+                        self.try_startup_terminal_win(page, startup_turn_guard, gate_frame, startup_candidate_observed_at)
                         page.wait_for_timeout(max(20, round(self.args.poll * 1000)))
                         continue
                     initial_anchor = startup_turn_guard.initial_action_anchor

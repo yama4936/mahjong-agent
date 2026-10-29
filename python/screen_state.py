@@ -212,6 +212,53 @@ def _has_bottom_tile_faces(image: Image.Image) -> bool:
     return white_faces >= .35 and dark_ink >= .02
 
 
+def _is_reference_supported_riichi_selection(
+    image: Image.Image,
+    references: dict[str, tuple[ScreenState, Image.Image]],
+    maximum_distance: float,
+) -> bool:
+    """Recover one calibrated dim-riichi view, not arbitrary gray hand rows.
+
+    JPEG55 can move the disabled faces from just above to just below the
+    ordinary 130 threshold. Do not lower that global threshold: require the
+    independent gold return control, inked dim faces, and a calibrated table
+    reference (including its central HUD). Coordinates apply only at native
+    1920x1080. In particular, a hand-like strip alone cannot override a lobby.
+    """
+    if image.size != (1920, 1080):
+        return False
+    match_references = [reference for state, reference in references.values()
+                        if state == "match" and reference.size == image.size]
+    if not match_references:
+        return False
+    # Inspect the small control before computing row masks or reference
+    # signatures. Ordinary frames with bright hands already returned above;
+    # other frames normally fail here, so no new every-frame full comparison.
+    control = image.crop((1387, 798, 1497, 899))
+    pixels = list(control.getdata())
+    gold = sum(1 for r, g, b in pixels if r > 170 and g > 110 and b < 150 and r > g * 1.1) / len(pixels)
+    dark = _rgb_fraction(control, (("<", 90),) * 3)
+    if gold < .20 or not .30 <= dark <= .70:
+        return False
+    row = image.crop((223, 930, 1454, 1065))
+    red, green, blue = row.split()
+    minimum = ImageChops.darker(ImageChops.darker(red, green), blue)
+    maximum = ImageChops.lighter(ImageChops.lighter(red, green), blue)
+    muted = minimum.point([255 if 110 <= value <= 165 else 0 for value in range(256)])
+    neutral = ImageChops.subtract(maximum, minimum).point([255 if value < 30 else 0 for value in range(256)])
+    muted_fraction = ImageChops.multiply(muted, neutral).histogram()[255] / (row.width * row.height)
+    ink = _rgb_fraction(row, (("<", 100),) * 3)
+    bright = _rgb_fraction(row, ((">", 180),) * 3)
+    if muted_fraction < .45 or ink < .04 or bright > .25:
+        return False
+    hud = (800, 310, 1140, 535)
+    return any(
+        _distance(image, reference) <= min(.085, maximum_distance)
+        and _distance(image.crop(hud), reference.crop(hud)) <= .05
+        for reference in match_references
+    )
+
+
 def _is_cherry_blossom_ranked_menu(image: Image.Image) -> bool:
     """Recognize the stacked dark-blue ranked-room panels on the current skin."""
     width, height = image.size
@@ -330,6 +377,8 @@ def classify_screen(
     if _matches_blocking_dialog(image, _blocking_dialog_reference("connection-error.png")):
         return "connection_error", 1.0
     if _has_bottom_tile_faces(image):
+        return "match", 1.0
+    if _is_reference_supported_riichi_selection(image, references, maximum_distance):
         return "match", 1.0
     if _is_lobby_loading(image):
         return "loading", 1.0

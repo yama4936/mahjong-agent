@@ -1,0 +1,24 @@
+{
+  "sourceCommit": "1a15c17",
+  "sourceRun": "artifacts/friend-300-1a15c17-retry-20261030",
+  "nativeSize": [1920, 1080],
+  "before": {
+    "source": "frames/2026-10-29T20-11-40.030430+00-00.selection-before.png",
+    "sourceDecodedFormat": "PNG",
+    "fixture": "riichi-selection-codec-before-jpeg55-20261030.jpg",
+    "transform": "Pillow RGB JPEG quality=55; no resize or crop"
+  },
+  "receipt": {
+    "source": "frames/2026-10-29T20-11-40.030430+00-00.selection-receipt.png",
+    "sourceDecodedFormat": "JPEG",
+    "fixture": "riichi-selection-codec-receipt-20261030.jpg",
+    "transform": "byte-for-byte copy; source .png suffix does not indicate its codec"
+  },
+  "independentMatchReference": {
+    "source": "artifacts/live/login-step-3.png",
+    "fixture": "riichi-selection-calibrated-match-20260920.jpg",
+    "transform": "Pillow RGB JPEG quality=55; no resize or crop",
+    "purpose": "independent existing runtime match reference; not either failure frame"
+  },
+  "scope": "Limited native dim-riichi codec regression. This does not establish global screen recognition accuracy or repair existing away-to-match classification."
+}
