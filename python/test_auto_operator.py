@@ -5826,6 +5826,44 @@ class AwayDialogDetectionTest(unittest.TestCase):
                 self.assertIsNone(raised_tile_confirmation_point(before, output.getvalue(), layout,
                                                                 13, point, 1.5))
 
+    def test_draw_9m_inset_calibration_requires_independent_physical_proof(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        layout = load_json(root / "config/layout-300-regression.json")
+        for slot in [*layout["handSlots"], layout["drawSlot"]]:
+            slot["y"] -= 5
+            slot["height"] += 5
+        point = {"x": 1532, "y": 996.5}
+        before = (root / "test/fixtures/selection-9m-inset-before-20261030.png").read_bytes()
+        after = (root / "test/fixtures/selection-9m-inset-lift-20261030.png").read_bytes()
+        result = raised_tile_confirmation_point(before, after, layout, 13, point, 1.5)
+        self.assertEqual(result["lift"], 48.0)
+        self.assertEqual(result["verification"], "inset_translated_rim_glyph_and_stable_neighbour")
+        self.assertIsNone(raised_tile_confirmation_point(before, before, layout, 13, point, 1.5))
+        self.assertIsNone(raised_tile_confirmation_point(before, after, layout, 12,
+                                                        layout["clickPoints"][12], 1.5))
+        with Image.open(io.BytesIO(before)) as image:
+            neighbour_lifted = image.convert("RGB")
+        slot = layout["handSlots"][12]
+        bounds = tuple(int(value) for value in (slot["x"], slot["y"],
+                                                slot["x"] + slot["width"],
+                                                slot["y"] + slot["height"]))
+        neighbour_face = neighbour_lifted.crop(bounds)
+        ImageDraw.Draw(neighbour_lifted).rectangle(bounds, fill=(35, 55, 78))
+        neighbour_lifted.paste(neighbour_face, (bounds[0], bounds[1] - 48))
+        output = io.BytesIO()
+        neighbour_lifted.save(output, format="PNG")
+        self.assertIsNone(raised_tile_confirmation_point(before, output.getvalue(), layout,
+                                                        13, point, 1.5))
+        for rectangle in ((1496, 888, 1567, 960), (1370, 936, 1440, 1035)):
+            with self.subTest(obstruction=rectangle):
+                with Image.open(io.BytesIO(after)) as image:
+                    altered = image.convert("RGB")
+                ImageDraw.Draw(altered).rectangle(rectangle, fill=(0, 0, 0))
+                output = io.BytesIO()
+                altered.save(output, format="PNG")
+                self.assertIsNone(raised_tile_confirmation_point(before, output.getvalue(), layout,
+                                                                13, point, 1.5))
+
     def test_draw_8s_click_sparkle_masks_only_a_bounded_obstruction(self) -> None:
         root = Path(__file__).resolve().parents[1]
         layout = load_json(root / "config/layout-300-regression.json")

@@ -1281,6 +1281,19 @@ def raised_tile_confirmation_point(
         )
         if sparkle_confirmation is not None:
             return sparkle_confirmation
+        # Some calibrated layouts include five pixels of felt above each
+        # physical tile (while retaining the same bottom edge). Retry only
+        # the independent rim + glyph + stationary-neighbour proof with that
+        # inset; do not relax the ordinary face-difference thresholds.
+        inset_slots = [{**tile, "y": tile["y"] + 5, "height": tile["height"] - 5}
+                       for tile in slots]
+        inset_face = {**face, "y": face["y"] + 5, "height": face["height"] - 5}
+        if inset_face["height"] > 0:
+            rim_confirmation = raised_rim_and_glyph_confirmation(
+                before, after, inset_slots, click_index, point, inset_face,
+            )
+            if rim_confirmation is not None:
+                return {**rim_confirmation, "verification": "inset_translated_rim_glyph_and_stable_neighbour"}
         # A click sparkle can change a small part of the selected glyph. In
         # the recorded 9p receipt the true 48px lift differed by 1.685%,
         # while the nearest alternative differed by 17.091%. Admit only this
