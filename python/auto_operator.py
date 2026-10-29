@@ -23,13 +23,14 @@ import time
 import uuid
 from collections import Counter
 from datetime import datetime, timezone
-from math import ceil
+from math import ceil, isfinite
 from pathlib import Path
 from typing import Any, Callable
 
 from playwright.sync_api import Browser, CDPSession, Page, sync_playwright
 from PIL import Image, ImageChops, ImageStat
 from screen_state import _rgb_fraction, classify_screen, load_references
+from synchronous_capture import CaptureReceipt, capture_full_png
 from operator_lock import OperatorAlreadyRunning, endpoint_key, operator_lease
 from analysis_recorder import AnalysisRecorder
 from startup_turn_guard import StartupTurnGuard
@@ -39,6 +40,10 @@ from screencast_diagnostic import ScreencastDiagnostic
 
 class RetryableSafetyAbort(RuntimeError):
     """A stale pre-click observation that is safe to reevaluate."""
+
+
+class ReactionWinPromptChangedAbort(RetryableSafetyAbort):
+    """A streamed win candidate vanished or became ambiguous before input."""
 
 
 class SelectionStateUncertainAbort(RetryableSafetyAbort):
@@ -2079,6 +2084,10 @@ class PythonAutoOperator:
         self.action_evidence_generation: int | None = None
         self.last_action_clicked_at: float | None = None
         self.action_evidence_last_seen_at: float | None = None
+        # A stream may deliver an old reaction after a slow discard attempt.
+        # Only two explicit captures can replace that discard's clock. Keep
+        # the first candidate observation even if confirmation is retried.
+        self.discard_to_win_candidate: dict[str, Any] | None = None
         if self.log_path.exists():
             for line in reversed(self.log_path.read_text(encoding="utf-8").splitlines()):
                 try:
@@ -5859,10 +5868,11 @@ class PythonAutoOperator:
             # its visual transition cannot be mistaken for confirmation of
             # the following tile click.
             riichi_stage_started = time.monotonic()
-            post_riichi_full = page.screenshot(animations="disabled")
-            post_riichi_captured_at = time.monotonic()
+            post_riichi_capture = self.capture_full_action_frame(page, "riichi_selection")
+            post_riichi_full = post_riichi_capture.png
+            post_riichi_captured_at = post_riichi_capture.attempt_started_at
             self.log("riichi_stage_timing", stage="post_selection_capture",
-                     durationMs=round((post_riichi_captured_at - riichi_stage_started) * 1000))
+                     durationMs=round((post_riichi_capture.completed_at - riichi_stage_started) * 1000))
             riichi_stage_started = time.monotonic()
             post_riichi_hand = crop_screenshot(post_riichi_full, self.hand_clip)
             post_riichi_state, _ = classify_screen(
@@ -5890,10 +5900,11 @@ class PythonAutoOperator:
             self.log("riichi_stage_timing", stage="selection_settle_wait",
                      durationMs=round((time.monotonic() - riichi_stage_started) * 1000))
             riichi_stage_started = time.monotonic()
-            settled_riichi_full = page.screenshot(animations="disabled")
-            settled_riichi_captured_at = time.monotonic()
+            settled_riichi_capture = self.capture_full_action_frame(page, "riichi_selection_settled")
+            settled_riichi_full = settled_riichi_capture.png
+            settled_riichi_captured_at = settled_riichi_capture.attempt_started_at
             self.log("riichi_stage_timing", stage="settled_selection_capture",
-                     durationMs=round((settled_riichi_captured_at - riichi_stage_started) * 1000))
+                     durationMs=round((settled_riichi_capture.completed_at - riichi_stage_started) * 1000))
             riichi_stage_started = time.monotonic()
             settled_riichi_hand = crop_screenshot(settled_riichi_full, self.hand_clip)
             settled_riichi_state, _ = classify_screen(
@@ -6236,6 +6247,126 @@ class PythonAutoOperator:
                 }
         raise RetryableSafetyAbort("hand and own meld did not change after call click")
 
+    def capture_full_action_frame(self, page: Page, purpose: str) -> CaptureReceipt:
+        receipt = capture_full_png(
+            page, session=getattr(self, "screencast_session", None),
+            expected_size=(self.layout["viewport"]["width"], self.layout["viewport"]["height"]),
+        )
+        self.log("synchronous_action_capture", purpose=purpose, method=receipt.method,
+                 attemptStartedAt=receipt.attempt_started_at, completedAt=receipt.completed_at,
+                 durationMs=round((receipt.completed_at - receipt.attempt_started_at) * 1000),
+                 fallbackReason=receipt.fallback_reason, size=[receipt.width, receipt.height])
+        return receipt
+
+    def observe_discard_to_win_trigger(self, observed_at: float | None) -> bool:
+        """Keep the first stream observation as an earlier processing SLA bound.
+
+        Its receipt is never evidence of fresh pixels. Synchronous captures
+        below establish the current prompt, while this bound also charges the
+        work already spent processing its streamed candidate.
+        """
+        if (getattr(self, "action_evidence_kind", None) != "discard"
+                or not isinstance(observed_at, (int, float)) or isinstance(observed_at, bool)
+                or not isfinite(observed_at) or observed_at < 0 or observed_at > time.monotonic()):
+            return False
+        key = self.action_evidence_started_at
+        candidate = getattr(self, "discard_to_win_candidate", None)
+        if candidate is None or candidate["discardKey"] != key:
+            self.discard_to_win_candidate = {"discardKey": key, "startedAt": observed_at,
+                                            "button": None, "screenshot": None}
+        else:
+            candidate["startedAt"] = min(candidate["startedAt"], observed_at)
+        return True
+
+    def confirm_discard_to_win_transition(
+        self, page: Page, *, triggered_at: float | None,
+    ) -> tuple[bytes, float, dict[str, Any]]:
+        """Certify a new ron prompt without lending it the old discard clock.
+
+        Stream receipts are triggers only: delivery can lag the actual image.
+        Synchronous captures establish the presently available ron, not when
+        the game first displayed it or how much game time remains. The SLA starts
+        at the earlier stream observation, includes both captures and cannot
+        restart when a capture fails or the prompt is reobserved.
+        """
+        # Gate generation changes even while observing the same discard.
+        # Only its immutable first-evidence time identifies a new action.
+        if not self.observe_discard_to_win_trigger(triggered_at):
+            raise RetryableSafetyAbort("reaction win trigger has no valid observation timestamp")
+        candidate = self.discard_to_win_candidate
+        if candidate.get("rejected"):
+            raise ReactionWinPromptChangedAbort("new reaction win transition became ambiguous; awaiting a verified turn")
+
+        def current_win(frame: bytes) -> dict[str, Any] | None:
+            with Image.open(io.BytesIO(frame)) as image:
+                if image.size != (self.layout["viewport"]["width"], self.layout["viewport"]["height"]):
+                    return None
+            state, _ = classify_screen(frame, self.screen_references)
+            if (state != "match" or getattr(self, "pending_post_call_discard", False)
+                    or self_turn_draw_visible(frame, self.layout, self.cached_open_melds)):
+                return None
+            return force_auto_reaction_win_button(
+                frame, self.layout["viewport"],
+                self.layout.get("actionButtonRegions", {}).get("pass"),
+            )
+
+        def save_capture(frame: bytes, suffix: str) -> str | None:
+            if not hasattr(self, "frames"):
+                return None
+            path = self.frames / f"{utc_stamp()}.reaction-win-transition-{suffix}.png"
+            path.write_bytes(frame)
+            return str(path)
+
+        self.require_force_auto_click_budget(
+            candidate["startedAt"], phase="before_reaction_win_transition_capture",
+            include_action_evidence=False,
+        )
+        if candidate["button"] is None:
+            first_capture = self.capture_full_action_frame(page, "reaction_win_first")
+            first_started = first_capture.attempt_started_at
+            first = first_capture.png
+            button = current_win(first)
+            first_path = save_capture(first, "first")
+            if button is None:
+                self.log("discard_to_win_transition_deferred", firstScreenshot=first_path,
+                         firstObservedAt=candidate["startedAt"], reason="no_synchronous_win_prompt")
+                raise ReactionWinPromptChangedAbort("streamed reaction win was absent from the first synchronous capture")
+            candidate.update(firstCaptureStartedAt=first_started, button=button,
+                             screenshot=first_path)
+
+        # Check the candidate's own clock, not the preceding discard. This
+        # includes both the stream processing and the first capture cost.
+        self.require_force_auto_click_budget(
+            candidate["startedAt"], phase="before_reaction_win_transition_confirmation",
+            include_action_evidence=False,
+        )
+        second_capture = self.capture_full_action_frame(page, "reaction_win_second")
+        second_started = second_capture.attempt_started_at
+        second = second_capture.png
+        button = current_win(second)
+        second_path = save_capture(second, "second")
+        first_point = candidate["button"]["center"]
+        if (button is None or any(abs(button["center"][axis] - first_point[axis]) > 12
+                                  for axis in ("x", "y"))):
+            candidate["rejected"] = True
+            self.log("discard_to_win_transition_rejected", firstScreenshot=candidate["screenshot"],
+                     secondScreenshot=second_path, reason="prompt_disappeared_or_changed")
+            raise ReactionWinPromptChangedAbort("reaction win changed between independent synchronous captures")
+        # Even a repeated identical prompt cannot extend the original first
+        # observation. Do this check before replacing any authoritative clock.
+        self.require_force_auto_click_budget(
+            candidate["startedAt"], phase="after_reaction_win_transition_confirmation",
+            include_action_evidence=False,
+        )
+        self.mark_action_evidence("win", observed_at=candidate["startedAt"], supersede=True)
+        self.log("discard_to_win_transition_verified",
+                 firstObservedAt=candidate["startedAt"],
+                 firstCaptureStartedAt=candidate["firstCaptureStartedAt"], secondCaptureStartedAt=second_started,
+                 firstScreenshot=candidate["screenshot"], secondScreenshot=second_path,
+                 evidenceAgeMs=self.force_auto_action_evidence_age_ms(),
+                 verification="two_synchronous_match_pass_single_win_empty_draw_captures")
+        return second, second_started, button
+
     def execute_force_auto_reaction_win(
         self, page: Page, screenshot: bytes, button: dict[str, Any],
         *, evaluated_captured_at: float | None = None,
@@ -6243,13 +6374,18 @@ class PythonAutoOperator:
         """Accept an unambiguous ron button and verify that the prompt closes."""
         if self.args.mode != "force-auto":
             return {"clicked": False, "reason": "force_auto_only"}
+        if (getattr(self, "action_evidence_kind", None) == "discard"
+                and getattr(self, "action_evidence_started_at", None) is not None):
+            screenshot, evaluated_captured_at, button = self.confirm_discard_to_win_transition(
+                page, triggered_at=evaluated_captured_at,
+            )
         pass_region = self.layout.get("actionButtonRegions", {}).get("pass")
         current = force_auto_reaction_win_button(screenshot, self.layout["viewport"], pass_region)
         if current is None and button.get("source") == "contextual_reaction_prompt":
             contextual = force_auto_self_action_buttons(screenshot, self.layout["viewport"])
             current = contextual[0] if len(contextual) == 1 else None
         if not current:
-            raise RetryableSafetyAbort("reaction win button was not stable before click")
+            raise ReactionWinPromptChangedAbort("reaction win button was not stable before click")
         point = current["center"]
         self.require_force_auto_click_budget(
             evaluated_captured_at, phase="before_reaction_win_click",
@@ -6631,6 +6767,7 @@ class PythonAutoOperator:
                     call_gate_streak = call_gate_streak + 1 if quick_calls else 0
                     reaction_win_gate_streak = reaction_win_gate_streak + 1 if quick_reaction_win else 0
                     if quick_reaction_win:
+                        self.observe_discard_to_win_trigger(gate_captured_at)
                         self.mark_action_evidence(
                             "win", observed_at=initial_anchor, budget_observed_at=initial_budget_observed,
                             gate_generation=self.screencast_sequence,
@@ -6909,10 +7046,15 @@ class PythonAutoOperator:
                         if reaction_win is None and len(orange_buttons) == 1:
                             reaction_win = {**orange_buttons[0], "source": "contextual_reaction_prompt"}
                         if reaction_win:
-                            receipt = self.execute_force_auto_reaction_win(
-                                page, full_screen, reaction_win,
-                                evaluated_captured_at=full_screen_captured_at,
-                            )
+                            try:
+                                receipt = self.execute_force_auto_reaction_win(
+                                    page, full_screen, reaction_win,
+                                    evaluated_captured_at=full_screen_captured_at,
+                                )
+                            except ReactionWinPromptChangedAbort as error:
+                                self.log("reaction_win_deferred", screenshot=str(screenshot_path), error=str(error))
+                                page.wait_for_timeout(max(20, round(self.args.poll * 1000)))
+                                continue
                             receipt["actionTiming"] = self.action_timing(decision_started_at, clear=True)
                             self.log("reaction_win", screenshot=str(screenshot_path), execution=receipt)
                             time.sleep(self.args.poll)

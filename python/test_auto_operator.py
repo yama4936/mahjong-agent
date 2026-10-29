@@ -23,6 +23,7 @@ from auto_operator import board_state_signature, board_state_signature_matches
 from auto_operator import initial_dealing_frame_visible
 from startup_turn_guard import StartupTurnGuard
 from auto_operator import verified_post_call_white_discard
+from auto_operator import ReactionWinPromptChangedAbort
 
 FRAME_FIXTURES = Path(__file__).resolve().parents[1] / "test/fixtures"
 
@@ -1918,7 +1919,8 @@ class AwayDialogDetectionTest(unittest.TestCase):
         self.addCleanup(open_patcher.stop)
         self.addCleanup(read_patcher.stop)
 
-    def run_reaction_frame(self, frame: bytes, *, accept_call: bool, policy_error=None, iterations=2) -> PythonAutoOperator:
+    def run_reaction_frame(self, frame: bytes, *, accept_call: bool, policy_error=None,
+                           win_error=None, iterations=2) -> PythonAutoOperator:
         project = Path(__file__).resolve().parents[1]
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
@@ -1957,6 +1959,7 @@ class AwayDialogDetectionTest(unittest.TestCase):
         operator.action_evidence_last_seen_at = None
         operator.action_evidence_kind = None
         operator.last_action_clicked_at = None
+        operator.login_button_clicked_at = None
         operator.poll_public_recognition = Mock()
         operator.ensure_viewport = Mock()
         operator.start_screencast_gate = Mock()
@@ -1970,6 +1973,8 @@ class AwayDialogDetectionTest(unittest.TestCase):
                          "callAssessments": [{"actionId": "pon_P", "approved": True}]},
         })
         operator.execute_force_auto_reaction_win = Mock(return_value={"clicked": True, "action": "ron"})
+        if win_error is not None:
+            operator.execute_force_auto_reaction_win.side_effect = win_error
         if policy_error is not None:
             operator.evaluate_force_auto_call_policy.side_effect = policy_error
         operator.execute_reaction_pass = Mock(return_value={"clicked": True, "action": "pass"})
@@ -2040,6 +2045,27 @@ class AwayDialogDetectionTest(unittest.TestCase):
         operator.execute_force_auto_reaction_win.assert_called_once()
         event = next(c for c in operator.log.call_args_list if c.args[0] == "reaction_win")
         self.assertTrue(event.kwargs["execution"]["actionTiming"]["deadlineMet"])
+
+    def test_changed_win_prompt_reobserves_but_budget_and_unexpected_errors_do_not(self) -> None:
+        frame = (Path(__file__).resolve().parents[1] /
+                 "artifacts/live/red-ron-prompt-20260928.png").read_bytes()
+        with patch("auto_operator.StartupTurnGuard") as startup:
+            startup.return_value.ready = True
+            startup.return_value.quarantined = False
+            startup.return_value.initial_action_anchor = None
+            startup.return_value.observe.return_value = "ready"
+            operator = self.run_reaction_frame(
+                frame, accept_call=False, iterations=8,
+                win_error=ReactionWinPromptChangedAbort("prompt vanished"),
+            )
+            self.assertTrue(any(call.args[0] == "reaction_win_deferred" for call in operator.log.call_args_list))
+            self.assertFalse(any(call.args[0] == "safety_stop" for call in operator.log.call_args_list))
+            operator.execute_reaction_pass.assert_not_called()
+            # Failures outside prompt disappearance retain the existing fatal
+            # path instead of silently resuming an unsafe decision pipeline.
+            for error in (RetryableSafetyAbort("click budget expired"), RuntimeError("unexpected capture failure")):
+                with self.subTest(error=error), self.assertRaises(type(error)):
+                    self.run_reaction_frame(frame, accept_call=False, win_error=error, iterations=8)
 
     def test_screencast_rejects_resized_frame_and_clears_stale_gate(self) -> None:
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
@@ -3538,6 +3564,8 @@ class AwayDialogDetectionTest(unittest.TestCase):
         operator.river_clip = {"x": 10, "y": 0, "width": 10, "height": 10}
         frame = (project / "test/fixtures/riichi-before-selection-20261020.jpg").read_bytes()
         selection = (project / "test/fixtures/riichi-two-candidates-selection-20261020.jpg").read_bytes()
+        operator.capture_full_action_frame = Mock(side_effect=lambda *_args: argparse.Namespace(
+            png=selection, attempt_started_at=time.monotonic(), completed_at=time.monotonic()))
         operator.screencast_session = Mock()
         operator.latest_screencast_frame = frame
         operator.screencast_draw_generation = 4
@@ -3623,6 +3651,8 @@ class AwayDialogDetectionTest(unittest.TestCase):
                 operator.hand_clip = {"x": 223, "y": 926, "width": 1355, "height": 146}
                 operator.river_clip = {"x": 10, "y": 0, "width": 10, "height": 10}
                 operator.screencast_session = Mock()
+                operator.capture_full_action_frame = Mock(side_effect=lambda *_args: argparse.Namespace(
+                    png=selection, attempt_started_at=time.monotonic(), completed_at=time.monotonic()))
                 operator.latest_screencast_frame = frame
                 operator.screencast_draw_generation = 4
                 operator.cached_open_melds = 0
@@ -3681,6 +3711,8 @@ class AwayDialogDetectionTest(unittest.TestCase):
         operator.river_clip = {"x": 770, "y": 535, "width": 390, "height": 225}
         frame = (project / "test/fixtures/riichi-before-selection-20261020.jpg").read_bytes()
         selection = (project / "test/fixtures/riichi-two-candidates-selection-20261020.jpg").read_bytes()
+        operator.capture_full_action_frame = Mock(side_effect=lambda *_args: argparse.Namespace(
+            png=selection, attempt_started_at=time.monotonic(), completed_at=time.monotonic()))
         operator.screencast_session = Mock()
         operator.latest_screencast_frame = frame
         operator.screencast_draw_generation = 4
