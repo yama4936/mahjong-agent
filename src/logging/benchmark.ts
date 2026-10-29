@@ -1,5 +1,5 @@
 import type { DecisionRecord } from "./replay.js";
-import { groupByRound, roundBoolean } from "./roundOutcomes.js";
+import { groupByRound, roundNumber, summarizeRoundBooleans } from "./roundOutcomes.js";
 
 export interface BenchmarkGroup {
   decisions: number;
@@ -14,25 +14,23 @@ export interface BenchmarkGroup {
 
 function summarizeGroup(records: readonly DecisionRecord[]): BenchmarkGroup {
   const completed = groupByRound(records).filter((group) => group.some((record) => record.actualResult));
-  const winLabels = completed.filter((group) => roundBoolean(group, "won") !== null);
-  const dealInLabels = completed.filter((group) => roundBoolean(group, "dealIn") !== null);
-  const wins = winLabels.filter((group) => roundBoolean(group, "won") === true).length;
-  const dealIns = dealInLabels.filter((group) => roundBoolean(group, "dealIn") === true).length;
+  const wins = summarizeRoundBooleans(completed, "won");
+  const dealIns = summarizeRoundBooleans(completed, "dealIn");
   const pointDeltas = completed.flatMap((group) => {
-    const values = new Set(group.flatMap((record) => typeof record.actualResult?.pointsDelta === "number" ? [record.actualResult.pointsDelta] : []));
-    return values.size === 1 ? [...values] : [];
+    const value = roundNumber(group, "pointsDelta");
+    return value === null ? [] : [value];
   });
   const ranks = completed.flatMap((group) => {
-    const values = new Set(group.flatMap((record) => typeof record.actualResult?.finalRank === "number" ? [record.actualResult.finalRank] : []));
-    return values.size === 1 ? [...values] : [];
+    const value = roundNumber(group, "finalRank");
+    return value === null ? [] : [value];
   });
   return {
     decisions: records.length,
     completedOutcomes: completed.length,
-    wins,
-    dealIns,
-    winRate: winLabels.length ? wins / winLabels.length : null,
-    dealInRate: dealInLabels.length ? dealIns / dealInLabels.length : null,
+    wins: wins.positive,
+    dealIns: dealIns.positive,
+    winRate: wins.samples ? wins.positive / wins.samples : null,
+    dealInRate: dealIns.samples ? dealIns.positive / dealIns.samples : null,
     averagePointsDelta: pointDeltas.length ? pointDeltas.reduce((sum, value) => sum + value, 0) / pointDeltas.length : null,
     averageFinalRank: ranks.length ? ranks.reduce((sum, value) => sum + value, 0) / ranks.length : null,
   };

@@ -1,5 +1,5 @@
 import type { DecisionRecord } from "./replay.js";
-import { groupByRound, roundBoolean } from "./roundOutcomes.js";
+import { groupByRound, roundBoolean, summarizeRoundBooleans } from "./roundOutcomes.js";
 
 export interface DecisionMetrics {
   decisions: number;
@@ -44,21 +44,14 @@ const average = (values: number[]): number | null => values.length
 export function summarizeDecisionMetrics(records: readonly DecisionRecord[]): DecisionMetrics {
   const rounds = groupByRound(records);
   const completed = rounds.filter((group) => roundBoolean(group, "won") !== null || roundBoolean(group, "dealIn") !== null);
-  const winLabels = completed.filter((group) => roundBoolean(group, "won") !== null);
-  const dealInLabels = completed.filter((group) => roundBoolean(group, "dealIn") !== null);
-  const wins = winLabels.filter((group) => roundBoolean(group, "won") === true).length;
-  const dealIns = dealInLabels.filter((group) => roundBoolean(group, "dealIn") === true).length;
+  const wins = summarizeRoundBooleans(completed, "won");
+  const dealIns = summarizeRoundBooleans(completed, "dealIn");
   const actions = records.map((record) => record.decision.selectedAction?.action);
   const riichi = actions.filter((action) => action === "riichi").length;
   const callActions = new Set(["chi", "pon", "minkan", "ankan", "kakan"]);
   const calls = actions.filter((action) => action && callActions.has(action)).length;
-  const roundKey = (record: DecisionRecord) => String(record.actualResult?.round?.observedAt
-    ?? record.actualResult?.roundId ?? record.id);
-  const calledRoundKeys = new Set(records.filter((record) => callActions.has(record.decision.selectedAction?.action))
-    .map(roundKey));
-  const wonRoundKeys = new Set(rounds.filter((group) => roundBoolean(group, "won") === true).map((group) => roundKey(group[0]!)));
-  const winLabeledRoundKeys = new Set(winLabels.map((group) => roundKey(group[0]!)));
-  const calledRoundWinSamples = [...calledRoundKeys].filter((key) => winLabeledRoundKeys.has(key)).length;
+  const calledRounds = rounds.filter((group) => group.some((record) => callActions.has(record.decision.selectedAction?.action)));
+  const calledRoundWins = summarizeRoundBooleans(calledRounds, "won");
   const selectedCandidates = records.flatMap((record) => {
     const selected = record.decision.candidates?.find((candidate) => candidate.actionId === record.decision.selectedActionId);
     return selected ? [selected] : [];
@@ -80,13 +73,13 @@ export function summarizeDecisionMetrics(records: readonly DecisionRecord[]): De
   const differences = comparable.filter(({ local, jev }) => local !== jev).length;
   return {
     decisions: records.length, completedRounds: completed.length,
-    wins, winSamples: winLabels.length, winRate: rate(wins, winLabels.length),
-    dealIns, dealInSamples: dealInLabels.length, dealInRate: rate(dealIns, dealInLabels.length),
+    wins: wins.positive, winSamples: wins.samples, winRate: rate(wins.positive, wins.samples),
+    dealIns: dealIns.positive, dealInSamples: dealIns.samples, dealInRate: rate(dealIns.positive, dealIns.samples),
     riichi, riichiRate: rate(riichi, records.length), calls, callRate: rate(calls, records.length),
-    calledRounds: calledRoundKeys.size,
-    calledRoundWins: [...calledRoundKeys].filter((key) => wonRoundKeys.has(key)).length,
-    calledRoundWinSamples,
-    calledRoundWinRate: rate([...calledRoundKeys].filter((key) => wonRoundKeys.has(key)).length, calledRoundWinSamples),
+    calledRounds: calledRounds.length,
+    calledRoundWins: calledRoundWins.positive,
+    calledRoundWinSamples: calledRoundWins.samples,
+    calledRoundWinRate: rate(calledRoundWins.positive, calledRoundWins.samples),
     averageWinTurn: average(winTurns),
     tenpaiReached: tenpaiObserved.filter((record) => record.actualResult?.tenpaiAtDraw === true).length,
     tenpaiRate: rate(tenpaiObserved.filter((record) => record.actualResult?.tenpaiAtDraw === true).length, tenpaiObserved.length),
