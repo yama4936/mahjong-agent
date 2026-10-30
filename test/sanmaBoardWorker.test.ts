@@ -44,6 +44,19 @@ test("real sanma frame retains the OCR wall count only as an unverified candidat
   } finally { worker.close(); }
 });
 
+test("compact sanma hand retains board candidate through resident worker without certification", {skip: !available}, async () => {
+  const worker = new SanmaBoardWorker();
+  try {
+    const image = "artifacts/sanma-manual-e48c562-20261031/actions/2026-10-30T16-40-57-727Z-before.png";
+    const data = await worker.observe(await readFile(image)) as any;
+    assert.equal(data.board.candidate.remainingTiles, 27);
+    assert.equal(data.board.screenEvidence, "sanma_compact_candidate");
+    assert.equal(data.board.verified, false);
+    assert.equal(data.north.status, "unknown");
+    assert.equal(data.north.complete, false);
+  } finally { worker.close(); }
+});
+
 test("resident recognition server returns separate unchanged safe candidate snapshots", {skip: !available, timeout: 60_000}, async () => {
   const { spawn } = await import("node:child_process");
   const { createInterface } = await import("node:readline");

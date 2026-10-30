@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from sanma_board_image import recognize_sanma_board_candidate
+from board_metadata import recognize_board
 
 ROOT = Path(__file__).resolve().parents[1]
 ACTIONS = ROOT / 'artifacts/sanma-manual-e48c562-20261031/actions'
@@ -18,6 +19,19 @@ CASES = [
 
 
 class SanmaBoardImageTests(unittest.TestCase):
+    @unittest.skipUnless((ACTIONS / '2026-10-30T16-40-57-727Z-before.png').exists(), 'local compact hand frame unavailable')
+    def test_compact_sanma_hand_can_yield_only_unverified_board_candidate(self):
+        frame = ACTIONS / '2026-10-30T16-40-57-727Z-before.png'
+        # Default four-player/operator path and shared screen state stay unchanged.
+        self.assertEqual(recognize_board(frame)['reason'], 'not_gameplay_screen')
+        result = recognize_sanma_board_candidate(frame, expected_total_points=None, payment_phase=None)
+        self.assertFalse(result['verified'])
+        self.assertFalse(result.get('consistent', False))
+        self.assertEqual(result['screenEvidence'], 'sanma_compact_candidate')
+        self.assertEqual(result['candidate']['remainingTiles'], 27)
+        self.assertEqual(result['candidate']['seat'], 'south')
+        self.assertEqual(result['candidate']['scores'], {'south': 42000, 'east': 32000, 'west': 31000})
+
     def test_screen_rejection_is_not_promoted(self):
         with patch('sanma_board_image.recognize_board', return_value={
                 'verified': False, 'reason': 'not_gameplay_screen'}):

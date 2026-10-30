@@ -170,7 +170,7 @@ def parse_board_tokens(tokens: list[dict], expected_total_points: int = 100000) 
             **({"remainingTiles": int(remaining[1:])} if remaining and int(remaining[1:]) <= 70 else {})}
 
 
-def recognize_board(image_path: Path) -> dict:
+def recognize_board(image_path: Path, *, sanma_compact_candidate: bool = False) -> dict:
     # Optional dependencies stay outside the live operator until validated.
     from PIL import Image
     image = Image.open(image_path).convert("RGB")
@@ -178,7 +178,16 @@ def recognize_board(image_path: Path) -> dict:
         return {"verified": False, "reason": "uncalibrated_viewport"}
     from screen_state import classify_screen
     state, _ = classify_screen(image_path, {})
-    if state != "match":
+    # Opt-in OCR candidate only: a saved sanma three-meld hand missed the
+    # ordinary gameplay gate by 0.00057 dark-ink fraction despite visible
+    # faces. This does not alter screen classification or authorize actions.
+    compact_candidate = False
+    if sanma_compact_candidate and state == "unknown":
+        pixels = list(image.crop((1920 * .115, 1080 * .87, 1920 * .30, 1080 * .97)).getdata())
+        white = sum(min(p) > 130 and max(p) - min(p) < 60 for p in pixels) / len(pixels)
+        ink = sum(max(p) < 100 for p in pixels) / len(pixels)
+        compact_candidate = white >= .70 and .018 <= ink < .02
+    if state != "match" and not compact_candidate:
         return {"verified": False, "reason": "not_gameplay_screen", "screenState": state}
     import numpy as np
     engine = ocr_engine()
@@ -256,8 +265,11 @@ def recognize_board(image_path: Path) -> dict:
     parsed = parse_board_tokens(tokens)
     if parsed.get("verified"):
         parsed["riichiSeats"] = recognize_riichi_sticks(image, parsed["seat"])
+    if compact_candidate:
+        parsed = {**parsed, "verified": False, "reason": "sanma_compact_screen_unverified"}
     return {**parsed, "tokens": tokens,
-            "source": str(image_path), "scope": "seat_round_scores_honba_riichi_remaining"}
+            "source": str(image_path), "scope": "seat_round_scores_honba_riichi_remaining",
+            **({"screenEvidence": "sanma_compact_candidate"} if compact_candidate else {})}
 
 
 def reconcile_riichi_metadata(previous: dict | None, current: dict) -> dict:

@@ -12,14 +12,15 @@ from board_metadata import recognize_board, parse_sanma_board_tokens
 
 def recognize_sanma_board_candidate(image_path: Path, *, expected_total_points: int | None,
                                     payment_phase: str | None) -> dict:
-    raw = recognize_board(image_path)
+    raw = recognize_board(image_path, sanma_compact_candidate=True)
     if 'tokens' not in raw:
         return {'verified': False, 'scope': 'sanma_offline_image_candidate',
                 'reason': raw.get('reason', 'ocr_unavailable')}
     parsed = parse_sanma_board_tokens(raw['tokens'], expected_total_points=expected_total_points,
                                       payment_phase=payment_phase)
     return {**parsed, 'scope': 'sanma_offline_image_candidate', 'source': str(image_path),
-            'tokens': raw['tokens']}
+            'tokens': raw['tokens'],
+            **({'screenEvidence': raw['screenEvidence']} if 'screenEvidence' in raw else {})}
 
 
 def observe_sanma_image(image_path: Path) -> dict:

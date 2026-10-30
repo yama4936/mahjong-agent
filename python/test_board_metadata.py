@@ -292,8 +292,10 @@ class BoardMetadataTest(unittest.TestCase):
             path = Path(directory) / "screen.png"
             Image.new("RGB", (1920, 1080), "black").save(path)
             self.assertEqual(recognize_board(path)["reason"], "not_gameplay_screen")
+            self.assertEqual(recognize_board(path, sanma_compact_candidate=True)["reason"], "not_gameplay_screen")
             Image.new("RGB", (960, 540), "black").save(path)
             self.assertEqual(recognize_board(path)["reason"], "uncalibrated_viewport")
+            self.assertEqual(recognize_board(path, sanma_compact_candidate=True)["reason"], "uncalibrated_viewport")
 
     def tokens(self):
         return [{"text": text, "x": x, "y": y, "confidence": 0.999}
