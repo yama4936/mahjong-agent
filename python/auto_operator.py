@@ -4707,8 +4707,18 @@ class PythonAutoOperator:
             self.verified_friend_300_active = False
             self.log("verified_friend_300_proof_revoked", reason=reason)
 
-    def observe_ranked_match_screen(self, state: str) -> None:
+    def observe_ranked_match_screen(self, state: str, *, screenshot: bytes | None = None,
+                                    confidence: float | None = None) -> None:
         if getattr(self, "verified_friend_300_active", False):
+            if state == "lobby" and screenshot is not None:
+                try:
+                    snapshot = self.frames / f"{utc_stamp()}.friend-proof-lobby.png"
+                    snapshot.write_bytes(screenshot)
+                    snapshot.chmod(0o600)
+                    self.log("verified_friend_300_lobby_evidence", screenshot=str(snapshot),
+                             confidence=confidence, gameplayClicks=0)
+                except OSError as error:
+                    self.log("verified_friend_300_lobby_evidence_error", error=str(error))
             started = getattr(self, "verified_friend_300_started_at", None)
             if (not getattr(self, "verified_friend_300_match_seen", False)
                     and (not isinstance(started, (int, float)) or time.monotonic() - started > 30)):
@@ -4997,7 +5007,7 @@ class PythonAutoOperator:
     def handle_early_non_gameplay_screen(self, page: Page, state: str, confidence: float,
                                        screenshot: bytes | None = None) -> bool:
         """Handle verified non-gameplay screens before latency quick gates."""
-        self.observe_ranked_match_screen(state)
+        self.observe_ranked_match_screen(state, screenshot=screenshot, confidence=confidence)
         if state in {"rank_promotion", "rank_certificate"}:
             self.ranked_terminal_matchmaking_seen_at = None
             # Promotion controls are authorized only by this process's verified
@@ -8294,7 +8304,8 @@ class PythonAutoOperator:
                     # Match and away references share almost the entire table.
                     # The stricter popup/button geometry remains authoritative.
                     screen_state = "match"
-                self.observe_ranked_match_screen(screen_state)
+                self.observe_ranked_match_screen(screen_state, screenshot=full_screen,
+                                                 confidence=screen_confidence)
                 if screen_state in {"round_result", "match_result", "rank_progress", "post_match_reward"}:
                     self.ranked_terminal_matchmaking_seen_at = None
                     if getattr(self, "round_terminal_latched", False):

@@ -3349,6 +3349,31 @@ class AwayDialogDetectionTest(unittest.TestCase):
             operator.observe_ranked_match_screen("match_result")
             self.assertFalse(operator.verified_friend_300_active)
 
+    def test_friend_lobby_revocation_saves_exact_classified_frame(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.log = Mock()
+        operator.verified_friend_300_active = operator.verified_friend_300_match_seen = True
+        with tempfile.TemporaryDirectory() as directory:
+            operator.frames = Path(directory)
+            operator.observe_ranked_match_screen("lobby", screenshot=b"classified frame", confidence=0.91)
+            evidence = next(operator.frames.glob("*.friend-proof-lobby.png"))
+            self.assertEqual(evidence.read_bytes(), b"classified frame")
+            self.assertEqual(evidence.stat().st_mode & 0o777, 0o600)
+            operator.log.assert_any_call("verified_friend_300_lobby_evidence", screenshot=str(evidence),
+                                         confidence=0.91, gameplayClicks=0)
+            operator.log.assert_any_call("verified_friend_300_proof_revoked", reason="lobby")
+            self.assertFalse(operator.verified_friend_300_active)
+
+    def test_friend_lobby_evidence_write_failure_still_revokes_proof(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.log = Mock()
+        operator.verified_friend_300_active = operator.verified_friend_300_match_seen = True
+        with tempfile.TemporaryDirectory() as directory:
+            operator.frames = Path(directory) / "missing"
+            operator.observe_ranked_match_screen("lobby", screenshot=b"frame")
+            self.assertFalse(operator.verified_friend_300_active)
+            operator.log.assert_any_call("verified_friend_300_proof_revoked", reason="lobby")
+
     def test_friend_lobby_fade_cannot_reactivate_proof(self) -> None:
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
         operator.args = argparse.Namespace(mode="force-auto", ranked_loop=False, action_deadline_ms=300000)
