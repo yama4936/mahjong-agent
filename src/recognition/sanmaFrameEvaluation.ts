@@ -25,7 +25,10 @@ export function evaluateSanmaFrameCandidate(input: {
   if (!Buffer.isBuffer(frame) || createHash("sha256").update(frame).digest("hex") !== report.digest) reasons.push("frame digest mismatch");
   if (!review || review.source !== "external_review") reasons.push("complete independent review missing");
   else if (review.digest !== report.digest) reasons.push("review digest mismatch");
-  if (report.hand.status !== "candidate" || !report.hand.value.safe) reasons.push("hand recognition unconfirmed");
+  const openCandidate = report.hand.status === "candidate" && report.hand.value.candidateMelds !== undefined
+    && report.hand.value.candidateMelds > 0 && report.hand.value.slotClassificationSafe
+    && review?.handEvidence === "confirmed" && review.meldEvidence === "confirmed";
+  if (report.hand.status !== "candidate" || (!report.hand.value.safe && !openCandidate)) reasons.push("hand recognition unconfirmed");
   if (report.publicTiles.status !== "candidate") reasons.push("public recognition failed");
   const accepts = (action: string) => priorityOnly === true && !!review && Array.isArray(review.ui?.actions)
     && review.ui.actions.includes((action === "skip" ? "pass" : action) as UiAction);
@@ -43,6 +46,10 @@ export function evaluateSanmaFrameCandidate(input: {
   }
   const state = review.state as Record<string, unknown>;
   const observed = report.hand.value.tiles;
+  if (openCandidate && (state.openMelds !== report.hand.value.candidateMelds
+      || !Array.isArray(state.melds) || state.melds.length !== report.hand.value.candidateMelds)) {
+    return {status:"blocked" as const, reasons:["reviewed meld count conflicts with physical row candidate"],operationAuthorized:false as const};
+  }
   if (!Array.isArray(state.hand) || typeof state.draw !== "string" ||
       JSON.stringify([...state.hand, state.draw]) !== JSON.stringify(observed)) {
     return {status: "blocked" as const, reasons: ["reviewed physical hand differs from recognition"], operationAuthorized: false as const};
@@ -123,6 +130,12 @@ export function assembleSanmaEvaluation(input: {
   if (report.hand.status === "candidate" && report.hand.value.tiles.length) {
     partial.orderedHand = report.hand.value.tiles;
     partial.handRecognizerAccepted = report.hand.value.safe;
+    if (report.hand.value.candidateMelds !== undefined && report.hand.value.candidateMelds > 0
+        && report.hand.value.tiles.length === 14 - 3 * report.hand.value.candidateMelds) {
+      partial.possibleOpenHand = { melds:report.hand.value.candidateMelds,
+        concealed:report.hand.value.tiles.slice(0,-1), draw:report.hand.value.tiles.at(-1),
+        slotClassificationSafe:report.hand.value.slotClassificationSafe, verified:false };
+    }
   }
   if (report.publicTiles.status === "candidate") {
     const publicTiles = report.publicTiles.value.observation;

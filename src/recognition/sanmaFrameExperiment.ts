@@ -4,7 +4,7 @@ import { evaluateDiscards } from "../game/ukeire.js";
 import { proposeLiveHandLayout, knownOpenHandProposalFitsCalibratedRow } from "./handLayoutProposal.js";
 import { recoverSanmaRaisedHand } from "./sanmaRaisedHandRecovery.js";
 import type { ScreenLayout } from "./layout.js";
-import { recognizeHand } from "./templateMatcher.js";
+import { recognizeTileSlots } from "./templateMatcher.js";
 import { classifySanmaButtonCrop, type ExperimentalTemplates } from "./sanmaButtonExperiment.js";
 import { inspectSanmaButtonRow, SANMA_BUTTON_ROW_RECT } from "./sanmaButtonRowExperiment.js";
 import { sanmaOwnMeldExperiment } from "./sanmaOwnMeldExperiment.js";
@@ -37,7 +37,18 @@ export async function inspectSanmaFrame(input: {
       if (!recovered) throw new Error("suspected false compact hand and raised-row recovery unavailable");
       proposal = recovered;
     }
-    const recognition = await recognizeHand(frame, { ...input.layout, ...proposal }, input.templates);
+    const slots = [...proposal.handSlots, proposal.drawSlot];
+    const classified = await recognizeTileSlots(frame, slots, { ...input.layout, ...proposal }, input.templates);
+    const possibleMelds = (14 - slots.length) / 3;
+    const recognizedAll = classified.matches.length === slots.length;
+    // Row length suggests a possible number of melds but is not proof; a
+    // concealed or raised tile may be missed. Never authorize it as safe.
+    const candidateMelds = recognizedAll && Number.isInteger(possibleMelds) && possibleMelds >= 0 && possibleMelds <= 4
+      ? possibleMelds : undefined;
+    const recognition = {...classified, turnReady:recognizedAll && slots.length === 14,
+      safe:classified.safe && recognizedAll && slots.length === 14,
+      slotClassificationSafe:classified.safe && recognizedAll,
+      ...(candidateMelds !== undefined ? {candidateMelds} : {})};
     return { recognition, proposal };
   })();
   const publicPromise = (async () => {

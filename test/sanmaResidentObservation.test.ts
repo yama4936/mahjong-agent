@@ -12,7 +12,7 @@ const available = existsSync(sanma) && existsSync(yonma) && existsSync(".runtime
 
 test("one resident server handles yonma and read-only sanma without mixing execution", {skip:!available,timeout:90000}, async () => {
   const child = spawn(process.execPath,["--import","tsx","src/recognition/recognitionServer.ts",
-    "config/layout.json","templates/bootstrap","examples/public-unknown.json"], {stdio:["pipe","pipe","pipe"],env:{...process.env,TYPESAFE_API_KEY:""}});
+    "config/layout-runtime.json","templates/bootstrap","examples/public-unknown.json"], {stdio:["pipe","pipe","pipe"],env:{...process.env,TYPESAFE_API_KEY:""}});
   const lines=createInterface({input:child.stdout})[Symbol.asyncIterator]();
   const read=async()=>JSON.parse((await lines.next()).value!);
   const send=(data:unknown)=>child.stdin.write(JSON.stringify(data)+"\n");
@@ -40,6 +40,19 @@ test("one resident server handles yonma and read-only sanma without mixing execu
     assert.ok(observation.result.assembly.evaluation.reasons.includes("complete independent review missing"));
     assert.equal(observation.result.report.decision.status,"blocked");
     assert.equal(observation.result.candidates.status,"hypotheses");
+    const open = "artifacts/sanma-manual-e48c562-20261031/actions/2026-10-30T16-21-44-430Z-before.png";
+    send({id:5,screenshot:open,observeSanma:true});
+    const openResponse = await read();
+    assert.equal(openResponse.error,undefined);
+    assert.equal(openResponse.result.assembly.status,"blocked");
+    const row = openResponse.result.assembly.partial.possibleOpenHand;
+    assert.equal(row.melds,1);
+    assert.equal(row.draw,"N");
+    assert.deepEqual(row.concealed,["1p","1p","2p","3p","7p","7p","8p","5s","8s","9s"]);
+    assert.equal(row.slotClassificationSafe,false);
+    assert.equal(row.verified,false);
+    assert.equal(openResponse.result.assembly.priority.status,"blocked");
+    assert.equal(openResponse.result.operationAuthorized,false);
     send({id:4,screenshot:yonma});
     const after=await read();
     assert.equal(after.id,4);

@@ -142,3 +142,26 @@ test("reviewed same-frame priority, structural and discard safety paths remain r
   const safety = evaluateSanmaFrameCandidate({frame,report,review});
   assert.equal(safety.status,"offline_evaluation");
 });
+
+test("reviewed compact hand connects draw and exposed meld to sanma evaluation", () => {
+  const compact = ["1p","1p","2p","3p","7p","7p","8p","5s","8s","9s"];
+  const openState = {...state,hand:compact,draw:"N",openMelds:1,melds:[{type:"minkan",tiles:["F","F","F","F"]}]};
+  const openReport = {...report,hand:{status:"candidate" as const,value:{...((report.hand as any).value),
+    safe:false,slotClassificationSafe:true,candidateMelds:1,tiles:[...compact,"N"]}}} as typeof report;
+  const openReview = {...review,state:openState};
+  const result = evaluateSanmaFrameCandidate({frame,report:openReport,review:openReview});
+  assert.equal(result.status,"offline_evaluation");
+  if(result.status === "offline_evaluation") {
+    assert.ok(result.rows.length > 0);
+    assert.ok(result.rows.every(row=>row.effectiveTiles.every(tile=>!(/^[2-8]m$/.test(tile.tile)))));
+  }
+  assert.equal(result.operationAuthorized,false);
+  for (const changed of [
+    {...openReview,state:{...openState,draw:"9s"}},
+    {...openReview,state:{...openState,openMelds:0}},
+    {...openReview,state:{...openState,melds:[]}},
+    {...openReview,state:{...openState,ownKitaCount:undefined}},
+  ]) assert.equal(evaluateSanmaFrameCandidate({frame,report:openReport,review:changed}).status,"blocked");
+  const unknownRow = {...openReport,hand:{...openReport.hand,value:{...(openReport.hand as any).value,slotClassificationSafe:false}}} as typeof report;
+  assert.equal(evaluateSanmaFrameCandidate({frame,report:unknownRow,review:openReview}).status,"blocked");
+});
