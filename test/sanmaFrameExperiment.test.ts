@@ -7,6 +7,7 @@ import sharp from "sharp";
 import { bindSanmaDiscardHypothesis, inspectSanmaFrame } from "../src/recognition/sanmaFrameExperiment.js";
 import { EXPERIMENTAL_BUTTONS, type ExperimentalTemplates } from "../src/recognition/sanmaButtonExperiment.js";
 import { HybridTileRecognizer } from "../src/recognition/hybridTileRecognizer.js";
+import { evaluateSanmaFrameCandidate } from "../src/recognition/sanmaFrameEvaluation.js";
 import { evaluateDiscards } from "../src/game/ukeire.js";
 import { layoutSchema } from "../src/recognition/layout.js";
 
@@ -33,6 +34,13 @@ test("one saved sanma frame is bound to untrusted hand, public and button observ
     if (report.publicTiles.status === "candidate") assert.deepEqual(report.publicTiles.value.observation.opponentDiscards.map(o => o.seat), ["east", "south"]);
     assert.equal(report.decision.status, "blocked");
     assert.equal(report.operationAuthorized, false);
+    const evaluation = evaluateSanmaFrameCandidate({frame, report});
+    assert.equal(evaluation.status, "blocked");
+    if (evaluation.status === "blocked") {
+      assert.ok(evaluation.reasons.includes("complete independent review missing"));
+      assert.ok(evaluation.reasons.includes("hand recognition unconfirmed"));
+      assert.ok(evaluation.reasons.includes("visible kita button needs separate handling"));
+    }
     const bound = bindSanmaDiscardHypothesis(report, frame, 0);
     assert.equal(bound.status, "blocked");
     assert.equal(bound.operationAuthorized, false);
