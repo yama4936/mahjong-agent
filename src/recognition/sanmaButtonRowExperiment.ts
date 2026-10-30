@@ -69,7 +69,7 @@ export async function inspectSanmaButtonRow(row: Buffer, templates: Experimental
         return { status: "candidate", action: "skip", slot, confidence: candidateConfidence!, evidence: "partially_occluded_skip" };
       }
     }
-    // Two independent saved north-button frames show a wider overlap: the
+    // Two saved north-button frames from one match show a wider overlap: the
     // 200px check is obscured but the first 130px remains fully visible.
     // Keep a full-slot gate and compare the clear section against every
     // available competing reference. This is still only a hypothesis.
