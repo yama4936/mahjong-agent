@@ -20,3 +20,15 @@ def recognize_sanma_board_candidate(image_path: Path, *, expected_total_points: 
                                       payment_phase=payment_phase)
     return {**parsed, 'scope': 'sanma_offline_image_candidate', 'source': str(image_path),
             'tokens': raw['tokens']}
+
+
+if __name__ == '__main__':
+    import argparse
+    import json
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('screenshot', type=Path)
+    arguments = parser.parse_args()
+    # Unknown room total and payment phase are never inferred from the image.
+    print(json.dumps(recognize_sanma_board_candidate(arguments.screenshot,
+        expected_total_points=None, payment_phase=None), ensure_ascii=False))

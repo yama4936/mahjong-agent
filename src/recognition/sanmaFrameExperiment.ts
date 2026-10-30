@@ -12,7 +12,7 @@ import { recognizeSanmaPublicCandidates, type PublicVitClassifier } from "./publ
 /** Read-only frame experiment. No result in this function authorizes play. */
 export async function inspectSanmaFrame(input: {
   frame: Buffer; layout: ScreenLayout; templates: string; buttonTemplates: ExperimentalTemplates;
-  ownSeat: "east" | "south" | "west"; publicClassifier: PublicVitClassifier;
+  ownSeat?: "east" | "south" | "west"; publicClassifier: PublicVitClassifier;
   buttonRowReferences?: { skip: Buffer; emptyRow: Buffer; ron?: Buffer };
   assumedHandRightEdge?: number;
 }) {
@@ -29,7 +29,9 @@ export async function inspectSanmaFrame(input: {
     const recognition = await recognizeHand(frame, { ...input.layout, ...proposal }, input.templates);
     return { recognition, proposal };
   })();
-  const publicPromise = recognizeSanmaPublicCandidates(frame, input.layout, input.ownSeat, input.publicClassifier);
+  const publicPromise = input.ownSeat
+    ? recognizeSanmaPublicCandidates(frame, input.layout, input.ownSeat, input.publicClassifier)
+    : Promise.reject(new Error("own seat unknown: opponent mapping unavailable"));
   const buttonPromise = (async () => {
     const crop = await sharp(frame).extract({ left: 890, top: 785, width: 245, height: 90 }).png().toBuffer();
     return classifySanmaButtonCrop(crop, input.buttonTemplates);
