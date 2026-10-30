@@ -119,15 +119,36 @@ test("live seven-pin confusions are unsafe while the verified shimmer hand remai
     assert.equal(laterFalseSafe.safe, false);
 
     // The original 698264b frame also contains a raised 1s read as 8s.
-    // Its current unsafe result depends on the separate 7p-as-6p veto;
-    // it must not be taken as proof that raised tiles are generally detected.
+    // It passes every ordinary safe predicate: the current unsafe result depends
+    // on a separate 7p-as-6p veto, not on detection of the raised 1s.
     const raised = await recognizer.recognizeHand(
       "artifacts/live/raised-one-sou-read-two-sou-698264b-20260929.jpg", layout,
     );
     assert.equal(raised.matches[8]?.tile, "6p");
     assert.equal(raised.matches[8]?.runnerUpTile, "7p");
     assert.equal(raised.matches[9]?.tile, "8s");
+    assert.ok(raised.turnReady);
+    assert.ok(raised.confidence >= layout.minimumVitConfidence);
+    assert.ok(raised.ambiguityMargin >= layout.minimumVitMargin);
+    assert.ok(raised.presenceFractions.every((fraction) => fraction >= layout.minimumTilePresence));
     assert.equal(raised.safe, false);
+
+    // In this separate live frame the raised 7p itself is read as 9p.  It too
+    // meets all ordinary safe predicates; safe is false only because a different
+    // 7p is read as 6p and reaches the narrow, known-confusion veto.  Keep this
+    // distinction explicit so a future generic safe result is not mistaken for
+    // raised-tile handling.
+    const raisedSevenPin = await recognizer.recognizeHand(
+      "artifacts/live/raised-seven-pin-read-two-sou-20260928.jpg", layout,
+    );
+    assert.equal(raisedSevenPin.matches[8]?.tile, "6p");
+    assert.equal(raisedSevenPin.matches[8]?.runnerUpTile, "7p");
+    assert.equal(raisedSevenPin.matches[9]?.tile, "9p");
+    assert.ok(raisedSevenPin.turnReady);
+    assert.ok(raisedSevenPin.confidence >= layout.minimumVitConfidence);
+    assert.ok(raisedSevenPin.ambiguityMargin >= layout.minimumVitMargin);
+    assert.ok(raisedSevenPin.presenceFractions.every((fraction) => fraction >= layout.minimumTilePresence));
+    assert.equal(raisedSevenPin.safe, false);
 
     const verified = await recognizer.recognizeHand(
       "artifacts/live/riichi-shimmer-hand-before-20260928.jpg", layout,
