@@ -94,6 +94,13 @@ class ExperimentalSanmaFriendLoopTest(unittest.TestCase):
         self.op.execute_sanma_friend_tsumo_candidate.assert_not_called()
         self.assertTrue(any(call.kwargs.get('reason')=='transition_requires_review' for call in self.op.log.call_args_list))
 
+    def test_pon_routes_to_pass_and_stops_unconfirmed(self):
+        self.receipt['candidates'] = {'candidates': [{'action':'pon'}]}
+        with patch('sanma_friend_pass_experiment.execute_friend_pon_pass', return_value={'confirmation':'unknown'}) as skip:
+            self.run_room()
+        skip.assert_called_once_with(self.op, self.page, self.receipt)
+        self.assertTrue(any(call.kwargs.get('reason') == 'pass_requires_review' for call in self.op.log.call_args_list))
+
     def test_no_prompt_routes_to_draw_adapter_and_stops(self):
         self.receipt['candidates'] = {'candidates': []}
         self.receipt['drawCandidate'] = {'status':'candidate'}

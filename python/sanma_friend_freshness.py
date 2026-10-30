@@ -31,7 +31,7 @@ def friend_frame_stable(before: bytes, after: bytes) -> bool:
 
 def latch_friend_action_target(operator, frame: bytes, action: str) -> str:
     """Suppress repeated input on the same visible target, without claiming success."""
-    if action not in ("kita", "tsumo", "discard"):
+    if action not in ("kita", "tsumo", "discard", "pass"):
         raise ValueError("unknown friend action")
     with Image.open(io.BytesIO(frame)) as image:
         if image.size != (1920, 1080):
