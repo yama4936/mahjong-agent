@@ -14,6 +14,22 @@ const normal = {
   discardSelectionReserveMs: 650,
 };
 
+test("ordinary self-turn reserves the full admission window on every original clock", () => {
+  const request = { ...normal, discardSelectionReserveMs: 1000 };
+  for (const input of [
+    { captureAgeBeforeDecisionMs: 1250 },
+    { captureAgeBeforeDecisionMs: 100, actionBudgetRemainingMs: 1350 },
+    { captureAgeBeforeDecisionMs: 100, actionDeadlineRemainingMs: 1350 },
+  ]) {
+    const budget = selfTurnDecisionBudget({ ...request, ...input });
+    assert.equal(budget.totalReserveMs, 1350);
+    assert.equal(budget.decisionBudgetMs, 0);
+    assert.equal(budget.remoteDecisionAllowed, false);
+  }
+  const budget = selfTurnDecisionBudget({ ...request, captureAgeBeforeDecisionMs: 1000 });
+  assert.equal(budget.decisionBudgetMs, 250);
+});
+
 test("raw overruns retain IPC350 and gesture650, rather than lending Jev the gesture time", () => {
   for (const row of fixture.cases) {
     const legacy = selfTurnDecisionBudget({ ...normal, captureAgeBeforeDecisionMs: row.captureAgeBeforeDecisionMs,

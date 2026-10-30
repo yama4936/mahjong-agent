@@ -3692,7 +3692,7 @@ class PythonAutoOperator:
 
         This is sent only for an explicit force-auto self-turn evaluation.
         The resident server separately reserves IPC/pixel work plus the
-        unchanged 650ms first-gesture window; no clock or grace is refreshed.
+        ordinary self-turn 1000ms admission window; no clock or grace is refreshed.
         """
         budget = self.force_auto_click_budget_ms()
         if getattr(self.args, "mode", None) != "force-auto" or budget is None:
@@ -3714,7 +3714,7 @@ class PythonAutoOperator:
         effective_budget = budget + self.force_auto_same_draw_grace_ms(captured_at)
         return {
             "actionBudgetRemainingMs": effective_budget - round((now - budget_started) * 1000),
-            "discardSelectionReserveMs": FORCE_AUTO_DISCARD_SELECTION_RESERVE_MS,
+            "discardSelectionReserveMs": FORCE_AUTO_SELF_TURN_DISCARD_SELECTION_RESERVE_MS,
         }
 
     def recognize_resident(

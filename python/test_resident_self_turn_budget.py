@@ -45,7 +45,7 @@ class ResidentSelfTurnBudgetTest(unittest.TestCase):
         request = self.payload(evaluate_force_auto=True)
         self.assertEqual(request["actionBudgetRemainingMs"], 8623)
         self.assertEqual(request["actionDeadlineRemainingMs"], 298623)
-        self.assertEqual(request["discardSelectionReserveMs"], 650)
+        self.assertEqual(request["discardSelectionReserveMs"], 1000)
         self.assertAlmostEqual(request["frameCapturedAtMs"], 999723)
         self.assertEqual(self.operator.action_evidence_started_at, 100)
         self.assertEqual(self.operator.action_budget_started_at, 100)

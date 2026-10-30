@@ -5,7 +5,9 @@ import type { JevClient, JevHandPlan } from "../jev/client.js";
 // This precedes the first gesture; its IPC/pixel work is separate from the
 // time Python still needs to observe and activate the raised tile afterwards.
 const ipcAndPixelReserveMs = 350;
-const discardSelectionReserveMs = 650;
+// Older resident clients sent 650; current ordinary-discard admission needs
+// 1000. Respect either explicit protocol version without silently weakening it.
+const discardSelectionReservesMs = new Set([650, 1000]);
 
 export interface SelfTurnBudgetInput {
   clickBudgetMs: number;
@@ -19,7 +21,7 @@ export interface SelfTurnBudgetInput {
 
 export function selfTurnDecisionBudget(input: SelfTurnBudgetInput) {
   const bounded = input.discardSelectionReserveMs !== undefined;
-  if (bounded && input.discardSelectionReserveMs !== discardSelectionReserveMs) {
+  if (bounded && !discardSelectionReservesMs.has(input.discardSelectionReserveMs!)) {
     throw new Error("invalid force-auto discard selection reserve");
   }
   if (bounded && (!Number.isFinite(input.actionBudgetRemainingMs)
@@ -30,7 +32,7 @@ export function selfTurnDecisionBudget(input: SelfTurnBudgetInput) {
       || !Number.isFinite(input.captureAgeBeforeDecisionMs) || input.captureAgeBeforeDecisionMs < 0) {
     throw new Error("invalid force-auto self-turn elapsed time");
   }
-  const selectionReserve = bounded ? discardSelectionReserveMs : 0;
+  const selectionReserve = bounded ? input.discardSelectionReserveMs! : 0;
   const totalReserveMs = ipcAndPixelReserveMs + selectionReserve;
   const imageRemainingMs = input.clickBudgetMs - input.captureAgeBeforeDecisionMs;
   // Old resident clients retain their original request semantics. Explicit
