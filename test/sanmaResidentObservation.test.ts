@@ -3,6 +3,10 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 import { existsSync } from "node:fs";
+import {readFile, mkdtemp, writeFile, rm} from "node:fs/promises";
+import {tmpdir} from "node:os";
+import path from "node:path";
+import sharp from "sharp";
 
 const sanma = "artifacts/sanma-manual-e48c562-20261031/actions/2026-10-30T16-05-55-331Z-before.png";
 const yonma = "/home/yama1/projects/jantama-auto/artifacts/live/cached-hand-drift-20260928.jpg";
@@ -60,6 +64,21 @@ test("one resident server handles yonma and read-only sanma without mixing execu
     assert.equal(winResponse.result.assembly.priority.status,"blocked");
     assert.ok(winResponse.result.candidates.candidates.some((item:any)=>item.action === "tsumo"));
     assert.equal(winResponse.result.operationAuthorized,false);
+    // Synthetic composition: only the ron row is from a second four-player
+    // game; the underlying screenshot is sanma. This tests routing, not sanma accuracy.
+    const directory = await mkdtemp(path.join(tmpdir(), "sanma-ron-routing-"));
+    try {
+      const image = await sharp(await readFile(sanma)).composite([{input:await readFile("test/fixtures/ron-button-rows/ron2.png"),left:600,top:785}]).png().toBuffer();
+      const file = path.join(directory,"frame.png");
+      await writeFile(file,image);
+      send({id:7,screenshot:file,observeSanma:true});
+      const ron = await read();
+      assert.equal(ron.error,undefined);
+      assert.ok(ron.result.candidates.candidates.some((item:any)=>item.action === "ron"));
+      assert.ok(ron.result.candidates.missing.includes("sanma ron reference not independently verified"));
+      assert.equal(ron.result.operationAuthorized,false);
+      assert.equal(ron.result.assembly.priority.status,"blocked");
+    } finally { await rm(directory,{recursive:true,force:true}); }
     send({id:4,screenshot:yonma});
     const after=await read();
     assert.equal(after.id,4);

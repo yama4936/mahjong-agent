@@ -74,8 +74,10 @@ test("automatic same-frame board, hand, public and UI candidates remain unverifi
       assert.deepEqual(conflict.candidates,[]);
       assert.ok(conflict.missing.includes("kita button conflicts with recognized hand; neither result is verified"));
       const unknownSeat = deriveSanmaActionCandidates(result.report, false);
-      assert.equal(unknownSeat.status,"unresolved");
-      assert.deepEqual(unknownSeat.candidates,[]);
+      assert.equal(unknownSeat.status,"hypotheses");
+      assert.deepEqual(unknownSeat.candidates,result.candidates.candidates);
+      assert.ok(unknownSeat.missing.includes("own seat unavailable"));
+      assert.equal(unknownSeat.operationAuthorized,false);
     }
     // The same black 1920x1080 image has no identifiable board or seat;
     // mapping is withheld, not silently assigned East.
@@ -119,6 +121,9 @@ test("automatic same-frame board, hand, public and UI candidates remain unverifi
       assert.equal(other.north.complete,false);
       assert.ok(other.north.positions?.left.candidate);
       assert.equal(other.ownSeat.status,"unknown");
+      assert.ok(other.candidates.candidates.some(candidate => candidate.action === "kita"));
+      assert.ok(other.candidates.missing.includes("own seat unavailable"));
+      assert.equal(other.candidates.operationAuthorized,false);
       assert.equal(other.board.reason,"unsupported_right_opponent_layout");
     }
   } finally { await model.close(); }

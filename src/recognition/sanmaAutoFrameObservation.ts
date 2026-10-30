@@ -93,6 +93,7 @@ export async function observeSanmaFrameAutomatically(input: {
   const bySeat = mapSanmaNorthCandidates(ownSeat, positions);
   const candidates = deriveSanmaActionCandidates(report, ownSeat !== undefined);
   if (!input.buttonRowReferences?.ron) candidates.missing.push("ron reference unavailable");
+  else candidates.missing.push("sanma ron reference not independently verified");
   return { scope: "offline_untrusted_sanma_auto_observation" as const, digest, board, north: { ...north, ...(bySeat ? { bySeat, mappingVerified: false as const } : {}) }, candidates,
     ...(rightRiver ? {rightRiver} : {}),
     ownSeat: ownSeat ? { status: "candidate" as const, value: ownSeat, verified: false as const }
@@ -114,7 +115,6 @@ export function deriveSanmaActionCandidates(report: ObservedFrame, hasSeatCandid
     return { status: "unresolved" as const, candidates: [], missing, operationAuthorized: false as const };
   }
   if (report.buttonRow.value.slots.some(slot => slot.status === "unresolved")) missing.push("some button slots unresolved");
-  if (!hasSeatCandidate) return { status: "unresolved" as const, candidates: [], missing, operationAuthorized: false as const };
   type Candidate = { action: "kita" | "riichi" | "tsumo" | "ron" | "pon" | "kan"; slot: number;
     handSupport: "not_checked" | "unknown" | "north_not_observed" | "north_candidate"; northIndexes?: number[] };
   const candidates = report.buttonRow.value.slots.flatMap<Candidate>(slot => {

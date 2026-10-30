@@ -77,7 +77,7 @@ async function screenshotDigest(path: string): Promise<string> {
 
 let sanmaClassifier: HybridTileRecognizer | undefined;
 let sanmaBoardWorker: SanmaBoardWorker | undefined;
-let sanmaReferences: { buttonTemplates: ExperimentalTemplates; buttonRowReferences: { skip: Buffer; emptyRow: Buffer } } | undefined;
+let sanmaReferences: { buttonTemplates: ExperimentalTemplates; buttonRowReferences: { skip: Buffer; emptyRow: Buffer; ron: Buffer } } | undefined;
 async function sanmaObservationReferences() {
   if (sanmaReferences) return sanmaReferences;
   const buttonTemplates = Object.fromEntries(await Promise.all(EXPERIMENTAL_BUTTONS.map(async name =>
@@ -85,7 +85,11 @@ async function sanmaObservationReferences() {
   const row = await readFile("test/fixtures/sanma-button-rows/kita.png");
   const skip = await sharp(row).extract({left:580,top:0,width:245,height:90}).png().toBuffer();
   const emptyRow = await readFile("test/fixtures/sanma-button-rows/empty.png");
-  return sanmaReferences = {buttonTemplates,buttonRowReferences:{skip,emptyRow}};
+  // These are four-player images. A match is an unverified visual candidate,
+  // and does not establish a sanma ron offer or authorize a click.
+  const ronRow = await readFile("test/fixtures/ron-button-rows/ron1.png");
+  const ron = await sharp(ronRow).extract({left:290,top:0,width:245,height:90}).png().toBuffer();
+  return sanmaReferences = {buttonTemplates,buttonRowReferences:{skip,emptyRow,ron}};
 }
 
 const lines = createInterface({ input: process.stdin, crlfDelay: Infinity });
