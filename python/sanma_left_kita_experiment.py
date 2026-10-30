@@ -7,7 +7,8 @@ from hashlib import sha256
 from pathlib import Path
 
 
-def left_north_candidate(image_path: Path, template_path: Path) -> dict:
+def left_north_candidate(image_path: Path, template_path: Path, *,
+                         glare_template_path: Path | None = None) -> dict:
     import cv2
     base = {'scope': 'sanma_offline_left_north_visual_candidate',
             'status': 'unknown', 'verified': False, 'complete': False}
@@ -19,11 +20,22 @@ def left_north_candidate(image_path: Path, template_path: Path) -> dict:
         return {**base, 'reason': 'uncalibrated_or_unreadable_template'}
     # The calibrated first candidate touches the avatar at x=394. Other
     # placements, overlap, glow and multiple extracts are not established.
+    references = [('primary', template)]
+    if glare_template_path is not None:
+        glare = cv2.imread(str(glare_template_path), cv2.IMREAD_GRAYSCALE)
+        if glare is None or glare.shape != (48, 85) or glare.std() < 5:
+            return {**base, 'reason': 'uncalibrated_or_unreadable_glare_template'}
+        references.append(('glare', glare))
     roi = image[680:800, 270:410]
-    scores = cv2.matchTemplate(roi, template, cv2.TM_CCOEFF_NORMED)
-    _, value, _, (x, y) = cv2.minMaxLoc(scores)
-    x, y = x + 270, y + 680
-    candidate = {'x': x, 'y': y, 'similarity': float(value)} if (
+    matches = []
+    for label, reference in references:
+        scores = cv2.matchTemplate(roi, reference, cv2.TM_CCOEFF_NORMED)
+        _, score, _, (local_x, local_y) = cv2.minMaxLoc(scores)
+        x, y = local_x + 270, local_y + 680
+        if abs(x - 305) <= 4 and abs(y - 712) <= 4:
+            matches.append((score, x, y, label))
+    value, x, y, label = max(matches, default=(0, 0, 0, 'none'))
+    candidate = {'x': x, 'y': y, 'similarity': float(value), 'reference': label} if (
         value >= .97 and abs(x - 305) <= 4 and abs(y - 712) <= 4) else None
     return {**base, 'candidate': candidate,
             'frame_sha256': sha256(Path(image_path).read_bytes()).hexdigest()}

@@ -49,3 +49,28 @@ test("unknown fields, inconsistent frame, recognition and priority prompt reject
     assert.equal(result.operationAuthorized, false);
   }
 });
+
+
+test("reviewed complete river evidence is attached to each candidate without authorizing operation", () => {
+  const opponents = [
+    {...state.opponents[0], discards:["4p", "N"]},
+    {...state.opponents[1], discards:["4p"]},
+  ];
+  const candidateReport = {...report, publicTiles: {status:"candidate" as const, value:{observation:{
+    ownDiscards:[],doraIndicators:["1p"],ownMelds:[],
+    opponentDiscards:[{seat:"south",discards:["4p"],melds:[]},{seat:"west",discards:["4p"],melds:[]}],
+  }}}} as unknown as typeof report;
+  const result = evaluateSanmaFrameCandidate({frame,report:candidateReport,review:{...review,state:{...state,opponents}}});
+  assert.equal(result.status,"offline_evaluation");
+  if (result.status === "offline_evaluation") {
+    const four = result.rows.find(row => row.tile === "4p")!;
+    assert.deepEqual(four.byOpponent.map(item=>item.status),["genbutsu_candidate","genbutsu_candidate"]);
+    assert.equal(four.allOpponentsGenbutsuCandidate,true);
+    const north = result.rows.find(row=>row.tile === "N")!;
+    assert.deepEqual(north.byOpponent.map(item=>item.status),["genbutsu_candidate","unknown"]);
+    assert.equal(north.allOpponentsGenbutsuCandidate,false);
+  }
+  assert.equal(result.operationAuthorized,false);
+  const missing = evaluateSanmaFrameCandidate({frame,report:candidateReport,review:{...review,state:{...state,opponents:[{...opponents[0],discards:undefined},opponents[1]]}}});
+  assert.equal(missing.status,"blocked");
+});

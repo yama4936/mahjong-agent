@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { sanmaDiscardExperiment } from "../game/sanmaDiscardExperiment.js";
+import { inspectSanmaDiscardSafety } from "../game/sanmaDiscardSafetyExperiment.js";
 import type { inspectSanmaFrame } from "./sanmaFrameExperiment.js";
 
 type FrameReport = Awaited<ReturnType<typeof inspectSanmaFrame>>;
@@ -79,9 +79,9 @@ export function evaluateSanmaFrameCandidate(input: {
           || !containsMelds(opponent.melds, observedOpponent.melds ?? []);
       })) return {status: "blocked" as const, reasons: ["reviewed public state conflicts with candidate tiles"], operationAuthorized: false as const};
   try {
-    const rows = sanmaDiscardExperiment(review);
+    const { rows } = inspectSanmaDiscardSafety(review);
     return {status: "offline_evaluation" as const, digest: report.digest, rows,
-      assumptions: ["external review is correct", "not a defense or point-value model"], operationAuthorized: false as const};
+      assumptions: ["external review is correct", "genbutsu candidates are not a complete defense or point-value model"], operationAuthorized: false as const};
   } catch (error) {
     return {status: "blocked" as const, reasons: [error instanceof Error ? error.message : String(error)], operationAuthorized: false as const};
   }

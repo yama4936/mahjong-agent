@@ -44,7 +44,8 @@ if __name__ == '__main__':
                 'own': detect_own_north_candidates(arguments.screenshot, root / 'sanma-public-experiment/own-north-face.png'),
                 'opposite': opposite_north_candidate(arguments.screenshot, root / 'sanma-opposite-kita/north-glyph-reference.png',
                     shadow_template_path=root / 'sanma-opposite-kita/north-glyph-shadow-reference.png'),
-                'left': left_north_candidate(arguments.screenshot, root / 'sanma-left-kita/left-north-reference.png'),
+                'left': left_north_candidate(arguments.screenshot, root / 'sanma-left-kita/left-north-reference.png',
+                    glare_template_path=root / 'sanma-left-kita/left-north-glare-reference.png'),
             }
             result = {'status': 'unknown', 'verified': False, 'complete': False, 'positions': observations}
         except Exception as error:

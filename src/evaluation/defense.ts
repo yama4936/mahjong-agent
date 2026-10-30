@@ -14,6 +14,12 @@ export interface TileDanger {
   combinedProbability: number;
 }
 
+/** A matching discard provides direct furiten evidence for this opponent. */
+export function isOpponentGenbutsu(tile: string, discards: readonly string[]): boolean {
+  const target = normalizeTile(tile);
+  return discards.some(discard => normalizeTile(discard) === target);
+}
+
 function hasFourKnownSets(opponent: GameState["opponents"][number]): boolean {
   if (opponent.openMelds !== 4 || opponent.melds?.length !== 4) return false;
   // Positive tile evidence is sufficient even if the whole-row observation
@@ -38,7 +44,7 @@ export function evaluateTileDanger(tileInput: string, state: GameState): TileDan
   const byOpponent = state.opponents.map((opponent): OpponentDanger => {
     const discardedTypes = new Set(opponent.discards.map(normalizeTile));
     const reasons: string[] = [];
-    if (discardedTypes.has(tile)) return { seat: opponent.seat, probability: 0, reasons: ["genbutsu"] };
+    if (isOpponentGenbutsu(tile, opponent.discards)) return { seat: opponent.seat, probability: 0, reasons: ["genbutsu"] };
     if (opponent.riichi && opponent.postRiichiSafeTiles?.some((safe) => normalizeTile(safe) === tile)) {
       return { seat: opponent.seat, probability: 0, reasons: ["post_riichi_passed"] };
     }
