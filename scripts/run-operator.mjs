@@ -14,11 +14,18 @@ if (!modes.has(mode)) {
   process.exit(2);
 }
 
-// Reject before launching either the dashboard or Python operator. The latter
-// also rejects direct sanma invocations before acquiring a lease or connecting.
+// Reject unsupported sanma modes before launching dashboard or operator.
+// Python performs the authoritative validation before acquiring a lease.
 const forwardedRules = process.argv.slice(3);
-if (forwardedRules.some((arg, index) => arg === "--rules=sanma" ||
-    (arg === "--rules" && forwardedRules[index + 1] === "sanma"))) {
+const mentionsSanma = forwardedRules.some((arg, index) => arg === "--rules=sanma" ||
+    (arg === "--rules" && forwardedRules[index + 1] === "sanma"));
+const friendDeadline = forwardedRules.some((arg, index) => arg === "--action-deadline-ms=300000" ||
+    (arg === "--action-deadline-ms" && forwardedRules[index + 1] === "300000"));
+const reviewedRoom = forwardedRules.some((arg, index) => arg.startsWith("--start-reviewed-friend-room=") && arg.length > 29 ||
+    (arg === "--start-reviewed-friend-room" && Boolean(forwardedRules[index + 1])));
+const experimentalFriend = mode === "force-auto" && forwardedRules.includes("--experimental-sanma-friend") &&
+    friendDeadline && reviewedRoom && !forwardedRules.includes("--ranked-loop");
+if (mentionsSanma && !experimentalFriend) {
   console.error("sanma automatic decisions and screen operation are not implemented; startup stopped");
   process.exit(2);
 }

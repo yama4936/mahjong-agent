@@ -2397,12 +2397,22 @@ def merge_public_observations(
     }
 
 
+def experimental_sanma_friend_allowed(args: Any) -> bool:
+    """Narrow opt-in: reviewed CPU friend room with an explicit long clock."""
+    return (getattr(args, "rules", None) == "sanma"
+            and getattr(args, "experimental_sanma_friend", False) is True
+            and getattr(args, "mode", None) == "force-auto"
+            and getattr(args, "action_deadline_ms", None) == 300000
+            and getattr(args, "ranked_loop", False) is False
+            and bool(getattr(args, "start_reviewed_friend_room", None)))
+
+
 class PythonAutoOperator:
     def __init__(self, args: argparse.Namespace) -> None:
         # The CLI already rejects sanma before the lease and Playwright. A
         # direct constructor call must also stop before layout reads, child
         # recognizers, or browser access; the implementation is incomplete.
-        if getattr(args, "rules", "yonma") == "sanma":
+        if getattr(args, "rules", "yonma") == "sanma" and not experimental_sanma_friend_allowed(args):
             raise RuntimeError("sanma automatic decisions and screen operation are not implemented; startup stopped")
         self.args = args
         self.root = Path(args.project).resolve()
@@ -3944,6 +3954,12 @@ class PythonAutoOperator:
                 or getattr(args, "ranked_loop", False) or not getattr(args, "experimental_sanma_friend", False)
                 or getattr(self, "verified_friend_300_active", False) is not True):
             raise RuntimeError("experimental sanma tsumo requires verified 300+0 friend session")
+        # The real turn onset is not yet observable. The room-start instant
+        # predates every turn, so it is conservative until a turn clock is proven.
+        started_at = getattr(self, "verified_friend_300_started_at", None)
+        if (type(started_at) not in (int, float) or not isfinite(started_at)
+                or not 0 <= time.monotonic() - started_at < 300):
+            raise RuntimeError("experimental sanma friend timing unknown or expired")
         source = receipt.get("sourceObservation") if isinstance(receipt, dict) else None
         freshness = receipt.get("freshness") if isinstance(receipt, dict) else None
         if (not isinstance(source, dict) or receipt.get("scope") != "sanma_self_turn_observation"
@@ -3981,6 +3997,12 @@ class PythonAutoOperator:
                 raise ValueError("game screen not recognized")
         except Exception as error:
             raise RuntimeError(f"sanma tsumo pre-click check failed: {error}") from error
+        attempted = getattr(self, "_sanma_friend_attempted_frames", set())
+        if receipt["digest"] in attempted:
+            raise RuntimeError("sanma frame already attempted; fresh observation required")
+        # Latch before input: even a transport failure might have delivered it.
+        attempted.add(receipt["digest"])
+        self._sanma_friend_attempted_frames = attempted
         before_path = self.frames / f"{utc_stamp()}.{uuid.uuid4().hex}.sanma-tsumo-before.png"
         before_path.write_bytes(fresh)
         point = {"x": 1012.5, "y": 830.0}
@@ -8288,6 +8310,57 @@ class PythonAutoOperator:
             return None
         return min(original_gate_captured_at, gate_processing_started_at)
 
+    def run_experimental_sanma_friend(self, page: Page) -> None:
+        """After a reviewed 300+0 room start, try only a visible tsumo; stop on unknown."""
+        if not experimental_sanma_friend_allowed(self.args) or self.verified_friend_300_active is not True:
+            raise RuntimeError("experimental sanma friend session is not verified")
+        started = time.monotonic()
+        polls = 0
+        last_frame = None
+        def preserve(frame: bytes | None) -> str | None:
+            if not isinstance(frame, bytes) or not frame:
+                return None
+            path = self.frames / f"{utc_stamp()}.{uuid.uuid4().hex}.sanma-friend-stop.png"
+            path.write_bytes(frame)
+            return str(path)
+        while time.monotonic() - started < 60:
+            polls += 1
+            if self.verified_friend_300_active is not True:
+                self.log("sanma_friend_stopped", reason="friend_session_revoked", screenshot=preserve(last_frame))
+                return
+            try:
+                frame = page.screenshot(animations="disabled")
+                last_frame = frame
+                state, confidence = classify_screen(frame, self.screen_references)
+            except Exception as error:
+                self.log("sanma_friend_stopped", reason="screen_observation_failed", error=str(error),
+                         screenshot=preserve(last_frame))
+                return
+            if state == "match" and confidence >= 0.95:
+                try:
+                    receipt = self.inspect_sanma_self_turn(page)
+                    candidates = receipt.get("candidates")
+                    actions = candidates.get("candidates") if isinstance(candidates, dict) else None
+                    if not isinstance(actions, list) or not any(isinstance(item, dict) and item.get("action") == "tsumo" for item in actions):
+                        self.log("sanma_friend_stopped", reason="unsupported_or_unknown_action", screenshot=receipt.get("screenshot"),
+                                 digest=receipt.get("digest"), candidates=candidates, operationAuthorized=False)
+                        return
+                    result = self.execute_sanma_friend_tsumo_candidate(page, receipt)
+                    self.log("sanma_friend_stopped", reason="candidate_click_outcome_requires_review", result=result)
+                    return
+                except Exception as error:
+                    self.log("sanma_friend_stopped", reason="observation_or_action_failed", error=str(error),
+                             screenshot=preserve(last_frame), operationAuthorized=False)
+                    return
+            if state in {"unknown", "login", "connection_error", "rank_entry_denied", "match_result", "round_result"}:
+                self.log("sanma_friend_stopped", reason="unexpected_screen", screenState=state, confidence=confidence,
+                         screenshot=preserve(last_frame))
+                return
+            if getattr(self.args, "max_iterations", 0) and polls >= self.args.max_iterations:
+                break
+            page.wait_for_timeout(500)
+        self.log("sanma_friend_stopped", reason="match_screen_timeout", polls=polls, screenshot=preserve(last_frame))
+
     def run(self, page: Page) -> None:
         self.ensure_viewport(page, force=True)
         startup_turn_guard = StartupTurnGuard()
@@ -8321,7 +8394,26 @@ class PythonAutoOperator:
                              reason=str(error), operationAuthorized=False)
                     raise
                 self.log("sanma_friend_start_inspection", **inspection)
-                raise RuntimeError("sanma automatic decisions and screen operation are not implemented; startup stopped")
+                if not experimental_sanma_friend_allowed(self.args):
+                    raise RuntimeError("sanma automatic decisions and screen operation are not implemented; startup stopped")
+                # The reviewed preflight supplies player and CPU identity; the
+                # comparison above bound the current room to that screenshot.
+                page.on("framenavigated", lambda frame: self.revoke_verified_friend_300("navigation")
+                        if frame == page.main_frame else None)
+                started_at = time.monotonic()
+                page.mouse.click(1140, 998)
+                self.verified_friend_300_active = True
+                self.verified_friend_300_started_at = started_at
+                try:
+                    commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=self.root,
+                                            capture_output=True, text=True, check=True).stdout.strip()
+                except (OSError, subprocess.SubprocessError, AttributeError):
+                    commit = None
+                self.log("sanma_friend_start_clicked", preflight=str(preflight_path), commit=commit,
+                         point={"x":1140,"y":998}, actionDeadlineMs=300000, roomClock="300+0",
+                         scope="experimental_friend_only")
+                self.run_experimental_sanma_friend(page)
+                return
 
             # Transient animated particles can interrupt otherwise matching
             # room frames. More attempts do not weaken the two consecutive
@@ -9609,7 +9701,9 @@ def parse_args() -> argparse.Namespace:
                         help="calibrated screen-state PNG directory (default: PROJECT/artifacts/live)")
     parser.add_argument("--cdp", default="http://127.0.0.1:9222")
     parser.add_argument("--rules", choices=("yonma", "sanma"), default="yonma",
-                        help="game rules; sanma operation is not yet supported")
+                        help="game rules; sanma requires the experimental friend-only opt-in")
+    parser.add_argument("--experimental-sanma-friend", action="store_true",
+                        help="friend-only experimental tsumo; stops on unsupported actions")
     parser.add_argument("--layout", required=True)
     parser.add_argument("--templates", required=True)
     parser.add_argument("--action-templates", default="", help="calibrated riichi/call/win/pass button templates")
@@ -9671,11 +9765,17 @@ def parse_args() -> argparse.Namespace:
     )
     args = parser.parse_args()
     explicit_args = sys.argv[1:]
-    if args.rules == "sanma" or any(
-            value == "--rules=sanma" or (value == "--rules" and index + 1 < len(explicit_args)
-                                         and explicit_args[index + 1] == "sanma")
-            for index, value in enumerate(explicit_args)):
+    mentions_sanma = any(
+        value == "--rules=sanma" or (value == "--rules" and index + 1 < len(explicit_args)
+                                     and explicit_args[index + 1] == "sanma")
+        for index, value in enumerate(explicit_args))
+    explicit_deadline = any(value == "--action-deadline-ms=300000" or
+        (value == "--action-deadline-ms" and index + 1 < len(explicit_args)
+         and explicit_args[index + 1] == "300000") for index, value in enumerate(explicit_args))
+    if (args.rules == "sanma" or mentions_sanma) and not (experimental_sanma_friend_allowed(args) and explicit_deadline):
         parser.error("sanma automatic decisions and screen operation are not implemented; startup stopped")
+    if args.experimental_sanma_friend and not (experimental_sanma_friend_allowed(args) and explicit_deadline):
+        parser.error("experimental sanma requires a reviewed 300+0 non-ranked force-auto friend room")
     if args.action_templates and not Path(args.action_templates).exists():
         parser.error(f"--action-templates path does not exist: {args.action_templates}")
     if args.ranked_loop and args.match_length == "south":
