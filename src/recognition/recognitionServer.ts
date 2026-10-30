@@ -10,6 +10,10 @@ import { calibratedOpenHandProposal, resolveOpenDrawGap, proposeLiveHandLayout }
 import { layoutSchema } from "./layout.js";
 import { recognizeHand, recognizeTileSlots, warmTemplateCache, type MatcherOptions } from "./templateMatcher.js";
 import { confirmWeakOpenDraw, createOpenDrawVerifier, selectedTileRecognition } from "./openDrawEvidence.js";
+import sharp from "sharp";
+import { HybridTileRecognizer } from "./hybridTileRecognizer.js";
+import { EXPERIMENTAL_BUTTONS, type ExperimentalTemplates } from "./sanmaButtonExperiment.js";
+import { observeSanmaFrameAutomatically } from "./sanmaAutoFrameObservation.js";
 import { exitWhenOutputPipeBreaks } from "./outputPipe.js";
 
 const [layoutPath, templateDirectory, statePath] = process.argv.slice(2);
@@ -68,6 +72,18 @@ async function screenshotDigest(path: string): Promise<string> {
   return createHash("sha256").update(await readFile(path)).digest("hex");
 }
 
+let sanmaClassifier: HybridTileRecognizer | undefined;
+let sanmaReferences: { buttonTemplates: ExperimentalTemplates; buttonRowReferences: { skip: Buffer; emptyRow: Buffer } } | undefined;
+async function sanmaObservationReferences() {
+  if (sanmaReferences) return sanmaReferences;
+  const buttonTemplates = Object.fromEntries(await Promise.all(EXPERIMENTAL_BUTTONS.map(async name =>
+    [name, await readFile(`test/fixtures/sanma-buttons/${name}.png`)]))) as ExperimentalTemplates;
+  const row = await readFile("test/fixtures/sanma-button-rows/kita.png");
+  const skip = await sharp(row).extract({left:580,top:0,width:245,height:90}).png().toBuffer();
+  const emptyRow = await readFile("test/fixtures/sanma-button-rows/empty.png");
+  return sanmaReferences = {buttonTemplates,buttonRowReferences:{skip,emptyRow}};
+}
+
 const lines = createInterface({ input: process.stdin, crlfDelay: Infinity });
 for await (const line of lines) {
   if (!line.trim()) continue;
@@ -76,6 +92,7 @@ for await (const line of lines) {
     const request = JSON.parse(line) as {
       id: unknown;
       screenshot: string;
+      observeSanma?: boolean;
       frameCapturedAtMs?: number;
       concealedOnly?: boolean;
       drawOnly?: boolean;
@@ -93,6 +110,22 @@ for await (const line of lines) {
       forceAutoRecognitionId?: string;
     };
     id = request.id;
+    if (request.observeSanma === true) {
+      // Only the three-key read-only request is accepted. In particular no
+      // staged evaluation, supplied state, deadline or click data can be mixed.
+      if (Object.keys(request).some(key => !["id", "screenshot", "observeSanma"].includes(key))) {
+        throw new Error("sanma observation cannot be combined with action or other request fields");
+      }
+      if (typeof request.screenshot !== "string" || !request.screenshot.trim()) throw new Error("sanma observation requires a screenshot");
+      const frame = await readFile(request.screenshot);
+      const refs = await sanmaObservationReferences();
+      sanmaClassifier ??= new HybridTileRecognizer();
+      const result = await observeSanmaFrameAutomatically({frame,layout,templates:templateDirectory,
+        publicClassifier:sanmaClassifier,...refs});
+      process.stdout.write(`${JSON.stringify({id,result})}\n`);
+      continue;
+    }
+    if (request.observeSanma !== undefined && request.observeSanma !== false) throw new Error("invalid sanma observation mode");
     if (request.stageForceAutoRecognition && (request.drawOnly || request.concealedTiles || request.evaluateForceAuto)) {
       throw new Error("force-auto recognition staging requires the entire physical hand row only");
     }
@@ -315,3 +348,5 @@ for await (const line of lines) {
     process.stdout.write(`${JSON.stringify({ id, error: error instanceof Error ? error.message : String(error) })}\n`);
   }
 }
+
+await sanmaClassifier?.close();

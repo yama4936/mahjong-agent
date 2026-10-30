@@ -3766,6 +3766,36 @@ class PythonAutoOperator:
             "discardSelectionReserveMs": FORCE_AUTO_SELF_TURN_DISCARD_SELECTION_RESERVE_MS,
         }
 
+    def observe_sanma_resident(self, screenshot: Path) -> dict[str, Any]:
+        """Request untrusted sanma observations; never supplies or executes an action.
+
+        This opt-in read-only path is not called by the playing loop. The sanma
+        startup guard remains in force pending full recognition and action checks.
+        """
+        if self.recognition_server.poll() is not None:
+            raise RuntimeError("resident recognition server is not running")
+        if not self.recognition_server.stdin or not self.recognition_server.stdout:
+            raise RuntimeError("resident recognition server pipes are unavailable")
+        self.recognition_request_id += 1
+        request_id = self.recognition_request_id
+        self.recognition_server.stdin.write(json.dumps({
+            "id": request_id, "screenshot": str(screenshot), "observeSanma": True,
+        }) + "\n")
+        self.recognition_server.stdin.flush()
+        response_line = self.recognition_server.stdout.readline()
+        if not response_line:
+            raise RuntimeError("resident recognition server closed its output")
+        response = json.loads(response_line)
+        if response.get("id") != request_id:
+            raise RuntimeError("resident sanma observation response id mismatch")
+        if response.get("error"):
+            raise RuntimeError(f"resident sanma observation failed: {response['error']}")
+        result = response.get("result")
+        if not isinstance(result, dict) or result.get("scope") != "offline_untrusted_sanma_auto_observation" \
+                or result.get("operationAuthorized") is not False:
+            raise RuntimeError("resident sanma observation response is not read-only")
+        return result
+
     def recognize_resident(
         self, screenshot: Path, *, concealed_only: bool = False, draw_only: bool = False,
         concealed_tiles: list[str] | None = None, evaluate_force_auto: bool = False,
