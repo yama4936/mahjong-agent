@@ -14,6 +14,15 @@ if (!modes.has(mode)) {
   process.exit(2);
 }
 
+// Reject before launching either the dashboard or Python operator. The latter
+// also rejects direct sanma invocations before acquiring a lease or connecting.
+const forwardedRules = process.argv.slice(3);
+if (forwardedRules.some((arg, index) => arg === "--rules=sanma" ||
+    (arg === "--rules" && forwardedRules[index + 1] === "sanma"))) {
+  console.error("sanma automatic decisions and screen operation are not implemented; startup stopped");
+  process.exit(2);
+}
+
 const python = process.platform === "win32"
   ? path.join(root, ".runtime", "python-auto-venv", "Scripts", "python.exe")
   : path.join(root, ".runtime", "python-auto-venv", "bin", "python");

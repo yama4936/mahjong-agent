@@ -22,6 +22,8 @@ const gameStateObjectSchema = z.object({
   draw: tileSchema.optional(),
   doraIndicators: z.array(tileSchema).default([]),
   ownDiscards: z.array(tileSchema).default([]),
+  // Extracted north tiles are physically visible but are neither discards nor melds.
+  ownKitaCount: z.number().int().min(0).max(4).optional(),
   melds: z.array(meldSchema).max(4).default([]),
   visibleTiles: z.array(tileSchema).default([]),
   openMelds: z.number().int().min(0).max(4).default(0),
@@ -35,6 +37,7 @@ const gameStateObjectSchema = z.object({
   availableUiActions: z.array(uiActionSchema).default([]),
   opponents: z.array(z.object({
     seat: seatSchema,
+    kitaCount: z.number().int().min(0).max(4).optional(),
     discards: z.array(tileSchema).default([]),
     riichi: z.boolean().default(false),
     // Historical safety evidence, not additional physically visible tiles.
@@ -54,6 +57,7 @@ function normalizeStateInput(value: unknown): unknown {
     riichiSticks: source.riichiSticks ?? source.riichi_sticks,
     doraIndicators: source.doraIndicators ?? source.dora_indicators,
     ownDiscards: source.ownDiscards ?? source.own_discards,
+    ownKitaCount: source.ownKitaCount,
     melds: source.melds,
     visibleTiles: source.visibleTiles ?? source.visible_tiles,
     openMelds: source.openMelds ?? source.open_melds ?? (Array.isArray(source.melds) ? source.melds.length : undefined),
@@ -92,6 +96,20 @@ export function assertYonmaEvaluation(state: Pick<PublicGameState, "rules">): vo
   if (state.rules === "sanma") throw new Error("Sanma evaluation is not implemented");
 }
 
+function assertKitaConsistency(state: PublicGameState): void {
+  if (state.rules !== "sanma" && (state.ownKitaCount !== undefined
+    || state.opponents.some(opponent => opponent.kitaCount !== undefined))) {
+    throw new Error("Kita counts require explicitly selected sanma rules");
+  }
+}
+
+function kitaTiles(state: PublicGameState): GameTile[] {
+  const count = (state.ownKitaCount ?? 0)
+    + state.opponents.reduce((sum, opponent) => sum + (opponent.kitaCount ?? 0), 0);
+  if (count > 4) throw new Error("More than four extracted north tiles");
+  return Array<GameTile>(count).fill("N");
+}
+
 function assertSanmaConsistency(state: PublicGameState): void {
   if (state.rules !== "sanma") return;
   if (/^(east|south|west|north)_4$/i.test(state.round)) throw new Error("Sanma has no fourth hand");
@@ -127,7 +145,8 @@ function assertHighConfidencePublicState(state: PublicGameState): void {
 /**
  * Returns every physically known tile exactly once. `visibleTiles` is reserved
  * for known tiles that are not already represented by another state field
- * (for example, called meld tiles once meld recognition is added).
+ * Extracted north tiles must be represented only by the kita counts, not
+ * repeated in visibleTiles, rivers, melds, indicators or the hand.
  */
 function pendingTileOutsideRiver(state: Pick<GameState, "pendingDiscard" | "opponents">): GameTile[] {
   const pending = state.pendingDiscard;
@@ -147,6 +166,7 @@ export function knownTiles(state: GameState): GameTile[] {
     ...state.ownDiscards,
     ...state.melds.flatMap((meld) => meld.tiles),
     ...state.visibleTiles,
+    ...kitaTiles(state),
     ...state.opponents.flatMap((opponent) => opponent.discards),
     ...state.opponents.flatMap((opponent) => opponent.melds?.flatMap((meld) => meld.tiles) ?? []),
     ...pendingTileOutsideRiver(state),
@@ -159,6 +179,7 @@ export function knownTilesOutsideHand(state: GameState): GameTile[] {
     ...state.ownDiscards,
     ...state.melds.flatMap((meld) => meld.tiles),
     ...state.visibleTiles,
+    ...kitaTiles(state),
     ...state.opponents.flatMap((opponent) => opponent.discards),
     ...state.opponents.flatMap((opponent) => opponent.melds?.flatMap((meld) => meld.tiles) ?? []),
     ...pendingTileOutsideRiver(state),
@@ -167,6 +188,7 @@ export function knownTilesOutsideHand(state: GameState): GameTile[] {
 
 export function parseGameState(input: unknown): GameState {
   const state = gameStateSchema.parse(input);
+  assertKitaConsistency(state);
   assertSanmaConsistency(state);
   assertHighConfidencePublicState(state);
   const tiles = state.draw ? [...state.hand, state.draw] : state.hand;
@@ -186,6 +208,7 @@ export function parseGameState(input: unknown): GameState {
 
 export function parsePublicGameState(input: unknown): PublicGameState {
   const state = publicGameStateSchema.parse(input);
+  assertKitaConsistency(state);
   assertSanmaConsistency(state);
   assertHighConfidencePublicState(state);
   if (state.phase === "reaction" && !state.pendingDiscard) throw new Error("Reaction state requires pendingDiscard");
@@ -197,6 +220,7 @@ export function parsePublicGameState(input: unknown): PublicGameState {
     ...state.ownDiscards,
     ...state.melds.flatMap((meld) => meld.tiles),
     ...state.visibleTiles,
+    ...kitaTiles(state),
     ...state.opponents.flatMap((opponent) => opponent.discards),
     ...state.opponents.flatMap((opponent) => opponent.melds?.flatMap((meld) => meld.tiles) ?? []),
     ...pendingTileOutsideRiver(state),

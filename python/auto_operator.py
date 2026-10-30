@@ -9239,6 +9239,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--screen-references", type=Path,
                         help="calibrated screen-state PNG directory (default: PROJECT/artifacts/live)")
     parser.add_argument("--cdp", default="http://127.0.0.1:9222")
+    parser.add_argument("--rules", choices=("yonma", "sanma"), default="yonma",
+                        help="game rules; sanma operation is not yet supported")
     parser.add_argument("--layout", required=True)
     parser.add_argument("--templates", required=True)
     parser.add_argument("--action-templates", default="", help="calibrated riichi/call/win/pass button templates")
@@ -9299,6 +9301,12 @@ def parse_args() -> argparse.Namespace:
         help="explicitly allow confidence-gated deterministic discards in advisor mode; no defense/Jev",
     )
     args = parser.parse_args()
+    explicit_args = sys.argv[1:]
+    if args.rules == "sanma" or any(
+            value == "--rules=sanma" or (value == "--rules" and index + 1 < len(explicit_args)
+                                         and explicit_args[index + 1] == "sanma")
+            for index, value in enumerate(explicit_args)):
+        parser.error("sanma automatic decisions and screen operation are not implemented; startup stopped")
     if args.action_templates and not Path(args.action_templates).exists():
         parser.error(f"--action-templates path does not exist: {args.action_templates}")
     if args.ranked_loop and args.match_length == "south":
