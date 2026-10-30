@@ -122,14 +122,19 @@ class OptionalReactionBudgetPassTest(unittest.TestCase):
                                ["chi", "pass"], captured_at=captured_at)
         op.evaluate_force_auto_call_policy = Mock(side_effect=exhausted_policy)
 
-    def run_frame(self, *, win=False, green_call=True):
+    def run_frame(self, *, win=False, green_call=True, self_action_detector=None):
+        self_action_patch = (
+            patch("auto_operator.force_auto_self_action_buttons", side_effect=self_action_detector)
+            if self_action_detector is not None else
+            patch("auto_operator.force_auto_self_action_buttons", return_value=(
+                [{"action": "ron", "center": {"x": 1000, "y": 820}}] if win else []))
+        )
         with patch("auto_operator.classify_screen", return_value=("match", 1)), \
                 patch("auto_operator.StartupTurnGuard") as startup, \
                 patch("auto_operator.force_auto_call_buttons", return_value=([{
                     "action": "chi", "center": {"x": 1000, "y": 820},
                 }] if green_call else [])), \
-                patch("auto_operator.force_auto_self_action_buttons", return_value=(
-                    [{"action": "ron", "center": {"x": 1000, "y": 820}}] if win else [])), \
+                self_action_patch, \
                 patch("auto_operator.force_auto_reaction_win_button", return_value=(
                     {"action": "ron", "center": {"x": 1000, "y": 820}} if win else None)), \
                 patch("auto_operator.subprocess.run", self.solver):
@@ -220,11 +225,80 @@ class OptionalReactionBudgetPassTest(unittest.TestCase):
         self.operator.args.max_iterations = 3
         with patch("auto_operator.is_contextual_reaction_pass", return_value=True):
             self.run_frame()
-        self.assertEqual(self.operator.evaluate_force_auto_call_policy.call_count, 2)
+        # The first expired-pass certificate was rejected, but that does not
+        # make the original call a fresh policy-evaluation opportunity.  The
+        # retry re-certifies the exact prompt instead of repeating OCR/model
+        # work against an already-expired reaction clock.
+        self.assertEqual(self.operator.evaluate_force_auto_call_policy.call_count, 1)
         self.solver.assert_not_called()
         self.assertEqual(self.operator.capture_full_action_frame.call_count, 4)
         self.page.mouse.click.assert_called_once_with(1307.5, 827.5)
         self.assertEqual(self.original_clock_at_click, [(100.0, 100.0)])
+
+    def test_expired_certificate_budget_retry_skips_second_call_policy_evaluation(self):
+        # This matches the 38-second live failure mode: full-frame proof can
+        # time out, but it must not restart expensive reaction recognition on
+        # the same expired optional call.  The certificate remains fail-closed
+        # (no click) while future fresh frames are retried.
+        self.capture_cost = 1.4
+        self.operator.args.max_iterations = 3
+        self.run_frame()
+        self.assertEqual(self.operator.evaluate_force_auto_call_policy.call_count, 1)
+        self.assertEqual(self.operator.capture_full_action_frame.call_count, 4)
+        self.page.mouse.click.assert_not_called()
+        self.assertTrue(any(call.args[0] == "expired_optional_pass_certificate_retry"
+                            for call in self.operator.log.call_args_list))
+
+    def test_capture_only_budget_shortfall_never_latches_optional_call_policy(self):
+        # A stale receipt can reject the evaluator while the original reaction
+        # clock still has time.  This must remain eligible for a later policy
+        # run; otherwise one old streamed frame would convert every following
+        # fresh frame into an unconditional pass.
+        changed = io.BytesIO()
+        Image.new("RGB", (275, 105), "white").save(changed, "PNG")
+        second = Image.open(io.BytesIO(self.full)).convert("RGB")
+        second.paste(Image.open(io.BytesIO(changed.getvalue())), (1170, 775))
+        out = io.BytesIO()
+        second.save(out, "PNG")
+        self.capture_images = [self.full, out.getvalue(), self.full, self.full]
+        self.operator.args.max_iterations = 3
+        self.operator.evaluate_force_auto_call_policy.side_effect = OptionalReactionBudgetExhausted(
+            "capture receipt stale", reaction_clock_exhausted=False,
+        )
+        with patch("auto_operator.is_contextual_reaction_pass", return_value=True):
+            self.run_frame()
+        self.assertEqual(self.operator.evaluate_force_auto_call_policy.call_count, 2)
+        self.assertFalse(getattr(self.operator, "expired_optional_pass_latch", None))
+
+    def test_capture_only_shortfall_still_rejects_new_ron_before_pass(self):
+        # Re-evaluation remains available later, but this attempt is still an
+        # expired optional call and must use the two full-table no-orange
+        # certificate.  A ron that appears between those captures forbids pass.
+        ron = self.native_frame("ron")
+        self.capture_images = [self.full, ron]
+        self.operator.args.max_iterations = 3
+        # Two stable gates are required before this path runs. End the third
+        # loop before it can begin a different prompt; this test is solely
+        # about the first certificate's no-ron guard.
+        polls = 0
+        def stop_after_first_gate(_page):
+            nonlocal polls
+            polls += 1
+            self.operator.screencast_sequence += 1
+            return polls > 2
+        self.operator.capture_self_win_result.side_effect = stop_after_first_gate
+        self.operator.evaluate_force_auto_call_policy.side_effect = OptionalReactionBudgetExhausted(
+            "capture receipt stale", reaction_clock_exhausted=False,
+        )
+        original_self_actions = force_auto_self_action_buttons
+        with patch("auto_operator.is_contextual_reaction_pass", return_value=True):
+            self.run_frame(self_action_detector=original_self_actions)
+        self.page.mouse.click.assert_not_called()
+        self.assertFalse(getattr(self.operator, "expired_optional_pass_latch", None))
+        self.assertEqual(self.operator.capture_full_action_frame.call_count, 2)
+        rejected = next(call for call in self.operator.log.call_args_list
+                        if call.args[0] == "expired_optional_pass_confirmation_rejected")
+        self.assertEqual(rejected.kwargs["reason"], "orange_present")
 
     def test_unknown_timing_or_metadata_error_still_defers_without_pass(self):
         self.operator.evaluate_force_auto_call_policy.side_effect = RetryableSafetyAbort(

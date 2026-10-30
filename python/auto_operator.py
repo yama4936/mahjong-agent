@@ -51,6 +51,14 @@ class ReactionWinPromptChangedAbort(RetryableSafetyAbort):
 class OptionalReactionBudgetExhausted(RetryableSafetyAbort):
     """An optional call cannot fit; only a separately verified pass may follow."""
 
+    def __init__(self, message: str, *, reaction_clock_exhausted: bool = False):
+        super().__init__(message)
+        # A stale capture receipt can reject an otherwise live reaction.  It
+        # is not permission to remember a pass-only outcome forever: only the
+        # original reaction/action deadline being exhausted makes a later
+        # policy evaluation intrinsically impossible.
+        self.reaction_clock_exhausted = reaction_clock_exhausted
+
 
 class SelectionStateUncertainAbort(RetryableSafetyAbort):
     """The first discard click may have selected a tile, but not provably.
@@ -2449,6 +2457,12 @@ class PythonAutoOperator:
         self.action_evidence_generation: int | None = None
         self.last_action_clicked_at: float | None = None
         self.action_evidence_last_seen_at: float | None = None
+        # When an optional call outlives its decision window, a later pass
+        # still needs two fresh full-table observations.  Remember only the
+        # exact reaction clock and button candidate so a failed confirmation
+        # does not restart expensive call policy recognition on that same
+        # already-expired opportunity.
+        self.expired_optional_pass_latch: dict[str, Any] | None = None
         # A stream may deliver an old reaction after a slow discard attempt.
         # Only two explicit captures can replace that discard's clock. Keep
         # the first candidate observation even if confirmation is retried.
@@ -2502,6 +2516,8 @@ class PythonAutoOperator:
         self.action_evidence_generation = gate_generation
         self.action_evidence_last_seen_at = budget_observed_at if budget_observed_at is not None else seen_at
         self.last_action_clicked_at = None
+        if previous_started is None or previous_kind != kind or supersede:
+            self.expired_optional_pass_latch = None
         self.log("action_deadline_started", actionKind=kind, deadlineMs=self.configured_action_deadline_ms())
 
     def configured_action_deadline_ms(self) -> int:
@@ -2521,6 +2537,7 @@ class PythonAutoOperator:
             self.action_evidence_generation = None
             self.last_action_clicked_at = None
             self.action_evidence_last_seen_at = None
+            self.expired_optional_pass_latch = None
         return timing
 
     def clear_discard_evidence_on_confirmed_opponent_turn(self) -> None:
@@ -5224,7 +5241,16 @@ class PythonAutoOperator:
                 self.log("reaction_decision_budget_rejected", reason="insufficient_remaining_window",
                          remainingMs=remaining, preClickAndLaunchReserveMs=reserve,
                          **remaining_by_clock)
-                raise OptionalReactionBudgetExhausted("reaction decision budget lacks launch and click reserve")
+                reaction_clock_remaining = [
+                    remaining_by_clock.get("actionBudgetRemainingMs"),
+                    remaining_by_clock.get("actionDeadlineRemainingMs"),
+                ]
+                raise OptionalReactionBudgetExhausted(
+                    "reaction decision budget lacks launch and click reserve",
+                    reaction_clock_exhausted=any(
+                        value is not None and value <= reserve for value in reaction_clock_remaining
+                    ),
+                )
             decision_budget = max(1, int(self.evaluator_env.get("JEV_FORCE_AUTO_DEADLINE_MS", "2300")))
             if remaining is not None:
                 decision_budget = min(decision_budget, remaining - reserve)
@@ -8277,7 +8303,27 @@ class PythonAutoOperator:
                             time.sleep(self.args.poll)
                             continue
                         expired_optional_call = None
-                        if getattr(self.args, "accept_single_call", False) and len(call_buttons) == 1:
+                        reaction_clock = tuple(getattr(self, field, None) for field in (
+                            "action_evidence_started_at", "action_budget_started_at", "action_evidence_kind",
+                        ))
+                        optional_pass_latch = getattr(self, "expired_optional_pass_latch", None)
+                        same_latched_optional_call = (
+                            len(call_buttons) == 1
+                            and isinstance(optional_pass_latch, dict)
+                                and optional_pass_latch.get("clock") == reaction_clock
+                                and optional_pass_latch.get("call") == call_buttons[0]
+                        )
+                        if same_latched_optional_call:
+                            # The previous fresh certificate declined to click.
+                            # It did not make this old call eligible for a new
+                            # solver run: retry only the prompt-local safety
+                            # certificate below, which rejects any changed
+                            # call, draw, or orange win control.
+                            expired_optional_call = call_buttons[0]
+                            self.log("expired_optional_pass_certificate_retry",
+                                     action=expired_optional_call.get("action"),
+                                     reason="same_expired_reaction_clock_and_call")
+                        elif getattr(self.args, "accept_single_call", False) and len(call_buttons) == 1:
                             call_action = call_buttons[0].get("action")
                             try:
                                 policy = self.evaluate_force_auto_call_policy(
@@ -8296,6 +8342,11 @@ class PythonAutoOperator:
                                          elapsedMs=elapsed_ms)
                                 if isinstance(error, OptionalReactionBudgetExhausted):
                                     expired_optional_call = call_buttons[0]
+                                    if error.reaction_clock_exhausted:
+                                        self.expired_optional_pass_latch = {
+                                            "clock": reaction_clock,
+                                            "call": call_buttons[0].copy(),
+                                        }
                                 policy = None
                             if policy:
                                 decision = policy.get("decision", {})
@@ -8347,6 +8398,7 @@ class PythonAutoOperator:
                                 continue
                             receipt["actionTiming"] = self.action_timing(decision_started_at, clear=True)
                             self.log("reaction_prompt", screenshot=str(screenshot_path), evaluation=reaction, execution=receipt)
+                            self.expired_optional_pass_latch = None
                             self.last_processed_hand = None
                             self.armed = True
                             time.sleep(self.args.poll)
