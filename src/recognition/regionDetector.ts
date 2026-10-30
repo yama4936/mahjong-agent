@@ -18,6 +18,8 @@ export interface RegionDetection {
 export interface RegionDetectionOptions {
   extendMeldBoundaries?: boolean;
   maximumColorSpread?: number;
+  /** Experimental: enable separately measured blue-face detection for sanma research. */
+  sanmaBlueFaces?: boolean;
   luminanceThreshold?: number;
   minimumArea?: number;
   minimumWidth?: number;
@@ -87,6 +89,7 @@ export async function detectBrightTileCandidates(
   screenshot: string | Buffer,
   region: Rect,
   options: RegionDetectionOptions = {},
+  blueHighlightedFaces = false,
 ): Promise<RegionDetection> {
   const luminanceThreshold = options.luminanceThreshold ?? 120;
   const minimumArea = options.minimumArea ?? 200;
@@ -103,14 +106,18 @@ export async function detectBrightTileCandidates(
   const size = info.width * info.height;
   const foreground = new Uint8Array(size);
   const visited = new Uint8Array(size);
-  const colors = options.maximumColorSpread === undefined ? undefined : await sharp(screenshot)
+  const colors = options.maximumColorSpread === undefined && !blueHighlightedFaces ? undefined : await sharp(screenshot)
     .extract({ left: region.x, top: region.y, width: region.width, height: region.height })
     .toColourspace("srgb").removeAlpha().raw().toBuffer();
   for (let index = 0; index < size; index += 1) {
     const offset = index * 3;
     const neutral = !colors || Math.max(colors[offset]!, colors[offset + 1]!, colors[offset + 2]!)
       - Math.min(colors[offset]!, colors[offset + 1]!, colors[offset + 2]!) <= options.maximumColorSpread!;
-    foreground[index] = data[index]! >= luminanceThreshold && neutral ? 1 : 0;
+    const blueFace = blueHighlightedFaces && colors
+      && colors[offset]! >= 125 && colors[offset + 1]! >= 170 && colors[offset + 2]! >= 200
+      && colors[offset + 2]! - colors[offset]! >= 55 && colors[offset + 2]! - colors[offset]! <= 100
+      && colors[offset + 2]! - colors[offset + 1]! >= 20 && colors[offset + 2]! - colors[offset + 1]! <= 40;
+    foreground[index] = blueHighlightedFaces ? (blueFace ? 1 : 0) : (data[index]! >= luminanceThreshold && neutral ? 1 : 0);
   }
 
   const candidates: RegionCandidate[] = [];
@@ -200,6 +207,14 @@ export async function detectConfiguredPublicRegions(
       }));
     }
     if (region.detectionMode !== "discard_grid" || !name.endsWith("Discards")) return [name, detection] as const;
+    if (options.sanmaBlueFaces) {
+      const blue = await detectBrightTileCandidates(screenshot, region, regionOptions, true);
+      detection.candidates.push(...blue.candidates.filter(candidate => !detection.candidates.some(existing => {
+        const dx = Math.abs((candidate.x + candidate.width / 2) - (existing.x + existing.width / 2));
+        const dy = Math.abs((candidate.y + candidate.height / 2) - (existing.y + existing.height / 2));
+        return dx < Math.max(candidate.width, existing.width) * 0.5 && dy < Math.max(candidate.height, existing.height) * 0.5;
+      })));
+    }
     const widths = detection.candidates.map((candidate) => candidate.width);
     const heights = detection.candidates.map((candidate) => candidate.height);
     const medianWidth = median(widths);
