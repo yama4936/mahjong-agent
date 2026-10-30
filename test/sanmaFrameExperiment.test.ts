@@ -20,10 +20,13 @@ test("one saved sanma frame is bound to untrusted hand, public and button observ
   const layout = layoutSchema.parse(JSON.parse(await readFile("config/layout-runtime.json", "utf8")));
   const buttonTemplates = Object.fromEntries(await Promise.all(EXPERIMENTAL_BUTTONS.map(async name =>
     [name, await readFile(`test/fixtures/sanma-buttons/${name}.png`)]))) as ExperimentalTemplates;
+  const rowFixture = await readFile("test/fixtures/sanma-button-rows/kita.png");
+  const buttonRowReferences = { skip: await sharp(rowFixture).extract({left:580,top:0,width:245,height:90}).png().toBuffer(),
+    emptyRow: await readFile("test/fixtures/sanma-button-rows/empty.png") };
   const classifier = new HybridTileRecognizer();
   try {
     const report = await inspectSanmaFrame({frame, layout, templates:"templates/bootstrap", buttonTemplates,
-      ownSeat:"west", publicClassifier:classifier});
+      ownSeat:"west", publicClassifier:classifier, buttonRowReferences});
     assert.equal(report.digest, createHash("sha256").update(frame).digest("hex"));
     assert.equal(report.hand.status, "candidate");
     if (report.hand.status === "candidate") assert.deepEqual(report.hand.value.tiles,
@@ -32,6 +35,18 @@ test("one saved sanma frame is bound to untrusted hand, public and button observ
     if (report.button.status === "candidate") assert.deepEqual([report.button.value.status, report.button.value.status === "matched" && report.button.value.action], ["matched", "kita"]);
     assert.equal(report.publicTiles.status, "candidate");
     if (report.publicTiles.status === "candidate") assert.deepEqual(report.publicTiles.value.observation.opponentDiscards.map(o => o.seat), ["east", "south"]);
+    assert.equal(report.buttonRow.status, "candidate");
+    if (report.buttonRow.status === "candidate") {
+      assert.deepEqual(report.buttonRow.value.slots.flatMap(s => s.status === "candidate" ? [s.action] : []), ["kita", "skip"]);
+      assert.equal(report.buttonRow.value.complete, false);
+    }
+    assert.equal(report.ownMelds.status, "candidate");
+    if (report.ownMelds.status === "candidate") {
+      assert.equal(report.ownMelds.value.reason, "hand_extent_unknown");
+      assert.equal(report.ownMelds.value.complete, false);
+    }
+    assert.ok(report.decision.reasons.includes("possible kita in button slot 1"));
+    assert.ok(report.decision.reasons.includes("possible skip in button slot 2"));
     assert.equal(report.decision.status, "blocked");
     assert.equal(report.operationAuthorized, false);
     const evaluation = evaluateSanmaFrameCandidate({frame, report});
@@ -62,6 +77,18 @@ test("one saved sanma frame is bound to untrusted hand, public and button observ
     assert.equal("hypothesis" in mismatch, false);
     const unknownButton = bindSanmaDiscardHypothesis({ ...report, button: { status: "unresolved", reason: "test" } }, frame, 0);
     assert.ok(unknownButton.blockers.includes("button crop unrecognized"));
+    const meldFrame = await readFile("test/fixtures/sanma-melds/own-pon-kan-redacted.png");
+    const meldReport = await inspectSanmaFrame({frame: meldFrame, layout, templates:"templates/bootstrap", buttonTemplates,
+      ownSeat:"west", publicClassifier:classifier, buttonRowReferences, assumedHandRightEdge:1010});
+    assert.equal(meldReport.digest, createHash("sha256").update(meldFrame).digest("hex"));
+    assert.equal(meldReport.ownMelds.status, "candidate");
+    if (meldReport.ownMelds.status === "candidate") {
+      assert.equal(meldReport.ownMelds.value.complete, false);
+      assert.deepEqual(meldReport.ownMelds.value.hypotheses.map(m => [m.type,m.tiles]),
+        [["pon",["7p","7p","7p"]],["minkan",["F","F","F","F"]]]);
+    }
+    assert.ok(meldReport.decision.reasons.includes("own meld hypotheses unverified"));
+    assert.equal(meldReport.operationAuthorized, false);
 
   } finally { await classifier.close(); }
 });

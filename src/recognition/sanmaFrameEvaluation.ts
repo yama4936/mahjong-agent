@@ -27,6 +27,11 @@ export function evaluateSanmaFrameCandidate(input: {
   if (report.hand.status !== "candidate" || !report.hand.value.safe) reasons.push("hand recognition unconfirmed");
   if (report.publicTiles.status !== "candidate") reasons.push("public recognition failed");
   if (report.button.status === "candidate" && report.button.value.status === "matched") reasons.push(`visible ${report.button.value.action} button needs separate handling`);
+  if (report.buttonRow?.status === "candidate") {
+    for (const slot of report.buttonRow.value.slots) {
+      if (slot.status === "candidate") reasons.push(`possible ${slot.action} button in slot ${slot.slot} needs separate handling`);
+    }
+  }
   if (reasons.length || !review || report.hand.status !== "candidate" || report.publicTiles.status !== "candidate") {
     return { status: "blocked" as const, reasons, operationAuthorized: false as const };
   }
@@ -66,6 +71,7 @@ export function evaluateSanmaFrameCandidate(input: {
   if (!containsOrdered(state.ownDiscards, publicObservation.ownDiscards)
       || !containsOrdered(state.doraIndicators, publicObservation.doraIndicators)
       || !containsMelds(state.melds, publicObservation.ownMelds ?? [])
+      || (report.ownMelds?.status === "candidate" && !containsMelds(state.melds, report.ownMelds.value.hypotheses))
       || !opponents
       || publicObservation.opponentDiscards.some(observedOpponent => {
         const opponent = opponents!.find((o: any) => o?.seat === observedOpponent.seat);

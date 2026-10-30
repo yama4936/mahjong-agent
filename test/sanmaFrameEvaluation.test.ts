@@ -37,6 +37,10 @@ test("unknown fields, inconsistent frame, recognition and priority prompt reject
     {frame,report,review:{...review,ui:{status:"confirmed" as const,actions:["kita" as const]}}},
     {frame,report:{...report,button:{status:"candidate" as const,value:{status:"matched" as const,action:"kita" as const,confidence:1,margin:1}}},review},
     {frame,report:{...report,hand:{status:"unresolved" as const,reason:"unknown"}},review},
+    {frame,report:{...report,buttonRow:{status:"candidate" as const,value:{scope:"offline_untrusted_sanma_button_row" as const,
+      slots:[{status:"candidate" as const, action:"pon" as const,slot:0,confidence:1}],complete:false as const,operationAuthorized:false as const}}},review},
+    {frame,report:{...report,ownMelds:{status:"candidate" as const,value:{status:"unknown" as const,complete:false as const,
+      hypotheses:[{type:"pon" as const,tiles:["7p" as const,"7p" as const,"7p" as const],confidence:1}]}}},review},
   ];
   for (const value of cases) {
     const result = evaluateSanmaFrameCandidate(value);

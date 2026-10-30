@@ -5,12 +5,16 @@ import { proposeLiveHandLayout } from "./handLayoutProposal.js";
 import type { ScreenLayout } from "./layout.js";
 import { recognizeHand } from "./templateMatcher.js";
 import { classifySanmaButtonCrop, type ExperimentalTemplates } from "./sanmaButtonExperiment.js";
+import { inspectSanmaButtonRow, SANMA_BUTTON_ROW_RECT } from "./sanmaButtonRowExperiment.js";
+import { sanmaOwnMeldExperiment } from "./sanmaOwnMeldExperiment.js";
 import { recognizeSanmaPublicCandidates, type PublicVitClassifier } from "./publicTileRecognizer.js";
 
 /** Read-only frame experiment. No result in this function authorizes play. */
 export async function inspectSanmaFrame(input: {
   frame: Buffer; layout: ScreenLayout; templates: string; buttonTemplates: ExperimentalTemplates;
   ownSeat: "east" | "south" | "west"; publicClassifier: PublicVitClassifier;
+  buttonRowReferences?: { skip: Buffer; emptyRow: Buffer };
+  assumedHandRightEdge?: number;
 }) {
   if (!Buffer.isBuffer(input.frame)) throw new Error("Frame bytes required");
   // The same immutable snapshot is used for every branch. Paths are not
@@ -30,7 +34,15 @@ export async function inspectSanmaFrame(input: {
     const crop = await sharp(frame).extract({ left: 890, top: 785, width: 245, height: 90 }).png().toBuffer();
     return classifySanmaButtonCrop(crop, input.buttonTemplates);
   })();
-  const [hand, publicTiles, button] = await Promise.allSettled([handPromise, publicPromise, buttonPromise]);
+  const buttonRowPromise = (async () => {
+    if (!input.buttonRowReferences) throw new Error("button row references missing");
+    const row = await sharp(frame).extract(SANMA_BUTTON_ROW_RECT).png().toBuffer();
+    return inspectSanmaButtonRow(row, input.buttonTemplates, input.buttonRowReferences.skip, input.buttonRowReferences.emptyRow);
+  })();
+  const ownMeldPromise = sanmaOwnMeldExperiment(frame, input.layout, input.publicClassifier, input.assumedHandRightEdge);
+  const [hand, publicTiles, button, buttonRow, ownMelds] = await Promise.allSettled([
+    handPromise, publicPromise, buttonPromise, buttonRowPromise, ownMeldPromise,
+  ]);
   const describe = <T>(value: PromiseSettledResult<T>) => value.status === "fulfilled"
     ? { status: "candidate" as const, value: value.value }
     : { status: "unresolved" as const, reason: value.reason instanceof Error ? value.reason.message : String(value.reason) };
@@ -44,12 +56,23 @@ export async function inspectSanmaFrame(input: {
         rows: evaluateDiscards(hand.value.recognition.tiles, [], 0, "sanma") };
     } catch (error) { shape = { status: "unresolved", reason: error instanceof Error ? error.message : String(error) }; }
   } else shape = { status: "unresolved", reason: "No complete candidate hand" };
+  const decisionReasons = ["hand recognition unverified", "public observations incomplete",
+    "action row incomplete", "turn, meld and riichi status unverified"];
+  if (buttonRow.status === "rejected") decisionReasons.push("button row unavailable");
+  else {
+    for (const slot of buttonRow.value.slots) {
+      if (slot.status === "candidate") decisionReasons.push(`possible ${slot.action} in button slot ${slot.slot}`);
+      if (slot.status === "unresolved") decisionReasons.push(`button slot ${slot.slot} unresolved`);
+    }
+  }
+  if (ownMelds.status === "rejected") decisionReasons.push("own meld observation failed");
+  else if (ownMelds.value.reason) decisionReasons.push(`own melds unknown: ${ownMelds.value.reason}`);
+  else decisionReasons.push("own meld hypotheses unverified");
   return { scope: "offline_untrusted_sanma_frame" as const, digest,
     hand: hand.status === "fulfilled" ? describe({ status: "fulfilled", value: hand.value.recognition }) : { status: "unresolved" as const, reason: hand.reason instanceof Error ? hand.reason.message : String(hand.reason) },
     handGeometry: hand.status === "fulfilled" ? describe({ status: "fulfilled", value: hand.value.proposal }) : { status: "unresolved" as const, reason: hand.reason instanceof Error ? hand.reason.message : String(hand.reason) },
-    publicTiles: describe(publicTiles), button: describe(button), shape,
-    decision: { status: "blocked" as const, reasons: ["hand recognition unverified", "public observations incomplete",
-      "single crop does not establish all available actions", "turn, meld and riichi status unverified"] },
+    publicTiles: describe(publicTiles), button: describe(button), buttonRow: describe(buttonRow), ownMelds: describe(ownMelds), shape,
+    decision: { status: "blocked" as const, reasons: decisionReasons },
     operationAuthorized: false as const };
 }
 
@@ -72,6 +95,16 @@ export function bindSanmaDiscardHypothesis(
   if (report.publicTiles.status !== "candidate" || !report.publicTiles.value.observation.complete) blockers.push("public tiles incomplete");
   if (report.button.status !== "candidate" || report.button.value.status !== "matched") blockers.push("button crop unrecognized");
   else blockers.push(`button ${report.button.value.action} is only a single unverified crop`);
+  if (report.buttonRow.status === "unresolved") blockers.push("button row unavailable");
+  else {
+    blockers.push("button row is not complete");
+    for (const slot of report.buttonRow.value.slots) {
+      if (slot.status === "candidate") blockers.push(`possible ${slot.action} in button slot ${slot.slot}`);
+      if (slot.status === "unresolved") blockers.push(`button slot ${slot.slot} unresolved`);
+    }
+  }
+  if (report.ownMelds.status === "unresolved") blockers.push("own meld observation failed");
+  else blockers.push(`own melds unknown${report.ownMelds.value.reason ? `: ${report.ownMelds.value.reason}` : ""}`);
   blockers.push("full action list, turn, melds and riichi status are unverified");
   if (report.shape.status !== "hypothesis" || !Number.isInteger(rowIndex) || rowIndex < 0 || rowIndex >= report.shape.rows.length) {
     blockers.push("discard shape hypothesis unavailable");
