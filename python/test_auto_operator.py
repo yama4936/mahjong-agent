@@ -3349,7 +3349,7 @@ class AwayDialogDetectionTest(unittest.TestCase):
             operator.observe_ranked_match_screen("match_result")
             self.assertFalse(operator.verified_friend_300_active)
 
-    def test_friend_lobby_fade_suspends_proof_until_round_result_and_match(self) -> None:
+    def test_friend_lobby_fade_cannot_reactivate_proof(self) -> None:
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
         operator.args = argparse.Namespace(mode="force-auto", ranked_loop=False, action_deadline_ms=300000)
         operator.log = Mock()
@@ -3359,11 +3359,12 @@ class AwayDialogDetectionTest(unittest.TestCase):
         with patch("auto_operator.time.monotonic", return_value=2.0):
             for state in ("round_result", "lobby", "lobby"):
                 operator.observe_ranked_match_screen(state)
-            self.assertTrue(operator.verified_friend_300_active)
+            self.assertFalse(operator.verified_friend_300_active)
             self.assertEqual(operator.verified_friend_action_budget_ms(), 10000)
             operator.observe_ranked_match_screen("round_result")
             operator.observe_ranked_match_screen("match")
-            self.assertEqual(operator.verified_friend_action_budget_ms(), 295000)
+            self.assertFalse(operator.verified_friend_300_active)
+            self.assertEqual(operator.verified_friend_action_budget_ms(), 10000)
 
     def test_friend_lobby_exit_does_not_transfer_proof_to_new_match(self) -> None:
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
@@ -3373,12 +3374,10 @@ class AwayDialogDetectionTest(unittest.TestCase):
         with patch("auto_operator.time.monotonic", return_value=2.0):
             for next_state in ("ranked_room", "matchmaking", "match"):
                 operator.verified_friend_300_active = operator.verified_friend_300_match_seen = True
-                operator.verified_friend_300_lobby_pending = False
                 operator.observe_ranked_match_screen("lobby")
                 operator.observe_ranked_match_screen(next_state)
                 self.assertFalse(operator.verified_friend_300_active, next_state)
             operator.verified_friend_300_active = operator.verified_friend_300_match_seen = True
-            operator.verified_friend_300_lobby_pending = False
             operator.observe_ranked_match_screen("lobby")
         with patch("auto_operator.time.monotonic", return_value=12.0):
             operator.observe_ranked_match_screen("lobby")

@@ -2704,7 +2704,6 @@ class PythonAutoOperator:
             budget_start = start
         if (getattr(self, "verified_friend_300_active", False)
                 and getattr(self, "verified_friend_300_match_seen", False)
-                and not getattr(self, "verified_friend_300_lobby_pending", False)
                 and getattr(args, "mode", None) == "force-auto"
                 and not getattr(args, "ranked_loop", False)
                 and self.configured_action_deadline_ms() == 300000
@@ -4706,34 +4705,15 @@ class PythonAutoOperator:
     def revoke_verified_friend_300(self, reason: str) -> None:
         if getattr(self, "verified_friend_300_active", False):
             self.verified_friend_300_active = False
-            self.verified_friend_300_lobby_pending = False
             self.log("verified_friend_300_proof_revoked", reason=reason)
 
     def observe_ranked_match_screen(self, state: str) -> None:
         if getattr(self, "verified_friend_300_active", False):
             started = getattr(self, "verified_friend_300_started_at", None)
-            pending = getattr(self, "verified_friend_300_lobby_pending", False)
             if (not getattr(self, "verified_friend_300_match_seen", False)
                     and (not isinstance(started, (int, float)) or time.monotonic() - started > 30)):
                 self.revoke_verified_friend_300("start_transition_timeout")
-            elif pending and time.monotonic() - self.verified_friend_300_lobby_since >= 10:
-                self.revoke_verified_friend_300("lobby_unconfirmed_timeout")
-            elif state == "lobby" and getattr(self, "verified_friend_300_match_seen", False) \
-                    and getattr(self, "round_terminal_result_observed", False):
-                if not pending:
-                    self.verified_friend_300_lobby_pending = True
-                    self.verified_friend_300_lobby_since = time.monotonic()
-                    self.verified_friend_300_lobby_round_seen = False
-                    self.log("verified_friend_300_proof_suspended", reason="ambiguous_lobby")
-            elif pending and state == "round_result":
-                self.verified_friend_300_lobby_round_seen = True
             elif state == "match":
-                if pending:
-                    if not getattr(self, "verified_friend_300_lobby_round_seen", False):
-                        self.revoke_verified_friend_300("unconfirmed_match_after_lobby")
-                        return
-                    self.verified_friend_300_lobby_pending = False
-                    self.log("verified_friend_300_proof_resumed", reason="round_result_then_match")
                 self.verified_friend_300_match_seen = True
             elif (state in {"match_result", "rank_progress", "post_match_reward",
                             "connection_error", "session_conflict",
