@@ -12,11 +12,16 @@ import { recognizeSanmaPublicCandidates, type PublicVitClassifier } from "./publ
 /** Read-only frame experiment. No result in this function authorizes play. */
 export async function inspectSanmaFrame(input: {
   frame: Buffer; layout: ScreenLayout; templates: string; buttonTemplates: ExperimentalTemplates;
-  ownSeat?: "east" | "south" | "west"; publicClassifier: PublicVitClassifier;
+  ownSeat?: "east" | "south" | "west";
+  ownSeatPromise?: Promise<"east" | "south" | "west" | undefined>; publicClassifier: PublicVitClassifier;
   buttonRowReferences?: { skip: Buffer; emptyRow: Buffer; ron?: Buffer };
   assumedHandRightEdge?: number;
 }) {
   if (!Buffer.isBuffer(input.frame)) throw new Error("Frame bytes required");
+  // Attach the rejection handler before the first image await; OCR may fail
+  // immediately while metadata is still being read.
+  const seatResolution = input.ownSeatPromise?.then(value => ({ ok: true as const, value }),
+    error => ({ ok: false as const, error }));
   // The same immutable snapshot is used for every branch. Paths are not
   // accepted, since a live screenshot file can change during recognition.
   const frame = Buffer.from(input.frame);
@@ -29,9 +34,13 @@ export async function inspectSanmaFrame(input: {
     const recognition = await recognizeHand(frame, { ...input.layout, ...proposal }, input.templates);
     return { recognition, proposal };
   })();
-  const publicPromise = input.ownSeat
-    ? recognizeSanmaPublicCandidates(frame, input.layout, input.ownSeat, input.publicClassifier)
-    : Promise.reject(new Error("own seat unknown: opponent mapping unavailable"));
+  const publicPromise = (async () => {
+    const resolved = seatResolution ? await seatResolution : undefined;
+    if (resolved && !resolved.ok) throw resolved.error;
+    const ownSeat = resolved ? resolved.value : input.ownSeat;
+    if (!ownSeat) throw new Error("own seat unknown: opponent mapping unavailable");
+    return recognizeSanmaPublicCandidates(frame, input.layout, ownSeat, input.publicClassifier);
+  })();
   const buttonPromise = (async () => {
     const crop = await sharp(frame).extract({ left: 890, top: 785, width: 245, height: 90 }).png().toBuffer();
     return classifySanmaButtonCrop(crop, input.buttonTemplates);

@@ -30,41 +30,48 @@ export async function observeSanmaFrameAutomatically(input: {
   if (!Buffer.isBuffer(input.frame)) throw new Error("Frame bytes required");
   const frame = Buffer.from(input.frame);
   const digest = createHash("sha256").update(frame).digest("hex");
-  let board: { verified: false; reason?: string; candidate?: { seat?: string } };
-  let north: NorthResult = { status: "unknown", verified: false, complete: false, reason: "north observations unavailable" };
-  try {
-    let data: { board: typeof board; north: NorthResult; frame_sha256?: string };
-    if (input.boardObserver) {
-      data = await input.boardObserver.observe(frame) as typeof data;
-      if (data.frame_sha256 !== digest) throw new Error("OCR frame digest mismatch");
-    } else {
-      const directory = await mkdtemp(path.join(tmpdir(), "jantama-sanma-observe-"));
-      try {
-        const file = path.join(directory, "frame.png");
-        await writeFile(file, frame, { mode: 0o600, flag: "wx" });
-        const result = await run(path.resolve(".runtime/python-auto-venv/bin/python"),
-          [path.resolve("python/sanma_board_image.py"), file, "--with-north"], { timeout: 30_000, maxBuffer: 2_000_000 });
-        data = JSON.parse(result.stdout) as typeof data;
-        if (createHash("sha256").update(await readFile(file)).digest("hex") !== digest) throw new Error("OCR frame changed");
-      } finally { await rm(directory, { recursive: true, force: true }); }
-    }
-    if (data.board?.verified !== false) throw new Error("board OCR did not return an unverified candidate");
-    board = data.board;
-    if (data.north?.status !== "unknown" || data.north.verified !== false || data.north.complete !== false) {
-      throw new Error("north observations lack unverified/incomplete flags");
-    }
-    for (const value of Object.values(data.north.positions ?? {})) {
-      if (value.verified !== false || value.complete !== false || (value.frame_sha256 !== undefined && value.frame_sha256 !== digest)) {
-        throw new Error("north observation frame or status mismatch");
+  // OCR and independent visual branches consume the same immutable bytes.
+  // Public seat mapping still waits for OCR and remains unresolved on failure.
+  const boardPromise = (async () => {
+    let board: { verified: false; reason?: string; candidate?: { seat?: string } };
+    let north: NorthResult = { status: "unknown", verified: false, complete: false, reason: "north observations unavailable" };
+    try {
+      let data: { board: typeof board; north: NorthResult; frame_sha256?: string };
+      if (input.boardObserver) {
+        data = await input.boardObserver.observe(frame) as typeof data;
+        if (data.frame_sha256 !== digest) throw new Error("OCR frame digest mismatch");
+      } else {
+        const directory = await mkdtemp(path.join(tmpdir(), "jantama-sanma-observe-"));
+        try {
+          const file = path.join(directory, "frame.png");
+          await writeFile(file, frame, { mode: 0o600, flag: "wx" });
+          const result = await run(path.resolve(".runtime/python-auto-venv/bin/python"),
+            [path.resolve("python/sanma_board_image.py"), file, "--with-north"], { timeout: 30_000, maxBuffer: 2_000_000 });
+          data = JSON.parse(result.stdout) as typeof data;
+          if (createHash("sha256").update(await readFile(file)).digest("hex") !== digest) throw new Error("OCR frame changed");
+        } finally { await rm(directory, { recursive: true, force: true }); }
       }
-    }
-    north = data.north;
-  } catch (error) { board = { verified: false, reason: `board observation failed: ${error instanceof Error ? error.message : String(error)}` }; }
-  const seat = board.candidate?.seat;
-  const ownSeat = seat === "east" || seat === "south" || seat === "west" ? seat : undefined;
-  const report = await inspectSanmaFrame({ frame, layout: input.layout, templates: input.templates,
+      if (data.board?.verified !== false) throw new Error("board OCR did not return an unverified candidate");
+      board = data.board;
+      if (data.north?.status !== "unknown" || data.north.verified !== false || data.north.complete !== false) {
+        throw new Error("north observations lack unverified/incomplete flags");
+      }
+      for (const value of Object.values(data.north.positions ?? {})) {
+        if (value.verified !== false || value.complete !== false || (value.frame_sha256 !== undefined && value.frame_sha256 !== digest)) {
+          throw new Error("north observation frame or status mismatch");
+        }
+      }
+      north = data.north;
+    } catch (error) { board = { verified: false, reason: `board observation failed: ${error instanceof Error ? error.message : String(error)}` }; }
+    const seat = board.candidate?.seat;
+    const ownSeat: "east" | "south" | "west" | undefined = seat === "east" || seat === "south" || seat === "west" ? seat : undefined;
+    return { board, north, ownSeat };
+  })();
+  const reportPromise = inspectSanmaFrame({ frame, layout: input.layout, templates: input.templates,
     buttonTemplates: input.buttonTemplates, publicClassifier: input.publicClassifier,
-    ...(ownSeat ? { ownSeat } : {}), ...(input.buttonRowReferences ? { buttonRowReferences: input.buttonRowReferences } : {}) });
+    ownSeatPromise: boardPromise.then(result => result.ownSeat),
+    ...(input.buttonRowReferences ? { buttonRowReferences: input.buttonRowReferences } : {}) });
+  const [{ board, north, ownSeat }, report] = await Promise.all([boardPromise, reportPromise]);
   if (report.digest !== digest) throw new Error("snapshot digest mismatch");
   // The older diagnostic evaluates with an assumed empty visible-tile list.
   // Do not expose it in the automatic observation as if unknown tiles were zero.
