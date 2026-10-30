@@ -37,6 +37,7 @@ from operator_lock import OperatorAlreadyRunning, endpoint_key, operator_lease
 from analysis_recorder import AnalysisRecorder
 from startup_turn_guard import StartupTurnGuard
 from friend_start import await_reviewed_friend_room, reviewed_friend_clock_is_300_plus_zero
+from sanma_friend_navigation import inspect_sanma_friend_start
 from screencast_diagnostic import ScreencastDiagnostic
 
 
@@ -7987,6 +7988,17 @@ class PythonAutoOperator:
                 path.write_bytes(frame)
                 self.log("friend_start_capture", screenshot=str(path),
                          capture=index, matched=matched)
+
+            if getattr(self.args, "rules", "yonma") == "sanma":
+                # Preparation can be exercised offline in tests. The normal
+                # CLI rejects sanma before constructing an operator; retaining
+                # this guard also protects direct Python invocation.
+                inspection = inspect_sanma_friend_start(
+                    page, reviewed, action_deadline_ms=getattr(self.args, "action_deadline_ms", None),
+                    attempts=32, on_capture=save_friend_start_capture,
+                )
+                self.log("sanma_friend_start_inspection", **inspection)
+                raise RuntimeError("sanma automatic decisions and screen operation are not implemented; startup stopped")
 
             # Transient animated particles can interrupt otherwise matching
             # room frames. More attempts do not weaken the two consecutive

@@ -12,7 +12,7 @@ async function setup() {
 }
 test("observed action rows include shifted pon and kan, while every result stays untrusted", async () => {
   const { templates, skip, empty } = await setup();
-  for (const [name, expected] of [["kita2", ["kita", "skip"]], ["riichi", ["riichi"]], ["pon-kan", ["pon", "kan", "skip"]], ["tsumo", ["tsumo"]]] as const) {
+  for (const [name, expected] of [["kita2", ["kita", "skip"]], ["riichi", ["riichi", "skip"]], ["pon-kan", ["pon", "kan", "skip"]], ["tsumo", ["tsumo", "skip"]]] as const) {
     const result = await inspectSanmaButtonRow(await row(name), templates, skip, empty);
     assert.deepEqual(result.slots.flatMap(s => s.status === "candidate" ? [s.action] : []), expected);
     assert.equal(result.complete, false);
@@ -33,4 +33,27 @@ test("unknown visual obstruction is never inferred as an empty slot", async () =
   const rowWithUnknown = await sharp(empty).composite([{ input: black, left: 290, top: 0 }]).png().toBuffer();
   const result = await inspectSanmaButtonRow(rowWithUnknown, templates, skip, empty);
   assert.equal(result.slots[1]?.status, "unresolved");
+});
+
+
+test("overlapped skip stays a diagnostic candidate and requires the clear portion and competing labels", async () => {
+  const { templates, skip, empty } = await setup();
+  for (const name of ["riichi", "tsumo"]) {
+    const result = await inspectSanmaButtonRow(await row(name), templates, skip, empty);
+    const slot = result.slots[2]!;
+    assert.equal(slot.status, "candidate");
+    if (slot.status === "candidate") {
+      assert.equal(slot.action, "skip");
+      assert.equal(slot.evidence, "partially_occluded_skip");
+      assert.ok(slot.confidence >= 0.995);
+    }
+    assert.equal(result.complete, false);
+    assert.equal(result.operationAuthorized, false);
+  }
+  const ambiguous = await inspectSanmaButtonRow(await row("riichi"), { ...templates, pon: skip }, skip, empty);
+  assert.equal(ambiguous.slots[2]?.status, "unresolved");
+  const black = await sharp({ create: { width: 45, height: 90, channels: 3, background: "black" } }).png().toBuffer();
+  const corrupted = await sharp(await row("riichi")).composite([{ input: black, left: 780, top: 0 }]).png().toBuffer();
+  const result = await inspectSanmaButtonRow(corrupted, templates, skip, empty);
+  assert.equal(result.slots[2]?.status, "unresolved");
 });

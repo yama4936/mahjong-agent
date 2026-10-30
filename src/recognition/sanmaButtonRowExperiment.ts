@@ -5,7 +5,7 @@ import { classifySanmaButtonCrop, type ExperimentalButton, type ExperimentalTemp
 export const SANMA_BUTTON_ROW_RECT = { left: 600, top: 785, width: 825, height: 90 } as const;
 const SLOT_OFFSETS = [0, 290, 580] as const;
 const SLOT_WIDTH = 245;
-type SlotResult = { status: "candidate"; action: ExperimentalButton | "skip" | "ron"; slot: number; confidence: number }
+type SlotResult = { status: "candidate"; action: ExperimentalButton | "skip" | "ron"; slot: number; confidence: number; evidence?: "partially_occluded_skip" }
   | { status: "empty_candidate"; slot: number; confidence: number }
   | { status: "unresolved"; slot: number; reason: string };
 
@@ -46,6 +46,28 @@ export async function inspectSanmaButtonRow(row: Buffer, templates: Experimental
     }
     if (skipConfidence >= 0.98 && skipConfidence > action.confidence + 0.03 && skipConfidence > emptyConfidence + 0.03 && skipConfidence > ronConfidence + 0.03) {
       return { status: "candidate", action: "skip", slot, confidence: skipConfidence };
+    }
+    // In two reviewed sanma images the last ~45px of a skip button is
+    // covered by the north tile. Compare the unobscured left portion against
+    // *all* competing references, while also requiring a near match across
+    // the full slot. This is a diagnostic candidate only, not click proof.
+    if (slot === 2 && skipConfidence >= 0.95 && skipConfidence < 0.98) {
+      const partial = async (image: Buffer) => sharp(image)
+        .extract({ left: 0, top: 0, width: 200, height: 90 }).png().toBuffer();
+      const [observedLeft, skipLeft, blankLeft, ...otherLeft] = await Promise.all([
+        partial(crop), partial(skip), partial(blank),
+        ...Object.values(templates).map(partial), ...(ronReference ? [partial(ronReference)] : []),
+      ]);
+      const edgePixels = await sharp(crop).extract({ left: 200, top: 0, width: 45, height: 90 }).greyscale().raw().toBuffer();
+      const edgeMean = edgePixels.reduce((sum, value) => sum + value, 0) / edgePixels.length;
+      const [candidateConfidence, ...competing] = await Promise.all([
+        similarity(observedLeft!, skipLeft!),
+        ...[blankLeft!, ...otherLeft].map(reference => similarity(observedLeft!, reference)),
+      ]);
+      if (edgeMean >= 40 && candidateConfidence! >= 0.995
+          && competing.every(value => candidateConfidence! > value + 0.03)) {
+        return { status: "candidate", action: "skip", slot, confidence: candidateConfidence!, evidence: "partially_occluded_skip" };
+      }
     }
     if (emptyConfidence >= 0.98 && emptyConfidence > action.confidence + 0.03 && emptyConfidence > skipConfidence + 0.03 && emptyConfidence > ronConfidence + 0.03) {
       return { status: "empty_candidate", slot, confidence: emptyConfidence };
