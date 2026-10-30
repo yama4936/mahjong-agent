@@ -27,6 +27,12 @@ class SanmaBoardImageTests(unittest.TestCase):
         self.assertEqual(result['reason'], 'unsupported_right_opponent_layout')
         self.assertEqual(result['layoutCandidate'], {'opponents':['left','right'], 'verified':False})
         self.assertNotIn('candidate', result)
+        observation = result['rightLayoutObservation']
+        self.assertEqual(observation['positions'], {'own': {'wind': 'south', 'score': 35000},
+            'left': {'wind': 'east', 'score': 35000}, 'right': {'wind': 'west', 'score': 35000}})
+        self.assertEqual(observation['scoresByObservedWind'], {'south': 35000, 'east': 35000, 'west': 35000})
+        self.assertFalse(observation['verified'])
+        self.assertFalse(observation['complete'])
 
     @unittest.skipUnless((ACTIONS / '2026-10-30T17-30-50-782Z-before.png').exists(), 'local score frame unavailable')
     def test_sanma_left_score_retry_recovers_unverified_candidate(self):

@@ -79,6 +79,10 @@ test("new right opponent layout is not assigned to the old opposite position", {
     assert.equal(data.board.reason,'unsupported_right_opponent_layout');
     assert.deepEqual(data.board.layoutCandidate,{opponents:['left','right'],verified:false});
     assert.equal(data.board.candidate,undefined);
+    assert.deepEqual(data.board.rightLayoutObservation.positions, {
+      own:{wind:'south',score:35000},left:{wind:'east',score:35000},right:{wind:'west',score:35000}});
+    assert.equal(data.board.rightLayoutObservation.verified,false);
+    assert.equal(data.board.rightLayoutObservation.complete,false);
     assert.equal(data.north.status,'unknown');
     assert.equal(data.north.complete,false);
   } finally { worker.close(); }

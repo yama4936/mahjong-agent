@@ -64,6 +64,29 @@ class SanmaBoardTokensTest(unittest.TestCase):
                         'source': 'upright_left_score_crop', 'cropWidth': 328})
         self.assertEqual(self.parse(changed)['reason'], 'incomplete_or_ambiguous_tokens')
 
+    def test_right_layout_reads_winds_and_scores_without_inference(self):
+        def token(text, x, y, confidence=0.999):
+            return {'text': text, 'x': x, 'y': y, 'confidence': confidence}
+        tokens = [token('南',824,514), token('東',835,335), token('西',1093,514),
+                  token('35000',960,482), token('32000',876,423), token('38000',1047,419)]
+        result = self.parse(tokens)
+        observed = result['rightLayoutObservation']
+        self.assertFalse(observed['verified'])
+        self.assertFalse(observed['complete'])
+        self.assertEqual(observed['positions'], {'own': {'wind':'south','score':35000},
+            'left': {'wind':'east','score':32000}, 'right': {'wind':'west','score':38000}})
+        self.assertEqual(observed['scoresByObservedWind'], {'south':35000,'east':32000,'west':38000})
+        self.assertNotIn('candidate', result)
+        for bad in (tokens[:2] + tokens[3:], tokens + [token('東',1093,514)],
+                    [*tokens[:2], token('南',1093,514), *tokens[3:]],
+                    tokens[:4] + tokens[5:]):
+            with self.subTest(bad=bad):
+                incomplete = self.parse(bad)['rightLayoutObservation']
+                self.assertNotIn('scoresByObservedWind', incomplete)
+                self.assertFalse(incomplete['complete'])
+        zero = self.parse(tokens[:-1] + [token('0',1047,419)])['rightLayoutObservation']
+        self.assertEqual(zero['positions']['right']['score'], 0)
+
     def test_alternate_right_score_layout_is_only_an_unverified_hypothesis(self):
         tokens = self.tokens('south')
         no_opposite = [t for t in tokens if not (abs(t['x'] - 958) <= 24 and abs(t['y'] - 364) <= 20)]
