@@ -301,6 +301,41 @@ def recognize_riichi_sticks(image, own_seat: str) -> list[str]:
     return detected
 
 
+def validate_sanma_board_consistency(snapshot: dict, *, expected_total_points: int | None,
+                                     payment_phase: str | None) -> dict:
+    """Check supplied sanma metadata, not OCR accuracy or screen identity.
+
+    ``settled`` means both scores and riichi-stick count reflect all completed
+    transfers for this same instant. In-flight or unknown phases are not
+    certifiable. ``expected_total_points`` includes outstanding deposits and
+    must come from independently reviewed room settings. This function is not
+    connected to the operator or its four-seat OCR path.
+    """
+    if type(expected_total_points) is not int or expected_total_points <= 0:
+        return {"consistent": False, "reason": "expected_total_points_unknown"}
+    if payment_phase != "settled":
+        return {"consistent": False, "reason": "payment_phase_not_settled"}
+    if not isinstance(snapshot, dict):
+        return {"consistent": False, "reason": "invalid_snapshot"}
+    seats = ("east", "south", "west")
+    if snapshot.get("seat") not in seats:
+        return {"consistent": False, "reason": "seat_not_verified"}
+    round_name = snapshot.get("round")
+    if not isinstance(round_name, str) or not re.fullmatch(r"(?:east|south|west|north)_[1-3]", round_name):
+        return {"consistent": False, "reason": "round_not_verified"}
+    scores = snapshot.get("scores")
+    if not isinstance(scores, dict) or set(scores) != set(seats) \
+            or any(type(value) is not int for value in scores.values()):
+        return {"consistent": False, "reason": "three_scores_not_verified"}
+    sticks, honba = snapshot.get("riichiSticks"), snapshot.get("honba")
+    if type(sticks) is not int or not 0 <= sticks <= 99 \
+            or type(honba) is not int or not 0 <= honba <= 99:
+        return {"consistent": False, "reason": "honba_or_riichi_sticks_not_verified"}
+    if sum(scores.values()) + sticks * 1000 != expected_total_points:
+        return {"consistent": False, "reason": "scores_and_riichi_sticks_total_mismatch"}
+    return {"consistent": True, "scope": "sanma_supplied_values_only"}
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("screenshot", type=Path)
