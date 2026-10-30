@@ -67,6 +67,30 @@ class ResidentObservationTests(unittest.TestCase):
         page.mouse.click.assert_not_called()
         op.log.assert_called_once()
 
+    def test_tampered_self_turn_receipt_is_rejected_before_capture(self):
+        op = self.operator({'id': 1, 'result': self.result()})
+        page = Mock()
+        page.screenshot.return_value = b'fake frame'
+        receipt = op.inspect_sanma_self_turn(page)
+        Path(receipt['screenshot']).write_bytes(b'tampered')
+        page.screenshot.reset_mock()
+        with self.assertRaisesRegex(RuntimeError, 'screenshot changed'):
+            op.inspect_sanma_kita_confirmation(page, receipt)
+        page.screenshot.assert_not_called()
+        page.mouse.click.assert_not_called()
+
+    def test_receipt_without_matching_source_cannot_enter_confirmation(self):
+        op = self.operator({'id': 1, 'result': self.result()})
+        page = Mock()
+        page.screenshot.return_value = b'fake frame'
+        receipt = op.inspect_sanma_self_turn(page)
+        receipt['sourceObservation']['digest'] = '0' * 64
+        page.screenshot.reset_mock()
+        with self.assertRaisesRegex(RuntimeError, 'receipt is missing or inconsistent'):
+            op.inspect_sanma_kita_confirmation(page, receipt)
+        page.screenshot.assert_not_called()
+        page.mouse.click.assert_not_called()
+
     def test_executable_priority_is_rejected_without_click(self):
         bad = self.result()
         bad['assembly']['priority'] = {'status': 'offline_priority'}
@@ -115,6 +139,14 @@ class ResidentSanmaEndToEndTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'sanma execution'):
                 op.execute(page, receipt)
             self.assertEqual(Path(receipt['screenshot']).read_bytes(), page.screenshot.return_value)
+            page.mouse.click.assert_not_called()
+            after_frame = Path('artifacts/sanma-manual-e48c562-20261031/actions/2026-10-30T16-05-55-331Z-after.png')
+            page.screenshot.return_value = after_frame.read_bytes()
+            confirmation = op.inspect_sanma_kita_confirmation(page, receipt)
+            self.assertEqual(confirmation['status'], 'unresolved')
+            self.assertEqual(confirmation['reason'], 'extraction_and_replacement_not_verified')
+            self.assertEqual(confirmation['beforeDigest'], receipt['digest'])
+            self.assertFalse(confirmation['operationAuthorized'])
             page.mouse.click.assert_not_called()
             open_frame = Path('artifacts/sanma-manual-e48c562-20261031/actions/2026-10-30T16-21-44-430Z-before.png')
             page.screenshot.return_value = open_frame.read_bytes()

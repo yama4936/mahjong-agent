@@ -3881,7 +3881,8 @@ class PythonAutoOperator:
                    "digest": result["digest"], "screenshot": str(path),
                    "priority": assembly["priority"], "evaluation": assembly["evaluation"],
                    "candidates": result.get("candidates"),
-                   "drawCandidate": sanma_draw_observation_candidate(result)}
+                   "drawCandidate": sanma_draw_observation_candidate(result),
+                   "sourceObservation": result}
         self.log("sanma_self_turn_observed", digest=receipt["digest"], screenshot=str(path),
                  priority=receipt["priority"], evaluation=receipt["evaluation"])
         return receipt
@@ -3894,6 +3895,24 @@ class PythonAutoOperator:
         the replacement draw, game identity or a click receipt. The playing loop
         must not use this diagnostic as a successful confirmation.
         """
+        # Accept the actual self-turn receipt, rather than requiring callers
+        # to reconstruct a separate observation after deciding what happened.
+        # Its on-disk screenshot and source report must still be identical.
+        if isinstance(before, dict) and before.get("scope") == "sanma_self_turn_observation":
+            receipt = before
+            source = receipt.get("sourceObservation")
+            path = receipt.get("screenshot")
+            if (receipt.get("status") != "blocked" or receipt.get("operationAuthorized") is not False
+                    or not isinstance(path, str) or not isinstance(source, dict)
+                    or receipt.get("digest") != source.get("digest")):
+                raise RuntimeError("sanma self-turn receipt is missing or inconsistent")
+            try:
+                digest = hashlib.sha256(Path(path).read_bytes()).hexdigest()
+            except OSError as error:
+                raise RuntimeError("sanma self-turn screenshot unavailable") from error
+            if digest != receipt.get("digest"):
+                raise RuntimeError("sanma self-turn screenshot changed")
+            before = source
         if (not isinstance(before, dict) or before.get("scope") != "offline_untrusted_sanma_auto_observation"
                 or before.get("operationAuthorized") is not False or not isinstance(before.get("digest"), str)
                 or not isinstance(before.get("report"), dict) or before["report"].get("digest") != before["digest"]):
