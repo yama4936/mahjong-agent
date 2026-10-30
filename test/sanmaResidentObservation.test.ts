@@ -35,6 +35,8 @@ test("one resident server handles yonma and read-only sanma without mixing execu
     assert.equal(observation.result.assembly.partial.seat,"west");
     assert.equal("ownKitaCount" in observation.result.assembly.partial,false);
     assert.equal(observation.result.assembly.evaluation.status,"blocked");
+    assert.equal(observation.result.assembly.priority.status,"blocked");
+    assert.ok(observation.result.assembly.priority.reasons.includes("complete independent review missing"));
     assert.ok(observation.result.assembly.evaluation.reasons.includes("complete independent review missing"));
     assert.equal(observation.result.report.decision.status,"blocked");
     assert.equal(observation.result.candidates.status,"hypotheses");

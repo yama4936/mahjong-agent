@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
+import { inspectSanmaSelfTurnPriority } from "../game/sanmaSelfTurnPriorityExperiment.js";
 import { inspectSanmaDiscardSafety } from "../game/sanmaDiscardSafetyExperiment.js";
 import type { inspectSanmaFrame } from "./sanmaFrameExperiment.js";
 
 type FrameReport = Awaited<ReturnType<typeof inspectSanmaFrame>>;
-type UiAction = "kita" | "tsumo" | "ron" | "pon" | "kan" | "pass";
+type UiAction = "kita" | "tsumo" | "ron" | "pon" | "kan" | "pass" | "riichi";
 /**
  * External human-reviewed state and complete UI evidence. This is a caller
  * assertion for offline research, never a certificate for the live operator.
@@ -17,19 +18,21 @@ export type ReviewedFrameEvidence = {
 };
 
 export function evaluateSanmaFrameCandidate(input: {
-  frame: Buffer; report: FrameReport; review?: ReviewedFrameEvidence;
+  frame: Buffer; report: FrameReport; review?: ReviewedFrameEvidence; priorityOnly?: boolean;
 }) {
   const reasons: string[] = [];
-  const { frame, report, review } = input;
+  const { frame, report, review, priorityOnly } = input;
   if (!Buffer.isBuffer(frame) || createHash("sha256").update(frame).digest("hex") !== report.digest) reasons.push("frame digest mismatch");
   if (!review || review.source !== "external_review") reasons.push("complete independent review missing");
   else if (review.digest !== report.digest) reasons.push("review digest mismatch");
   if (report.hand.status !== "candidate" || !report.hand.value.safe) reasons.push("hand recognition unconfirmed");
   if (report.publicTiles.status !== "candidate") reasons.push("public recognition failed");
-  if (report.button.status === "candidate" && report.button.value.status === "matched") reasons.push(`visible ${report.button.value.action} button needs separate handling`);
+  const accepts = (action: string) => priorityOnly === true && !!review && Array.isArray(review.ui?.actions)
+    && review.ui.actions.includes((action === "skip" ? "pass" : action) as UiAction);
+  if (report.button.status === "candidate" && report.button.value.status === "matched" && !accepts(report.button.value.action)) reasons.push(`visible ${report.button.value.action} button needs separate handling`);
   if (report.buttonRow?.status === "candidate") {
     for (const slot of report.buttonRow.value.slots) {
-      if (slot.status === "candidate") reasons.push(`possible ${slot.action} button in slot ${slot.slot} needs separate handling`);
+      if (slot.status === "candidate" && !accepts(slot.action)) reasons.push(`possible ${slot.action} button in slot ${slot.slot} needs separate handling`);
     }
   }
   if (reasons.length || !review || report.hand.status !== "candidate" || report.publicTiles.status !== "candidate") {
@@ -79,7 +82,15 @@ export function evaluateSanmaFrameCandidate(input: {
           || !containsMelds(opponent.melds, observedOpponent.melds ?? []);
       })) return {status: "blocked" as const, reasons: ["reviewed public state conflicts with candidate tiles"], operationAuthorized: false as const};
   try {
-    const { rows } = inspectSanmaDiscardSafety(review);
+    if (priorityOnly) {
+      const actions = review.ui.actions;
+      if (actions.some(action => action === "ron" || action === "pon")) throw new Error("reaction action is not a self-turn priority");
+      const priority = inspectSanmaSelfTurnPriority(review as Parameters<typeof inspectSanmaSelfTurnPriority>[0]);
+      return { status:"offline_priority" as const, digest:report.digest, priority,
+        assumptions:["external review is correct", "action list and self-turn status externally confirmed"], operationAuthorized:false as const };
+    }
+    if (review.ui.actions.includes("riichi")) throw new Error("riichi requires separate handling");
+    const { rows } = inspectSanmaDiscardSafety(review as Parameters<typeof inspectSanmaDiscardSafety>[0]);
     return {status: "offline_evaluation" as const, digest: report.digest, rows,
       assumptions: ["external review is correct", "genbutsu candidates are not a complete defense or point-value model"], operationAuthorized: false as const};
   } catch (error) {
@@ -142,6 +153,9 @@ export function assembleSanmaEvaluation(input: {
   const evaluation = northConflict
     ? {status:"blocked" as const, reasons:["reviewed zero north count conflicts with visual candidate"],operationAuthorized:false as const}
     : evaluateSanmaFrameCandidate({frame, report, ...(review ? {review} : {})});
+  const priority = northConflict
+    ? {status:"blocked" as const, reasons:["reviewed zero north count conflicts with visual candidate"],operationAuthorized:false as const}
+    : evaluateSanmaFrameCandidate({frame, report, ...(review ? {review} : {}), priorityOnly:true});
   return {scope:"offline_untrusted_sanma_evaluation_assembly" as const, status:"blocked" as const,
-    digest, partial, missing, evaluation, operationAuthorized:false as const};
+    digest, partial, missing, evaluation, priority, operationAuthorized:false as const};
 }
