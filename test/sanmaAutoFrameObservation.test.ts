@@ -119,7 +119,7 @@ test("automatic same-frame board, hand, public and UI candidates remain unverifi
       assert.equal(other.north.complete,false);
       assert.ok(other.north.positions?.left.candidate);
       assert.equal(other.ownSeat.status,"unknown");
-      assert.equal(other.board.reason,"incomplete_or_ambiguous_tokens");
+      assert.equal(other.board.reason,"unsupported_right_opponent_layout");
     }
   } finally { await model.close(); }
 });
