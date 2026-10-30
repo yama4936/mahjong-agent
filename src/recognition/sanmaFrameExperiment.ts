@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 import sharp from "sharp";
 import { evaluateDiscards } from "../game/ukeire.js";
-import { proposeLiveHandLayout } from "./handLayoutProposal.js";
+import { proposeLiveHandLayout, knownOpenHandProposalFitsCalibratedRow } from "./handLayoutProposal.js";
+import { recoverSanmaRaisedHand } from "./sanmaRaisedHandRecovery.js";
 import type { ScreenLayout } from "./layout.js";
 import { recognizeHand } from "./templateMatcher.js";
 import { classifySanmaButtonCrop, type ExperimentalTemplates } from "./sanmaButtonExperiment.js";
@@ -30,7 +31,12 @@ export async function inspectSanmaFrame(input: {
   const dimensions = await image.metadata();
   if (dimensions.width !== 1920 || dimensions.height !== 1080) throw new Error("Unreviewed frame dimensions");
   const handPromise = (async () => {
-    const proposal = await proposeLiveHandLayout(frame);
+    let proposal = await proposeLiveHandLayout(frame);
+    if (proposal.evidence.detectedTiles === 2 && !knownOpenHandProposalFitsCalibratedRow(proposal, input.layout, 4)) {
+      const recovered = await recoverSanmaRaisedHand(frame, input.layout, proposal);
+      if (!recovered) throw new Error("suspected false compact hand and raised-row recovery unavailable");
+      proposal = recovered;
+    }
     const recognition = await recognizeHand(frame, { ...input.layout, ...proposal }, input.templates);
     return { recognition, proposal };
   })();

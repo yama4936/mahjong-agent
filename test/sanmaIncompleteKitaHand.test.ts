@@ -13,7 +13,7 @@ const file=`${base}/2026-10-30T16-21-44-430Z-before.png`;
 const available=existsSync(file) && existsSync("templates/bootstrap/1m__hf_base.png") &&
   existsSync(".runtime/hybrid-vision/cvmaj-pretrained.tar") && existsSync(".runtime/hybrid-vision/automajsoul-best-model.pt");
 
-test("real kita button remains a hypothesis when cropped hand misses north",{skip:!available,timeout:30000},async()=>{
+test("real kita button remains a hypothesis after recovering a raised compact hand",{skip:!available,timeout:30000},async()=>{
   const frame=await readFile(file),layout=layoutSchema.parse(JSON.parse(await readFile("config/layout-runtime.json","utf8")));
   const buttonTemplates=Object.fromEntries(await Promise.all(EXPERIMENTAL_BUTTONS.map(async n=>[n,await readFile(`test/fixtures/sanma-buttons/${n}.png`)]))) as ExperimentalTemplates;
   const row=await readFile("test/fixtures/sanma-button-rows/kita.png"),buttonRowReferences={skip:await sharp(row).extract({left:580,top:0,width:245,height:90}).png().toBuffer(),emptyRow:await readFile("test/fixtures/sanma-button-rows/empty.png")};
@@ -23,10 +23,19 @@ test("real kita button remains a hypothesis when cropped hand misses north",{ski
     assert.equal(report.hand.status,"candidate");
     if(report.hand.status!=="candidate") return;
     assert.equal(report.hand.value.safe,false);
-    assert.ok(report.hand.value.tiles.length<14);
-    assert.equal(report.hand.value.tiles.includes("N"),false);
+    assert.equal(report.hand.value.tiles.length,11);
+    assert.deepEqual(report.hand.value.tiles,["1p","1p","2p","3p","7p","7p","8p","5s","8s","9s","N"]);
+    assert.equal(report.hand.value.turnReady,false);
+    assert.equal(report.handGeometry.status,"candidate");
+    if(report.handGeometry.status==="candidate") {
+      assert.equal(report.handGeometry.value.handSlots[9]?.y,873);
+      assert.equal(report.handGeometry.value.drawSlot.x,1201);
+      assert.equal(report.handGeometry.value.requiresHoldoutValidation,true);
+    }
     const result=deriveSanmaActionCandidates(report,true);
-    assert.deepEqual(result.candidates,[{action:"kita",slot:1,handSupport:"unknown"}]);
+    assert.deepEqual(result.candidates,[{action:"kita",slot:1,handSupport:"north_candidate",northIndexes:[10]}]);
+    const incompleteReport={...report,hand:{...report.hand,value:{...report.hand.value,tiles:report.hand.value.tiles.slice(0,2)}}};
+    assert.deepEqual(deriveSanmaActionCandidates(incompleteReport,true).candidates,[{action:"kita",slot:1,handSupport:"unknown"}]);
     assert.equal(result.status,"hypotheses");
     assert.equal(result.operationAuthorized,false);
     assert.equal(report.operationAuthorized,false);
