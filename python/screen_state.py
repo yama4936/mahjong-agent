@@ -284,6 +284,22 @@ def _is_cherry_blossom_ranked_menu(image: Image.Image) -> bool:
     return all(fraction >= 0.45 for fraction in dark_fractions)
 
 
+@lru_cache(maxsize=1)
+def _illustrated_loading_caption() -> Image.Image:
+    return _open(Path(__file__).resolve().parent.parent / "templates/screens/sanma-friend-loading-caption.png")
+
+
+def _is_illustrated_friend_loading(image: Image.Image) -> bool:
+    """Narrow native illustrated loading signature, observed in one match."""
+    if image.size != (1920, 1080):
+        return False
+    caption = image.crop((840, 910, 1080, 985))
+    if _distance(caption, _illustrated_loading_caption()) >= .025:
+        return False
+    bar = image.crop((0, 998, 1920, 1010))
+    return _rgb_fraction(bar, ((">", 210),) * 3) >= .40
+
+
 def _is_lobby_loading(image: Image.Image) -> bool:
     """The black lobby-loading screen is not a ranked reservation card."""
     width, height = image.size
@@ -388,7 +404,7 @@ def classify_screen(
         return "match", 1.0
     if _is_reference_supported_riichi_selection(image, references, maximum_distance):
         return "match", 1.0
-    if _is_lobby_loading(image):
+    if _is_lobby_loading(image) or _is_illustrated_friend_loading(image):
         return "loading", 1.0
     if _is_account_modal(image):
         return "account_modal", 1.0
