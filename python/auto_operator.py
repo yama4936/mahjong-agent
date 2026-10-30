@@ -41,6 +41,10 @@ from sanma_friend_navigation import inspect_sanma_friend_start
 from screencast_diagnostic import ScreencastDiagnostic
 
 
+class RankEntryDeniedError(RuntimeError):
+    """A rank admission dialog requires a stop even with error retries enabled."""
+
+
 class RetryableSafetyAbort(RuntimeError):
     """A stale pre-click observation that is safe to reevaluate."""
 
@@ -5263,9 +5267,16 @@ class PythonAutoOperator:
         if (state == "connection_error" and confidence >= .95 and screenshot is not None
                 and getattr(getattr(self, "args", None), "mode", None) == "force-auto"):
             return self.recover_connection_error(page)
-        if state in {"session_conflict", "connection_error"}:
-            self.log("blocking_dialog_stop", state=state, confidence=confidence, gameplayClicks=0)
-            raise RuntimeError(f"Mahjong Soul {state} dialog blocks the table; operator stopped without confirming it")
+        if state in {"session_conflict", "connection_error", "rank_entry_denied"}:
+            evidence = {}
+            if state == "rank_entry_denied" and screenshot is not None:
+                snapshot = self.frames / f"{utc_stamp()}.rank-entry-denied.png"
+                snapshot.write_bytes(screenshot)
+                snapshot.chmod(0o600)
+                evidence["screenshot"] = str(snapshot)
+            self.log("blocking_dialog_stop", state=state, confidence=confidence, gameplayClicks=0, **evidence)
+            error_type = RankEntryDeniedError if state == "rank_entry_denied" else RuntimeError
+            raise error_type(f"Mahjong Soul {state} dialog blocks the table; operator stopped without confirming it")
         if state in {"round_result", "match_result", "rank_progress", "post_match_reward"}:
             # Only uninterrupted matchmaking observations count toward the
             # five-second guard. These stages bypass its normal reset path.
@@ -8544,6 +8555,10 @@ class PythonAutoOperator:
                     screen_state, screen_confidence = gate_screen_state, gate_screen_confidence
                 else:
                     screen_state, screen_confidence = classify_screen(full_screen, self.screen_references)
+                if screen_state == "rank_entry_denied":
+                    # The streamed fast path uses the early guard; synchronous
+                    # fallback must stop and preserve the same evidence too.
+                    self.handle_early_non_gameplay_screen(page, screen_state, screen_confidence, full_screen)
                 if screen_state == "round_result":
                     live_evidence = round_result_conflicts_with_live_table(full_screen, self.layout)
                     if live_evidence is not None:
@@ -9408,7 +9423,7 @@ class PythonAutoOperator:
                 raise
             except Exception as error:
                 self.log("safety_stop", error=str(error))
-                if self.args.stop_on_error:
+                if isinstance(error, RankEntryDeniedError) or self.args.stop_on_error:
                     raise
             if self.args.max_iterations and iterations >= self.args.max_iterations:
                 return

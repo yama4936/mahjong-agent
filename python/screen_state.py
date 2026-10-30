@@ -10,6 +10,7 @@ from PIL import Image, ImageChops, ImageStat
 ScreenState = Literal[
     "login", "account_modal", "session_conflict", "connection_error", "lobby", "ranked_menu", "ranked_room",
     "matchmaking", "loading", "black_screen", "match", "away", "round_result", "match_result", "rank_progress",
+    "rank_entry_denied",
     "post_match_reward", "rank_promotion", "rank_certificate", "exit_confirm", "unknown",
 ]
 
@@ -42,6 +43,18 @@ def _signature(image: Image.Image) -> Image.Image:
 def _distance(left: Image.Image, right: Image.Image) -> float:
     mean = ImageStat.Stat(ImageChops.difference(_signature(left), _signature(right))).mean
     return sum(mean) / (3 * 255)
+
+
+@lru_cache(maxsize=1)
+def _rank_entry_denied_reference() -> Image.Image:
+    return _open(Path(__file__).resolve().parent.parent / "templates/screens/ranked-entry-denied-message.png")
+
+
+def _is_rank_entry_denied(image: Image.Image) -> bool:
+    """Recognize this native admission-denied text, independent of room or rank."""
+    if image.size != (1920, 1080):
+        return False
+    return _distance(image.crop((600, 450, 1320, 560)), _rank_entry_denied_reference()) < .025
 
 
 def _is_session_conflict(image: Image.Image) -> bool:
@@ -396,6 +409,8 @@ def classify_screen(
         return "rank_progress", 1.0
     if _is_ranked_match_result(image):
         return "match_result", 1.0
+    if _is_rank_entry_denied(image):
+        return "rank_entry_denied", 1.0
     if _is_session_conflict(image):
         return "session_conflict", 1.0
     if _matches_blocking_dialog(image, _blocking_dialog_reference("connection-error.png")):
