@@ -151,16 +151,19 @@ class ReviewedInitialBudgetTest(unittest.TestCase):
         self.assertEqual([entry[:2] for entry in recorded], [(0, 15.7)] * 2)
 
     def test_real_run_charges_prewarm_and_synchronous_replacement_capture(self):
-        recorded, _, _ = self.run_to_evidence(prewarm_cost=.5, replacement_capture_cost=1.0,
+        recorded, _, _ = self.run_to_evidence(prewarm_cost=.5, replacement_capture_cost=.7,
                                             classification_cost=.2, repeats=1)
         self.assertEqual(recorded[0][:2], (0, 15.7))
-        self.assertAlmostEqual(recorded[0][2], 17.6)
-        self.assertEqual(self.operator.force_auto_action_evidence_age_ms(), 1900)
+        # The charged work leaves exactly the normal self-turn's 1000ms
+        # two-click admission reserve; one more millisecond must reject.
+        self.assertAlmostEqual(recorded[0][2], 17.3)
+        self.assertEqual(self.operator.force_auto_action_evidence_age_ms(), 1600)
         self.operator.require_force_auto_discard_selection_window(15.7)
         self.now += .051
         with self.assertRaisesRegex(RetryableSafetyAbort, "lacks time"):
             self.operator.require_force_auto_discard_selection_window(15.7)
-        self.now += .650
+        # Independently exercise the unchanged 2600ms image-freshness guard.
+        self.now += .950
         with self.assertRaises(RetryableSafetyAbort):
             self.operator.require_force_auto_click_budget(15.7, phase="before_recognition")
 

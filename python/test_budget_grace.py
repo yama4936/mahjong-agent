@@ -70,11 +70,14 @@ class BudgetGraceTest(unittest.TestCase):
                 with self.assertRaises(RetryableSafetyAbort):
                     op.require_force_auto_click_budget(capture, phase="before_discard_click")
 
-    def test_first_selection_reserves_650ms_from_both_clocks(self):
+    def test_normal_self_turn_selection_reserves_1000ms_from_both_clocks(self):
         op = self.operator()
-        with patch("auto_operator.time.monotonic", return_value=19.35):
+        # Normal self-turn selection is the live path that measured a 912ms
+        # first-click-to-confirmation interval.  Its larger admission reserve
+        # must be charged against the original same-draw action clock too.
+        with patch("auto_operator.time.monotonic", return_value=19.0):
             op.require_force_auto_discard_selection_window(19.2)
-        with patch("auto_operator.time.monotonic", return_value=19.351):
+        with patch("auto_operator.time.monotonic", return_value=19.001):
             with self.assertRaises(RetryableSafetyAbort):
                 op.require_force_auto_discard_selection_window(19.2)
         self.assertEqual(op.log.call_args.kwargs["effectiveActionBudgetMs"], 10000)

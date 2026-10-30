@@ -163,7 +163,10 @@ class ResidentSelfTurnBudgetTest(unittest.TestCase):
             self.operator.require_force_auto_discard_selection_window(old_capture)
         # Alternative earlier completion, using the *same* original image.
         # Neither its receipt nor the original action clock gets refreshed.
-        self.now -= .650
+        # Normal self-turn admission has the separately measured 1000ms
+        # two-click reserve.  Preserve the original clocks while reaching its
+        # boundary; neither receipt nor turn evidence is reset.
+        self.now -= 1.000
         self.operator.require_force_auto_discard_selection_window(old_capture)
         self.assertEqual(self.operator.action_evidence_started_at, 100)
         self.assertEqual(self.operator.action_budget_started_at, 100)

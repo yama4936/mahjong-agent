@@ -12,6 +12,7 @@ import tempfile
 import json
 import time
 import threading
+import auto_operator
 from datetime import datetime, timezone
 from unittest.mock import Mock, call, patch
 
@@ -3321,10 +3322,33 @@ class AwayDialogDetectionTest(unittest.TestCase):
         operator.log.assert_called_once_with(
             "force_auto_discard_selection_window_insufficient",
             clickBudgetMs=2600,
-            reserveMs=650,
+            reserveMs=1000,
             captureAgeBeforeSelectionMs=111,
             actionEvidenceAgeMs=2311,
             remainingMs=289,
+        )
+
+    def test_short_discard_selection_reserve_rejects_one_millisecond_shortfall(self) -> None:
+        """The 1000ms admission boundary keeps a selected tile unambiguous."""
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(force_auto_click_budget_ms=2600)
+        operator.action_evidence_started_at = 10.0
+        operator.log = Mock()
+
+        # The action gate, rather than the nearly fresh screenshot, leaves
+        # 999ms.  A first press here could not be safely confirmed from the
+        # measured 300+0 selection receipts.
+        with patch("auto_operator.time.monotonic", return_value=11.601):
+            with self.assertRaisesRegex(RetryableSafetyAbort, "lacks time"):
+                operator.require_force_auto_discard_selection_window(11.6)
+
+        operator.log.assert_called_once_with(
+            "force_auto_discard_selection_window_insufficient",
+            clickBudgetMs=2600,
+            reserveMs=1000,
+            captureAgeBeforeSelectionMs=1,
+            actionEvidenceAgeMs=1601,
+            remainingMs=999,
         )
 
     def test_short_click_budget_rejects_fresh_frame_after_old_self_turn_gate(self) -> None:
@@ -3612,11 +3636,11 @@ class AwayDialogDetectionTest(unittest.TestCase):
         def classify_confirmed_selection(*_args):
             # Classification consumes the remaining time from the original
             # evaluated frame, but the verified selection screenshot itself
-            # was captured at 12.5 and remains inside the 2600ms budget.
+            # was captured at 12.5 and retains the full two-click reserve.
             # A Riichi declaration establishes a new baseline, but its tile
             # discard is still a two-click gesture and must retain the
             # confirmed-selection reserve for the raised hitbox.
-            clock["now"] = 14.3
+            clock["now"] = 13.8
             return "match", 1.0
 
         with patch("auto_operator.time.monotonic", side_effect=lambda: clock["now"]), \
@@ -5624,6 +5648,112 @@ class AwayDialogDetectionTest(unittest.TestCase):
         # known to remain on the selected physical tile.
         self.assertEqual(mouse.calls[:2], [(1122.5, 999, {}), (1122.5, 980.0, {"delay": 80})])
         synchronous_screenshot.assert_not_called()
+
+    def test_selection_receipt_never_reuses_an_unraised_stream_sequence(self) -> None:
+        """A later poll must wait for a new receipt, not retry stale pixels."""
+        layout = load_json(Path(__file__).resolve().parents[1] / "config/layout-300-regression.json")
+        before, raised = self.raised_tile_frames(layout, 9, 19)
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.latest_screencast_frame = before
+        operator.screencast_sequence = 13
+        operator.latest_screencast_captured_at = 10.1
+
+        self.assertEqual(
+            operator.fresh_screencast_selection_receipt(12, 10.0), before,
+        )
+        self.assertIsNone(
+            operator.fresh_screencast_selection_receipt(12, 10.0, after_sequence=13),
+        )
+        operator.latest_screencast_frame = raised
+        operator.screencast_sequence = 14
+        operator.latest_screencast_captured_at = 10.2
+        self.assertEqual(
+            operator.fresh_screencast_selection_receipt(12, 10.0, after_sequence=13), raised,
+        )
+
+    def test_discard_confirmation_waits_for_new_stream_sequence_after_unraised_receipt(self) -> None:
+        """The real two-click helper skips an unraised receipt and uses the next one."""
+        layout = load_json(Path(__file__).resolve().parents[1] / "config/layout-300-regression.json")
+        point = layout["clickPoints"][9]
+        before, raised = self.raised_tile_frames(layout, 9, 19)
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.latest_screencast_frame = before
+        operator.screencast_sequence = 13
+        operator.latest_screencast_captured_at = 0.0
+        operator.latest_selection_stream_receipt = None
+        seen_sequence = None
+        polls = 0
+
+        def wait_for_stream(_milliseconds):
+            nonlocal polls
+            polls += 1
+            if polls == 2:
+                operator.latest_screencast_frame = raised
+                operator.screencast_sequence = 14
+                operator.latest_screencast_captured_at = time.monotonic()
+                operator.latest_selection_stream_receipt = auto_operator._SelectionStreamReceipt(
+                    raised, operator.latest_screencast_captured_at, 14,
+                )
+            elif polls == 1:
+                operator.latest_selection_stream_receipt = auto_operator._SelectionStreamReceipt(
+                    before, time.monotonic(), 13,
+                )
+
+        def next_receipt(first_click_at):
+            nonlocal seen_sequence
+            receipt = operator.fresh_screencast_selection_receipt(
+                12, first_click_at, after_sequence=seen_sequence,
+            )
+            if receipt is not None:
+                # Mirror the live closure: bind the consumed sequence to the
+                # immutable publication that supplied these exact pixels.
+                seen_sequence = operator.latest_selection_stream_receipt.sequence
+            return receipt
+
+        mouse = RecordingMouse()
+        confirmation = send_discard_click(
+            mouse, point, {"width": 1920, "height": 1080}, wait_for_stream,
+            before, next_receipt, layout, 9, 1.5,
+        )
+        self.assertEqual(polls, 2)
+        self.assertEqual(confirmation["lift"], 19)
+        self.assertEqual(mouse.calls[:2], [(1122.5, 999, {}), (1122.5, 980.0, {"delay": 80})])
+
+    def test_riichi_selection_receipt_waits_for_new_stream_sequence_after_unraised_receipt(self) -> None:
+        """The immutable Riichi receipt path has the same no-reuse guarantee."""
+        layout = load_json(Path(__file__).resolve().parents[1] / "config/layout-300-regression.json")
+        point = layout["clickPoints"][9]
+        before, raised = self.raised_tile_frames(layout, 9, 19)
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        seen_sequence = None
+        polls = 0
+
+        def wait_for_stream(_milliseconds):
+            nonlocal polls
+            polls += 1
+            frame = before if polls == 1 else raised
+            operator.latest_selection_stream_receipt = auto_operator._SelectionStreamReceipt(
+                frame, time.monotonic(), 13 if polls == 1 else 14,
+            )
+
+        def next_receipt(first_click_at):
+            nonlocal seen_sequence
+            observation = operator.frozen_selection_stream_receipt(
+                12, first_click_at, after_sequence=seen_sequence,
+            )
+            if observation is not None:
+                seen_sequence = observation.sequence
+                return observation.frame
+            return None
+
+        mouse = RecordingMouse()
+        confirmation = send_discard_click(
+            mouse, point, {"width": 1920, "height": 1080}, wait_for_stream,
+            before, next_receipt, layout, 9, 1.5,
+        )
+        self.assertEqual(polls, 2)
+        self.assertEqual(confirmation["lift"], 19)
+        self.assertEqual(mouse.calls[:2], [(1122.5, 999, {}), (1122.5, 980.0, {"delay": 80})])
 
     def test_selection_receipt_rejects_fresh_unraised_compact_frame(self) -> None:
         layout = load_json(Path(__file__).resolve().parents[1] / "config/layout-300-regression.json")

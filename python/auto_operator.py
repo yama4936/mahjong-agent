@@ -143,9 +143,15 @@ FORCE_AUTO_SAME_DRAW_ACTION_BUDGET_MS = 10000
 FORCE_AUTO_NORMAL_TURN_BUDGET_MS = 5000
 # A discard is a two-input gesture: the first click only raises the selected
 # physical tile and a later, observed raised hitbox receives the confirmation
-# click.  Do not start that gesture with so little of the short-clock budget
-# left that its second input can race the client auto-tsumogiri.
+# click.  This reserve is also used by optional reaction evaluation and the
+# established Riichi receipt contract; changing it would silently alter those
+# independent safety budgets.
 FORCE_AUTO_DISCARD_SELECTION_RESERVE_MS = 650
+# Live 300+0 evidence needed 912ms from a *normal self-turn* first press to
+# the final confirmation gate.  That path has no Riichi receipt certificate,
+# so admit it only with this larger short-clock reserve.  Do not apply this to
+# reactions or Riichi, whose separately tested timing contracts remain 650ms.
+FORCE_AUTO_SELF_TURN_DISCARD_SELECTION_RESERVE_MS = 1000
 # Only the new execute-local riichi proof uses this comparison. JPEG ringing
 # may move a threshold edge by two pixels; changed tile interiors must remain
 # below 0.1% of the calibrated river, far smaller than an appended river tile.
@@ -2970,13 +2976,16 @@ class PythonAutoOperator:
             effective_budget - action_evidence_age_ms if action_evidence_age_ms is not None else budget,
             deadline_remaining if riichi_selection is not None else effective_budget,
         )
-        if elapsed_ms is None or remaining_ms >= FORCE_AUTO_DISCARD_SELECTION_RESERVE_MS:
+        reserve_ms = (FORCE_AUTO_DISCARD_SELECTION_RESERVE_MS
+                      if riichi_selection is not None
+                      else FORCE_AUTO_SELF_TURN_DISCARD_SELECTION_RESERVE_MS)
+        if elapsed_ms is None or remaining_ms >= reserve_ms:
             return
         self.log(
             "force_auto_discard_selection_window_insufficient",
             clickBudgetMs=budget,
             **({"effectiveActionBudgetMs": effective_budget} if effective_budget != budget else {}),
-            reserveMs=FORCE_AUTO_DISCARD_SELECTION_RESERVE_MS,
+            reserveMs=reserve_ms,
             captureAgeBeforeSelectionMs=capture_age_ms,
             **({"actionEvidenceAgeMs": action_evidence_age_ms}
                if action_evidence_age_ms is not None else {}),
@@ -3517,6 +3526,7 @@ class PythonAutoOperator:
 
     def frozen_selection_stream_receipt(
         self, sequence_before: int | None, first_click_at: float,
+        *, after_sequence: int | None = None,
     ) -> _SelectionStreamReceipt | None:
         """Read one immutable publication; never reconstruct metadata from latest fields."""
         receipt = getattr(self, "latest_selection_stream_receipt", None)
@@ -3524,8 +3534,12 @@ class PythonAutoOperator:
             return None
         stamps = (first_click_at, receipt.captured_at)
         if (isinstance(sequence_before, bool) or not isinstance(sequence_before, int)
+                or (after_sequence is not None
+                    and (isinstance(after_sequence, bool) or not isinstance(after_sequence, int)))
                 or isinstance(receipt.sequence, bool) or not isinstance(receipt.sequence, int)
-                or sequence_before < 0 or receipt.sequence <= sequence_before
+                or sequence_before < 0 or (after_sequence is not None and after_sequence < sequence_before)
+                or receipt.sequence <= sequence_before
+                or (after_sequence is not None and receipt.sequence <= after_sequence)
                 or any(isinstance(stamp, bool) or not isinstance(stamp, (int, float))
                        or not isfinite(stamp) for stamp in stamps)
                 or not 0 <= first_click_at <= receipt.captured_at <= time.monotonic()):
@@ -3534,6 +3548,7 @@ class PythonAutoOperator:
 
     def fresh_screencast_selection_receipt(
         self, sequence_before: int | None, first_click_at: float,
+        *, after_sequence: int | None = None,
     ) -> bytes | None:
         """Return a post-click calibrated stream frame for tile confirmation.
 
@@ -3543,6 +3558,18 @@ class PythonAutoOperator:
         several-second synchronous screenshot path observed on a compact
         open-hand selection.
         """
+        # Live operators publish an immutable triple so a producer cannot
+        # replace ``frame`` between the individual frame/timestamp/sequence
+        # reads below. The tuple is the only valid generic-discard proof too;
+        # Riichi already used the same publication for its certificate path.
+        # Keep the separate-field fallback solely for older ``__new__`` unit
+        # fixtures that predate the publication object.
+        published = getattr(self, "latest_selection_stream_receipt", None)
+        if published is not None:
+            receipt = self.frozen_selection_stream_receipt(
+                sequence_before, first_click_at, after_sequence=after_sequence,
+            )
+            return receipt.frame if receipt is not None else None
         frame = getattr(self, "latest_screencast_frame", None)
         captured_at = getattr(self, "latest_screencast_captured_at", None)
         sequence = getattr(self, "screencast_sequence", None)
@@ -3551,7 +3578,12 @@ class PythonAutoOperator:
         # fields, so this compatibility path cannot weaken live safety.
         if sequence_before is None or captured_at is None:
             return frame
+        if (after_sequence is not None
+                and (isinstance(after_sequence, bool) or not isinstance(after_sequence, int)
+                     or after_sequence < sequence_before)):
+            return None
         if frame is None or sequence is None or sequence <= sequence_before \
+                or (after_sequence is not None and sequence <= after_sequence) \
                 or captured_at < first_click_at:
             return None
         return frame
@@ -6862,17 +6894,41 @@ class PythonAutoOperator:
         last_selection_receipt: bytes | None = None
         last_selection_observation: _SelectionStreamReceipt | None = None
         selection_first_click_at: float | None = None
+        # A post-click receipt that precedes the lift is useful negative
+        # evidence, but must not be returned again for every polling interval.
+        # Otherwise a low-rate CDP stream can pin the selector to one unraised
+        # frame and make it miss the later frame that proves the same physical
+        # tile moved.
+        last_selection_receipt_sequence: int | None = None
 
         def observe_selection_receipt(first_click_at: float) -> bytes | None:
             nonlocal last_selection_receipt, last_selection_observation, selection_first_click_at
+            nonlocal last_selection_receipt_sequence
             selection_first_click_at = first_click_at
-            if riichi_selection_budget is not None and hasattr(self, "latest_selection_stream_receipt"):
-                last_selection_observation = self.frozen_selection_stream_receipt(selection_sequence_before, first_click_at)
+            if hasattr(self, "latest_selection_stream_receipt"):
+                observation = self.frozen_selection_stream_receipt(
+                    selection_sequence_before, first_click_at,
+                    after_sequence=last_selection_receipt_sequence,
+                )
+                if observation is None:
+                    return None
+                last_selection_observation = observation
+                last_selection_receipt_sequence = observation.sequence
                 last_selection_receipt = last_selection_observation.frame if last_selection_observation else None
                 return last_selection_receipt
-            # Legacy __new__ fixtures and non-riichi actions keep the existing
-            # bytes-only path; it never grants a new image freshness origin.
-            last_selection_receipt = self.fresh_screencast_selection_receipt(selection_sequence_before, first_click_at)
+            # Legacy __new__ fixtures without an immutable publication keep
+            # the bytes-only path.  Bind the returned frame to its sequence
+            # here too, so it cannot replay an unraised receipt.
+            last_selection_receipt = self.fresh_screencast_selection_receipt(
+                selection_sequence_before, first_click_at,
+            )
+            if last_selection_receipt is not None:
+                sequence = getattr(self, "screencast_sequence", None)
+                if isinstance(sequence, int) and not isinstance(sequence, bool):
+                    if (last_selection_receipt_sequence is not None
+                            and sequence <= last_selection_receipt_sequence):
+                        return None
+                    last_selection_receipt_sequence = sequence
             return last_selection_receipt
 
         def before_confirmation_click() -> None:
