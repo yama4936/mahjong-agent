@@ -5,6 +5,7 @@ import { proposeLiveHandLayout, knownOpenHandProposalFitsCalibratedRow } from ".
 import { recoverSanmaRaisedHand } from "./sanmaRaisedHandRecovery.js";
 import { recoverSanmaRaisedDrawAfterTwoCalls } from "./sanmaRaisedDrawRecovery.js";
 import { recoverSanmaRaisedFive } from "./sanmaRaisedFiveRecovery.js";
+import { recoverSanmaRaisedClosedHand } from "./sanmaRaisedClosedHandRecovery.js";
 import type { ScreenLayout } from "./layout.js";
 import { recognizeTileSlots } from "./templateMatcher.js";
 import { classifySanmaButtonCrop, type ExperimentalTemplates } from "./sanmaButtonExperiment.js";
@@ -34,10 +35,15 @@ export async function inspectSanmaFrame(input: {
   if (dimensions.width !== 1920 || dimensions.height !== 1080) throw new Error("Unreviewed frame dimensions");
   const handPromise = (async () => {
     let proposal = await proposeLiveHandLayout(frame);
+    let unverifiedClosedRecovery = false;
     if (proposal.evidence.detectedTiles === 2 && !knownOpenHandProposalFitsCalibratedRow(proposal, input.layout, 4)) {
-      const recovered = await recoverSanmaRaisedHand(frame, input.layout, proposal)
+      let recovered = await recoverSanmaRaisedHand(frame, input.layout, proposal)
         ?? await recoverSanmaRaisedDrawAfterTwoCalls(frame, input.layout, proposal)
         ?? await recoverSanmaRaisedFive(frame, input.layout, proposal);
+      if (!recovered) {
+        recovered = await recoverSanmaRaisedClosedHand(frame,input.layout,proposal);
+        unverifiedClosedRecovery = Boolean(recovered);
+      }
       if (!recovered) throw new Error("suspected false compact hand and raised-row recovery unavailable");
       proposal = recovered;
     }
@@ -49,8 +55,8 @@ export async function inspectSanmaFrame(input: {
     // concealed or raised tile may be missed. Never authorize it as safe.
     const candidateMelds = recognizedAll && Number.isInteger(possibleMelds) && possibleMelds >= 0 && possibleMelds <= 4
       ? possibleMelds : undefined;
-    const recognition = {...classified, turnReady:recognizedAll && slots.length === 14,
-      safe:classified.safe && recognizedAll && slots.length === 14,
+    const recognition = {...classified, turnReady:recognizedAll && slots.length === 14 && !unverifiedClosedRecovery,
+      safe:classified.safe && recognizedAll && slots.length === 14 && !unverifiedClosedRecovery,
       slotClassificationSafe:classified.safe && recognizedAll,
       ...(candidateMelds !== undefined ? {candidateMelds} : {})};
     return { recognition, proposal };
