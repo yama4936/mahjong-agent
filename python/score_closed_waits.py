@@ -34,8 +34,14 @@ def convert(tiles):
     return result
 
 
+def _require_yonma(state):
+    if state.get("rules") == "sanma":
+        raise ValueError("Sanma scoring is not implemented")
+
+
 def score_scenarios(state, cost, tsumo):
     """Immediate four-player score changes, never final-placement predictions."""
+    _require_yonma(state)
     scores = state.get("scores", {})
     if set(scores) != set(WINDS):
         return []
@@ -63,6 +69,7 @@ def score_scenarios(state, cost, tsumo):
 
 
 def score_waits(state, discard, waits):
+    _require_yonma(state)
     if state.get("openMelds", 0) or state.get("melds"):
         raise ValueError("This verifier supports closed hands without melds only")
     if state.get("riichiDeclared"):

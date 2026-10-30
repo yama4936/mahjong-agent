@@ -1,5 +1,7 @@
 import json
 import sys
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -40,6 +42,29 @@ class ClosedWaitScoringTests(unittest.TestCase):
             convert(["5m"] * 4)
         with self.assertRaises(ValueError):
             convert(["E"] * 5)
+
+    def test_explicit_sanma_rejected_by_api_and_stdin_cli(self):
+        state = {"rules": "sanma", "hand": ["1p", "2p", "3p", "4p", "5p", "6p", "1s", "2s", "3s", "4s", "5s", "W", "W"],
+                 "draw": "9p", "seat": "south", "round": "east_1", "scores": {"east": 35000, "south": 35000, "west": 35000}}
+        with self.assertRaisesRegex(ValueError, "Sanma scoring is not implemented"):
+            score_waits(state, "9p", ["6s"])
+        with self.assertRaisesRegex(ValueError, "Sanma scoring is not implemented"):
+            score_scenarios(state, {"main": 700, "additional": 400}, True)
+        result = subprocess.run([sys.executable, str(ROOT / "python/score_closed_waits.py"), "-", "--discard", "9p", "--wait", "6s"],
+                                input=json.dumps({"state": state}), text=True, capture_output=True, check=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Sanma scoring is not implemented", result.stderr)
+        self.assertEqual(result.stdout, "")
+        with tempfile.TemporaryDirectory() as directory:
+            replay_path = Path(directory) / "replay.json"
+            replay_path.write_text(json.dumps({"state": state}), encoding="utf-8")
+            result = subprocess.run([sys.executable, str(ROOT / "python/score_closed_waits.py"), str(replay_path),
+                                     "--discard", "9p", "--wait", "6s"], text=True, capture_output=True, check=False)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Sanma scoring is not implemented", result.stderr)
+            self.assertEqual(result.stdout, "")
+        state["rules"] = "yonma"
+        self.assertIsNone(score_waits(state, "9p", ["6s"])["rows"][0]["error"])
 
     def test_rejects_open_or_unknown_wind_input(self):
         with self.assertRaises(ValueError):
