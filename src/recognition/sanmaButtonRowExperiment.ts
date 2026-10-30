@@ -69,6 +69,29 @@ export async function inspectSanmaButtonRow(row: Buffer, templates: Experimental
         return { status: "candidate", action: "skip", slot, confidence: candidateConfidence!, evidence: "partially_occluded_skip" };
       }
     }
+    // Two independent saved north-button frames show a wider overlap: the
+    // 200px check is obscured but the first 130px remains fully visible.
+    // Keep a full-slot gate and compare the clear section against every
+    // available competing reference. This is still only a hypothesis.
+    if (slot === 2 && skipConfidence >= 0.94 && skipConfidence < 0.98
+        && skipConfidence > emptyConfidence + 0.03 && skipConfidence > action.confidence + 0.03
+        && skipConfidence > ronConfidence + 0.03) {
+      const partial = (image: Buffer) => sharp(image)
+        .extract({ left: 0, top: 0, width: 130, height: 90 }).png().toBuffer();
+      const [observed, skipPart, blankPart, ...otherParts] = await Promise.all([
+        partial(crop), partial(skip), partial(blank),
+        ...Object.values(templates).map(partial), ...(ronReference ? [partial(ronReference)] : []),
+      ]);
+      const edge = await sharp(crop).extract({ left: 200, top: 0, width: 45, height: 90 }).greyscale().raw().toBuffer();
+      const edgeMean = edge.reduce((sum, value) => sum + value, 0) / edge.length;
+      const [candidateConfidence, ...competing] = await Promise.all([
+        similarity(observed!, skipPart!), ...[blankPart!, ...otherParts].map(reference => similarity(observed!, reference)),
+      ]);
+      if (edgeMean >= 40 && candidateConfidence! >= 0.995
+          && competing.every(value => candidateConfidence! > value + 0.03)) {
+        return { status: "candidate", action: "skip", slot, confidence: candidateConfidence!, evidence: "partially_occluded_skip" };
+      }
+    }
     if (emptyConfidence >= 0.98 && emptyConfidence > action.confidence + 0.03 && emptyConfidence > skipConfidence + 0.03 && emptyConfidence > ronConfidence + 0.03) {
       return { status: "empty_candidate", slot, confidence: emptyConfidence };
     }

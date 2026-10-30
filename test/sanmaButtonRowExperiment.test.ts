@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import sharp from "sharp";
 import { EXPERIMENTAL_BUTTONS, type ExperimentalTemplates } from "../src/recognition/sanmaButtonExperiment.js";
 import { inspectSanmaButtonRow } from "../src/recognition/sanmaButtonRowExperiment.js";
@@ -56,4 +57,28 @@ test("overlapped skip stays a diagnostic candidate and requires the clear portio
   const corrupted = await sharp(await row("riichi")).composite([{ input: black, left: 780, top: 0 }]).png().toBuffer();
   const result = await inspectSanmaButtonRow(corrupted, templates, skip, empty);
   assert.equal(result.slots[2]?.status, "unresolved");
+});
+
+test("wider north overlap preserves only a diagnostic skip candidate", {
+  skip: !existsSync("artifacts/sanma-manual-e48c562-20261031/actions/2026-10-30T16-44-54-053Z-before.png"),
+}, async () => {
+  const {templates,skip,empty} = await setup();
+  const source = "artifacts/sanma-manual-e48c562-20261031/actions";
+  for (const name of ["2026-10-30T16-44-54-053Z-before.png", "2026-10-30T17-20-14-718Z-before.png"]) {
+    const crop = await sharp(await readFile(`${source}/${name}`)).extract({left:600,top:785,width:825,height:90}).png().toBuffer();
+    const result = await inspectSanmaButtonRow(crop,templates,skip,empty);
+    assert.equal(result.slots[1]?.status,"candidate");
+    assert.equal(result.slots[2]?.status,"candidate");
+    if (result.slots[2]?.status === "candidate") assert.equal(result.slots[2].action,"skip");
+    assert.equal(result.complete,false);
+    assert.equal(result.operationAuthorized,false);
+    const ambiguous = await inspectSanmaButtonRow(crop,{...templates,pon:skip},skip,empty);
+    assert.equal(ambiguous.slots[2]?.status,"unresolved");
+    const black = await sharp({create:{width:45,height:90,channels:3,background:"black"}}).png().toBuffer();
+    const corrupt = await sharp(crop).composite([{input:black,left:780,top:0}]).png().toBuffer();
+    assert.equal((await inspectSanmaButtonRow(corrupt,templates,skip,empty)).slots[2]?.status,"unresolved");
+  }
+  // Another actual prompt is more obscured and must not be guessed.
+  const heavy = await sharp(await readFile(`${source}/2026-10-30T17-23-48-795Z-before.png`)).extract({left:600,top:785,width:825,height:90}).png().toBuffer();
+  assert.equal((await inspectSanmaButtonRow(heavy,templates,skip,empty)).slots[2]?.status,"unresolved");
 });
