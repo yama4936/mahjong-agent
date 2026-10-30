@@ -27,6 +27,7 @@ class ExperimentalSanmaFriendLoopTest(unittest.TestCase):
         self.receipt = {'candidates': {'candidates': [{'action':'tsumo'}]}, 'digest':'abc', 'screenshot':'frame.png'}
         self.op.inspect_sanma_self_turn = Mock(return_value=self.receipt)
         self.op.execute_sanma_friend_tsumo_candidate = Mock(return_value={'clicked':True,'confirmation':'unknown'})
+        self.op.execute_sanma_friend_kita_candidate = Mock(return_value={'clicked':True,'confirmation':'unknown'})
 
     def run_room(self):
         with patch('auto_operator.inspect_sanma_friend_start',return_value={'operationAuthorized':False}), \
@@ -41,7 +42,7 @@ class ExperimentalSanmaFriendLoopTest(unittest.TestCase):
         self.assertTrue(any(call.args[0]=='sanma_friend_stopped' for call in self.op.log.call_args_list))
 
     def test_unsupported_or_unknown_action_stops_without_play_click(self):
-        self.receipt['candidates'] = {'candidates': [{'action':'kita'}]}
+        self.receipt['candidates'] = {'candidates': [{'action':'kan'}]}
         self.run_room()
         self.page.mouse.click.assert_called_once_with(1140,998)
         self.op.execute_sanma_friend_tsumo_candidate.assert_not_called()
@@ -58,6 +59,13 @@ class ExperimentalSanmaFriendLoopTest(unittest.TestCase):
         self.page.mouse.click.assert_called_once_with(1140,998)
         self.op.execute_sanma_friend_tsumo_candidate.assert_not_called()
         self.assertTrue(any(call.kwargs.get('reason')=='observation_or_action_failed' for call in self.op.log.call_args_list))
+
+    def test_kita_routes_to_friend_adapter_and_stops(self):
+        self.receipt['candidates'] = {'candidates': [{'action':'kita'}]}
+        self.run_room()
+        self.op.execute_sanma_friend_kita_candidate.assert_called_once_with(self.page,self.receipt)
+        self.op.execute_sanma_friend_tsumo_candidate.assert_not_called()
+        self.assertTrue(any(call.kwargs.get('reason')=='candidate_click_outcome_requires_review' for call in self.op.log.call_args_list))
 
     def test_no_prompt_routes_to_draw_adapter_and_stops(self):
         self.receipt['candidates'] = {'candidates': []}

@@ -4037,6 +4037,10 @@ class PythonAutoOperator:
                 or getattr(args, "ranked_loop", False) or not getattr(args, "experimental_sanma_friend", False)
                 or getattr(self, "verified_friend_300_active", False) is not True):
             raise RuntimeError("experimental sanma kita requires verified 300+0 friend session")
+        started_at = getattr(self, "verified_friend_300_started_at", None)
+        if (type(started_at) not in (int, float) or not isfinite(started_at)
+                or not 0 <= time.monotonic() - started_at < 300):
+            raise RuntimeError("experimental sanma friend timing unknown or expired")
         source = receipt.get("sourceObservation") if isinstance(receipt, dict) else None
         freshness = receipt.get("freshness") if isinstance(receipt, dict) else None
         if (not isinstance(source, dict) or receipt.get("scope") != "sanma_self_turn_observation"
@@ -4065,7 +4069,7 @@ class PythonAutoOperator:
         if (not isinstance(hand, dict) or hand.get("status") != "candidate" or not isinstance(tiles, list)
                 or len(tiles) not in (2, 5, 8, 11, 14) or "N" not in tiles):
             raise RuntimeError("sanma kita requires an observed north hand candidate")
-        if getattr(self, "_sanma_kita_trial_digest", None) == receipt.get("digest"):
+        if receipt.get("digest") in getattr(self, "_sanma_friend_attempted_frames", set()):
             raise RuntimeError("sanma kita candidate already attempted")
         try:
             baseline = Path(receipt["screenshot"]).read_bytes()
@@ -4086,7 +4090,9 @@ class PythonAutoOperator:
         point = {"x": 1012.5, "y": 830.0}
         self.log("sanma_friend_candidate_click", action="kita", screenshot=str(before_path),
                  digest=receipt["digest"], clickPoint=point, candidateConfidence=slots[1]["confidence"])
-        self._sanma_kita_trial_digest = receipt["digest"]
+        attempted = getattr(self, "_sanma_friend_attempted_frames", set())
+        attempted.add(receipt["digest"])
+        self._sanma_friend_attempted_frames = attempted
         page.mouse.click(point["x"], point["y"])
         try:
             page.wait_for_timeout(200)
@@ -8426,6 +8432,8 @@ class PythonAutoOperator:
                         return
                     if any(isinstance(item, dict) and item.get("action") == "tsumo" for item in actions):
                         result = self.execute_sanma_friend_tsumo_candidate(page, receipt)
+                    elif any(isinstance(item, dict) and item.get("action") == "kita" for item in actions):
+                        result = self.execute_sanma_friend_kita_candidate(page, receipt)
                     elif not actions:
                         # A draw-only experiment is allowed only if its own
                         # adapter can verify the full hand and empty button row.

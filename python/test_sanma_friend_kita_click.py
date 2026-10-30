@@ -4,6 +4,7 @@ import json
 import copy
 import subprocess
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -51,6 +52,7 @@ process.stdout.write(JSON.stringify(report));
         self.operator.args = SimpleNamespace(rules='sanma', mode='force-auto', action_deadline_ms=300000,
                                              ranked_loop=False, experimental_sanma_friend=True)
         self.operator.verified_friend_300_active = True
+        self.operator.verified_friend_300_started_at = time.monotonic()
         self.operator.frames = self.frames
         self.operator.screen_references = load_references(REFS)
         self.operator.log = Mock()
