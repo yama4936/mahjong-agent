@@ -65,6 +65,44 @@ test("winning-tile assignments preserve sanankou and choose the strongest fu dec
   assert.equal(scoreOpenWinningTile(ambiguous.hand, "5p", ambiguous, true)?.fu, 40);
 });
 
+test("tsumo-only open wait is not discounted again when its own river causes furiten", () => {
+  const base = state(["2p","2p","2p","4s","4s","4s","6m","6m","F","F"],
+    [meld("chi", ["1m","2m","3m"])], { opponents: [{ seat: "east", discards: ["6m", "F", "F"], riichi: false, openMelds: 0, melds: [] }] });
+  const furiten = parseGameState({ ...base, ownDiscards: ["6m"], opponents: base.opponents.map(op => ({ ...op, discards: ["F", "F"] })) });
+  const normalValue = deterministicAdvice(base).candidates.find(c => c.tile === "N")!;
+  const furitenValue = deterministicAdvice(furiten).candidates.find(c => c.tile === "N")!;
+  assert.equal(normalValue.openTenpaiScore?.ronUkeire, 0);
+  assert.ok(normalValue.openTenpaiScore!.tsumoUkeire > 0);
+  assert.equal(furitenValue.openTenpaiScore?.knownDiscardFuriten, true);
+  assert.equal(furitenValue.winProbability, normalValue.winProbability);
+  assert.equal(furitenValue.estimatedValue, normalValue.estimatedValue);
+});
+
+test("last-wall situational fallback does not apply unknown mode split", () => {
+  const base = state(["2p","2p","2p","4s","4s","4s","6m","6m","F","F"],
+    [meld("chi", ["1m","2m","3m"])], { remainingTiles: 3,
+      opponents: [{ seat: "east", discards: ["6m", "F", "F"], riichi: false, openMelds: 0, melds: [] }] });
+  const furiten = parseGameState({ ...base, ownDiscards: ["6m"], opponents: base.opponents.map(op => ({ ...op, discards: ["F", "F"] })) });
+  const ordinary = deterministicAdvice(base).candidates.find(c => c.tile === "N")!;
+  const flagged = deterministicAdvice(furiten).candidates.find(c => c.tile === "N")!;
+  assert.equal(flagged.openTenpaiScoreApplied, false);
+  assert.equal(flagged.winProbability, ordinary.winProbability);
+  assert.ok(flagged.winProbability! > 0);
+});
+
+test("known furiten excludes unavailable ron points from open conditional value", () => {
+  const base = state(["3p","4p","5p","6m","7m","8m","2s","2s","2s","5p"],
+    [meld("pon", ["P","P","P"])], { ownDiscards: ["5p"] });
+  const score = scoreOpenTenpai(candidate(base, "N"), base)!;
+  assert.equal(score.knownDiscardFuriten, true);
+  assert.equal(score.ronUkeire, 0);
+  const wait = score.waits.find(w => w.tile === "5p")!;
+  assert.ok(wait.ron && wait.tsumo && wait.ron.total < wait.tsumo.total);
+  const live = score.waits.filter(w => w.remaining > 0 && w.tsumo);
+  assert.equal(score.conditionalConservativePoints, Math.round(live.reduce((sum, w) => sum + w.remaining * w.tsumo!.total, 0)
+    / live.reduce((sum, w) => sum + w.remaining, 0)));
+});
+
 test("dora-only never scores; winning dora, repeated indicators and red tiles do", () => {
   const noYaku = state(["2p","3p","4p","4s","5s","6s","7m","8m","9m","F"],
     [meld("chi", ["1m","2m","3m"])], { doraIndicators: ["P","P"] });
@@ -82,7 +120,7 @@ test("standard red-five variants use unseen copy counts and preserve retained re
     [meld("pon", ["P","P","P"])], { draw: "8s" });
   const redDiscard = evaluateRoundValue(candidate(s,"0p"), s);
   const normalDiscard = evaluateRoundValue(candidate(s,"5p"), s);
-  assert.equal(redDiscard.estimatedValue, 1000); // P pon excludes tanyao.
+  assert.equal(redDiscard.estimatedValue, 1100); // Furiten permits tsumo only, including the remaining red winner.
   assert.equal(normalDiscard.estimatedValue, 2000);
   assert.equal(normalDiscard.openTenpaiScore?.waits.find(w => w.tile === "0p")?.remaining, 0);
   assert.equal(normalDiscard.openTenpaiScore?.waits.find(w => w.tile === "5p")?.remaining, 2);

@@ -23,6 +23,9 @@ export interface DecisionResult extends AdvisorResult {
   handPlan: StrategyHandPlan;
   callAssessments?: CallAssessment[];
   declarationComparison?: { status: "selected" | "fallback"; report?: ClosedWaitReport; decision?: JevDecision; reason?: string };
+  localRiichiWaitComparison?: { scope: "early_unopposed_force_auto_riichi_only";
+    opponentDrawWeight: 3; selfDrawWeight: 1; temporaryOrRiichiPassFuriten: "unknown";
+    candidates: Array<{ tile: string; weightedWaitCopies: number; knownDiscardFuriten: boolean }> };
   riichiAssessment?: { actionId: string; approved: boolean; remainingWinningTiles: number; reasons: string[];
     standardWaits: Array<{ tile: string; shapes: WaitShape[] }>; kokushiPolicy?: KokushiRiichiPolicy };
 }
@@ -223,6 +226,27 @@ async function decideWithAnalysis(
   const advice = analysis.advice();
   const legalDiscardIds = new Set(legalActions.filter(action => action.action === "discard").map(action => action.id));
   const base = { ...advice, candidates: advice.candidates.filter(candidate => legalDiscardIds.has(candidate.actionId)) };
+  let localRiichiWaitComparison: DecisionResult["localRiichiWaitComparison"];
+  // This fallback will declare riichi for each offered candidate. Riichi
+  // supplies ron yaku, unlike a shared dama/riichi value estimate. Restrict
+  // the approximation to the existing early, unopposed efficiency ordering.
+  const tenpai = base.candidates.filter(candidate => candidate.shanten === 0 && candidate.ukeire > 0);
+  const riichiTiles = new Set(legalActions.filter(action => action.action === "riichi").map(action => action.tile));
+  if (options.mode === "force-auto" && !options.jev && state.turn <= 6 && state.openMelds === 0
+      && !state.riichiDeclared && state.remainingTiles !== undefined && state.remainingTiles >= 4
+      && !state.opponents.some(opponent => opponent.riichi || opponent.openMelds >= 2)
+      && tenpai.length > 1 && tenpai.every(candidate => riichiTiles.has(candidate.tile)
+        && !kokushiRiichiPolicy(state, candidate))) {
+    const weighted = (candidate: DiscardEvaluation) => candidate.ukeire
+      * (candidate.knownDiscardFuritenWaits?.length ? 0.25 : 1);
+    localRiichiWaitComparison = { scope: "early_unopposed_force_auto_riichi_only",
+      opponentDrawWeight: 3, selfDrawWeight: 1, temporaryOrRiichiPassFuriten: "unknown",
+      candidates: tenpai.map(candidate => ({ tile: candidate.tile, weightedWaitCopies: weighted(candidate),
+        knownDiscardFuriten: Boolean(candidate.knownDiscardFuritenWaits?.length) })) };
+    base.candidates.sort((left, right) => left.shanten - right.shanten
+      || (left.shanten === 0 ? weighted(right) - weighted(left) : right.ukeire - left.ukeire)
+      || (right.expectedRoundValue ?? 0) - (left.expectedRoundValue ?? 0));
+  }
   const immediateWin = legalActions.find((action) => action.action === "tsumo");
   if (immediateWin) return decideImmediateSelfAction(state, base, legalActions, immediateWin, options);
   const kan = legalActions.find((action): action is LegalAction & { action: "ankan" | "kakan"; consumedTiles: string[] } =>
@@ -367,6 +391,7 @@ async function decideWithAnalysis(
     selectedAction,
     legalActions,
     ...(declarationComparison ? { declarationComparison } : {}),
+    ...(localRiichiWaitComparison ? { localRiichiWaitComparison } : {}),
     ...(legalActions.find((action) => action.action === "riichi" && action.tile === selected.tile) ? {
       riichiAssessment: {
         actionId: `riichi_discard_${selected.tile}`,
@@ -376,6 +401,7 @@ async function decideWithAnalysis(
           tile: wait.tile, shapes: standardWaitShapes(concealedAfterDiscard, wait.tile, state.openMelds),
         })),
         reasons: [
+          ...(selected.knownDiscardFuritenWaits?.length ? ["known_discard_furiten_ron_unavailable"] : []),
           ...(selectedKokushiPolicy ? ["kokushi_no_riichi_scoring_gain"] : []),
           ...(declarationComparison?.status === "selected" && selectedAction.action === "discard" ? ["declaration_comparison_selected_dama"] : []),
           ...(selected.ukeire === 0 ? ["no_remaining_winning_tiles"] : []),

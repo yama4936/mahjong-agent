@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { parseGameState } from "../src/game/state.js";
 import { scoreClosedWaits } from "../src/evaluation/closedWaitScorer.js";
+import { deterministicAdvice } from "../src/evaluation/advisor.js";
 
 const python = path.resolve(".runtime/scoring-venv", process.platform === "win32" ? "Scripts/python.exe" : "bin/python");
 async function liveState() {
@@ -29,4 +30,18 @@ test("scorer abort and missing runtime fail explicitly", async () => {
   await assert.rejects(scoreClosedWaits(state, "5m", ["6m"], { signal: controller.signal }), /aborted/);
   await assert.rejects(scoreClosedWaits(state, "5m", ["6m"], { python: path.resolve(".runtime/missing-scorer.exe") }));
   assert.throws(() => scoreClosedWaits(state, "5m", ["6m", "6m"]), /Unique/);
+});
+
+test("no-yaku dama ron does not get discounted again solely for known discard furiten", { skip: !existsSync(python) }, async () => {
+  const source = await liveState();
+  const normal = parseGameState({ ...source, opponents: source.opponents.map((op, i) => i === 0
+    ? { ...op, discards: [...op.discards, "6m"] } : op) });
+  const furiten = parseGameState({ ...source, ownDiscards: [...source.ownDiscards, "6m"] });
+  const report = await scoreClosedWaits(normal, "5m", ["6m", "9m"], { timeoutMs: 3000 });
+  assert.equal(report.rows.find(row => row.wait === "6m" && !row.riichi && !row.tsumo)?.error, "no_yaku");
+  assert.equal(report.rows.find(row => row.wait === "6m" && !row.riichi && row.tsumo)?.error, null);
+  const before = deterministicAdvice(normal).candidates.find(c => c.tile === "5m")!;
+  const after = deterministicAdvice(furiten).candidates.find(c => c.tile === "5m")!;
+  assert.deepEqual(after.knownDiscardFuritenWaits, ["6m"]);
+  assert.equal(after.winProbability, before.winProbability);
 });

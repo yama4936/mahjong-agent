@@ -24,6 +24,8 @@ export interface DiscardEvaluation {
   dealInProbability?: number;
   expectedRoundValue?: number;
   evaluationModel?: string;
+  /** Observed own-discard furiten; absence does not certify no furiten. */
+  knownDiscardFuritenWaits?: Tile[];
   openTenpaiScore?: OpenTenpaiScore;
   openTenpaiScoreApplied?: boolean;
   closedWaitScore?: ClosedWaitReport;

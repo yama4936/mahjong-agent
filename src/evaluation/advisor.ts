@@ -3,6 +3,8 @@ import { evaluateDiscards, type DiscardEvaluation } from "../game/ukeire.js";
 import { evaluateTileDanger } from "./defense.js";
 import { evaluateRoundValue } from "./value.js";
 import { createOpenOneShantenAnalyzer } from "./openOneShantenYaku.js";
+import { calculateShanten } from "../game/shanten.js";
+import { normalizeTile, toCounts, tileIndex, type Tile } from "../game/tiles.js";
 
 export interface AdvisorResult {
   recommendedAction: "discard" | "riichi" | "tsumo" | "ron" | "chi" | "pon" | "minkan" | "ankan" | "kakan" | "kyuushu" | "pass";
@@ -32,16 +34,32 @@ export function hasLiveWinningTenpai(candidate: DiscardEvaluation, state: GameSt
     && candidate.openTenpaiScore.winningUkeire > 0;
 }
 
+/** Positive evidence only; includes the just-discarded tile and dead waits. */
+function knownDiscardFuritenWaits(candidate: DiscardEvaluation, state: GameState): Tile[] {
+  if (candidate.shanten !== 0) return [];
+  const remaining = [...state.hand, ...(state.draw ? [state.draw] : [])];
+  const index = remaining.indexOf(candidate.tile);
+  if (index < 0) throw new Error("Furiten evaluation requires a discard in hand");
+  remaining.splice(index, 1);
+  const counts = toCounts(remaining);
+  return [...new Set([...state.ownDiscards, candidate.tile].map(normalizeTile))]
+    .filter(tile => counts[tileIndex(tile)]! < 4
+      && calculateShanten([...remaining, tile], state.openMelds).shanten === -1);
+}
+
 export function deterministicAdvice(state: GameState): AdvisorResult {
   const hand = state.draw ? [...state.hand, state.draw] : state.hand;
   const ordinaryProgress = createOpenOneShantenAnalyzer(state);
-  const evaluated = evaluateDiscards(
+  const structural = evaluateDiscards(
     hand,
     knownTilesOutsideHand(state),
     state.openMelds,
-  ).map((candidate) => {
+  );
+  const evaluated = structural.map((candidate) => {
     const evidence = ordinaryProgress(candidate);
+    const furitenWaits = knownDiscardFuritenWaits(candidate, state);
     return evaluateRoundValue({ ...candidate, ...(evidence ? { openOneShantenYaku: evidence } : {}),
+      ...(furitenWaits.length ? { knownDiscardFuritenWaits: furitenWaits } : {}),
       danger: evaluateTileDanger(candidate.tile, state).combinedProbability }, state);
   });
   const minimumShanten = Math.min(...evaluated.map((candidate) => candidate.shanten));
@@ -62,7 +80,12 @@ export function deterministicAdvice(state: GameState): AdvisorResult {
       if (leftLive !== rightLive) return leftLive ? -1 : 1;
     }
     if (phase === "early" && !underThreat) {
-      return left.shanten - right.shanten || right.ukeire - left.ukeire
+      // Apply mode-specific evidence only when available; otherwise ron
+      // eligibility (including dama and situational yaku) remains unknown.
+      const effective = (candidate: DiscardEvaluation) => candidate.openTenpaiScoreApplied && candidate.openTenpaiScore
+        ? (3 * candidate.openTenpaiScore.ronUkeire + candidate.openTenpaiScore.tsumoUkeire) / 4
+        : candidate.ukeire;
+      return left.shanten - right.shanten || effective(right) - effective(left)
         || (right.expectedRoundValue ?? Number.NEGATIVE_INFINITY) - (left.expectedRoundValue ?? Number.NEGATIVE_INFINITY);
     }
     if (!underThreat && phase !== "late" && left.shanten !== right.shanten) return left.shanten - right.shanten;

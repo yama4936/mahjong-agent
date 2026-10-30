@@ -159,7 +159,7 @@ export function scoreOpenTenpai(candidate: DiscardEvaluation, state: GameState):
   const tsumoUkeire = waits.reduce((sum, wait) => sum + (wait.tsumo ? wait.remaining : 0), 0);
   let weighted = 0, winningUkeire = 0;
   for (const wait of waits) {
-    const points = [wait.ron?.total, wait.tsumo?.total]
+    const points = [existence.knownDiscardFuriten ? undefined : wait.ron?.total, wait.tsumo?.total]
       .filter((value): value is number => value !== undefined);
     if (points.length && wait.remaining > 0 && (!existence.knownDiscardFuriten && wait.ron || wait.tsumo)) {
       weighted += Math.min(...points) * wait.remaining;

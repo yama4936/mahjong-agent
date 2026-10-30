@@ -68,8 +68,19 @@ export function evaluateRoundValue(candidate: DiscardEvaluation, state: GameStat
   const winningUkeire = ordinaryEstimate?.winningUkeire ?? candidate.ukeire;
   const winningUkeireFactor = clamp(winningUkeire / 20, 0.12, 1.6);
   const winBase = candidate.shanten <= 0 ? 0.34 : candidate.shanten === 1 ? 0.18 : candidate.shanten === 2 ? 0.075 : 0.025;
-  const winProbability = wallExhausted || noShortestOrdinaryRoute || ordinaryEstimate && winningUkeire === 0 ? 0
+  const unadjustedWinProbability = wallExhausted || noShortestOrdinaryRoute || ordinaryEstimate && winningUkeire === 0 ? 0
     : clamp(winBase * winningUkeireFactor * turnsLeftFactor, 0.005, 0.72);
+  // A coarse four-player opportunity split, not a calibrated ron/tsumo
+  // model. Unknown temporary and riichi-pass furiten are not inferred from
+  // a missing river match. Without scoring evidence, the existing estimate
+  // cannot distinguish a ron-eligible hand from a tsumo-only dama hand.
+  // Ordinary open scoring identifies legal yaku by winning mode. Weight its
+  // separate ron and tsumo copies once, including already-known furiten;
+  // applying the generic furiten factor again would penalize tsumo-only yaku.
+  const opportunityRatio = ordinaryEstimate && winningUkeire > 0
+    ? (3 * ordinaryEstimate.ronUkeire + ordinaryEstimate.tsumoUkeire) / (4 * winningUkeire)
+    : 1;
+  const winProbability = unadjustedWinProbability * opportunityRatio;
   const tenpaiBase = candidate.shanten <= 0 ? 1 : candidate.shanten === 1 ? 0.48 : candidate.shanten === 2 ? 0.22 : 0.08;
   const tenpaiProbability = wallExhausted
     ? (candidate.shanten <= 0 ? 1 : 0)
