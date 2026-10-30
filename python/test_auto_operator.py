@@ -3349,6 +3349,41 @@ class AwayDialogDetectionTest(unittest.TestCase):
             operator.observe_ranked_match_screen("match_result")
             self.assertFalse(operator.verified_friend_300_active)
 
+    def test_friend_lobby_fade_suspends_proof_until_round_result_and_match(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(mode="force-auto", ranked_loop=False, action_deadline_ms=300000)
+        operator.log = Mock()
+        operator.verified_friend_300_active = operator.verified_friend_300_match_seen = True
+        operator.round_terminal_result_observed = True
+        operator.action_evidence_started_at = operator.action_budget_started_at = 1.0
+        with patch("auto_operator.time.monotonic", return_value=2.0):
+            for state in ("round_result", "lobby", "lobby"):
+                operator.observe_ranked_match_screen(state)
+            self.assertTrue(operator.verified_friend_300_active)
+            self.assertEqual(operator.verified_friend_action_budget_ms(), 10000)
+            operator.observe_ranked_match_screen("round_result")
+            operator.observe_ranked_match_screen("match")
+            self.assertEqual(operator.verified_friend_action_budget_ms(), 295000)
+
+    def test_friend_lobby_exit_does_not_transfer_proof_to_new_match(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(mode="force-auto", ranked_loop=False, action_deadline_ms=300000)
+        operator.log = Mock()
+        operator.round_terminal_result_observed = True
+        with patch("auto_operator.time.monotonic", return_value=2.0):
+            for next_state in ("ranked_room", "matchmaking", "match"):
+                operator.verified_friend_300_active = operator.verified_friend_300_match_seen = True
+                operator.verified_friend_300_lobby_pending = False
+                operator.observe_ranked_match_screen("lobby")
+                operator.observe_ranked_match_screen(next_state)
+                self.assertFalse(operator.verified_friend_300_active, next_state)
+            operator.verified_friend_300_active = operator.verified_friend_300_match_seen = True
+            operator.verified_friend_300_lobby_pending = False
+            operator.observe_ranked_match_screen("lobby")
+        with patch("auto_operator.time.monotonic", return_value=12.0):
+            operator.observe_ranked_match_screen("lobby")
+            self.assertFalse(operator.verified_friend_300_active)
+
     def test_friend_start_failure_and_navigation_revoke_proof(self) -> None:
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
         operator.args = argparse.Namespace(mode="force-auto", ranked_loop=False,
@@ -4672,6 +4707,7 @@ class AwayDialogDetectionTest(unittest.TestCase):
         page.evaluate.side_effect = [
             {"width": 630, "height": 84},
             {"width": 1920, "height": 1080},
+            {"width": 1920, "height": 1080},
         ]
 
         operator.ensure_viewport(page)
@@ -4693,11 +4729,34 @@ class AwayDialogDetectionTest(unittest.TestCase):
         page.evaluate.side_effect = [
             {"width": 1920, "height": 1119},
             {"width": 1920, "height": 1080},
+            {"width": 1920, "height": 1080},
         ]
 
         operator.ensure_viewport(page)
 
         operator.restart_screencast_gate.assert_called_once_with(page)
+
+    def test_viewport_restore_retries_unstable_resize(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        expected = {"width": 1920, "height": 1080}
+        wrong = {"width": 1920, "height": 1119}
+        operator.layout = {"viewport": expected}
+        operator.log = Mock()
+        page = Mock()
+        page.evaluate.side_effect = [wrong, expected, wrong, wrong, wrong, expected, expected]
+        operator.ensure_viewport(page)
+        self.assertEqual(page.set_viewport_size.call_count, 2)
+
+    def test_viewport_restore_fails_closed_after_bounded_retries(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.layout = {"viewport": {"width": 1920, "height": 1080}}
+        operator.log = Mock()
+        page = Mock()
+        page.evaluate.return_value = {"width": 1920, "height": 1119}
+        with self.assertRaisesRegex(RuntimeError, "viewport restore failed"):
+            operator.ensure_viewport(page)
+        self.assertEqual(page.set_viewport_size.call_count, 3)
+        self.assertEqual(page.wait_for_timeout.call_count, 12)
 
     def test_restart_screencast_replaces_silent_subscription(self) -> None:
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
@@ -4735,12 +4794,13 @@ class AwayDialogDetectionTest(unittest.TestCase):
         page.evaluate.side_effect = [
             {"width": 1920, "height": 1080},
             {"width": 1920, "height": 1080},
+            {"width": 1920, "height": 1080},
         ]
 
         operator.ensure_viewport(page, force=True)
 
         page.set_viewport_size.assert_called_once_with({"width": 1920, "height": 1080})
-        page.wait_for_timeout.assert_called_once_with(250)
+        self.assertEqual(page.wait_for_timeout.call_count, 2)
         operator.log.assert_not_called()
 
     def test_replay_records_execution_and_receives_round_and_match_evidence(self) -> None:
