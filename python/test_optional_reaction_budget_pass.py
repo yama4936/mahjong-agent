@@ -13,7 +13,7 @@ from PIL import Image
 
 from auto_operator import (
     OptionalReactionBudgetExhausted, PythonAutoOperator, RetryableSafetyAbort,
-    force_auto_call_buttons, force_auto_self_action_buttons,
+    expired_optional_call_geometry_matches, force_auto_call_buttons, force_auto_self_action_buttons,
     load_json, should_retry_call_policy,
 )
 from synchronous_capture import CaptureReceipt
@@ -23,6 +23,28 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class OptionalReactionBudgetPassTest(unittest.TestCase):
+
+    def test_expired_optional_geometry_bounds_and_rejections(self):
+        expected = {"action": "chi", "x": 913, "y": 740, "width": 215, "height": 123,
+                    "center": {"x": 1020.5, "y": 801.5}}
+        def candidate(*, dx=-12, dy=30, bottom=12, width=24, height=32):
+            h = expected["height"] + height
+            y = expected["y"] + expected["height"] + bottom - h
+            return {"action": "chi", "x": 0, "y": y, "width": expected["width"] + width, "height": h,
+                    "center": {"x": expected["center"]["x"] + dx, "y": expected["center"]["y"] + dy}}
+        self.assertTrue(expired_optional_call_geometry_matches(expected, candidate()))
+        for changed in ({"dx": 13}, {"dy": 31}, {"bottom": 13}, {"width": 25}, {"height": 33}):
+            with self.subTest(changed=changed):
+                self.assertFalse(expired_optional_call_geometry_matches(expected, candidate(**changed)))
+        missing = candidate()
+        del missing["height"]
+        self.assertFalse(expired_optional_call_geometry_matches(expected, missing))
+        nonfinite = candidate()
+        nonfinite["width"] = float("nan")
+        self.assertFalse(expired_optional_call_geometry_matches(expected, nonfinite))
+        other_chi = candidate()
+        other_chi["center"] = {"x": 1040, "y": 850}
+        self.assertFalse(expired_optional_call_geometry_matches(expected, other_chi))
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
@@ -403,6 +425,41 @@ class OptionalReactionBudgetPassTest(unittest.TestCase):
         self.assertGreaterEqual(self.now, 103.32)  # both captures +120ms charged
         self.page.mouse.click.assert_called_once_with(1307.5, 827.5)
         self.assertEqual(self.original_clock_at_click, [(100.0, 100.0)])
+
+    def test_native_chi_accepts_stream_and_full_png_outline_variance(self):
+        # Regression for friend-300-5d3b8b8 at 04:29: the stream detector
+        # bounded this one chi at (913,740,215,123), while the fresh full PNG
+        # bounded the same strip at (895,779,234,93).  Center-Y differs by
+        # 24px, but horizontal center and lower edge remain within 12px.
+        native = self.native_frame("chi")
+        expected = {"action": "chi", "x": 913, "y": 740, "width": 215, "height": 123,
+                    "center": {"x": 1020.5, "y": 801.5}}
+        self.capture_images = [native, native]
+        evaluation = {"actionButton": {"action": "pass", "center": {"x": 1307.5, "y": 827.5}}}
+        with patch("auto_operator.classify_screen", return_value=("match", 1)):
+            receipt = self.operator.execute_reaction_pass(
+                self.page, evaluation, evaluated_captured_at=100.0, expired_optional_call=expected,
+            )
+        self.assertTrue(receipt["clicked"])
+        self.page.mouse.click.assert_called_once_with(1307.5, 827.5)
+
+    def test_bottom_anchor_rejects_oversized_green_geometry(self):
+        native = self.native_frame("chi")
+        expected = {"action": "chi", "x": 913, "y": 740, "width": 215, "height": 123,
+                    "center": {"x": 1020.5, "y": 801.5}}
+        # Same nominal action/anchors but an implausibly wide rectangle must
+        # not borrow the contour-variance exception.
+        oversized = {"action": "chi", "x": 512, "y": 779, "width": 1000, "height": 93,
+                     "center": {"x": 1012.0, "y": 825.5}}
+        self.capture_images = [native, native]
+        evaluation = {"actionButton": {"action": "pass", "center": {"x": 1307.5, "y": 827.5}}}
+        with patch("auto_operator.classify_screen", return_value=("match", 1)), \
+                patch("auto_operator.force_auto_call_buttons", return_value=[oversized]):
+            with self.assertRaisesRegex(RetryableSafetyAbort, "call or skip prompt changed"):
+                self.operator.execute_reaction_pass(
+                    self.page, evaluation, evaluated_captured_at=100.0, expired_optional_call=expected,
+                )
+        self.page.mouse.click.assert_not_called()
 
     def test_native_second_frame_ron_with_identical_skip_never_passes(self):
         ron = self.native_frame("ron")

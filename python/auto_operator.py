@@ -862,6 +862,28 @@ def should_retry_call_policy(error: Exception, elapsed_ms: int) -> bool:
     return str(error) != "reaction_tile_count_conflict" or elapsed_ms < 20000
 
 
+def expired_optional_call_geometry_matches(expected: dict[str, Any], current: dict[str, Any]) -> bool:
+    """Match one call strip across stream/full-PNG contour variance."""
+    centers = (expected.get("center"), current.get("center"))
+    if not all(isinstance(center, dict) for center in centers):
+        return False
+    values = tuple(center.get(axis) for center in centers for axis in ("x", "y"))
+    if not all(isinstance(value, (int, float)) and not isinstance(value, bool) and isfinite(value)
+               for value in values):
+        return False
+    dx, dy = current["center"]["x"] - expected["center"]["x"], current["center"]["y"] - expected["center"]["y"]
+    if abs(dx) <= 12 and abs(dy) <= 12:
+        return True
+    geometry = tuple(item.get(axis) for item in (expected, current) for axis in ("x", "y", "width", "height"))
+    if not all(isinstance(value, (int, float)) and not isinstance(value, bool) and isfinite(value)
+               for value in geometry):
+        return False
+    return (abs(dx) <= 12 and abs(dy) <= 30
+            and abs((current["y"] + current["height"]) - (expected["y"] + expected["height"])) <= 12
+            and abs(current["width"] - expected["width"]) <= 24
+            and abs(current["height"] - expected["height"]) <= 32)
+
+
 def force_auto_chi_choice_points(screenshot: bytes, viewport: dict[str, int]) -> list[dict[str, float]]:
     """Locate complete two-tile choices in Mahjong Soul's post-chi selector."""
     left, right = round(viewport["width"] * 0.25), round(viewport["width"] * 0.75)
@@ -7144,8 +7166,28 @@ class PythonAutoOperator:
                 flags["callActionMatches"] = len(calls) == 1 and calls[0].get("action") == expected_call["action"]
                 flags["centerDelta"] = ({axis: calls[0]["center"][axis] - expected_call["center"][axis]
                                          for axis in ("x", "y")} if len(calls) == 1 else None)
-                flags["callCenterMatches"] = bool(flags["centerDelta"] is not None and all(
-                    abs(delta) <= 12 for delta in flags["centerDelta"].values()))
+                # The streamed gate and the synchronous PNG capture can find
+                # the same green action strip with different vertical ink
+                # bounds (the live chi was 24px apart by center, but only
+                # 9px apart at its lower edge).  Keep the strict center
+                # match, while accepting that known rendering variance only
+                # when the horizontal center and bottom edge also agree.  A
+                # different action row still fails both anchors.
+                current_bottom = (calls[0].get("y"), calls[0].get("height")) if len(calls) == 1 else None
+                expected_bottom = (expected_call.get("y"), expected_call.get("height"))
+                bottom_values = current_bottom + expected_bottom if current_bottom is not None else ()
+                geometry_values = ((calls[0].get("x"), calls[0].get("y"), calls[0].get("width"), calls[0].get("height"),
+                                    expected_call.get("x"), expected_call.get("y"), expected_call.get("width"), expected_call.get("height"))
+                                   if len(calls) == 1 else ())
+                flags["geometryComplete"] = len(geometry_values) == 8 and all(
+                    isinstance(value, (int, float)) and not isinstance(value, bool) and isfinite(value)
+                    for value in geometry_values)
+                flags["bottomEdgeDelta"] = (
+                    current_bottom[0] + current_bottom[1] - expected_bottom[0] - expected_bottom[1]
+                    if len(bottom_values) == 4 and all(isinstance(value, (int, float)) and not isinstance(value, bool) and isfinite(value)
+                                                       for value in bottom_values) else None
+                )
+                flags["callCenterMatches"] = len(calls) == 1 and expired_optional_call_geometry_matches(expected_call, calls[0])
                 reason = ("screen_not_match" if flags["screenState"] != "match" else
                           "draw_present" if flags["drawVisible"] else "orange_present")
                 if flags["screenState"] != "match" or flags["drawVisible"] or flags["orangeButtons"]:
