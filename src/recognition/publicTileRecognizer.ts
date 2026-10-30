@@ -14,6 +14,8 @@ export interface RecognizedPublicTile extends RegionCandidate {
   runnerUpConfidence: number;
   ambiguityMargin: number;
   safe: boolean;
+  /** The prediction names a tile absent from the explicitly selected sanma set. */
+  sanmaUnavailableTile?: true;
   redNumeralEvidence?: RedManNumeralEvidence;
   whitePonRotationEvidence?: {
     scope: "left_sideways_white_pon_only";
@@ -285,7 +287,20 @@ export async function recognizeSanmaPublicCandidates(
   const regions = { ...layout.publicTileRegions };
   delete regions.rightDiscards;
   delete regions.rightMelds;
-  const recognition = await recognizeConfiguredPublicTilesWithVit(screenshot, { ...layout, publicTileRegions: regions }, classifier, options);
+  const raw = await recognizeConfiguredPublicTilesWithVit(screenshot, { ...layout, publicTileRegions: regions }, classifier, options);
+  // The generic detector can classify a blue 1m as an impossible 2m with high
+  // confidence. Preserve the raw label as diagnostic evidence but do not
+  // expose it as safe, even when a different weak tile has already made the
+  // whole region classificationSafe=false. Do not infer its actual identity.
+  const recognition: typeof raw = Object.fromEntries(Object.entries(raw).map(([name, region]) => {
+    if (!region) return [name, region];
+    let impossible = false;
+    const recognized = region.recognized.map(tile => {
+      try { assertTilesAvailable([tile.tile], "sanma"); return tile; }
+      catch { impossible = true; return { ...tile, safe: false, sanmaUnavailableTile: true as const }; }
+    });
+    return [name, impossible ? { ...region, recognized, classificationSafe: false } : region];
+  }));
   const observation = toPublicTileObservation(recognition, ownSeat, "sanma");
   return { recognition, observation };
 }
