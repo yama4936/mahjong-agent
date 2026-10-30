@@ -1,0 +1,22 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import sharp from "sharp";
+import { EXPERIMENTAL_BUTTONS, type ExperimentalTemplates } from "../src/recognition/sanmaButtonExperiment.js";
+import { inspectSanmaButtonRow } from "../src/recognition/sanmaButtonRowExperiment.js";
+const file = (name: string) => readFile(`test/fixtures/ron-button-rows/${name}.png`);
+test("four-player ron references can identify separate ron image but never authorize a click", async () => {
+  const templates = Object.fromEntries(await Promise.all(EXPERIMENTAL_BUTTONS.map(async name => [name, await readFile(`test/fixtures/sanma-buttons/${name}.png`)]))) as ExperimentalTemplates;
+  const kita = await readFile("test/fixtures/sanma-button-rows/kita.png");
+  const skip = await sharp(kita).extract({left:580,top:0,width:245,height:90}).png().toBuffer();
+  const empty = await readFile("test/fixtures/sanma-button-rows/empty.png");
+  const ref = await sharp(await file("ron1")).extract({left:290,top:0,width:245,height:90}).png().toBuffer();
+  const observed = await inspectSanmaButtonRow(await file("ron2"), templates, skip, empty, ref);
+  assert.deepEqual(observed.slots.flatMap(s => s.status === "candidate" ? [s.action] : []), ["ron", "skip"]);
+  assert.equal(observed.complete, false);
+  assert.equal(observed.operationAuthorized, false);
+  const original = await inspectSanmaButtonRow(await file("ron2"), templates, skip, empty);
+  assert.equal(original.slots[1]?.status, "unresolved");
+  const ambiguous = await inspectSanmaButtonRow(await file("ron2"), { ...templates, tsumo: ref }, skip, empty, ref);
+  assert.equal(ambiguous.slots[1]?.status, "unresolved");
+});

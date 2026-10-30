@@ -13,7 +13,7 @@ import { recognizeSanmaPublicCandidates, type PublicVitClassifier } from "./publ
 export async function inspectSanmaFrame(input: {
   frame: Buffer; layout: ScreenLayout; templates: string; buttonTemplates: ExperimentalTemplates;
   ownSeat: "east" | "south" | "west"; publicClassifier: PublicVitClassifier;
-  buttonRowReferences?: { skip: Buffer; emptyRow: Buffer };
+  buttonRowReferences?: { skip: Buffer; emptyRow: Buffer; ron?: Buffer };
   assumedHandRightEdge?: number;
 }) {
   if (!Buffer.isBuffer(input.frame)) throw new Error("Frame bytes required");
@@ -37,7 +37,7 @@ export async function inspectSanmaFrame(input: {
   const buttonRowPromise = (async () => {
     if (!input.buttonRowReferences) throw new Error("button row references missing");
     const row = await sharp(frame).extract(SANMA_BUTTON_ROW_RECT).png().toBuffer();
-    return inspectSanmaButtonRow(row, input.buttonTemplates, input.buttonRowReferences.skip, input.buttonRowReferences.emptyRow);
+    return inspectSanmaButtonRow(row, input.buttonTemplates, input.buttonRowReferences.skip, input.buttonRowReferences.emptyRow, input.buttonRowReferences.ron);
   })();
   const ownMeldPromise = sanmaOwnMeldExperiment(frame, input.layout, input.publicClassifier, input.assumedHandRightEdge);
   const [hand, publicTiles, button, buttonRow, ownMelds] = await Promise.allSettled([
