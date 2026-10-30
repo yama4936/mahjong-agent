@@ -16,7 +16,7 @@ import auto_operator
 from datetime import datetime, timezone
 from unittest.mock import Mock, call, patch
 
-from auto_operator import PythonAutoOperator, RetryableSafetyAbort, SelectionStateUncertainAbort, action_deadline_timing, ambiguous_open_draw_fallback, away_resume_geometry, closed_concealed_row_visible, closed_hand_face_mismatches, confirmed_call_meld, crop_screenshot, crop_screenshot_regions, discard_point_in_hand_geometry, force_auto_call_buttons, force_auto_chi_choice_points, force_auto_reaction_win_button, force_auto_self_action_buttons, geometric_open_meld_count, is_away_resume_dialog, is_contextual_reaction_pass, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, mean_pixel_delta, merge_public_observations, open_hand_draw_slot, own_meld_surface_visible, post_call_transition, raised_glyph_overlap_confirmation, raised_tile_confirmation_point, retreat_pointer_from_hand, riichi_selection_target_region, screencast_frame_follows_pointer_retreat, riichi_selection_is_visible, round_result_conflicts_with_live_table, selected_chi_choice_point, selected_open_draw_is_ambiguous, selected_tile_comparison_region, send_discard_click, should_guard_tenpai_reaction, should_process_reaction_prompt, should_retry_call_policy, stable_hand_comparison_region, stable_hand_delta, tile_face_structure_delta
+from auto_operator import PythonAutoOperator, RetryableSafetyAbort, SelectionStateUncertainAbort, action_deadline_timing, ambiguous_open_draw_fallback, away_resume_geometry, closed_concealed_row_visible, closed_hand_face_mismatches, confirmed_call_meld, crop_screenshot, crop_screenshot_regions, discard_point_in_hand_geometry, force_auto_call_buttons, force_auto_chi_choice_points, force_auto_reaction_win_button, force_auto_self_action_buttons, geometric_open_meld_count, is_away_resume_dialog, is_contextual_reaction_pass, is_draw_slot_occupied, is_force_auto_pass_prompt, load_json, load_secret_environment, local_discard_allowed, mean_pixel_delta, merge_public_observations, open_hand_draw_slot, own_meld_surface_visible, post_call_transition, raised_closed_hand_slots, raised_glyph_overlap_confirmation, raised_tile_confirmation_point, retreat_pointer_from_hand, riichi_selection_target_region, screencast_frame_follows_pointer_retreat, riichi_selection_is_visible, round_result_conflicts_with_live_table, selected_chi_choice_point, selected_open_draw_is_ambiguous, selected_tile_comparison_region, send_discard_click, should_guard_tenpai_reaction, should_process_reaction_prompt, should_retry_call_policy, stable_hand_comparison_region, stable_hand_delta, tile_face_structure_delta
 from screen_state import classify_screen, load_references
 from auto_operator import geometric_reaction_open_meld_count, draw_slots_occupied
 from auto_operator import configure_evaluator_click_budget, with_match_length
@@ -1457,6 +1457,12 @@ class ActionDeadlineTest(unittest.TestCase):
             page = Mock()
             evaluation = {"decision": {"selectedAction": {"action": "discard", "tile": "6p"}},
                           "recognition": {"tiles": tiles, "safe": False}, "clickIndex": 13}
+            # A lifted tile in the evaluation frame is a recognition hazard,
+            # not a preselected discard.  Defer before any hand click.
+            with patch("auto_operator.raised_closed_hand_slots", return_value=[9]):
+                with self.assertRaisesRegex(RetryableSafetyAbort, "raised tile"):
+                    operator.execute(page, evaluation, crop_screenshot(before, operator.hand_clip), before, 5)
+            page.mouse.click.assert_not_called()
             with patch("auto_operator.stable_hand_delta", return_value=3.0), \
                     patch("auto_operator.raised_tile_confirmation_point",
                           return_value={"x": 1532, "y": 971, "lift": 28, "faceStructureDelta": 0.0}):
@@ -6011,6 +6017,30 @@ class AwayDialogDetectionTest(unittest.TestCase):
         confirmation = raised_tile_confirmation_point(before, after, layout, 11, point, 1.5)
         self.assertEqual(confirmation, {"x": 1312.5, "y": 968.0, "lift": 31.0,
                                         "faceStructureDelta": 0.0})
+
+    def test_raised_closed_hand_slots_find_live_misrecognitions_without_flagging_neutral_rows(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        layout = load_json(root / "config/layout-300-regression.json")
+        # These are the two reviewed 300+0 frames where the fixed neutral crop
+        # misread a lifted 1s/7p.  The detector is geometric and returns the
+        # physical slot, not an inferred tile label.
+        self.assertEqual(raised_closed_hand_slots(
+            (root / "artifacts/live/raised-one-sou-read-two-sou-698264b-20260929.jpg").read_bytes(), layout,
+        ), [9])
+        self.assertEqual(raised_closed_hand_slots(
+            (root / "artifacts/live/raised-seven-pin-read-two-sou-20260928.jpg").read_bytes(), layout,
+        ), [9])
+        # A verified neutral row and the pre-selection half of a real click
+        # must not postpone a short-clock decision.
+        self.assertEqual(raised_closed_hand_slots(
+            (root / "artifacts/live/riichi-shimmer-hand-before-20260928.jpg").read_bytes(), layout,
+        ), [])
+        self.assertEqual(raised_closed_hand_slots(
+            (root / "test/fixtures/selection-7p-before-20261029.png").read_bytes(), layout,
+        ), [])
+        self.assertEqual(raised_closed_hand_slots(
+            (root / "test/fixtures/selection-7p-receipt-20261029.png").read_bytes(), layout,
+        ), [8])
 
     def test_native_seven_pin_selection_requires_physical_rim_and_glyph(self) -> None:
         root = Path(__file__).resolve().parents[1]

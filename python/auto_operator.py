@@ -344,6 +344,55 @@ def closed_hand_face_mismatches(
     return mismatches
 
 
+def raised_closed_hand_slots(screenshot: bytes, layout: dict[str, Any]) -> list[int]:
+    """Return closed-row slots whose physical top rim is materially raised.
+
+    Recognition crops are calibrated to a neutral row.  A selected or hovered
+    tile moves its face roughly 48 pixels upward, so a label from that fixed
+    crop is not sufficient evidence for a discard decision.  This is a narrow
+    geometry check: three independently sampled columns must find the same
+    ivory top edge immediately below an orange rim, 12--80px above that
+    slot's calibrated top.  It deliberately reports uncertainty rather than
+    attempting to translate and re-recognize the tile.
+    """
+    slots = [*layout.get("handSlots", [])]
+    draw_slot = layout.get("drawSlot")
+    if draw_slot:
+        slots.append(draw_slot)
+    if len(slots) != 14:
+        return []
+    try:
+        with Image.open(io.BytesIO(screenshot)) as source:
+            image = source.convert("RGB")
+        raised: list[int] = []
+        for index, slot in enumerate(slots):
+            top = int(slot["y"])
+            center = float(slot["x"]) + float(slot["width"]) / 2
+            edges: list[int] = []
+            for offset in (-28, -14, 0, 14):
+                x = int(center + offset)
+                for y in range(max(0, top - 80), min(image.height - 2, top + 8)):
+                    pixels = [image.getpixel((x, y + dy)) for dy in range(3)]
+                    ivory = all(min(pixel) > 130 and max(pixel) - min(pixel) < 50
+                                for pixel in pixels)
+                    orange_rim = any(
+                        (pixel := image.getpixel((x, rim_y)))[0] > 150
+                        and pixel[0] - pixel[1] > 35 and pixel[1] - pixel[2] > 30
+                        for rim_y in range(max(0, y - 8), y)
+                    )
+                    if ivory and orange_rim:
+                        edges.append(y)
+                        break
+            lifts = [top - edge for edge in edges if 12 <= top - edge <= 80]
+            if len(lifts) >= 3 and max(lifts) - min(lifts) <= 2:
+                raised.append(index)
+        return raised
+    except Exception:
+        # This gate only adds a fail-closed delay when positive evidence is
+        # available; an unreadable frame follows the existing checks.
+        return []
+
+
 def crop_screenshot(screenshot: bytes, clip: dict[str, float]) -> bytes:
     """Crop a PNG in memory so one CDP capture can serve several checks."""
     with Image.open(io.BytesIO(screenshot)) as image:
@@ -6604,6 +6653,20 @@ class PythonAutoOperator:
             self.resume_if_away(page, pre_click_full)
             raise RetryableSafetyAbort("decision canceled because away dialog appeared during evaluation")
         trusted_open_melds = getattr(self, "cached_open_melds", 0)
+        # The resident Hybrid recognizer sees a fixed neutral-row crop.  If a
+        # tile was already lifted in the frame that produced this decision,
+        # its label may be confidently wrong even though the later selection
+        # receipt can prove a physical click.  Defer before the first click
+        # and wait for a neutral observation instead of translating that crop
+        # or accepting a generic recognition-safe flag.
+        if force_auto and needs_tile_click and trusted_open_melds == 0 and evaluated_full is not None:
+            raised_slots = raised_closed_hand_slots(evaluated_full, self.layout)
+            if raised_slots:
+                self.log("raised_hand_recognition_deferred", slots=raised_slots,
+                         phase="before_discard_click", verification="rim_backed_top_edge")
+                raise RetryableSafetyAbort(
+                    "evaluated closed hand contains a raised tile; wait for neutral re-observation"
+                )
         stable_region = stable_hand_comparison_region(self.layout, trusted_open_melds)
         selected_region = None
         same_draw_generation = bool(
