@@ -1,0 +1,63 @@
+import json
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+from sanma_board_image import recognize_sanma_board_candidate
+
+ROOT = Path(__file__).resolve().parents[1]
+ACTIONS = ROOT / 'artifacts/sanma-manual-e48c562-20261031/actions'
+CASES = [
+    ('2026-10-30T16-05-55-331Z-before.png', 'west', 'east_1',
+     {'west': 35000, 'south': 35000, 'east': 35000}, 0),
+    ('2026-10-30T16-30-00-848Z-before.png', 'south', 'east_2',
+     {'south': 42000, 'east': 32000, 'west': 31000}, 0),
+    ('2026-10-30T17-20-14-718Z-after.png', 'east', 'east_3',
+     {'east': 41500, 'west': 33000, 'south': 30500}, 2),
+]
+
+
+class SanmaBoardImageTests(unittest.TestCase):
+    def test_screen_rejection_is_not_promoted(self):
+        with patch('sanma_board_image.recognize_board', return_value={
+                'verified': False, 'reason': 'not_gameplay_screen'}):
+            result = recognize_sanma_board_candidate(Path('unused'), expected_total_points=105000,
+                                                      payment_phase='settled')
+        self.assertFalse(result['verified'])
+        self.assertEqual(result['reason'], 'not_gameplay_screen')
+
+    def test_unobserved_settings_and_missing_score_stay_unverified(self):
+        tokens = json.loads((ROOT / 'test/fixtures/sanma-board-tokens/west.json').read_text())
+        with patch('sanma_board_image.recognize_board', return_value={'tokens': tokens}):
+            unknown = recognize_sanma_board_candidate(Path('unused'), expected_total_points=None,
+                                                        payment_phase=None)
+        self.assertFalse(unknown['verified'])
+        self.assertNotEqual(unknown.get('consistent'), True)
+        self.assertEqual(unknown['reason'], 'expected_total_points_unknown')
+        tokens = [token for token in tokens if abs(token['x'] - 958) > 24 or abs(token['y'] - 364) > 20]
+        with patch('sanma_board_image.recognize_board', return_value={'tokens': tokens}):
+            missing = recognize_sanma_board_candidate(Path('unused'), expected_total_points=105000,
+                                                        payment_phase='settled')
+        self.assertFalse(missing['verified'])
+        self.assertNotIn('candidate', missing)
+        self.assertEqual(missing['reason'], 'incomplete_or_ambiguous_tokens')
+
+    @unittest.skipUnless(all((ACTIONS / case[0]).exists() for case in CASES),
+                         'local screenshots from the manually assisted match unavailable')
+    def test_three_real_saved_images_end_to_end(self):
+        try:
+            import rapidocr  # noqa: F401
+        except ImportError:
+            self.skipTest('optional OCR dependencies unavailable')
+        for name, seat, round_name, scores, honba in CASES:
+            with self.subTest(seat=seat):
+                result = recognize_sanma_board_candidate(ACTIONS / name, expected_total_points=105000,
+                                                          payment_phase='settled')
+                self.assertFalse(result['verified'])
+                self.assertTrue(result.get('consistent'), result)
+                self.assertEqual(result['candidate'], {'seat': seat, 'round': round_name,
+                                 'scores': scores, 'riichiSticks': 0, 'honba': honba})
+
+
+if __name__ == '__main__':
+    unittest.main()
