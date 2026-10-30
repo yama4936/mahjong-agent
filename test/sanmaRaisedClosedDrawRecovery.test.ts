@@ -1,0 +1,13 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {existsSync} from 'node:fs';import {readFile} from 'node:fs/promises';import sharp from 'sharp';import {layoutSchema} from '../src/recognition/layout.js';import {proposeLiveHandLayout} from '../src/recognition/handLayoutProposal.js';import {recoverSanmaRaisedClosedDraw} from '../src/recognition/sanmaRaisedClosedDrawRecovery.js';import {inspectSanmaFrame} from '../src/recognition/sanmaFrameExperiment.js';import {EXPERIMENTAL_BUTTONS,type ExperimentalTemplates} from '../src/recognition/sanmaButtonExperiment.js';
+const root='/home/yama1/sanma-independent-20261031',available=existsSync(`${root}/22-turn.png`)&&existsSync(`${root}/27-turn.png`)&&existsSync('templates/bootstrap/1m__hf_base.png');
+test('raised closed draw recovers only an unverified hand after layout failure',{skip:!available,timeout:60000},async()=>{
+ const layout=layoutSchema.parse(JSON.parse(await readFile('config/layout-runtime.json','utf8'))),frame=await readFile(`${root}/22-turn.png`);
+ await assert.rejects(proposeLiveHandLayout(frame));const p=await recoverSanmaRaisedClosedDraw(frame,layout);assert.ok(p);assert.equal(p.drawSlot.y,873);assert.equal(p.confidence,0);assert.equal(p.evidence.detectedTiles,-1);
+ assert.equal(await recoverSanmaRaisedClosedDraw(await readFile(`${root}/27-turn.png`),layout),undefined);
+ assert.equal(await recoverSanmaRaisedClosedDraw(await readFile(`${root}/20-turn.png`),layout),undefined);
+ assert.equal(await recoverSanmaRaisedClosedDraw(await readFile('test/fixtures/hand-seven-sou-control-a-20261021.jpg'),layout),undefined);
+ const band=await sharp(frame).extract({left:1486,top:879,width:92,height:26}).png().toBuffer(),twice=await sharp(frame).composite([{input:band,left:1076,top:879}]).png().toBuffer();assert.equal(await recoverSanmaRaisedClosedDraw(twice,layout),undefined);
+ const altered={...layout,handSlots:layout.handSlots.map((r,i)=>i===3?{...r,x:r.x+1}:r)};assert.equal(await recoverSanmaRaisedClosedDraw(frame,altered),undefined);
+ const buttonTemplates=Object.fromEntries(await Promise.all(EXPERIMENTAL_BUTTONS.map(async n=>[n,await readFile(`test/fixtures/sanma-buttons/${n}.png`)]))) as ExperimentalTemplates;
+ const report=await inspectSanmaFrame({frame,layout,templates:'templates/bootstrap',buttonTemplates,publicClassifier:{async classifyTileImages(){throw new Error('unavailable')}}});assert.equal(report.hand.status,'candidate');if(report.hand.status==='candidate'){assert.deepEqual(report.hand.value.tiles,['3p','4p','0p','5p','7p','0s','6s','7s','E','E','S','W','F','9m']);assert.equal(report.hand.value.safe,false);assert.equal(report.hand.value.turnReady,false)}assert.equal(report.operationAuthorized,false);
+});

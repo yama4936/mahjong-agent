@@ -6,6 +6,7 @@ import { recoverSanmaRaisedHand } from "./sanmaRaisedHandRecovery.js";
 import { recoverSanmaRaisedDrawAfterTwoCalls } from "./sanmaRaisedDrawRecovery.js";
 import { recoverSanmaRaisedFive } from "./sanmaRaisedFiveRecovery.js";
 import { recoverSanmaRaisedClosedHand } from "./sanmaRaisedClosedHandRecovery.js";
+import { recoverSanmaRaisedClosedDraw } from "./sanmaRaisedClosedDrawRecovery.js";
 import type { ScreenLayout } from "./layout.js";
 import { recognizeTileSlots } from "./templateMatcher.js";
 import { classifySanmaButtonCrop, type ExperimentalTemplates } from "./sanmaButtonExperiment.js";
@@ -34,8 +35,15 @@ export async function inspectSanmaFrame(input: {
   const dimensions = await image.metadata();
   if (dimensions.width !== 1920 || dimensions.height !== 1080) throw new Error("Unreviewed frame dimensions");
   const handPromise = (async () => {
-    let proposal = await proposeLiveHandLayout(frame);
     let unverifiedClosedRecovery = false;
+    let proposal;
+    try { proposal = await proposeLiveHandLayout(frame); }
+    catch (error) {
+      const recovered = await recoverSanmaRaisedClosedDraw(frame,input.layout);
+      if (!recovered) throw error;
+      proposal = recovered;
+      unverifiedClosedRecovery = true;
+    }
     if (proposal.evidence.detectedTiles === 2 && !knownOpenHandProposalFitsCalibratedRow(proposal, input.layout, 4)) {
       let recovered = await recoverSanmaRaisedHand(frame, input.layout, proposal)
         ?? await recoverSanmaRaisedDrawAfterTwoCalls(frame, input.layout, proposal)
