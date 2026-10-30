@@ -8455,6 +8455,8 @@ class PythonAutoOperator:
         attempted_frames: set[str] = set()
         last_unconfirmed_action: str | None = None
         unknown_streak = 0
+        startup_unknown_polls = 0
+        match_seen = False
         def preserve(frame: bytes | None) -> str | None:
             if not isinstance(frame, bytes) or not frame:
                 return None
@@ -8477,6 +8479,7 @@ class PythonAutoOperator:
                          screenshot=preserve(last_frame))
                 return
             if state == "match" and confidence >= 0.95:
+                match_seen = True
                 try:
                     receipt = self.inspect_sanma_self_turn(page)
                     candidates = receipt.get("candidates")
@@ -8535,6 +8538,12 @@ class PythonAutoOperator:
                     self.log("sanma_friend_stopped", reason="observation_or_action_failed", error=str(error),
                              screenshot=preserve(last_frame), operationAuthorized=False)
                     return
+            if state == "unknown" and not match_seen and time.monotonic() - started < 30 and startup_unknown_polls < 20:
+                startup_unknown_polls += 1
+                self.log("sanma_friend_wait", reason="startup_screen_unknown", screenshot=preserve(frame),
+                         confidence=confidence, poll=startup_unknown_polls)
+                page.wait_for_timeout(500)
+                continue
             if state in {"unknown", "login", "connection_error", "rank_entry_denied", "match_result", "round_result"}:
                 self.log("sanma_friend_stopped", reason="unexpected_screen", screenState=state, confidence=confidence,
                          screenshot=preserve(last_frame))

@@ -49,6 +49,32 @@ class ExperimentalSanmaFriendLoopTest(unittest.TestCase):
         self.op.execute_sanma_friend_tsumo_candidate.assert_not_called()
         self.assertTrue(any(call.kwargs.get('reason')=='unsupported_or_unknown_action' for call in self.op.log.call_args_list))
 
+    def test_real_start_animation_waits_then_observes_match(self):
+        fixture = Path('/home/yama1/.codex/sanma-run-1740066-20261031/frames/2026-10-30T23-37-24.592906+00-00.805131614d0e42f4aafdf2c7a89c592c.sanma-friend-stop.png')
+        if not fixture.exists():
+            self.skipTest('captured friend start animation is not available')
+        self.op.args.max_iterations = 2
+        self.page.screenshot.side_effect = [fixture.read_bytes(), b'match']
+        self.op.verified_friend_300_active = True
+        with patch('auto_operator.classify_screen', side_effect=[('unknown', 0.0), ('match', 1.0)]):
+            self.op.run_experimental_sanma_friend(self.page)
+        self.op.execute_sanma_friend_tsumo_candidate.assert_called_once()
+        self.assertTrue(any(c.kwargs.get('reason') == 'startup_screen_unknown' for c in self.op.log.call_args_list))
+
+    def test_unknown_start_is_bounded_and_login_is_not_ignored(self):
+        self.op.args.max_iterations = 0
+        self.op.verified_friend_300_active = True
+        with patch('auto_operator.classify_screen', return_value=('unknown', 0.0)):
+            self.op.run_experimental_sanma_friend(self.page)
+        self.assertEqual(self.page.wait_for_timeout.call_count, 20)
+        self.assertTrue(any(c.kwargs.get('reason') == 'unexpected_screen' for c in self.op.log.call_args_list))
+        self.op.log.reset_mock()
+        self.page.wait_for_timeout.reset_mock()
+        with patch('auto_operator.classify_screen', return_value=('login', 1.0)):
+            self.op.run_experimental_sanma_friend(self.page)
+        self.page.wait_for_timeout.assert_not_called()
+        self.assertTrue(any(c.kwargs.get('screenState') == 'login' for c in self.op.log.call_args_list))
+
     def test_real_reviewed_room_preflight_enters_only_the_experimental_loop(self):
         fixture = Path(__file__).resolve().parents[1] / 'test/fixtures/sanma-friend-preflight.png'
         image = fixture.read_bytes()
