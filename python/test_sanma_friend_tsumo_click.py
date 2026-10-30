@@ -54,6 +54,15 @@ class SanmaFriendTsumoTest(unittest.TestCase):
         self.assertEqual(Path(result['before']).read_bytes(), self.frame)
         self.assertEqual(Path(result['after']).read_bytes(), AFTER.read_bytes())
 
+    def test_session_revoked_during_capture_stops_before_click(self):
+        def capture(**_):
+            self.operator.verified_friend_300_active = False
+            return self.frame
+        self.page.screenshot.side_effect = capture
+        with self.assertRaisesRegex(RuntimeError, 'session or timing expired'):
+            self.operator.execute_sanma_friend_tsumo_candidate(self.page, self.receipt)
+        self.page.mouse.click.assert_not_called()
+
     def test_same_frame_cannot_be_clicked_twice(self):
         self.page.screenshot.side_effect = None
         self.page.screenshot.return_value = self.frame

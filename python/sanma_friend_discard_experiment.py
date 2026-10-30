@@ -59,11 +59,12 @@ def execute_friend_draw_candidate(operator, page, receipt):
         operator.log("sanma_friend_discard_experiment", **event)
     return execute_friend_discard(page, session=session, observation=observation, plan=plan,
                                   layout=operator.layout, log=record,
-                                  turn_started_monotonic=getattr(operator, "verified_friend_300_started_at", None))
+                                  turn_started_monotonic=getattr(operator, "verified_friend_300_started_at", None),
+                                  session_check=lambda: getattr(operator, "verified_friend_300_active", False) is True)
 
 
 def execute_friend_discard(page, *, session, observation, plan, layout, log,
-                           turn_started_monotonic, clock=time.monotonic):
+                           turn_started_monotonic, clock=time.monotonic, session_check=None):
     """Map a supplied TS plan to the existing select/confirm routine.
 
     This experimental entry point depends on a caller that establishes the
@@ -100,6 +101,8 @@ def execute_friend_discard(page, *, session, observation, plan, layout, log,
         if not isinstance(before, bytes) or hashlib.sha256(before).hexdigest() != observation.get("frameSha256"):
             raise ValueError("recognition frame changed before click")
         def deadline():
+            if session_check is not None and session_check() is not True:
+                raise RuntimeError("friend session revoked")
             if not 0 <= clock() - turn_started_monotonic < 300:
                 raise RuntimeError("action deadline expired")
         deadline()

@@ -33,6 +33,12 @@ class FriendDiscardExperimentTests(unittest.TestCase):
         self.assertEqual(result["result"], "discard_not_verified")
 
     @patch("sanma_friend_discard_experiment.send_discard_click")
+    def test_revoked_friend_session_stops_before_click(self, send):
+        with self.assertRaisesRegex(RuntimeError, 'friend session revoked'):
+            execute_friend_discard(self.page, **{**self.kwargs, 'session_check': lambda: False})
+        send.assert_not_called()
+
+    @patch("sanma_friend_discard_experiment.send_discard_click")
     def test_ambiguous_prompts_ranked_changed_frame_and_expired_turn_are_blocked(self, send):
         variants = [dict(observation={**self.observation, "promptStatus": "unknown"}),
                     dict(session={**self.session, "ranked": True}),

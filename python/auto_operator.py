@@ -3997,6 +3997,8 @@ class PythonAutoOperator:
                 raise ValueError("game screen not recognized")
         except Exception as error:
             raise RuntimeError(f"sanma tsumo pre-click check failed: {error}") from error
+        if self.verified_friend_300_active is not True or not 0 <= time.monotonic() - started_at < 300:
+            raise RuntimeError("experimental sanma friend session or timing expired")
         attempted = getattr(self, "_sanma_friend_attempted_frames", set())
         if receipt["digest"] in attempted:
             raise RuntimeError("sanma frame already attempted; fresh observation required")
@@ -4085,6 +4087,8 @@ class PythonAutoOperator:
                 raise ValueError("game screen not recognized")
         except Exception as error:
             raise RuntimeError(f"sanma kita pre-click check failed: {error}") from error
+        if self.verified_friend_300_active is not True or not 0 <= time.monotonic() - started_at < 300:
+            raise RuntimeError("experimental sanma friend session or timing expired")
         before_path = self.frames / f"{utc_stamp()}.{uuid.uuid4().hex}.sanma-kita-before.png"
         before_path.write_bytes(fresh)
         point = {"x": 1012.5, "y": 830.0}
