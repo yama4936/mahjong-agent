@@ -23,8 +23,29 @@ class SanmaBoardTokensTest(unittest.TestCase):
                 result = self.parse(self.tokens(seat))
                 self.assertFalse(result['verified'])
                 self.assertTrue(result['consistent'])
-                self.assertEqual(result['candidate'], {'seat': seat, 'round': round_name,
-                                 'scores': scores, 'riichiSticks': 0, 'honba': honba})
+                expected = {'seat': seat, 'round': round_name,
+                            'scores': scores, 'riichiSticks': 0, 'honba': honba}
+                observed = [t['text'] for t in self.tokens(seat) if t['text'].startswith('余')]
+                if len(observed) == 1:
+                    expected['remainingTiles'] = int(observed[0][1:])
+                self.assertEqual(result['candidate'], expected)
+
+    def test_wall_count_is_candidate_only_and_missing_is_not_zero(self):
+        tokens = self.tokens('south')
+        result = self.parse(tokens, total=None, phase=None)
+        self.assertEqual(result['candidate']['remainingTiles'], 40)
+        self.assertFalse(result['verified'])
+        self.assertFalse(result.get('consistent', False))
+        absent = [t for t in tokens if not t['text'].startswith('余')]
+        self.assertNotIn('remainingTiles', self.parse(absent)['candidate'])
+        for bad in [
+            {'text': '余40', 'confidence': 0.9, 'x': 959, 'y': 443},
+            {'text': '余71', 'confidence': 1.0, 'x': 959, 'y': 443},
+            {'text': '余40', 'confidence': 1.0, 'x': 1100, 'y': 443},
+        ]:
+            self.assertNotIn('remainingTiles', self.parse(absent + [bad])['candidate'])
+        conflicting = tokens + [{'text': '余41', 'confidence': 1.0, 'x': 959, 'y': 443}]
+        self.assertNotIn('remainingTiles', self.parse(conflicting)['candidate'])
 
     def test_missing_conflicting_and_unsettled_fail_closed(self):
         tokens = self.tokens('south')

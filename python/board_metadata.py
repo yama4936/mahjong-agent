@@ -396,6 +396,11 @@ def parse_sanma_board_tokens(tokens: list[dict], *, expected_total_points: int |
     candidate = {"seat": seat, "round": f"{WINDS[round_text[0]]}_{round_text[1]}",
                  "scores": {mapping[position]: int(value) for position, value in numbers.items()},
                  "riichiSticks": int(sticks), "honba": int(honba)}
+    # Preserve the observed wall count as an OCR candidate only.  Missing,
+    # ambiguous, or implausible readings do not imply an empty wall.
+    remaining = at(959, 443, r"余\d{1,2}")
+    if remaining is not None and int(remaining[1:]) <= 70:
+        candidate["remainingTiles"] = int(remaining[1:])
     check = validate_sanma_board_consistency(candidate, expected_total_points=expected_total_points,
                                               payment_phase=payment_phase)
     if not check["consistent"]:
