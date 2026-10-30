@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { calculateShanten } from "../game/shanten.js";
-import { assertTilesAvailable } from "../game/tiles.js";
+import { assertTilesAvailable, tileAvailableInRules, tileFromIndex, TILE_NAMES, toCounts } from "../game/tiles.js";
 import type { inspectSanmaFrame } from "./sanmaFrameExperiment.js";
 
 /** Hand-only shanten hypotheses and their physical positions; never a policy. */
@@ -21,16 +21,28 @@ export function sanmaStructuralPositions(frame: Buffer, report: Awaited<ReturnTy
     return blocked("hand and position counts differ");
   try { assertTilesAvailable(tiles, "sanma"); }
   catch { return blocked("recognized hand is invalid for sanma"); }
+  // Counts from the recognized hand alone provide a conservative upper
+  // bound, not actual live tiles. Rivers, melds and north extracts are unknown.
+  const handCounts = toCounts(tiles);
   const candidates = [...new Set(tiles)].map(tile => {
     const remainder = [...tiles];
     remainder.splice(remainder.indexOf(tile), 1);
     const shape = calculateShanten(remainder, melds);
-    return {tile, shanten:shape.shanten, form:shape.bestForm,
+    const improvingDraws = TILE_NAMES.flatMap((_, index) => {
+      const draw = tileFromIndex(index);
+      if (!tileAvailableInRules(draw, "sanma")) return [];
+      const maximumUnseen = 4 - handCounts[index]!;
+      if (maximumUnseen <= 0 || calculateShanten([...remainder, draw], melds).shanten >= shape.shanten) return [];
+      return [{tile:draw, maximumUnseen}];
+    });
+    return {tile, shanten:shape.shanten, form:shape.bestForm, improvingDraws,
+      maximumUnseenTotal:improvingDraws.reduce((sum, entry) => sum + entry.maximumUnseen, 0),
       positions: tiles.flatMap((observed, index) => observed === tile
         ? [{index, rect:slots[index], point:geometry.clickPoints[index]}] : [])};
   });
   return {status:"blocked" as const, digest, operationAuthorized:false as const, candidates,
     reason:"unverified hand, meld count, turn and action priority; visible tiles and danger unknown",
-    assumptions:["recognized tile labels and candidate meld count are correct"],
+    assumptions:["recognized tile labels and candidate meld count are correct",
+      "draw totals are upper bounds from hand-only counts, not live or observed tile counts"],
     positionCalibrationRequired:geometry.requiresHoldoutValidation};
 }

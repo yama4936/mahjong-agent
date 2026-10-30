@@ -212,6 +212,8 @@ class ResidentSanmaEndToEndTests(unittest.TestCase):
             self.assertEqual(receipt['structuralPositions']['digest'], receipt['digest'])
             self.assertFalse(receipt['structuralPositions']['operationAuthorized'])
             self.assertTrue(receipt['structuralPositions']['candidates'])
+            self.assertTrue(all('maximumUnseenTotal' in row and 'improvingDraws' in row for row in receipt['structuralPositions']['candidates']))
+            self.assertTrue(any('upper bounds' in note for note in receipt['structuralPositions']['assumptions']))
             self.assertTrue(any(candidate['tile'] == 'N' and candidate['positions'] for candidate in receipt['structuralPositions']['candidates']))
             self.assertTrue(any(candidate['action'] == 'kita' for candidate in receipt['candidates']['candidates']))
             self.assertIn('complete independent review missing', receipt['priority']['reasons'])

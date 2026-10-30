@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { evaluateDiscards } from "../src/game/ukeire.js";
 import { sanmaStructuralPositions } from "../src/recognition/sanmaStructuralPositions.js";
 
 const frame = Buffer.from("frame");
@@ -29,4 +30,24 @@ test("mismatched frame, impossible hand and missing geometry are blocked",()=>{
   assert.match(sanmaStructuralPositions(frame,{...report,handGeometry:{status:"unresolved"}}).reason,/unavailable/);
   const short = {...report,handGeometry:{...report.handGeometry,value:{...report.handGeometry.value,clickPoints:[]}}};
   assert.match(sanmaStructuralPositions(frame,short).reason,/counts differ/);
+});
+
+
+test("unknown visible tiles produce upper bounds, never an assumed live count",()=>{
+  const result = sanmaStructuralPositions(frame,report);
+  for (const visible of [[],["1p","1s","F"],["N","N","4p"]]) {
+    const exact = evaluateDiscards(tiles,visible,0,"sanma");
+    for (const row of result.candidates) {
+      const complete = exact.find(entry=>entry.tile===row.tile)!;
+      assert.equal(row.shanten,complete.shanten);
+      assert.ok(row.maximumUnseenTotal >= complete.ukeire);
+      assert.ok(row.improvingDraws.every(draw=>!(/^[2-8]m$/.test(draw.tile))));
+      for (const draw of complete.effectiveTiles) {
+        const bound = row.improvingDraws.find(entry=>entry.tile===draw.tile);
+        assert.ok(bound && bound.maximumUnseen>=draw.remaining);
+      }
+    }
+  }
+  assert.ok(result.assumptions?.some(item=>item.includes("upper bounds")));
+  assert.equal(result.operationAuthorized,false);
 });
