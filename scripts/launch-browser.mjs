@@ -2,6 +2,7 @@ import { access, mkdir } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { chromium } from "playwright";
+import { watchBrowserLifecycle } from "./browser-lifecycle.mjs";
 
 const profile = path.resolve(process.env.JANTAMA_BROWSER_PROFILE ?? ".runtime/browser-profile");
 const port = Number(process.env.JANTAMA_CDP_PORT ?? 9222);
@@ -40,6 +41,7 @@ const context = await chromium.launchPersistentContext(profile, {
     ...(softwareRendering ? ["--enable-unsafe-swiftshader", "--use-angle=swiftshader-webgl"] : []),
   ],
 });
+const lifecycle = watchBrowserLifecycle(context, process);
 
 const pages = context.pages();
 const page = pages.find((candidate) => candidate.url().includes("mahjongsoul.com")) ?? pages[0] ?? await context.newPage();
@@ -53,6 +55,6 @@ async function close() {
   await context.close().catch(() => {});
   process.exit(0);
 }
-process.once("SIGINT", close);
-process.once("SIGTERM", close);
+process.once("SIGINT", () => { lifecycle.recordSignal("SIGINT"); void close(); });
+process.once("SIGTERM", () => { lifecycle.recordSignal("SIGTERM"); void close(); });
 await new Promise((resolve) => context.on("close", resolve));
