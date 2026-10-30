@@ -69,11 +69,11 @@ export async function inspectSanmaButtonRow(row: Buffer, templates: Experimental
         return { status: "candidate", action: "skip", slot, confidence: candidateConfidence!, evidence: "partially_occluded_skip" };
       }
     }
-    // Two saved north-button frames from one match show a wider overlap: the
-    // 200px check is obscured but the first 130px remains fully visible.
-    // Keep a full-slot gate and compare the clear section against every
+    // Saved frames from one match show a wider overlap: the 200px check is
+    // obscured while the left portion still carries the button silhouette.
+    // Keep a full-slot gate and compare the visible section against every
     // available competing reference. This is still only a hypothesis.
-    if (slot === 2 && skipConfidence >= 0.94 && skipConfidence < 0.98
+    if (slot === 2 && skipConfidence >= 0.925 && skipConfidence < 0.98
         && skipConfidence > emptyConfidence + 0.03 && skipConfidence > action.confidence + 0.03
         && skipConfidence > ronConfidence + 0.03) {
       const partial = (image: Buffer) => sharp(image)
@@ -87,8 +87,8 @@ export async function inspectSanmaButtonRow(row: Buffer, templates: Experimental
       const [candidateConfidence, ...competing] = await Promise.all([
         similarity(observed!, skipPart!), ...[blankPart!, ...otherParts].map(reference => similarity(observed!, reference)),
       ]);
-      if (edgeMean >= 40 && candidateConfidence! >= 0.995
-          && competing.every(value => candidateConfidence! > value + 0.03)) {
+      if (edgeMean >= 40 && candidateConfidence! >= 0.96
+          && competing.every(value => candidateConfidence! > value + 0.09)) {
         return { status: "candidate", action: "skip", slot, confidence: candidateConfidence!, evidence: "partially_occluded_skip" };
       }
     }

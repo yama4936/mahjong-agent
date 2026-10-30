@@ -78,7 +78,18 @@ test("wider north overlap preserves only a diagnostic skip candidate", {
     const corrupt = await sharp(crop).composite([{input:black,left:780,top:0}]).png().toBuffer();
     assert.equal((await inspectSanmaButtonRow(corrupt,templates,skip,empty)).slots[2]?.status,"unresolved");
   }
-  // Another actual prompt is more obscured and must not be guessed.
-  const heavy = await sharp(await readFile(`${source}/2026-10-30T17-23-48-795Z-before.png`)).extract({left:600,top:785,width:825,height:90}).png().toBuffer();
-  assert.equal((await inspectSanmaButtonRow(heavy,templates,skip,empty)).slots[2]?.status,"unresolved");
+  // A darker, more obscured skip was observed on two prompts in one match.
+  for (const name of ["2026-10-30T17-23-48-795Z-before.png", "2026-10-30T17-56-40-472Z-before.png"]) {
+    const crop = await sharp(await readFile(`${source}/${name}`)).extract({left:600,top:785,width:825,height:90}).png().toBuffer();
+    const result = await inspectSanmaButtonRow(crop,templates,skip,empty);
+    assert.equal(result.slots[1]?.status,"candidate");
+    assert.equal(result.slots[2]?.status,"candidate");
+    if (result.slots[2]?.status === "candidate") assert.equal(result.slots[2].action,"skip");
+    assert.equal(result.complete,false);
+    assert.equal(result.operationAuthorized,false);
+    assert.equal((await inspectSanmaButtonRow(crop,{...templates,pon:skip},skip,empty)).slots[2]?.status,"unresolved");
+    const black = await sharp({create:{width:45,height:90,channels:3,background:"black"}}).png().toBuffer();
+    const corrupt = await sharp(crop).composite([{input:black,left:780,top:0}]).png().toBuffer();
+    assert.equal((await inspectSanmaButtonRow(corrupt,templates,skip,empty)).slots[2]?.status,"unresolved");
+  }
 });
