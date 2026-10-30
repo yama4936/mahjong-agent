@@ -6638,6 +6638,8 @@ class PythonAutoOperator:
         region_override: dict[str, Any] | None = None,
         screen_before: bytes | None = None,
     ) -> dict[str, Any]:
+        if action == "kita":
+            raise RuntimeError("kita confirmation requires verified north removal and replacement draw")
         region = region_override or self.layout.get("actionButtonRegions", {}).get(action)
         if not region:
             raise RuntimeError(f"layout has no calibrated {action} button region")
@@ -6769,20 +6771,22 @@ class PythonAutoOperator:
                  mismatches=mismatches)
         return verified
 
+    def require_supported_execution_rules(self, evaluation: dict[str, Any] | None = None) -> None:
+        """Block unverified sanma evidence at every public action entry point."""
+        state = evaluation.get("state") if isinstance(evaluation, dict) else None
+        scope = evaluation.get("scope") if isinstance(evaluation, dict) else None
+        if ((isinstance(state, dict) and state.get("rules") == "sanma")
+                or getattr(getattr(self, "args", None), "rules", None) == "sanma"
+                or (isinstance(scope, str) and (scope.startswith("offline_untrusted_sanma")
+                                               or scope.startswith("sanma_")))):
+            raise RuntimeError("sanma execution is not implemented; observation cannot authorize clicks")
+
     def execute(
         self, page: Page, evaluation: dict[str, Any], evaluated_hand: bytes | None = None,
         evaluated_full: bytes | None = None, evaluated_draw_generation: int | None = None,
         evaluated_captured_at: float | None = None,
     ) -> dict[str, Any]:
-        # A direct library call must not bypass the CLI's sanma startup guard.
-        # Sanma observation and confirmation candidates are not executable.
-        state = evaluation.get("state")
-        scope = evaluation.get("scope")
-        if ((isinstance(state, dict) and state.get("rules") == "sanma")
-                or getattr(getattr(self, "args", None), "rules", None) == "sanma"
-                or (isinstance(scope, str) and (scope.startswith("offline_untrusted_sanma")
-                                               or scope == "sanma_self_turn_observation"))):
-            raise RuntimeError("sanma execution is not implemented; observation cannot authorize clicks")
+        self.require_supported_execution_rules(evaluation)
         decision = evaluation["decision"]
         recognition = evaluation["recognition"]
         if not isinstance(decision, dict):
@@ -7375,6 +7379,7 @@ class PythonAutoOperator:
         must never choose among chi/pon/kan/ron candidates.  A certified pass
         is valid for every such prompt and prevents the match from timing out.
         """
+        self.require_supported_execution_rules(evaluation)
         if self.args.mode not in {"auto", "force-auto"}:
             return {"clicked": False, "reason": "advisor_or_observer_reaction_prompt"}
         recognition = evaluation.get("recognition", {})
@@ -7664,6 +7669,7 @@ class PythonAutoOperator:
         *, evaluated_captured_at: float | None = None,
     ) -> dict[str, Any]:
         """Accept one unambiguous green call and arm the compact-hand discard."""
+        self.require_supported_execution_rules()
         if self.args.mode != "force-auto" or not getattr(self.args, "accept_single_call", False):
             return {"clicked": False, "reason": "single_call_not_enabled"}
         buttons = force_auto_call_buttons(screenshot, self.layout["viewport"])
@@ -7890,6 +7896,7 @@ class PythonAutoOperator:
         *, evaluated_captured_at: float | None = None,
     ) -> dict[str, Any]:
         """Accept an unambiguous ron button and verify that the prompt closes."""
+        self.require_supported_execution_rules()
         if self.args.mode != "force-auto":
             return {"clicked": False, "reason": "force_auto_only"}
         if (getattr(self, "action_evidence_kind", None) == "discard"
