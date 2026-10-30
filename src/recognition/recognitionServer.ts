@@ -12,6 +12,7 @@ import { recognizeHand, recognizeTileSlots, warmTemplateCache, type MatcherOptio
 import { confirmWeakOpenDraw, createOpenDrawVerifier, selectedTileRecognition } from "./openDrawEvidence.js";
 import sharp from "sharp";
 import { HybridTileRecognizer } from "./hybridTileRecognizer.js";
+import { SanmaBoardWorker } from "./sanmaBoardWorker.js";
 import { EXPERIMENTAL_BUTTONS, type ExperimentalTemplates } from "./sanmaButtonExperiment.js";
 import { assembleSanmaEvaluation } from "./sanmaFrameEvaluation.js";
 import { observeSanmaFrameAutomatically } from "./sanmaAutoFrameObservation.js";
@@ -74,6 +75,7 @@ async function screenshotDigest(path: string): Promise<string> {
 }
 
 let sanmaClassifier: HybridTileRecognizer | undefined;
+let sanmaBoardWorker: SanmaBoardWorker | undefined;
 let sanmaReferences: { buttonTemplates: ExperimentalTemplates; buttonRowReferences: { skip: Buffer; emptyRow: Buffer } } | undefined;
 async function sanmaObservationReferences() {
   if (sanmaReferences) return sanmaReferences;
@@ -121,8 +123,9 @@ for await (const line of lines) {
       const frame = await readFile(request.screenshot);
       const refs = await sanmaObservationReferences();
       sanmaClassifier ??= new HybridTileRecognizer();
+      sanmaBoardWorker ??= new SanmaBoardWorker();
       const result = await observeSanmaFrameAutomatically({frame,layout,templates:templateDirectory,
-        publicClassifier:sanmaClassifier,...refs});
+        publicClassifier:sanmaClassifier,boardObserver:sanmaBoardWorker,...refs});
       const assembly = assembleSanmaEvaluation({frame, observation:result});
       process.stdout.write(`${JSON.stringify({id,result:{...result,assembly}})}\n`);
       continue;
@@ -352,3 +355,4 @@ for await (const line of lines) {
 }
 
 await sanmaClassifier?.close();
+sanmaBoardWorker?.close();

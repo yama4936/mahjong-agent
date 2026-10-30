@@ -22,6 +22,28 @@ def recognize_sanma_board_candidate(image_path: Path, *, expected_total_points: 
             'tokens': raw['tokens']}
 
 
+def observe_sanma_image(image_path: Path) -> dict:
+    """Same unverified board and north observations as the CLI --with-north path."""
+    from sanma_kita_image_experiment import detect_own_north_candidates
+    from sanma_opposite_kita_experiment import opposite_north_candidate
+    from sanma_left_kita_experiment import left_north_candidate
+    board = recognize_sanma_board_candidate(image_path, expected_total_points=None, payment_phase=None)
+    root = Path(__file__).resolve().parents[1] / 'test/fixtures'
+    try:
+        observations = {
+            'own': detect_own_north_candidates(image_path, root / 'sanma-public-experiment/own-north-face.png'),
+            'opposite': opposite_north_candidate(image_path, root / 'sanma-opposite-kita/north-glyph-reference.png',
+                shadow_template_path=root / 'sanma-opposite-kita/north-glyph-shadow-reference.png'),
+            'left': left_north_candidate(image_path, root / 'sanma-left-kita/left-north-reference.png',
+                glare_template_path=root / 'sanma-left-kita/left-north-glare-reference.png'),
+        }
+        result = {'status': 'unknown', 'verified': False, 'complete': False, 'positions': observations}
+    except Exception as error:
+        result = {'status': 'unknown', 'verified': False, 'complete': False,
+                  'reason': f'north observation failed: {error}'}
+    return {'board': board, 'north': result}
+
+
 if __name__ == '__main__':
     import argparse
     import json
@@ -30,25 +52,8 @@ if __name__ == '__main__':
     parser.add_argument('screenshot', type=Path)
     parser.add_argument('--with-north', action='store_true')
     arguments = parser.parse_args()
-    # Unknown room total and payment phase are never inferred from the image.
-    board = recognize_sanma_board_candidate(arguments.screenshot, expected_total_points=None, payment_phase=None)
-    if not arguments.with_north:
-        print(json.dumps(board, ensure_ascii=False))
+    if arguments.with_north:
+        print(json.dumps(observe_sanma_image(arguments.screenshot), ensure_ascii=False))
     else:
-        from sanma_kita_image_experiment import detect_own_north_candidates
-        from sanma_opposite_kita_experiment import opposite_north_candidate
-        from sanma_left_kita_experiment import left_north_candidate
-        root = Path(__file__).resolve().parents[1] / 'test/fixtures'
-        try:
-            observations = {
-                'own': detect_own_north_candidates(arguments.screenshot, root / 'sanma-public-experiment/own-north-face.png'),
-                'opposite': opposite_north_candidate(arguments.screenshot, root / 'sanma-opposite-kita/north-glyph-reference.png',
-                    shadow_template_path=root / 'sanma-opposite-kita/north-glyph-shadow-reference.png'),
-                'left': left_north_candidate(arguments.screenshot, root / 'sanma-left-kita/left-north-reference.png',
-                    glare_template_path=root / 'sanma-left-kita/left-north-glare-reference.png'),
-            }
-            result = {'status': 'unknown', 'verified': False, 'complete': False, 'positions': observations}
-        except Exception as error:
-            result = {'status': 'unknown', 'verified': False, 'complete': False,
-                      'reason': f'north observation failed: {error}'}
-        print(json.dumps({'board': board, 'north': result}, ensure_ascii=False))
+        board = recognize_sanma_board_candidate(arguments.screenshot, expected_total_points=None, payment_phase=None)
+        print(json.dumps(board, ensure_ascii=False))
