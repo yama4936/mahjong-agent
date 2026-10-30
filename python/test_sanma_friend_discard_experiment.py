@@ -76,7 +76,8 @@ class FriendDrawBridgeTests(unittest.TestCase):
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
         baseline = Path(self.directory.name) / "baseline.png"
-        baseline.write_bytes(b"reviewed frame")
+        from PIL import Image
+        Image.new("RGB", (1920, 1080)).save(baseline)
         digest = hashlib.sha256(baseline.read_bytes()).hexdigest()
         self.receipt = {"scope": "sanma_self_turn_observation", "digest": digest, "screenshot": str(baseline),
                         "freshness": {"status": "identical_pixels_candidate"},

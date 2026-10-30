@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 
 from auto_operator import send_discard_click
-from sanma_friend_freshness import friend_frame_stable
+from sanma_friend_freshness import friend_frame_stable, latch_friend_action_target
 
 
 def execute_friend_draw_candidate(operator, page, receipt):
@@ -62,6 +62,7 @@ def execute_friend_draw_candidate(operator, page, receipt):
                "ranked": False, "cpuCount": 2, "roomVerified": True}
     def record(event):
         operator.log("sanma_friend_discard_experiment", **event)
+    latch_friend_action_target(operator, baseline, "discard")
     return execute_friend_discard(page, session=session, observation=observation, plan=plan,
                                   layout=operator.layout, log=record,
                                   turn_started_monotonic=getattr(operator, "verified_friend_300_started_at", None),

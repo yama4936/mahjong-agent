@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 from PIL import Image,ImageDraw
-from sanma_friend_freshness import friend_frame_changes,friend_frame_stable
+from sanma_friend_freshness import friend_frame_changes,friend_frame_stable,latch_friend_action_target
 from sanma_friend_discard_experiment import execute_friend_discard
 
 IMAGE=Path('/home/yama1/sanma-independent-20261031/20-turn.png')
@@ -26,6 +26,15 @@ class SanmaFriendFreshnessTests(unittest.TestCase):
         self.assertNotEqual(self.frame,newer)
         self.assertEqual(friend_frame_changes(self.frame,newer),{'hand':False,'actions':False,'fullFrame':False,'clock':True})
         self.assertTrue(friend_frame_stable(self.frame,newer))
+    def test_action_latch_ignores_clock_and_rejects_repeat(self):
+        for action in ("kita", "tsumo", "discard"):
+            with self.subTest(action=action):
+                operator=Mock()
+                latch_friend_action_target(operator,self.frame,action)
+                with self.assertRaisesRegex(RuntimeError,"outcome unknown"):
+                    latch_friend_action_target(operator,modified(self.frame,(1500,780,1550,830)),action)
+                latch_friend_action_target(operator,modified(self.frame,(900,800,910,810)),action)
+
     def test_hand_button_river_and_clock_boundary_changes_fail(self):
         for box in [(1500,900,1510,910),(900,800,910,810),(1000,500,1010,510),(1424,780,1424,780),(1500,870,1500,870)]:
             with self.subTest(box=box): self.assertFalse(friend_frame_stable(self.frame,modified(self.frame,box)))

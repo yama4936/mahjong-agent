@@ -38,7 +38,7 @@ from analysis_recorder import AnalysisRecorder
 from startup_turn_guard import StartupTurnGuard
 from friend_start import await_reviewed_friend_room, reviewed_friend_clock_is_300_plus_zero
 from sanma_friend_navigation import inspect_sanma_friend_start
-from sanma_friend_freshness import friend_frame_changes, friend_frame_stable
+from sanma_friend_freshness import friend_frame_changes, friend_frame_stable, latch_friend_action_target
 from screencast_diagnostic import ScreencastDiagnostic
 
 
@@ -4003,6 +4003,7 @@ class PythonAutoOperator:
         point = {"x": 1012.5, "y": 830.0}
         self.log("sanma_friend_candidate_click", action="tsumo", screenshot=str(before_path),
                  digest=receipt["digest"], clickPoint=point, candidateConfidence=slots[1]["confidence"])
+        latch_friend_action_target(self, baseline, "tsumo")
         page.mouse.click(point["x"], point["y"])
         try:
             page.wait_for_timeout(200)
@@ -4088,6 +4089,7 @@ class PythonAutoOperator:
         attempted = getattr(self, "_sanma_friend_attempted_frames", set())
         attempted.add(receipt["digest"])
         self._sanma_friend_attempted_frames = attempted
+        latch_friend_action_target(self, baseline, "kita")
         page.mouse.click(point["x"], point["y"])
         try:
             page.wait_for_timeout(200)
