@@ -142,6 +142,44 @@ test("rejects a river whose earlier grid row is incomplete", () => {
   assert.equal(result.gridValid, false);
 });
 
+test("ignores a small off-column riichi decoration before a complete opposite river", () => {
+  const tile = (x: number, y: number, width = 50, height = 43): RegionCandidate =>
+    ({ x, y, width, height, area: width * height, fillRatio: 0.8 });
+  const region = { x: 770, y: 150, width: 390, height: 190,
+    rotationToUpright: 180 as const, detectionMode: "discard_grid" as const };
+  const first = [1068, 1014, 962, 908, 854].map((x) => tile(x, 242));
+  first.push(tile(784, 246, 67, 34));
+  const second = [1068, 1013, 962, 910, 857].map((x) => tile(x, 197, 49, 41));
+  const decoration = tile(990, 289, 42, 32);
+  const result = orderDiscardGridCandidates([decoration, ...first, ...second], region);
+  assert.equal(result.gridValid, true);
+  assert.deepEqual(result.gridRows, [6, 5]);
+  assert.equal(result.candidates.length, 11);
+  assert.ok(!result.candidates.some((item) => item.y === decoration.y));
+  assert.ok(result.candidates.some((item) => item.x === 962 && item.y === 197));
+  const plausibleTile = tile(990, 289);
+  assert.equal(orderDiscardGridCandidates([plausibleTile, ...first, ...second], region).gridValid, false);
+  assert.equal(orderDiscardGridCandidates([decoration, ...first, ...second.slice(0, 4)], region).gridValid, false);
+});
+
+test("detects the complete opposite river despite the riichi decoration in a live frame", async () => {
+  const layout = layoutSchema.parse({
+    viewport: { width: 1920, height: 1080 },
+    handSlots: [{ x: 0, y: 900, width: 8, height: 30 }],
+    clickPoints: [{ x: 4, y: 915 }],
+    publicTileRegions: { oppositeDiscards: { x: 770, y: 150, width: 390, height: 190,
+      rotationToUpright: 180, detectionMode: "discard_grid" } },
+  });
+  const result = (await detectConfiguredPublicRegions(
+    "test/fixtures/opposite-riichi-decoration-20261030.jpg", layout, { luminanceThreshold: 190 },
+  )).oppositeDiscards!;
+  assert.equal(result.gridValid, true);
+  assert.deepEqual(result.gridRows, [6, 5]);
+  assert.equal(result.candidates.length, 11);
+  assert.ok(result.candidates.some((tile) => tile.x === 962 && tile.y === 198));
+  assert.equal(result.candidates.filter((tile) => tile.sideways).length, 1);
+});
+
 test("infers a partially filled third row when perspective overlap merges its faces", async () => {
   const tiles = [];
   for (const y of [10, 70]) {

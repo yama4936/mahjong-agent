@@ -332,6 +332,27 @@ export function orderDiscardGridCandidates(
     }
   }
   rows.sort((left, right) => left.center - right.center);
+  // A decorative riichi-stick figure can form a short, bright component in
+  // front of an otherwise complete opposite river.  Only discard this very
+  // specific outlier when the following rows already form a complete first
+  // row and a substantial second row; never repair an incomplete river by
+  // silently dropping a plausible tile-sized first row.
+  if (region.rotationToUpright === 180 && rows.length === 3
+      && rows[0]!.items.length === 1 && rows[1]!.items.length === 6
+      && rows[2]!.items.length === 5) {
+    const stray = rows[0]!.items[0]!;
+    const realTiles = [...rows[1]!.items, ...rows[2]!.items];
+    const typicalHeight = median(realTiles.map(({ point }) => point.height));
+    const typicalWidth = median(realTiles.map(({ point }) => point.width));
+    const realColumns = rows[1]!.items.map(({ point }) => point.x);
+    const nearestColumn = Math.min(...realColumns.map((x) => Math.abs(x - stray.point.x)));
+    if (stray.point.height <= typicalHeight * 0.8
+        && stray.point.width <= typicalWidth * 0.9
+        && nearestColumn >= typicalWidth * 0.2) {
+      rows.shift();
+      candidates = candidates.filter((candidate) => candidate !== stray.candidate);
+    }
+  }
   const selectedRows = rows.slice(0, 3);
   const gridRows = selectedRows.map((row) => row.items.length);
   const structurallyValid = rows.length <= 3

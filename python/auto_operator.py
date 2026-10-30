@@ -2822,8 +2822,9 @@ class PythonAutoOperator:
             "force_auto_click_budget_expired",
             **timing_payload,
         )
-        # A stale discard or win decision means the ranked action pipeline is
-        # persistently unsafe and must eventually stop.  A call is different:
+        # Keep rejecting stale decisions, but do not abandon a live ranked
+        # match merely because repeated observations share one expired clock.
+        # A call is different:
         # declining an expired chi/pon is the safe legal outcome.  Counting
         # repeated re-observations of that *same* transient call prompt as
         # ranked failures turns a conservative no-click into an away-dialog
@@ -2832,17 +2833,16 @@ class PythonAutoOperator:
         if getattr(getattr(self, "args", None), "ranked_loop", False) and not is_expired_optional_call:
             streak = getattr(self, "ranked_click_budget_expiry_streak", 0) + 1
             self.ranked_click_budget_expiry_streak = streak
-            if streak >= 3:
-                self.ranked_click_budget_safety_stop_requested = True
+            if streak == 3:
                 self.log(
-                    "ranked_click_budget_safety_stop",
+                    "ranked_click_budget_reobserve_streak",
                     expiryStreak=streak,
                     clickBudgetMs=budget,
                     effectiveActionBudgetMs=effective_budget,
                     captureAgeBeforeDecisionMs=capture_age_ms,
                     **({"actionEvidenceAgeMs": action_evidence_age_ms}
                        if action_evidence_age_ms is not None else {}),
-                    reason="three_consecutive_force_auto_click_budget_expiries",
+                    reason="stale_decisions_rejected_without_abandoning_ranked_match",
                 )
         raise RetryableSafetyAbort(
             "force-auto click budget expired before safe click; reobserve current hand"

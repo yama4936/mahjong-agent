@@ -40,14 +40,14 @@ class BudgetGraceTest(unittest.TestCase):
         self.assertEqual([call.kwargs["actionEvidenceAgeMs"] for call in extra], [5001, 9999])
         self.assertTrue(all(call.kwargs["remainingGameExtraTimeMs"] is None for call in extra))
 
-    def test_hard_expiry_still_stops_after_three_polls_of_one_draw(self):
+    def test_hard_expiry_rejects_three_polls_without_abandoning_ranked_match(self):
         op = self.operator()
         with patch("auto_operator.time.monotonic", return_value=20.0):
             for _ in range(3):
                 with self.assertRaises(RetryableSafetyAbort):
                     op.require_force_auto_click_budget(19.7, phase="before_recognition")
         self.assertEqual(op.ranked_click_budget_expiry_streak, 3)
-        self.assertTrue(op.ranked_click_budget_safety_stop_requested)
+        self.assertFalse(getattr(op, "ranked_click_budget_safety_stop_requested", False))
         self.assertEqual(op.log.call_args.kwargs["effectiveActionBudgetMs"], 10000)
 
     def test_grace_never_extends_capture_freshness_or_another_draw(self):
