@@ -38,6 +38,7 @@ from analysis_recorder import AnalysisRecorder
 from startup_turn_guard import StartupTurnGuard
 from friend_start import await_reviewed_friend_room, reviewed_friend_clock_is_300_plus_zero
 from sanma_friend_navigation import inspect_sanma_friend_start
+from sanma_friend_freshness import friend_frame_changes, friend_frame_stable
 from screencast_diagnostic import ScreencastDiagnostic
 
 
@@ -3907,22 +3908,16 @@ class PythonAutoOperator:
             latest = page.screenshot(animations="disabled")
             if not isinstance(latest, bytes) or not latest:
                 raise ValueError("fresh screenshot unavailable")
-            with Image.open(io.BytesIO(image)) as first, Image.open(io.BytesIO(latest)) as second:
-                if first.size != (1920, 1080) or second.size != (1920, 1080):
-                    raise ValueError("unreviewed screenshot dimensions")
-                regions = {"hand": (180, 865, 1650, 1080), "actions": (600, 785, 1425, 875),
-                           "fullFrame": (0, 0, 1920, 1080)}
-                changes = {}
-                for name, region in regions.items():
-                    changes[name] = ImageChops.difference(first.convert("RGB").crop(region),
-                                                          second.convert("RGB").crop(region)).getbbox() is not None
+            changes = friend_frame_changes(image, latest)
+            clock_changed = changes.pop('clock')
             latest_path = self.frames / f"{utc_stamp()}.{uuid.uuid4().hex}.sanma-freshness.png"
             latest_path.write_bytes(latest)
-            freshness = {"status": "changed" if any(changes.values()) else "identical_pixels_candidate",
+            freshness = {"status": "changed" if changes['fullFrame'] else
+                         "stable_except_clock_candidate" if clock_changed else "identical_pixels_candidate",
                          "operationAuthorized": False, "elapsedMs": round((time.monotonic() - capture_started) * 1000),
-                         "regionsChanged": changes, "digest": hashlib.sha256(latest).hexdigest(),
+                         "regionsChanged": changes, "clockChanged": clock_changed, "digest": hashlib.sha256(latest).hexdigest(),
                          "screenshot": str(latest_path),
-                         "reason": "identical pixels do not verify turn, state, or action"}
+                         "reason": "visible pixel stability does not verify turn, state, or action; clock area unobserved"}
         except Exception as error:
             freshness = {"status": "unknown", "operationAuthorized": False,
                          "reason": f"freshness observation failed: {error}"}
@@ -3965,7 +3960,7 @@ class PythonAutoOperator:
         if (not isinstance(source, dict) or receipt.get("scope") != "sanma_self_turn_observation"
                 or receipt.get("status") != "blocked" or receipt.get("operationAuthorized") is not False
                 or source.get("digest") != receipt.get("digest") or source.get("operationAuthorized") is not False
-                or not isinstance(freshness, dict) or freshness.get("status") != "identical_pixels_candidate"
+                or not isinstance(freshness, dict) or freshness.get("status") not in ("identical_pixels_candidate", "stable_except_clock_candidate")
                 or freshness.get("operationAuthorized") is not False
                 or not isinstance(freshness.get("elapsedMs"), (int, float))
                 or isinstance(freshness.get("elapsedMs"), bool) or not 0 <= freshness["elapsedMs"] <= 20000):
@@ -3988,10 +3983,8 @@ class PythonAutoOperator:
             fresh = page.screenshot(animations="disabled")
             if hashlib.sha256(baseline).hexdigest() != receipt["digest"]:
                 raise ValueError("baseline changed")
-            with Image.open(io.BytesIO(baseline)) as first, Image.open(io.BytesIO(fresh)) as second:
-                if first.size != (1920, 1080) or second.size != first.size or ImageChops.difference(
-                        first.convert("RGB"), second.convert("RGB")).getbbox() is not None:
-                    raise ValueError("screen changed")
+            if not friend_frame_stable(baseline, fresh):
+                raise ValueError("screen changed outside clock area")
             screen_state, confidence = classify_screen(fresh, self.screen_references)
             if screen_state != "match" or confidence < 0.95:
                 raise ValueError("game screen not recognized")
@@ -4048,7 +4041,7 @@ class PythonAutoOperator:
         if (not isinstance(source, dict) or receipt.get("scope") != "sanma_self_turn_observation"
                 or receipt.get("status") != "blocked" or receipt.get("operationAuthorized") is not False
                 or source.get("digest") != receipt.get("digest") or source.get("operationAuthorized") is not False
-                or not isinstance(freshness, dict) or freshness.get("status") != "identical_pixels_candidate"
+                or not isinstance(freshness, dict) or freshness.get("status") not in ("identical_pixels_candidate", "stable_except_clock_candidate")
                 or freshness.get("operationAuthorized") is not False
                 or not isinstance(freshness.get("elapsedMs"), (int, float))
                 or isinstance(freshness.get("elapsedMs"), bool) or not 0 <= freshness["elapsedMs"] <= 20000):
@@ -4078,10 +4071,8 @@ class PythonAutoOperator:
             fresh = page.screenshot(animations="disabled")
             if hashlib.sha256(baseline).hexdigest() != receipt["digest"]:
                 raise ValueError("baseline changed")
-            with Image.open(io.BytesIO(baseline)) as first, Image.open(io.BytesIO(fresh)) as second:
-                if first.size != (1920, 1080) or second.size != first.size or ImageChops.difference(
-                        first.convert("RGB"), second.convert("RGB")).getbbox() is not None:
-                    raise ValueError("screen changed")
+            if not friend_frame_stable(baseline, fresh):
+                raise ValueError("screen changed outside clock area")
             screen_state, confidence = classify_screen(fresh, self.screen_references)
             if screen_state != "match" or confidence < 0.95:
                 raise ValueError("game screen not recognized")

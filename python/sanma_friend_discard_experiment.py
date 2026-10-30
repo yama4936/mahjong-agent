@@ -6,8 +6,10 @@ certified. A successful click receipt does not prove a discard reached the river
 import hashlib
 import math
 import time
+from pathlib import Path
 
 from auto_operator import send_discard_click
+from sanma_friend_freshness import friend_frame_stable
 
 
 def execute_friend_draw_candidate(operator, page, receipt):
@@ -33,7 +35,7 @@ def execute_friend_draw_candidate(operator, page, receipt):
     freshness = receipt.get("freshness") or {}
     if (source.get("digest") != receipt.get("digest") or report.get("digest") != receipt.get("digest")
             or draw.get("digest") != receipt.get("digest") or draw.get("status") != "candidate"
-            or freshness.get("status") != "identical_pixels_candidate"
+            or freshness.get("status") not in ("identical_pixels_candidate", "stable_except_clock_candidate")
             or hand.get("status") != "candidate" or geometry.get("status") != "candidate"
             or row.get("status") != "candidate"):
         raise ValueError("turn, frame, hand or action row unavailable")
@@ -50,9 +52,12 @@ def execute_friend_draw_candidate(operator, page, receipt):
     slots = [{"tile": tile, **point} for tile, point in zip(tiles, points)]
     plan = {"scope": "offline_untrusted_sanma_discard_plan", "operationAuthorized": False,
             "tile": draw["tile"], "clickIndex": draw["index"], "clickPoint": draw["point"]}
+    baseline = Path(receipt["screenshot"]).read_bytes()
+    if hashlib.sha256(baseline).hexdigest() != receipt.get("digest"):
+        raise ValueError("recognition frame changed on disk")
     observation = {"status": "candidate", "phase": "self_turn", "promptStatus": "none",
                    "handStatus": "candidate", "layoutStatus": "candidate", "slots": slots,
-                   "frameSha256": receipt["digest"]}
+                   "frameSha256": receipt["digest"], "referenceFrame": baseline}
     session = {"mode": "cpu_friend", "rules": "sanma", "clock": "300+0", "actionDeadlineMs": 300000,
                "ranked": False, "cpuCount": 2, "roomVerified": True}
     def record(event):
@@ -98,7 +103,11 @@ def execute_friend_discard(page, *, session, observation, plan, layout, log,
                 or not 0 <= started - turn_started_monotonic < 300):
             raise ValueError("invalid or expired turn clock")
         before = page.screenshot(animations="disabled")
-        if not isinstance(before, bytes) or hashlib.sha256(before).hexdigest() != observation.get("frameSha256"):
+        reference = observation.get("referenceFrame")
+        if not isinstance(before, bytes) or (hashlib.sha256(before).hexdigest() != observation.get("frameSha256")
+                and (not isinstance(reference, bytes)
+                     or hashlib.sha256(reference).hexdigest() != observation.get("frameSha256")
+                     or not friend_frame_stable(reference, before))):
             raise ValueError("recognition frame changed before click")
         def deadline():
             if session_check is not None and session_check() is not True:

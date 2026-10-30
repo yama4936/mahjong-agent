@@ -1,5 +1,6 @@
 """Recorded kita prompt replayed against an in-memory page, never the browser."""
 import hashlib
+import io
 import json
 import copy
 import subprocess
@@ -9,6 +10,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
+from PIL import Image, ImageDraw
 
 from auto_operator import PythonAutoOperator
 from screen_state import load_references
@@ -99,6 +101,18 @@ process.stdout.write(JSON.stringify(report));
         with self.assertRaisesRegex(RuntimeError, 'already attempted'):
             self.operator.execute_sanma_friend_kita_candidate(self.page, self.receipt)
         self.page.mouse.click.assert_called_once()
+
+    def test_clock_change_only_does_not_prevent_real_prompt_click(self):
+        with Image.open(io.BytesIO(self.frame)) as source:
+            changed = source.convert('RGB')
+        ImageDraw.Draw(changed).rectangle((1500,780,1550,830),fill=(11,44,99))
+        data=io.BytesIO();changed.save(data,format='PNG')
+        self.page.screenshot.side_effect=[data.getvalue(),AFTER.read_bytes()]
+        self.receipt['freshness']['status']='stable_except_clock_candidate'
+        result=self.operator.execute_sanma_friend_kita_candidate(self.page,self.receipt)
+        self.assertTrue(result['clicked'])
+        self.assertEqual(result['confirmation'],'unknown')
+        self.page.mouse.click.assert_called_once_with(1012.5,830.0)
 
 
 if __name__ == '__main__':

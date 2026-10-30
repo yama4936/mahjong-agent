@@ -1,5 +1,7 @@
 import hashlib
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 from sanma_friend_discard_experiment import execute_friend_discard, execute_friend_draw_candidate
@@ -71,8 +73,12 @@ class FriendDrawBridgeTests(unittest.TestCase):
         self.operator.verified_friend_300_active = True
         self.operator.verified_friend_300_started_at = 100
         self.point = {"x": 1000, "y": 1000}
-        digest = "a" * 64
-        self.receipt = {"scope": "sanma_self_turn_observation", "digest": digest,
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        baseline = Path(self.directory.name) / "baseline.png"
+        baseline.write_bytes(b"reviewed frame")
+        digest = hashlib.sha256(baseline.read_bytes()).hexdigest()
+        self.receipt = {"scope": "sanma_self_turn_observation", "digest": digest, "screenshot": str(baseline),
                         "freshness": {"status": "identical_pixels_candidate"},
                         "drawCandidate": {"status": "candidate", "digest": digest, "index": 13,
                                           "tile": "1m", "point": self.point},

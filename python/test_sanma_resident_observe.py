@@ -122,6 +122,25 @@ class ResidentObservationTests(unittest.TestCase):
         page.screenshot.assert_not_called()
         page.mouse.click.assert_not_called()
 
+    def test_clock_only_change_is_reported_without_confirming_action(self):
+        from PIL import Image
+        before = Image.new('RGB', (1920, 1080), 'black')
+        after = before.copy()
+        after.putpixel((1500, 800), (255, 255, 255))
+        def png(image):
+            buffer = io.BytesIO(); image.save(buffer, format='PNG'); return buffer.getvalue()
+        original, changed = png(before), png(after)
+        digest = hashlib.sha256(original).hexdigest()
+        result = self.result()
+        result['digest'] = result['report']['digest'] = result['structuralPositions']['digest'] = digest
+        op = self.operator({'id': 1, 'result': result})
+        page = Mock(); page.screenshot.side_effect = [original, changed]
+        receipt = op.inspect_sanma_self_turn(page)
+        self.assertEqual(receipt['freshness']['status'],'stable_except_clock_candidate')
+        self.assertTrue(receipt['freshness']['clockChanged'])
+        self.assertFalse(receipt['freshness']['operationAuthorized'])
+        page.mouse.click.assert_not_called()
+
     def test_tampered_self_turn_receipt_is_rejected_before_capture(self):
         op = self.operator({'id': 1, 'result': self.result()})
         page = Mock()
