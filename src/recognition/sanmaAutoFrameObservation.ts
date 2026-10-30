@@ -16,8 +16,13 @@ type NorthPositions = { own: NorthPosition; opposite: NorthPosition; left: North
 type NorthResult = { status: "unknown"; verified: false; complete: false; reason?: string; positions?: NorthPositions };
 
 /** Maps screen positions under an unverified seat candidate; never counts extracts. */
-export function mapSanmaNorthCandidates(ownSeat: "east" | "south" | "west" | undefined, positions: NorthPositions | undefined) {
-  if (!ownSeat || !positions) return undefined;
+export function mapSanmaNorthCandidates(ownSeat: "east" | "south" | "west" | undefined, positions: NorthPositions | undefined,
+  layout?: "opposite-left") {
+  // Own wind alone does not identify which physical opponent slots exist.
+  // In an independently observed sanma game, opponents occupy left/right.
+  // The legacy relative mapping is a hypothesis only for the explicitly
+  // specified layout; automatic OCR does not establish that layout.
+  if (!ownSeat || !positions || layout !== "opposite-left") return undefined;
   return { [ownSeat]: positions.own,
     ...mapPublicOpponentPositions(ownSeat, { opposite: positions.opposite, left: positions.left }, "sanma") };
 }

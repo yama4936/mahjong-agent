@@ -7,7 +7,7 @@ import sharp from "sharp";
 import {layoutSchema} from "../src/recognition/layout.js";
 import {HybridTileRecognizer} from "../src/recognition/hybridTileRecognizer.js";
 import {EXPERIMENTAL_BUTTONS, type ExperimentalTemplates} from "../src/recognition/sanmaButtonExperiment.js";
-import {deriveSanmaActionCandidates, observeSanmaFrameAutomatically} from "../src/recognition/sanmaAutoFrameObservation.js";
+import {deriveSanmaActionCandidates, mapSanmaNorthCandidates, observeSanmaFrameAutomatically} from "../src/recognition/sanmaAutoFrameObservation.js";
 
 const file = "artifacts/sanma-manual-e48c562-20261031/actions/2026-10-30T16-05-55-331Z-before.png";
 const available = existsSync(file) && existsSync(".runtime/python-auto-venv/bin/python") &&
@@ -31,12 +31,13 @@ test("automatic same-frame board, hand, public and UI candidates remain unverifi
     assert.equal(result.board.verified,false);
     assert.equal(result.north.status,"unknown");
     assert.equal(result.north.complete,false);
-    assert.equal(result.north.mappingVerified,false);
     assert.ok(result.north.positions);
-    assert.deepEqual(Object.keys(result.north.bySeat ?? {}).sort(),["east","south","west"]);
-    assert.equal(result.north.bySeat?.west,result.north.positions?.own);
-    assert.equal(result.north.bySeat?.east,result.north.positions?.opposite);
-    assert.equal(result.north.bySeat?.south,result.north.positions?.left);
+    assert.equal(result.north.bySeat,undefined);
+    const explicitLegacy = mapSanmaNorthCandidates("west", result.north.positions, "opposite-left");
+    assert.equal(explicitLegacy?.west,result.north.positions?.own);
+    assert.equal(explicitLegacy?.east,result.north.positions?.opposite);
+    assert.equal(explicitLegacy?.south,result.north.positions?.left);
+    assert.equal(mapSanmaNorthCandidates("south", result.north.positions),undefined);
     for (const position of Object.values(result.north.positions ?? {})) {
       assert.equal(position.complete,false);
       assert.equal(position.verified,false);
@@ -108,5 +109,27 @@ test("automatic same-frame board, hand, public and UI candidates remain unverifi
     assert.ok(leftResult.north.positions?.left.candidate);
     assert.equal(leftResult.north.positions?.left.frame_sha256,leftResult.digest);
     assert.equal(leftResult.operationAuthorized,false);
+    // Independent table has opponents on the left and right. A left-side
+    // match must not be expanded into the old opposite/left seat mapping.
+    const independent = "/home/yama1/sanma-independent-20261031/20-turn.png";
+    if (existsSync(independent)) {
+      const other = await observeSanmaFrameAutomatically({frame:await readFile(independent),layout,buttonTemplates,
+        buttonRowReferences,templates:"templates/bootstrap",publicClassifier:model});
+      assert.equal(other.north.bySeat,undefined);
+      assert.equal(other.north.complete,false);
+      assert.ok(other.north.positions?.left.candidate);
+      assert.equal(other.ownSeat.status,"unknown");
+      assert.equal(other.board.reason,"incomplete_or_ambiguous_tokens");
+    }
   } finally { await model.close(); }
+});
+
+test("north-to-wind mapping requires an explicit opponent layout", () => {
+  const positions = {own:{verified:false as const,complete:false as const},
+    opposite:{verified:false as const,complete:false as const},left:{verified:false as const,complete:false as const}};
+  assert.equal(mapSanmaNorthCandidates("south",positions),undefined);
+  const explicit = mapSanmaNorthCandidates("west",positions,"opposite-left");
+  assert.equal(explicit?.west,positions.own);
+  assert.equal(explicit?.east,positions.opposite);
+  assert.equal(explicit?.south,positions.left);
 });
