@@ -404,6 +404,38 @@ export async function recognizeConfiguredPublicTilesWithVit(
       if (padded.confidence >= 0.8 && padded.confidence - original.confidence >= 0.15
         && padded.confidence - padded.runnerUpConfidence >= 0.5) predictions[index] = padded;
     });
+    // An observed 2m needed six pixels of context: the four-pixel retry
+    // agreed but narrowly missed the single-crop confidence requirement.
+    // Require two independently classified crops to agree, and keep the
+    // stricter single-crop path above unchanged.
+    const corroborate = weakOwnRiver.flatMap((index, retryIndex) => {
+      const p = paddedPredictions[retryIndex]!;
+      return unconfirmedOwnMan.has(index) && p.tile === "2m"
+        && p.confidence >= Math.max(0.9, minimumConfidence)
+        && p.confidence - p.runnerUpConfidence >= Math.max(0.85, minimumMargin)
+        ? [{ index, first: p }] : [];
+    });
+    if (corroborate.length) {
+      const images6 = await Promise.all(corroborate.map(({ index }) => {
+        const { candidate, region } = jobs[index]!;
+        const left = Math.max(0, candidate.x - 6), top = Math.max(0, candidate.y - 6);
+        const right = Math.min(width, candidate.x + candidate.width + 6);
+        const bottom = Math.min(height, candidate.y + candidate.height + 6);
+        return sharp(screenshot).extract({ left, top, width: right - left, height: bottom - top })
+          .rotate((region.rotationToUpright + (candidate.sideways ? 90 : 0)) % 360).png().toBuffer();
+      }));
+      const retries = await classifier.classifyTileImages(images6);
+      if (retries.length !== corroborate.length) throw new Error("Model public corroboration returned the wrong prediction count");
+      corroborate.forEach(({ index, first }, retryIndex) => {
+        const second = retries[retryIndex]!;
+        if (second.tile === first.tile && second.confidence >= Math.max(0.95, minimumConfidence)
+          && second.confidence - second.runnerUpConfidence >= Math.max(0.9, minimumMargin)
+          && first.confidence - predictions[index]!.confidence >= 0.15) {
+          predictions[index] = first;
+          unconfirmedOwnMan.delete(index);
+        }
+      });
+    }
   }
 
   const grouped = new Map<PublicTileRegionName, RecognizedPublicTile[]>();

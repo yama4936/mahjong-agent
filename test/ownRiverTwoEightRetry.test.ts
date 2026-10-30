@@ -62,3 +62,19 @@ test('strong eight-man, other runner-up and ViT avoid the new retry; strict thre
   const strict = await recognizeConfiguredPublicTilesWithVit(source,layout,model(),{minimumConfidence:.99});
   assert.equal(strict.ownDiscards!.classificationSafe,false);
 });
+test('borderline 2m retry requires a matching strong six-pixel crop', async () => {
+  const layout = await fixtureLayout();
+  for (const [second, safe] of [[prediction('2m', .97, '8m', .01), true],
+    [prediction('8m', .99, '2m', .01), false], [prediction('2m', .94, '8m', .01), false]] as const) {
+    const classifier = model(prediction('2m', .939, '8m', .048));
+    const base = classifier.classifyTileImages.bind(classifier);
+    classifier.classifyTileImages = async (images: Buffer[]) => {
+      if (classifier.calls.length === 2) { classifier.calls.push(images.length); return images.map(() => second); }
+      return base(images);
+    };
+    const result = await recognizeConfiguredPublicTilesWithVit(source, layout, classifier);
+    assert.deepEqual(classifier.calls.slice(0, 3), [6, 1, 1]);
+    assert.equal(result.ownDiscards!.classificationSafe, safe);
+    assert.equal(result.ownDiscards!.recognized.at(-1)!.tile, safe ? '2m' : '8m');
+  }
+});
