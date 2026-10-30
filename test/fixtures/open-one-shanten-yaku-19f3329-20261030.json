@@ -1,0 +1,670 @@
+{
+  "schemaVersion": 1,
+  "scope": "Recorded inputs from CPU300+0 room32326, not counterfactual outcomes. Actual line timestamps identify replay/evaluation sources.",
+  "source": "artifacts/friend-300-19f3329-nohint-20261030/python-operator.jsonl",
+  "sourceCommit": "19f3329",
+  "parts": [
+    {
+      "timestamp": "2026-10-30T00:17:25.953449+00:00",
+      "event": "decision",
+      "state": {
+        "round": "east_1",
+        "honba": 0,
+        "riichiSticks": 0,
+        "seat": "west",
+        "scores": {
+          "west": 25000,
+          "north": 25000,
+          "east": 25000,
+          "south": 25000
+        },
+        "hand": [
+          "1m",
+          "1m",
+          "2m",
+          "6m",
+          "7m",
+          "7m",
+          "9m",
+          "1p",
+          "9p",
+          "2s",
+          "3s",
+          "C",
+          "C"
+        ],
+        "draw": "2m",
+        "doraIndicators": [
+          "2p"
+        ],
+        "ownDiscards": [],
+        "melds": [],
+        "visibleTiles": [],
+        "openMelds": 0,
+        "turn": 0,
+        "remainingTiles": 67,
+        "phase": "self_turn",
+        "recognitionConfidence": 0.9359575303006186,
+        "publicStateConfidence": 0,
+        "riichiDeclared": false,
+        "availableUiActions": [],
+        "opponents": [
+          {
+            "seat": "north",
+            "discards": [],
+            "riichi": false,
+            "openMelds": 0,
+            "openMeldsObserved": true,
+            "melds": []
+          },
+          {
+            "seat": "east",
+            "discards": [
+              "S"
+            ],
+            "riichi": false,
+            "openMelds": 0,
+            "openMeldsObserved": true,
+            "melds": []
+          },
+          {
+            "seat": "south",
+            "discards": [
+              "0p"
+            ],
+            "riichi": false,
+            "openMelds": 0,
+            "openMeldsObserved": true,
+            "melds": []
+          }
+        ]
+      },
+      "recordedSelectedAction": {
+        "id": "discard_6m",
+        "action": "discard",
+        "tile": "6m"
+      }
+    },
+    {
+      "timestamp": "2026-10-30T00:17:34.376682+00:00",
+      "event": "decision",
+      "state": {
+        "round": "east_1",
+        "honba": 0,
+        "riichiSticks": 0,
+        "seat": "west",
+        "scores": {
+          "west": 25000,
+          "north": 25000,
+          "east": 25000,
+          "south": 25000
+        },
+        "hand": [
+          "1m",
+          "1m",
+          "2m",
+          "2m",
+          "7m",
+          "7m",
+          "9m",
+          "1p",
+          "9p",
+          "2s",
+          "3s",
+          "C",
+          "C"
+        ],
+        "draw": "6s",
+        "doraIndicators": [
+          "2p"
+        ],
+        "ownDiscards": [
+          "6m"
+        ],
+        "melds": [],
+        "visibleTiles": [],
+        "openMelds": 0,
+        "turn": 1,
+        "remainingTiles": 63,
+        "phase": "self_turn",
+        "recognitionConfidence": 0.9359575303006186,
+        "publicStateConfidence": 0,
+        "riichiDeclared": false,
+        "availableUiActions": [],
+        "opponents": [
+          {
+            "seat": "north",
+            "discards": [
+              "9m"
+            ],
+            "riichi": false,
+            "openMelds": 0,
+            "openMeldsObserved": true,
+            "melds": []
+          },
+          {
+            "seat": "east",
+            "discards": [
+              "S",
+              "5m"
+            ],
+            "riichi": false,
+            "openMelds": 0,
+            "openMeldsObserved": true,
+            "melds": []
+          },
+          {
+            "seat": "south",
+            "discards": [
+              "0p",
+              "3p"
+            ],
+            "riichi": false,
+            "openMelds": 0,
+            "openMeldsObserved": true,
+            "melds": []
+          }
+        ]
+      },
+      "recordedSelectedAction": {
+        "id": "discard_9m",
+        "action": "discard",
+        "tile": "9m"
+      }
+    },
+    {
+      "timestamp": "2026-10-30T00:18:14.295208+00:00",
+      "event": "reaction_call",
+      "state": {
+        "round": "east_1",
+        "honba": 0,
+        "riichiSticks": 0,
+        "seat": "west",
+        "scores": {
+          "west": 25000,
+          "north": 25000,
+          "east": 25000,
+          "south": 25000
+        },
+        "hand": [
+          "1m",
+          "1m",
+          "2m",
+          "2m",
+          "7m",
+          "7m",
+          "2s",
+          "3s",
+          "5s",
+          "6s",
+          "7s",
+          "C",
+          "C"
+        ],
+        "doraIndicators": [
+          "2p"
+        ],
+        "ownDiscards": [
+          "6m",
+          "9m",
+          "9p",
+          "1p",
+          "8m"
+        ],
+        "melds": [],
+        "visibleTiles": [],
+        "openMelds": 0,
+        "turn": 5,
+        "remainingTiles": 46,
+        "phase": "reaction",
+        "pendingDiscard": {
+          "tile": "1m",
+          "fromSeat": "south",
+          "inRiver": true
+        },
+        "recognitionConfidence": 0.946611658332013,
+        "publicStateConfidence": 0,
+        "riichiDeclared": false,
+        "availableUiActions": [
+          "pon",
+          "pass"
+        ],
+        "opponents": [
+          {
+            "seat": "north",
+            "discards": [
+              "9m",
+              "2p",
+              "9s",
+              "8s",
+              "N",
+              "8m"
+            ],
+            "riichi": false,
+            "openMelds": 1,
+            "openMeldsObserved": true,
+            "melds": [
+              {
+                "type": "pon",
+                "tiles": [
+                  "P",
+                  "P",
+                  "P"
+                ]
+              }
+            ]
+          },
+          {
+            "seat": "east",
+            "discards": [
+              "S",
+              "5m",
+              "W",
+              "6p",
+              "F",
+              "9s",
+              "C"
+            ],
+            "riichi": false,
+            "openMelds": 0,
+            "openMeldsObserved": true,
+            "melds": []
+          },
+          {
+            "seat": "south",
+            "discards": [
+              "0p",
+              "3p",
+              "P",
+              "S",
+              "1p",
+              "1m"
+            ],
+            "riichi": false,
+            "openMelds": 0,
+            "openMeldsObserved": true,
+            "melds": []
+          }
+        ]
+      },
+      "recordedSelectedAction": {
+        "id": "pon_1m",
+        "action": "pon",
+        "tile": "1m",
+        "consumedTiles": [
+          "1m",
+          "1m"
+        ]
+      }
+    },
+    {
+      "timestamp": "2026-10-30T00:18:19.262868+00:00",
+      "event": "decision",
+      "state": {
+        "round": "east_1",
+        "honba": 0,
+        "riichiSticks": 0,
+        "seat": "west",
+        "scores": {
+          "west": 25000,
+          "north": 25000,
+          "east": 25000,
+          "south": 25000
+        },
+        "hand": [
+          "2m",
+          "2m",
+          "7m",
+          "7m",
+          "2s",
+          "3s",
+          "5s",
+          "6s",
+          "7s",
+          "C"
+        ],
+        "draw": "C",
+        "doraIndicators": [
+          "2p"
+        ],
+        "ownDiscards": [
+          "6m",
+          "9m",
+          "9p",
+          "1p",
+          "8m"
+        ],
+        "melds": [
+          {
+            "type": "pon",
+            "tiles": [
+              "1m",
+              "1m",
+              "1m"
+            ]
+          }
+        ],
+        "visibleTiles": [],
+        "openMelds": 1,
+        "turn": 5,
+        "remainingTiles": 46,
+        "phase": "self_turn",
+        "recognitionConfidence": 0.9464423953349831,
+        "publicStateConfidence": 0,
+        "riichiDeclared": false,
+        "availableUiActions": [],
+        "opponents": [
+          {
+            "seat": "north",
+            "discards": [
+              "9m",
+              "2p",
+              "9s",
+              "8s",
+              "N",
+              "8m"
+            ],
+            "riichi": false,
+            "openMelds": 1,
+            "openMeldsObserved": true,
+            "melds": [
+              {
+                "type": "pon",
+                "tiles": [
+                  "P",
+                  "P",
+                  "P"
+                ]
+              }
+            ]
+          },
+          {
+            "seat": "east",
+            "discards": [
+              "S",
+              "5m",
+              "W",
+              "6p",
+              "F",
+              "9s",
+              "C"
+            ],
+            "riichi": false,
+            "openMelds": 0,
+            "openMeldsObserved": true,
+            "melds": []
+          },
+          {
+            "seat": "south",
+            "discards": [
+              "0p",
+              "3p",
+              "P",
+              "S",
+              "1p"
+            ],
+            "riichi": false,
+            "openMelds": 0,
+            "openMeldsObserved": true,
+            "melds": []
+          }
+        ]
+      },
+      "recordedSelectedAction": {
+        "id": "discard_C",
+        "action": "discard",
+        "tile": "C"
+      }
+    },
+    {
+      "timestamp": "2026-10-30T00:18:28.606236+00:00",
+      "event": "decision",
+      "state": {
+        "round": "east_1",
+        "honba": 0,
+        "riichiSticks": 0,
+        "seat": "west",
+        "scores": {
+          "west": 25000,
+          "north": 25000,
+          "east": 25000,
+          "south": 25000
+        },
+        "hand": [
+          "2m",
+          "2m",
+          "7m",
+          "7m",
+          "2s",
+          "3s",
+          "5s",
+          "6s",
+          "7s",
+          "C"
+        ],
+        "draw": "N",
+        "doraIndicators": [
+          "2p"
+        ],
+        "ownDiscards": [
+          "6m",
+          "9m",
+          "9p",
+          "1p",
+          "8m",
+          "C"
+        ],
+        "melds": [
+          {
+            "type": "pon",
+            "tiles": [
+              "1m",
+              "1m",
+              "1m"
+            ]
+          }
+        ],
+        "visibleTiles": [],
+        "openMelds": 1,
+        "turn": 6,
+        "remainingTiles": 42,
+        "phase": "self_turn",
+        "recognitionConfidence": 0.9464423953349831,
+        "publicStateConfidence": 0,
+        "riichiDeclared": false,
+        "availableUiActions": [],
+        "opponents": [
+          {
+            "seat": "north",
+            "discards": [
+              "9m",
+              "2p",
+              "9s",
+              "8s",
+              "N",
+              "8m",
+              "9p"
+            ],
+            "riichi": false,
+            "openMelds": 1,
+            "openMeldsObserved": true,
+            "melds": [
+              {
+                "type": "pon",
+                "tiles": [
+                  "P",
+                  "P",
+                  "P"
+                ]
+              }
+            ]
+          },
+          {
+            "seat": "east",
+            "discards": [
+              "S",
+              "5m",
+              "W",
+              "6p",
+              "F",
+              "9s",
+              "C",
+              "1m"
+            ],
+            "riichi": false,
+            "openMelds": 0,
+            "openMeldsObserved": true,
+            "melds": []
+          },
+          {
+            "seat": "south",
+            "discards": [
+              "0p",
+              "3p",
+              "P",
+              "S",
+              "1p",
+              "7p"
+            ],
+            "riichi": false,
+            "openMelds": 0,
+            "openMeldsObserved": true,
+            "melds": []
+          }
+        ]
+      },
+      "recordedSelectedAction": {
+        "id": "discard_C",
+        "action": "discard",
+        "tile": "C"
+      }
+    },
+    {
+      "timestamp": "2026-10-30T00:18:36.891577+00:00",
+      "event": "decision",
+      "state": {
+        "round": "east_1",
+        "honba": 0,
+        "riichiSticks": 0,
+        "seat": "west",
+        "scores": {
+          "west": 25000,
+          "north": 25000,
+          "east": 25000,
+          "south": 25000
+        },
+        "hand": [
+          "2m",
+          "2m",
+          "7m",
+          "7m",
+          "2s",
+          "3s",
+          "5s",
+          "6s",
+          "7s",
+          "N"
+        ],
+        "draw": "9s",
+        "doraIndicators": [
+          "2p"
+        ],
+        "ownDiscards": [
+          "6m",
+          "9m",
+          "9p",
+          "1p",
+          "8m",
+          "C",
+          "C"
+        ],
+        "melds": [
+          {
+            "type": "pon",
+            "tiles": [
+              "1m",
+              "1m",
+              "1m"
+            ]
+          }
+        ],
+        "visibleTiles": [],
+        "openMelds": 1,
+        "turn": 7,
+        "remainingTiles": 38,
+        "phase": "self_turn",
+        "recognitionConfidence": 0.9464423953349831,
+        "publicStateConfidence": 0,
+        "riichiDeclared": false,
+        "availableUiActions": [],
+        "opponents": [
+          {
+            "seat": "north",
+            "discards": [
+              "9m",
+              "2p",
+              "9s",
+              "8s",
+              "N",
+              "8m",
+              "9p",
+              "9m"
+            ],
+            "riichi": false,
+            "openMelds": 1,
+            "openMeldsObserved": true,
+            "melds": [
+              {
+                "type": "pon",
+                "tiles": [
+                  "P",
+                  "P",
+                  "P"
+                ]
+              }
+            ]
+          },
+          {
+            "seat": "east",
+            "discards": [
+              "S",
+              "5m",
+              "W",
+              "6p",
+              "F",
+              "9s",
+              "C",
+              "1m",
+              "9m"
+            ],
+            "riichi": false,
+            "openMelds": 0,
+            "openMeldsObserved": true,
+            "melds": []
+          },
+          {
+            "seat": "south",
+            "discards": [
+              "0p",
+              "3p",
+              "P",
+              "S",
+              "1p",
+              "7p",
+              "2s"
+            ],
+            "riichi": false,
+            "openMelds": 0,
+            "openMeldsObserved": true,
+            "melds": []
+          }
+        ]
+      },
+      "recordedSelectedAction": {
+        "id": "discard_N",
+        "action": "discard",
+        "tile": "N"
+      }
+    }
+  ]
+}

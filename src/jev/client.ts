@@ -289,13 +289,14 @@ export function buildJevRequest(
       model,
       state: {
         ...commonState,
-        candidates: candidates.map(({ actionId, tile, shanten, ukeire, estimatedValue, winProbability, tenpaiProbability, dealInProbability, expectedRoundValue, evaluationModel, effectiveTiles, openTenpaiScore, openTenpaiScoreApplied }) => ({ actionId, tile, shanten, ukeire, estimatedValue, winProbability, tenpaiProbability, dealInProbability, expectedRoundValue, evaluationModel, effectiveTiles,
+        candidates: candidates.map(({ actionId, tile, shanten, ukeire, estimatedValue, winProbability, tenpaiProbability, dealInProbability, expectedRoundValue, evaluationModel, effectiveTiles, openTenpaiScore, openTenpaiScoreApplied, openOneShantenYaku }) => ({ actionId, tile, shanten, ukeire, estimatedValue, winProbability, tenpaiProbability, dealInProbability, expectedRoundValue, evaluationModel, effectiveTiles,
+          ...(openOneShantenYaku ? { shortest_ordinary_open_progress: openOneShantenYaku } : {}),
           ...(openTenpaiScore ? { ordinary_open_waits: compactOpenScoring(openTenpaiScore, openTenpaiScoreApplied) } : {}) })),
       },
       questions: {
         action: {
           type: "choice",
-          instructions: "Select exactly one legal discard. Prioritize lower shanten, then broad high-quality ukeire. Do not invent an action.",
+          instructions: "Select exactly one legal discard. Prioritize lower shanten, then broad high-quality ukeire. Shortest ordinary open progress is not all future routes; zero ordinary progress does not prohibit a defensive discard. Do not invent an action.",
           criteria,
         },
       },
@@ -322,6 +323,7 @@ export function buildJevRequest(
         expected_round_points: candidate.expectedRoundValue ?? "unknown",
         estimate_source: candidate.evaluationModel ?? "unknown",
         ...(candidate.closedWaitScore ? { closed_wait_scoring: candidate.closedWaitScore } : {}),
+        ...(candidate.openOneShantenYaku ? { shortest_ordinary_open_progress: candidate.openOneShantenYaku } : {}),
         ...(candidate.openTenpaiScore ? { ordinary_open_waits: compactOpenScoring(candidate.openTenpaiScore, candidate.openTenpaiScoreApplied) } : {}),
       },
       ...(profile === "hierarchical-v3" ? { comparison_to_best: {
@@ -358,6 +360,7 @@ export function buildJevRequest(
             "Compare ukeire quality, hand value, win chance and tenpai chance for offense.",
             "For closed tenpai, compare supplied riichi and dama scoring outcomes with other discards' danger; scoring is not a policy EV and does not establish furiten safety.",
             "Ordinary open waits distinguish scoring wins from structural ukeire; null scoring points mean no ordinary yaku for that mode. Situational yaku and UI win legality are outside that scoring scope.",
+            "Shortest ordinary open progress covers only one structural improvement followed by ordinary winning waits, not longer reconstruction or situational yaku. Zero ordinary progress does not prohibit a defensive discard.",
             "When an opponent is riichi or pressure is otherwise visible, give deal-in probability substantially more weight.",
             "Use round, scores, seat, honba, riichi sticks, turn and remaining tiles for placement and urgency.",
           ],
@@ -369,6 +372,7 @@ export function buildJevRequest(
             "Second compare ukeire quality, hand value, win chance and tenpai chance using the supplied estimates.",
             "For closed tenpai, compare supplied riichi and dama scoring outcomes against defensive choices; scoring is not policy EV and does not establish furiten safety.",
             "Ordinary open waits distinguish scoring wins from structural ukeire; null scoring points mean no ordinary yaku for that mode. Situational yaku and UI win legality are outside that scoring scope.",
+            "Shortest ordinary open progress covers only one structural improvement followed by ordinary winning waits, not longer reconstruction or situational yaku. Zero ordinary progress does not prohibit a defensive discard.",
             "Third, when riichi or two-or-more open meld pressure is visible, prioritize avoiding deal-in unless placement urgency clearly warrants pushing.",
             "Treat cached_hand_plan only as a soft tie-breaker among tactically close choices; abandon it when current safety, shanten, ukeire or EV disagrees.",
             "Use placement context only when its fields are known. Never infer scores, round, remaining tiles, danger or yaku that are not supplied.",

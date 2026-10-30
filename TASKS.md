@@ -2,6 +2,13 @@
 
 Status values: `todo`, `doing`, `done`, `blocked`.
 
+## Current continuation — 2026-10-30
+
+- [x] `done` Complete the `19f3329` friend-room 32326 **300+0 / explicit action-deadline-ms=300000** functional run without manual gameplay/restart: second22000, final confirmation and process exit verified. Convenience display was disabled; this does not validate convenience-on/ranked play. See `VALIDATION-20260929.md` for exact evidence and limited branch coverage.
+- [ ] `doing` Correct the evidenced open-one-shanten ordinary-yaku valuation optimism; retain defensive choices and unknown-input fallback, then finish independent review, tests, commit/push and a fresh300+0 regression. A low-danger C discard itself is not proven wrong.
+- [ ] `todo` After functional regression, perform the user-requested **separate 5+20 practice before ranked**. Record its settings, commit, timing misses and results separately; do not count a300+0 success as short-clock reliability.
+- [ ] `todo` Continue permitted ranked/Bronze evaluation once the practice prerequisites are satisfied. On losses/stalls, reconcile recognition/state/decision/input evidence, practice and repair the supported causes, and repeat. Root operates the browser and recovers verified stalls; implementation may be delegated as explicitly requested. Do not edit running match code/config.
+
 ## A. Safe browser operation
 
 - [x] `done` Fix the live 300+0 friend-match crash loop after two successful discards: resized CDP frames are rejected before fixed-ROI processing, stale action gates are cleared, and the screencast is re-subscribed after restoring 1920×1080 so reaction handling resumes. Regression tests cover the observed 1058×1080 frame failure, exact-size recovery, and restart after the 1920×1119 viewport drift.

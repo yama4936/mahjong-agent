@@ -51,7 +51,13 @@ export function evaluateRoundValue(candidate: DiscardEvaluation, state: GameStat
   // existing fallback there and when meld/wind/physical evidence is unknown.
   const ordinaryEstimate = openTenpaiScore && !(state.remainingTiles !== undefined && state.remainingTiles <= 4)
     ? openTenpaiScore : undefined;
-  const estimatedValue = ordinaryEstimate?.conditionalConservativePoints
+  const noShortestOrdinaryRoute = candidate.shanten === 1 && state.openMelds > 0
+    && state.remainingTiles !== undefined && state.remainingTiles > 4
+    && candidate.openOneShantenYaku?.status === "known"
+    && candidate.openOneShantenYaku.scope === "shortest_structural_progress_to_ordinary_open_win_only"
+    && candidate.openOneShantenYaku.discardTile === candidate.tile
+    && candidate.openOneShantenYaku.ordinaryProgressUkeire === 0;
+  const estimatedValue = noShortestOrdinaryRoute ? 0 : ordinaryEstimate?.conditionalConservativePoints
     ?? estimateHeuristicRonPoints(baseHan + likelyRiichiHan + retainedDora, state.seat === "east", sevenPairs);
 
   const wallExhausted = state.remainingTiles === 0;
@@ -62,7 +68,7 @@ export function evaluateRoundValue(candidate: DiscardEvaluation, state: GameStat
   const winningUkeire = ordinaryEstimate?.winningUkeire ?? candidate.ukeire;
   const winningUkeireFactor = clamp(winningUkeire / 20, 0.12, 1.6);
   const winBase = candidate.shanten <= 0 ? 0.34 : candidate.shanten === 1 ? 0.18 : candidate.shanten === 2 ? 0.075 : 0.025;
-  const winProbability = wallExhausted || ordinaryEstimate && winningUkeire === 0 ? 0
+  const winProbability = wallExhausted || noShortestOrdinaryRoute || ordinaryEstimate && winningUkeire === 0 ? 0
     : clamp(winBase * winningUkeireFactor * turnsLeftFactor, 0.005, 0.72);
   const tenpaiBase = candidate.shanten <= 0 ? 1 : candidate.shanten === 1 ? 0.48 : candidate.shanten === 2 ? 0.22 : 0.08;
   const tenpaiProbability = wallExhausted

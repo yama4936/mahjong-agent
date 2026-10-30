@@ -2,6 +2,7 @@ import { isAllLastRound, knownTilesOutsideHand, type GameState } from "../game/s
 import { evaluateDiscards, type DiscardEvaluation } from "../game/ukeire.js";
 import { evaluateTileDanger } from "./defense.js";
 import { evaluateRoundValue } from "./value.js";
+import { createOpenOneShantenAnalyzer } from "./openOneShantenYaku.js";
 
 export interface AdvisorResult {
   recommendedAction: "discard" | "riichi" | "tsumo" | "ron" | "chi" | "pon" | "minkan" | "ankan" | "kakan" | "kyuushu" | "pass";
@@ -24,11 +25,16 @@ export function safetyCheck(state: GameState, candidates: readonly DiscardEvalua
 
 export function deterministicAdvice(state: GameState): AdvisorResult {
   const hand = state.draw ? [...state.hand, state.draw] : state.hand;
+  const ordinaryProgress = createOpenOneShantenAnalyzer(state);
   const evaluated = evaluateDiscards(
     hand,
     knownTilesOutsideHand(state),
     state.openMelds,
-  ).map((candidate) => evaluateRoundValue({ ...candidate, danger: evaluateTileDanger(candidate.tile, state).combinedProbability }, state));
+  ).map((candidate) => {
+    const evidence = ordinaryProgress(candidate);
+    return evaluateRoundValue({ ...candidate, ...(evidence ? { openOneShantenYaku: evidence } : {}),
+      danger: evaluateTileDanger(candidate.tile, state).combinedProbability }, state);
+  });
   const minimumShanten = Math.min(...evaluated.map((candidate) => candidate.shanten));
   const underThreat = state.opponents.some((opponent) => opponent.riichi || opponent.openMelds >= 2);
   const ownScore = state.scores[state.seat];
