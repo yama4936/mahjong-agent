@@ -3797,6 +3797,62 @@ class PythonAutoOperator:
             raise RuntimeError("resident sanma observation response is not read-only")
         return result
 
+    def inspect_sanma_kita_confirmation(self, page: Page, before: dict[str, Any]) -> dict[str, Any]:
+        """Capture a post-action candidate without clicking or confirming success.
+
+        The resident recognition results and glyph observations are unverified.
+        Even a visually plausible before/after pair cannot establish extraction,
+        the replacement draw, game identity or a click receipt. The playing loop
+        must not use this diagnostic as a successful confirmation.
+        """
+        if (not isinstance(before, dict) or before.get("scope") != "offline_untrusted_sanma_auto_observation"
+                or before.get("operationAuthorized") is not False or not isinstance(before.get("digest"), str)
+                or not isinstance(before.get("report"), dict) or before["report"].get("digest") != before["digest"]):
+            raise RuntimeError("untrusted sanma baseline missing or inconsistent")
+        def north_bound(observation: dict[str, Any]) -> bool:
+            north = observation.get("north")
+            if not isinstance(north, dict) or not isinstance(north.get("positions"), dict):
+                return True  # absent means unknown; never evidence of zero
+            for candidate in north["positions"].values():
+                if not isinstance(candidate, dict):
+                    return False
+                if candidate.get("frame_sha256") is not None and candidate["frame_sha256"] != observation["digest"]:
+                    return False
+                if (candidate.get("candidate") or candidate.get("matches")) and candidate.get("frame_sha256") != observation["digest"]:
+                    return False
+            return True
+        if not north_bound(before):
+            raise RuntimeError("sanma baseline north evidence digest mismatch")
+        before_digest = before["digest"]
+        if not re.fullmatch(r"[0-9a-f]{64}", before_digest):
+            raise RuntimeError("invalid sanma baseline digest")
+        screenshot = page.screenshot(animations="disabled")
+        if not isinstance(screenshot, bytes) or not screenshot:
+            raise RuntimeError("sanma post-action screenshot unavailable")
+        digest = hashlib.sha256(screenshot).hexdigest()
+        if digest == before_digest:
+            return {"status": "unresolved", "reason": "same_frame", "operationAuthorized": False}
+        path = self.frames / f"{utc_stamp()}.{uuid.uuid4().hex}.sanma-kita-observation.png"
+        path.write_bytes(screenshot)
+        after = self.observe_sanma_resident(path)
+        if (not isinstance(after, dict) or after.get("scope") != "offline_untrusted_sanma_auto_observation"
+                or after.get("operationAuthorized") is not False or after.get("digest") != digest
+                or not isinstance(after.get("report"), dict) or after["report"].get("digest") != digest
+                or not north_bound(after)):
+            raise RuntimeError("sanma post-action observation does not match captured screenshot")
+        # Preserve observations rather than turning absent matches into zero.
+        def visual(value: dict[str, Any]) -> dict[str, Any]:
+            north = value.get("north")
+            own = north.get("positions", {}).get("own") if isinstance(north, dict) and isinstance(north.get("positions"), dict) else None
+            row = value["report"].get("buttonRow")
+            return {"ownNorth": own if isinstance(own, dict) else None,
+                    "buttonRow": row if isinstance(row, dict) else None,
+                    "hand": value["report"].get("hand"), "board": value.get("board")}
+        return {"status": "unresolved", "reason": "extraction_and_replacement_not_verified",
+                "scope": "sanma_kita_confirmation_observation", "operationAuthorized": False,
+                "beforeDigest": before_digest, "afterDigest": digest, "screenshot": str(path),
+                "before": visual(before), "after": visual(after)}
+
     def recognize_resident(
         self, screenshot: Path, *, concealed_only: bool = False, draw_only: bool = False,
         concealed_tiles: list[str] | None = None, evaluate_force_auto: bool = False,
@@ -6570,6 +6626,11 @@ class PythonAutoOperator:
         evaluated_full: bytes | None = None, evaluated_draw_generation: int | None = None,
         evaluated_captured_at: float | None = None,
     ) -> dict[str, Any]:
+        # A direct library call must not bypass the CLI's sanma startup guard.
+        # Sanma observation and confirmation candidates are not executable.
+        state = evaluation.get("state")
+        if isinstance(state, dict) and state.get("rules") == "sanma":
+            raise RuntimeError("sanma execution is not implemented; observation cannot authorize clicks")
         decision = evaluation["decision"]
         recognition = evaluation["recognition"]
         selected = decision.get("selectedAction", {"action": decision.get("recommendedAction", "discard")})
