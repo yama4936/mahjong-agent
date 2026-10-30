@@ -10,6 +10,58 @@ import time
 from auto_operator import send_discard_click
 
 
+def execute_friend_draw_candidate(operator, page, receipt):
+    """Experimental draw-only bridge from the resident observation to input.
+
+    A separated draw is used because riichi status is not recognized. A draw
+    candidate does not itself prove the game is on our turn. The room, turn,
+    labels and empty action row remain experimental observations.
+    """
+    args = operator.args
+    if (getattr(args, "experimental_sanma_friend", False) is not True
+            or getattr(args, "rules", None) != "sanma" or getattr(args, "mode", None) != "force-auto"
+            or getattr(args, "action_deadline_ms", None) != 300000
+            or getattr(args, "ranked_loop", None) is not False
+            or getattr(operator, "verified_friend_300_active", False) is not True):
+        raise ValueError("experimental reviewed CPU friend session required")
+    if not isinstance(receipt, dict) or receipt.get("scope") != "sanma_self_turn_observation":
+        raise ValueError("self-turn observation missing")
+    source = receipt.get("sourceObservation") or {}
+    report = source.get("report") or {}
+    hand, geometry, row = (report.get(name) or {} for name in ("hand", "handGeometry", "buttonRow"))
+    draw = receipt.get("drawCandidate") or {}
+    freshness = receipt.get("freshness") or {}
+    if (source.get("digest") != receipt.get("digest") or report.get("digest") != receipt.get("digest")
+            or draw.get("digest") != receipt.get("digest") or draw.get("status") != "candidate"
+            or freshness.get("status") != "identical_pixels_candidate"
+            or hand.get("status") != "candidate" or geometry.get("status") != "candidate"
+            or row.get("status") != "candidate"):
+        raise ValueError("turn, frame, hand or action row unavailable")
+    hand_value, geo_value = hand.get("value") or {}, geometry.get("value") or {}
+    row_slots = (row.get("value") or {}).get("slots")
+    tiles, points = hand_value.get("tiles"), geo_value.get("clickPoints")
+    if (hand_value.get("safe") is not True or hand_value.get("turnReady") is not True
+            or not isinstance(row_slots, list) or len(row_slots) != 3
+            or any(slot.get("status") != "empty_candidate" for slot in row_slots)
+            or not isinstance(tiles, list) or len(tiles) != 14 or not isinstance(points, list) or len(tiles) != len(points)
+            or draw.get("index") != len(tiles) - 1 or draw.get("tile") != tiles[-1]
+            or draw.get("point") != points[-1]):
+        raise ValueError("unsafe hand, uncertain prompt or draw mismatch")
+    slots = [{"tile": tile, **point} for tile, point in zip(tiles, points)]
+    plan = {"scope": "offline_untrusted_sanma_discard_plan", "operationAuthorized": False,
+            "tile": draw["tile"], "clickIndex": draw["index"], "clickPoint": draw["point"]}
+    observation = {"status": "candidate", "phase": "self_turn", "promptStatus": "none",
+                   "handStatus": "candidate", "layoutStatus": "candidate", "slots": slots,
+                   "frameSha256": receipt["digest"]}
+    session = {"mode": "cpu_friend", "rules": "sanma", "clock": "300+0", "actionDeadlineMs": 300000,
+               "ranked": False, "cpuCount": 2, "roomVerified": True}
+    def record(event):
+        operator.log("sanma_friend_discard_experiment", **event)
+    return execute_friend_discard(page, session=session, observation=observation, plan=plan,
+                                  layout=operator.layout, log=record,
+                                  turn_started_monotonic=getattr(operator, "verified_friend_300_started_at", None))
+
+
 def execute_friend_discard(page, *, session, observation, plan, layout, log,
                            turn_started_monotonic, clock=time.monotonic):
     """Map a supplied TS plan to the existing select/confirm routine.

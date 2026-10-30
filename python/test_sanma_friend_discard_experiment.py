@@ -2,7 +2,7 @@ import hashlib
 import unittest
 from unittest.mock import Mock, patch
 
-from sanma_friend_discard_experiment import execute_friend_discard
+from sanma_friend_discard_experiment import execute_friend_discard, execute_friend_draw_candidate
 
 
 class FriendDiscardExperimentTests(unittest.TestCase):
@@ -54,3 +54,40 @@ class FriendDiscardExperimentTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FriendDrawBridgeTests(unittest.TestCase):
+    def setUp(self):
+        from types import SimpleNamespace
+        self.operator = Mock()
+        self.operator.args = SimpleNamespace(experimental_sanma_friend=True, rules="sanma", mode="force-auto",
+                                             action_deadline_ms=300000, ranked_loop=False)
+        self.operator.verified_friend_300_active = True
+        self.operator.verified_friend_300_started_at = 100
+        self.point = {"x": 1000, "y": 1000}
+        digest = "a" * 64
+        self.receipt = {"scope": "sanma_self_turn_observation", "digest": digest,
+                        "freshness": {"status": "identical_pixels_candidate"},
+                        "drawCandidate": {"status": "candidate", "digest": digest, "index": 13,
+                                          "tile": "1m", "point": self.point},
+                        "sourceObservation": {"digest": digest, "report": {"digest": digest,
+                            "hand": {"status": "candidate", "value": {"safe": True, "turnReady": True, "tiles": ["1m"] * 14}},
+                            "handGeometry": {"status": "candidate", "value": {"clickPoints": [self.point] * 14}},
+                            "buttonRow": {"status": "candidate", "value": {"slots": [{"status": "empty_candidate"}] * 3}}}}}
+
+    @patch("sanma_friend_discard_experiment.execute_friend_discard")
+    def test_uses_draw_candidate_and_friend_config(self, execute):
+        execute_friend_draw_candidate(self.operator, Mock(), self.receipt)
+        self.assertEqual(execute.call_args.kwargs["plan"]["clickPoint"], self.point)
+        self.assertEqual(execute.call_args.kwargs["plan"]["tile"], "1m")
+        self.assertEqual(execute.call_args.kwargs["turn_started_monotonic"], 100)
+
+    @patch("sanma_friend_discard_experiment.execute_friend_discard")
+    def test_prompt_or_ranked_never_dispatches(self, execute):
+        self.receipt["sourceObservation"]["report"]["buttonRow"]["value"]["slots"][0] = {"status": "unresolved"}
+        with self.assertRaises(ValueError):
+            execute_friend_draw_candidate(self.operator, Mock(), self.receipt)
+        self.operator.args.ranked_loop = True
+        with self.assertRaises(ValueError):
+            execute_friend_draw_candidate(self.operator, Mock(), self.receipt)
+        execute.assert_not_called()
