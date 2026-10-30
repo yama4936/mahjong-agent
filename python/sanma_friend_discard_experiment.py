@@ -4,12 +4,58 @@ Caller-provided recognition, room and timing claims are not independently
 certified. A successful click receipt does not prove a discard reached the river.
 """
 import hashlib
+import io
+
+from PIL import Image
 import math
 import time
 from pathlib import Path
 
 from auto_operator import send_discard_click
 from sanma_friend_freshness import friend_frame_stable, latch_friend_action_target
+
+
+def experimental_white_hand_candidate(frame, hand, geometry):
+    """Narrow visual hypothesis only; unloaded tile faces may look identical."""
+    try:
+        tiles, matches = hand["tiles"], hand["matches"]
+        presence, rects = hand["presenceFractions"], geometry["handSlots"]
+        evidence = geometry["evidence"]
+        if (hand.get("turnReady") is not True or len(tiles) != 14 or len(matches) != 14
+                or len(presence) != 14 or len(rects) != 13
+                or geometry.get("confidence", 0) < .98 or evidence.get("detectedTiles") != 14
+                or evidence.get("rowBottomSpread", 999) > 2
+                or any(not isinstance(v, (int, float)) or v < .75 for v in presence)):
+            return None
+        unknown = []
+        for i, (tile, match) in enumerate(zip(tiles, matches)):
+            if match.get("tile") != tile:
+                return None
+            if tile == "P" and match.get("confidence") == 0 and match.get("runnerUpConfidence") == 0:
+                if i == 13: return None
+                unknown.append(i)
+            elif (not isinstance(match.get("confidence"), (int, float))
+                  or not isinstance(match.get("runnerUpConfidence"), (int, float))
+                  or match["confidence"] < .95
+                  or match["confidence"] - match["runnerUpConfidence"] < .01):
+                return None
+        if not unknown or len(unknown) > 4:
+            return None
+        with Image.open(io.BytesIO(frame)) as source:
+            if source.size != (1920, 1080): return None
+            image = source.convert("RGB")
+            for i in unknown:
+                rect = rects[i]
+                x, y, w, h = (rect[k] for k in ("x", "y", "width", "height"))
+                if (any(type(v) is not int for v in (x,y,w,h)) or not (85 <= w <= 100 and 140 <= h <= 160)
+                        or x < 0 or y < 0 or x+w > 1920 or y+h > 1080): return None
+                core = image.crop((x+w//4, y+h//4, x+3*w//4, y+3*h//4))
+                pixels = list(core.getdata())
+                if sum(min(p) >= 170 and max(p)-min(p) <= 35 for p in pixels) / len(pixels) < .99:
+                    return None
+        return unknown
+    except (KeyError, TypeError, ValueError, OSError, ZeroDivisionError):
+        return None
 
 
 def execute_friend_draw_candidate(operator, page, receipt):
@@ -42,7 +88,11 @@ def execute_friend_draw_candidate(operator, page, receipt):
     hand_value, geo_value = hand.get("value") or {}, geometry.get("value") or {}
     row_slots = (row.get("value") or {}).get("slots")
     tiles, points = hand_value.get("tiles"), geo_value.get("clickPoints")
-    if (hand_value.get("safe") is not True or hand_value.get("turnReady") is not True
+    baseline = Path(receipt["screenshot"]).read_bytes()
+    if hashlib.sha256(baseline).hexdigest() != receipt.get("digest"):
+        raise ValueError("recognition frame changed on disk")
+    white_candidates = None if hand_value.get("safe") is True else experimental_white_hand_candidate(baseline, hand_value, geo_value)
+    if ((hand_value.get("safe") is not True and white_candidates is None) or hand_value.get("turnReady") is not True
             or not isinstance(row_slots, list) or len(row_slots) != 3
             or any(slot.get("status") != "empty_candidate" for slot in row_slots)
             or not isinstance(tiles, list) or len(tiles) != 14 or not isinstance(points, list) or len(tiles) != len(points)
@@ -52,9 +102,9 @@ def execute_friend_draw_candidate(operator, page, receipt):
     slots = [{"tile": tile, **point} for tile, point in zip(tiles, points)]
     plan = {"scope": "offline_untrusted_sanma_discard_plan", "operationAuthorized": False,
             "tile": draw["tile"], "clickIndex": draw["index"], "clickPoint": draw["point"]}
-    baseline = Path(receipt["screenshot"]).read_bytes()
-    if hashlib.sha256(baseline).hexdigest() != receipt.get("digest"):
-        raise ValueError("recognition frame changed on disk")
+    if white_candidates is not None:
+        operator.log("sanma_friend_white_candidate", indices=white_candidates, confirmed=False,
+                     risk="unloaded tile faces may appear identical", digest=receipt["digest"])
     observation = {"status": "candidate", "phase": "self_turn", "promptStatus": "none",
                    "handStatus": "candidate", "layoutStatus": "candidate", "slots": slots,
                    "frameSha256": receipt["digest"], "referenceFrame": baseline}
