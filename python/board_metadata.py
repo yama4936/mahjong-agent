@@ -398,6 +398,13 @@ def parse_sanma_board_tokens(tokens: list[dict], *, expected_total_points: int |
         if number is None:
             number = at(x, y, r"0", 0.95)
         numbers[position] = number
+    # A newer, separately recorded friend match places an opponent and score
+    # to the right, with no opposite score. This is only a layout hypothesis:
+    # never feed these positions into the calibrated left/opposite mapping.
+    right = at(1047, 419, r"-?\d{3,6}")
+    if right is not None and numbers['opposite'] is None:
+        return {**result, "reason": "unsupported_right_opponent_layout",
+                "layoutCandidate": {"opponents": ["left", "right"], "verified": False}}
     if not wind or not round_text or sticks is None or honba is None or any(v is None for v in numbers.values()):
         return {**result, "reason": "incomplete_or_ambiguous_tokens"}
     if any(isinstance(t.get("text"), str) and re.fullmatch(r"-?\d{1,6}", t["text"])

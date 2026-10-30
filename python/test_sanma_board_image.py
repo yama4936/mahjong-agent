@@ -19,6 +19,15 @@ CASES = [
 
 
 class SanmaBoardImageTests(unittest.TestCase):
+    @unittest.skipUnless(Path('/home/yama1/sanma-independent-20261031/20-turn.png').exists(), 'independent frame unavailable')
+    def test_new_right_layout_is_not_mapped_as_the_old_opposite_layout(self):
+        frame = Path('/home/yama1/sanma-independent-20261031/20-turn.png')
+        result = recognize_sanma_board_candidate(frame, expected_total_points=None, payment_phase=None)
+        self.assertFalse(result['verified'])
+        self.assertEqual(result['reason'], 'unsupported_right_opponent_layout')
+        self.assertEqual(result['layoutCandidate'], {'opponents':['left','right'], 'verified':False})
+        self.assertNotIn('candidate', result)
+
     @unittest.skipUnless((ACTIONS / '2026-10-30T17-30-50-782Z-before.png').exists(), 'local score frame unavailable')
     def test_sanma_left_score_retry_recovers_unverified_candidate(self):
         frame = ACTIONS / '2026-10-30T17-30-50-782Z-before.png'

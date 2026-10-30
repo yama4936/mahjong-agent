@@ -69,6 +69,21 @@ test("resident sanma OCR retries an uncertain left score without certification",
   } finally { worker.close(); }
 });
 
+test("new right opponent layout is not assigned to the old opposite position", {
+  skip: !existsSync('/home/yama1/sanma-independent-20261031/20-turn.png'), timeout: 30000,
+}, async () => {
+  const worker = new SanmaBoardWorker();
+  try {
+    const data = await worker.observe(await readFile('/home/yama1/sanma-independent-20261031/20-turn.png')) as any;
+    assert.equal(data.board.verified,false);
+    assert.equal(data.board.reason,'unsupported_right_opponent_layout');
+    assert.deepEqual(data.board.layoutCandidate,{opponents:['left','right'],verified:false});
+    assert.equal(data.board.candidate,undefined);
+    assert.equal(data.north.status,'unknown');
+    assert.equal(data.north.complete,false);
+  } finally { worker.close(); }
+});
+
 test("resident recognition server returns separate unchanged safe candidate snapshots", {skip: !available, timeout: 60_000}, async () => {
   const { spawn } = await import("node:child_process");
   const { createInterface } = await import("node:readline");

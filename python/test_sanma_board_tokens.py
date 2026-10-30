@@ -63,3 +63,15 @@ class SanmaBoardTokensTest(unittest.TestCase):
         changed.append({'text': '31000', 'confidence': 1.0, 'x': 876, 'y': 423,
                         'source': 'upright_left_score_crop', 'cropWidth': 328})
         self.assertEqual(self.parse(changed)['reason'], 'incomplete_or_ambiguous_tokens')
+
+    def test_alternate_right_score_layout_is_only_an_unverified_hypothesis(self):
+        tokens = self.tokens('south')
+        no_opposite = [t for t in tokens if not (abs(t['x'] - 958) <= 24 and abs(t['y'] - 364) <= 20)]
+        right = {'text':'35000', 'confidence':.999, 'x':1047, 'y':419}
+        result = self.parse(no_opposite + [right])
+        self.assertFalse(result['verified'])
+        self.assertEqual(result['reason'], 'unsupported_right_opponent_layout')
+        self.assertEqual(result['layoutCandidate'], {'opponents':['left','right'], 'verified':False})
+        self.assertNotIn('candidate', result)
+        self.assertNotIn('layoutCandidate', self.parse(no_opposite + [{**right,'confidence':.9}]))
+        self.assertNotIn('layoutCandidate', self.parse(no_opposite))
