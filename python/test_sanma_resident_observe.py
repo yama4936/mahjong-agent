@@ -81,6 +81,32 @@ class ResidentObservationTests(unittest.TestCase):
                 op.inspect_sanma_self_turn(page)
             page.mouse.click.assert_not_called()
 
+    def test_table_change_without_hand_or_button_change_invalidates_freshness(self):
+        from PIL import Image
+        before = Image.new('RGB', (1920, 1080), 'black')
+        after = before.copy()
+        after.putpixel((500, 400), (255, 255, 255))
+        def png(image):
+            buffer = io.BytesIO()
+            image.save(buffer, format='PNG')
+            return buffer.getvalue()
+        original, changed = png(before), png(after)
+        digest = hashlib.sha256(original).hexdigest()
+        result = self.result()
+        result['digest'] = result['report']['digest'] = result['structuralPositions']['digest'] = digest
+        op = self.operator({'id': 1, 'result': result})
+        page = Mock()
+        page.screenshot.side_effect = [original, changed]
+        receipt = op.inspect_sanma_self_turn(page)
+        self.assertEqual(receipt['freshness']['status'], 'changed')
+        self.assertEqual(receipt['freshness']['regionsChanged'],
+                         {'hand': False, 'actions': False, 'fullFrame': True})
+        page.screenshot.reset_mock()
+        with self.assertRaisesRegex(RuntimeError, 'stale or freshness unknown'):
+            op.inspect_sanma_kita_confirmation(page, receipt)
+        page.screenshot.assert_not_called()
+        page.mouse.click.assert_not_called()
+
     def test_tampered_self_turn_receipt_is_rejected_before_capture(self):
         op = self.operator({'id': 1, 'result': self.result()})
         page = Mock()

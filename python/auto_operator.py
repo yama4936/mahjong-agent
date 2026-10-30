@@ -3879,8 +3879,8 @@ class PythonAutoOperator:
                 or not isinstance(assembly.get("evaluation"), dict) or assembly["evaluation"].get("status") != "blocked"):
             raise RuntimeError("sanma read-only decision did not fail closed")
         # Recognition may take longer than a turn. Compare a fresh capture
-        # with the original over both the hand and the whole observed prompt
-        # row. Identical pixels are only a weak candidate, not permission.
+        # with the original across the entire frame as well as the hand and
+        # prompt row. Identical pixels are only a weak candidate, not permission.
         freshness: dict[str, Any] = {"status": "unknown", "operationAuthorized": False}
         try:
             latest = page.screenshot(animations="disabled")
@@ -3889,7 +3889,8 @@ class PythonAutoOperator:
             with Image.open(io.BytesIO(image)) as first, Image.open(io.BytesIO(latest)) as second:
                 if first.size != (1920, 1080) or second.size != (1920, 1080):
                     raise ValueError("unreviewed screenshot dimensions")
-                regions = {"hand": (180, 865, 1650, 1080), "actions": (600, 785, 1425, 875)}
+                regions = {"hand": (180, 865, 1650, 1080), "actions": (600, 785, 1425, 875),
+                           "fullFrame": (0, 0, 1920, 1080)}
                 changes = {}
                 for name, region in regions.items():
                     changes[name] = ImageChops.difference(first.convert("RGB").crop(region),
