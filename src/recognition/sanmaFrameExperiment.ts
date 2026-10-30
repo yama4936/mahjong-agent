@@ -85,7 +85,21 @@ export async function inspectSanmaFrame(input: {
     const row = await sharp(frame).extract(SANMA_BUTTON_ROW_RECT).png().toBuffer();
     return inspectSanmaButtonRow(row, input.buttonTemplates, input.buttonRowReferences.skip, input.buttonRowReferences.emptyRow, input.buttonRowReferences.ron);
   })();
-  const ownMeldPromise = sanmaOwnMeldExperiment(frame, input.layout, input.publicClassifier, input.assumedHandRightEdge);
+  const ownMeldPromise = (async () => {
+    if (input.assumedHandRightEdge !== undefined) {
+      return sanmaOwnMeldExperiment(frame,input.layout,input.publicClassifier,input.assumedHandRightEdge);
+    }
+    // The geometry is still a hypothesis. Use it only to select the crop for
+    // another unverified hypothesis, never to establish a complete hand or meld.
+    const hand = await handPromise.catch(() => undefined);
+    const slots = hand ? [...hand.proposal.handSlots,hand.proposal.drawSlot] : [];
+    if (!hand || ![5,8].includes(slots.length)) {
+      return sanmaOwnMeldExperiment(frame,input.layout,input.publicClassifier,undefined);
+    }
+    const rightEdge = Math.max(...slots.map(slot=>slot.x+slot.width));
+    const result = await sanmaOwnMeldExperiment(frame,input.layout,input.publicClassifier,rightEdge);
+    return {...result, handExtent:{source:'unverified_hand_geometry' as const,rightEdge,verified:false as const}};
+  })();
   const [hand, publicTiles, button, buttonRow, ownMelds] = await Promise.allSettled([
     handPromise, publicPromise, buttonPromise, buttonRowPromise, ownMeldPromise,
   ]);

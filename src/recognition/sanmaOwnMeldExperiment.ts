@@ -4,7 +4,8 @@ import { recognizeConfiguredPublicTilesWithVit, recognizeExposedMelds,
   type PublicVitClassifier, type RecognizedMeld } from "./publicTileRecognizer.js";
 
 /** Research output only. The hypothesized melds do not certify state. */
-type Result = { status: "unknown"; complete: false; hypotheses: RecognizedMeld[]; reason?: string };
+type Result = { status: "unknown"; complete: false; hypotheses: RecognizedMeld[]; reason?: string;
+  handExtent?: {source:"unverified_hand_geometry"; rightEdge:number; verified:false} };
 
 /**
  * The fixed 1920x1080 sanma sample has a seven-tile exposed row extending
