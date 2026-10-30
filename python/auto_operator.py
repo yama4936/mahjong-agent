@@ -6727,12 +6727,24 @@ class PythonAutoOperator:
         # A direct library call must not bypass the CLI's sanma startup guard.
         # Sanma observation and confirmation candidates are not executable.
         state = evaluation.get("state")
-        if isinstance(state, dict) and state.get("rules") == "sanma":
+        scope = evaluation.get("scope")
+        if ((isinstance(state, dict) and state.get("rules") == "sanma")
+                or getattr(getattr(self, "args", None), "rules", None) == "sanma"
+                or (isinstance(scope, str) and (scope.startswith("offline_untrusted_sanma")
+                                               or scope == "sanma_self_turn_observation"))):
             raise RuntimeError("sanma execution is not implemented; observation cannot authorize clicks")
         decision = evaluation["decision"]
         recognition = evaluation["recognition"]
-        selected = decision.get("selectedAction", {"action": decision.get("recommendedAction", "discard")})
+        if not isinstance(decision, dict):
+            raise RuntimeError("decision must specify a supported action")
+        selected = decision.get("selectedAction")
+        if selected is None and isinstance(decision.get("recommendedAction"), str):
+            selected = {"action": decision["recommendedAction"]}
+        if not isinstance(selected, dict):
+            raise RuntimeError("decision must specify a supported action")
         selected_action = selected.get("action")
+        if not isinstance(selected_action, str) or selected_action not in {"discard", "riichi", "tsumo", "ron", "kyuushu", "chi", "pon", "minkan", "ankan", "kakan", "pass"}:
+            raise RuntimeError(f"unsupported action cannot be executed: {selected_action!r}")
         force_auto = self.args.mode == "force-auto"
         selection_local_budget = False
         riichi_selection_budget: _RiichiSelectionBudget | None = None

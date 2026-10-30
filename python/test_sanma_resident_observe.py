@@ -112,6 +112,8 @@ class ResidentSanmaEndToEndTests(unittest.TestCase):
             self.assertEqual(receipt['drawCandidate']['index'], 13)
             self.assertFalse(receipt['drawCandidate']['verified'])
             self.assertFalse(receipt['drawCandidate']['operationAuthorized'])
+            with self.assertRaisesRegex(RuntimeError, 'sanma execution'):
+                op.execute(page, receipt)
             self.assertEqual(Path(receipt['screenshot']).read_bytes(), page.screenshot.return_value)
             page.mouse.click.assert_not_called()
             open_frame = Path('artifacts/sanma-manual-e48c562-20261031/actions/2026-10-30T16-21-44-430Z-before.png')
