@@ -1833,6 +1833,56 @@ def local_discard_allowed(args: argparse.Namespace, evaluation: dict[str, Any]) 
     )
 
 
+def sanma_draw_observation_candidate(observation: dict[str, Any]) -> dict[str, Any]:
+    """Bind an unverified last hand tile to its proposed draw rectangle.
+
+    This does not prove a draw, a self turn, legality, or calibrated click
+    geometry. It returns diagnostic candidates only and cannot authorize input.
+    """
+    unknown = {"status": "unresolved", "operationAuthorized": False}
+    if not isinstance(observation, dict) or observation.get("operationAuthorized") is not False:
+        return {**unknown, "reason": "not_read_only_observation"}
+    report = observation.get("report")
+    if not isinstance(report, dict) or observation.get("digest") != report.get("digest") \
+            or not isinstance(report.get("digest"), str) or not re.fullmatch(r"[0-9a-f]{64}", report["digest"]):
+        return {**unknown, "reason": "frame_identity_unknown"}
+    hand, geometry = report.get("hand"), report.get("handGeometry")
+    if not isinstance(hand, dict) or hand.get("status") != "candidate" \
+            or not isinstance(geometry, dict) or geometry.get("status") != "candidate":
+        return {**unknown, "reason": "hand_or_geometry_unknown"}
+    row, shape = hand.get("value"), geometry.get("value")
+    if not isinstance(row, dict) or not isinstance(shape, dict):
+        return {**unknown, "reason": "hand_or_geometry_unknown"}
+    tiles, slots, draw, points = row.get("tiles"), shape.get("handSlots"), shape.get("drawSlot"), shape.get("clickPoints")
+    if (not isinstance(tiles, list) or len(tiles) not in (2, 5, 8, 11, 14)
+            or not isinstance(slots, list) or len(slots) != len(tiles) - 1
+            or not isinstance(draw, dict) or not isinstance(points, list) or len(points) != len(tiles)
+            or any(not isinstance(tile, str) or not re.fullmatch(r"(?:[19]m|[0-9][ps]|[ESWNPFC])", tile) for tile in tiles)):
+        return {**unknown, "reason": "incomplete_or_invalid_hand_geometry"}
+    if any(not isinstance(slot, dict) or any(isinstance(slot.get(k), bool) or not isinstance(slot.get(k), (int, float))
+            or not isfinite(slot[k]) for k in ("x", "y", "width", "height")) for slot in slots):
+        return {**unknown, "reason": "invalid_concealed_rectangles"}
+    counts = Counter(("5" + tile[1]) if tile in ("0p", "0s") else tile for tile in tiles)
+    if any(count > 4 for count in counts.values()):
+        return {**unknown, "reason": "physically_impossible_hand"}
+    rect = [draw.get(k) for k in ("x", "y", "width", "height")]
+    point = points[-1]
+    if (any(isinstance(v, bool) or not isinstance(v, (int, float)) or not isfinite(v) for v in rect)
+            or rect[2] <= 0 or rect[3] <= 0 or rect[0] < 0 or rect[1] < 0
+            or rect[0] + rect[2] > 1920 or rect[1] + rect[3] > 1080 or not isinstance(point, dict)
+            or any(isinstance(point.get(k), bool) or not isinstance(point.get(k), (int, float))
+                   or not isfinite(point[k]) for k in ("x", "y"))
+            or not (rect[0] <= point["x"] < rect[0] + rect[2] and rect[1] <= point["y"] < rect[1] + rect[3])
+            or any(slot["width"] <= 0 or slot["height"] <= 0 or slot["x"] < 0 or slot["y"] < 0
+                   or slot["x"] + slot["width"] > rect[0] or slot["y"] + slot["height"] > 1080 for slot in slots)
+            or any(a["x"] + a["width"] > b["x"] for a, b in zip(slots, slots[1:]))):
+        return {**unknown, "reason": "invalid_draw_rectangle"}
+    return {"status": "candidate", "scope": "unverified_sanma_physical_draw", "verified": False,
+            "operationAuthorized": False, "digest": report["digest"], "index": len(tiles) - 1,
+            "tile": tiles[-1], "rectangle": dict(draw), "point": dict(point),
+            "reasons": ["hand and geometry are unverified", "self turn, action priority, and riichi state are unknown"]}
+
+
 def require_post_riichi_draw_click(
     evaluation: dict[str, Any], selected: dict[str, Any], layout: dict[str, Any],
     click_index: Any, point: Any, established_riichi: bool = False,
@@ -3826,7 +3876,8 @@ class PythonAutoOperator:
         receipt = {"status": "blocked", "scope": "sanma_self_turn_observation", "operationAuthorized": False,
                    "digest": result["digest"], "screenshot": str(path),
                    "priority": assembly["priority"], "evaluation": assembly["evaluation"],
-                   "candidates": result.get("candidates")}
+                   "candidates": result.get("candidates"),
+                   "drawCandidate": sanma_draw_observation_candidate(result)}
         self.log("sanma_self_turn_observed", digest=receipt["digest"], screenshot=str(path),
                  priority=receipt["priority"], evaluation=receipt["evaluation"])
         return receipt
