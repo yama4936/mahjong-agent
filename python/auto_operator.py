@@ -3782,6 +3782,7 @@ class PythonAutoOperator:
             raise RuntimeError("resident recognition server is not running")
         if not self.recognition_server.stdin or not self.recognition_server.stdout:
             raise RuntimeError("resident recognition server pipes are unavailable")
+        expected_digest = hashlib.sha256(screenshot.read_bytes()).hexdigest()
         self.recognition_request_id += 1
         request_id = self.recognition_request_id
         self.recognition_server.stdin.write(json.dumps({
@@ -3800,7 +3801,35 @@ class PythonAutoOperator:
         if not isinstance(result, dict) or result.get("scope") != "offline_untrusted_sanma_auto_observation" \
                 or result.get("operationAuthorized") is not False:
             raise RuntimeError("resident sanma observation response is not read-only")
+        if (result.get("digest") != expected_digest or hashlib.sha256(screenshot.read_bytes()).hexdigest() != expected_digest
+                or not isinstance(result.get("report"), dict) or result["report"].get("digest") != expected_digest):
+            raise RuntimeError("resident sanma observation does not match screenshot")
         return result
+
+    def inspect_sanma_self_turn(self, page: Page) -> dict[str, Any]:
+        """Capture the resident sanma observation and decision blockers, without clicking.
+
+        No returned candidate is authorized as an action. This method is not
+        called by the playing loop and the sanma startup guard remains active.
+        """
+        image = page.screenshot(animations="disabled")
+        if not isinstance(image, bytes) or not image:
+            raise RuntimeError("sanma screenshot unavailable")
+        path = self.frames / f"{utc_stamp()}.{uuid.uuid4().hex}.sanma-self-turn.png"
+        path.write_bytes(image)
+        result = self.observe_sanma_resident(path)
+        assembly = result.get("assembly")
+        if (not isinstance(assembly, dict) or assembly.get("operationAuthorized") is not False
+                or not isinstance(assembly.get("priority"), dict) or assembly["priority"].get("status") != "blocked"
+                or not isinstance(assembly.get("evaluation"), dict) or assembly["evaluation"].get("status") != "blocked"):
+            raise RuntimeError("sanma read-only decision did not fail closed")
+        receipt = {"status": "blocked", "scope": "sanma_self_turn_observation", "operationAuthorized": False,
+                   "digest": result["digest"], "screenshot": str(path),
+                   "priority": assembly["priority"], "evaluation": assembly["evaluation"],
+                   "candidates": result.get("candidates")}
+        self.log("sanma_self_turn_observed", digest=receipt["digest"], screenshot=str(path),
+                 priority=receipt["priority"], evaluation=receipt["evaluation"])
+        return receipt
 
     def inspect_sanma_kita_confirmation(self, page: Page, before: dict[str, Any]) -> dict[str, Any]:
         """Capture a post-action candidate without clicking or confirming success.
