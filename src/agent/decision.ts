@@ -1,3 +1,4 @@
+import { assertYonmaEvaluation } from "../game/state.js";
 import { isAllLastRound, type GameState } from "../game/state.js";
 import { deterministicAdvice, hasLiveWinningTenpai, type AdvisorResult } from "../evaluation/advisor.js";
 import { JevClient, type JevDecision, type JevHandPlan } from "../jev/client.js";
@@ -159,6 +160,7 @@ function inferPlanTargets(state: GameState): Array<{ id: string; score: number }
 }
 
 export function buildStrategyHandPlan(state: GameState): StrategyHandPlan {
+  assertYonmaEvaluation(state);
   const phase = strategyPhase(state.turn);
   const placement = placementContext(state);
   const targets = inferPlanTargets(state);
@@ -214,6 +216,7 @@ function decisionAnalysis(state: GameState) {
 }
 
 export async function decide(state: GameState, options: DecisionOptions): Promise<DecisionResult> {
+  assertYonmaEvaluation(state);
   return decideWithAnalysis(state, options, decisionAnalysis(state));
 }
 
@@ -425,6 +428,7 @@ export async function decideForceAutoWithJevDeadline(
   state: GameState,
   options: { jev?: JevClient; deadlineMs?: number; handPlan?: JevHandPlan },
 ): Promise<DecisionResult> {
+  assertYonmaEvaluation(state);
   const deadlineMs = options.deadlineMs ?? 2_300;
   if (!Number.isFinite(deadlineMs) || deadlineMs <= 0) throw new Error("Jev deadline must be positive");
   const startedAt = performance.now();
@@ -590,6 +594,7 @@ function yakuForCall(state: GameState, action: CallAction): { confirmed: string[
 }
 
 export function assessReactionCalls(state: GameState, legalActions: readonly LegalAction[]): CallAssessment[] {
+  assertYonmaEvaluation(state);
   const currentShanten = calculateShanten(state.hand, state.openMelds).shanten;
   const plan = buildStrategyHandPlan(state);
   const threat = state.opponents.some((opponent) => opponent.riichi || opponent.openMelds >= 2);

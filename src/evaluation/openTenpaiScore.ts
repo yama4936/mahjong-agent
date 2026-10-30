@@ -1,3 +1,4 @@
+import { assertYonmaEvaluation } from "../game/state.js";
 import { knownTiles, type GameState } from "../game/state.js";
 import { doraFromIndicator, isRedTile, isTerminalOrHonor, normalizeTile, parseGameTile, tileIndex, toCounts,
   type GameTile, type Tile } from "../game/tiles.js";
@@ -70,7 +71,7 @@ function scoreAssignment(shape: WinningShape, exposed: OpenGroup[], winningGroup
       + Number(["P", "F", "C"].includes(name.slice(8))) : HAN[name] ?? 0), 0);
   const yakuman = yakumanYaku.length;
   if (!yakuman && han === 0) return;
-  const indicators = state.doraIndicators.map(doraFromIndicator);
+  const indicators = state.doraIndicators.map((indicator) => doraFromIndicator(indicator, state.rules));
   const doraHan = yakuman ? 0 : physical.reduce((sum, tile) => sum + Number(isRedTile(tile))
     + indicators.filter(indicator => indicator === normalizeTile(tile)).length, 0);
   han = yakuman ? yakuman * 13 : han + doraHan;
@@ -104,6 +105,7 @@ function scoreAssignment(shape: WinningShape, exposed: OpenGroup[], winningGroup
  */
 export function scoreOpenWinningTile(concealed: readonly GameTile[], winner: GameTile,
   state: GameState, tsumo: boolean): OpenWinningScore | undefined {
+  assertYonmaEvaluation(state);
   const exposed = knownOpenGroups(state);
   if (!exposed || concealed.length !== 13 - state.openMelds * 3) return;
   const physical = [...concealed, winner, ...state.melds.flatMap(meld => meld.tiles)];
@@ -127,6 +129,7 @@ export function scoreOpenWinningTile(concealed: readonly GameTile[], winner: Gam
 }
 
 export function scoreOpenTenpai(candidate: DiscardEvaluation, state: GameState): OpenTenpaiScore | undefined {
+  assertYonmaEvaluation(state);
   const existence = openTenpaiYaku(candidate, state);
   if (!existence) return;
   const concealed = [...state.hand, ...(state.draw ? [state.draw] : [])].map(parseGameTile);

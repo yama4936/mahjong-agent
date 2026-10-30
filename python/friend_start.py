@@ -30,6 +30,29 @@ _BOUND_REGIONS = (
 _LONG_FRIEND_CLOCK = "FypLFypLFipMFipLJTlZJDdYEydKFipMKjxbGSxMFihJJjhYIjNUFylKFypLEydJFilLFCdJKDpaHC5PGy5POkxrQ1RzEidJP1FwFipMFypLGCtMFSlMFSlMEyhLIjZYXG2LcoGeMUVmTl9+cYCbU2OALj9ecX+abXyXIzVVGCtMJTlZDiNFPlBvcYCbY3KOIzZWbn6ZTmB+N0pqZ3eTQlRzGCtMGCtMFClMFClMFClMFClNHjFVZ3eURVd3bH2ZGi5PbXyXZXSQO0tqUmJ/SFh2MUNiZnaSGi5PbHyXIzZWZXSQPE5sgY+qeomjYXKOWmqIWmuIMkNiFShJFSpQFCpPFSpPECZMMUVoeommQVR0a3uYEydKbHuWcH+ZMkRkSVl4WGeEXG2KiJewQVNybn6aGy9RYHCMO01tf46oeYmkO05uZ3eUU2SDJThZFypMFi5XFi5XFC1VJz5kK0FnT2OEXG+PZniXO09xa3yZUmSEVGaFZHWTOU1vHjRZSF1+CyRLYHOSQ1Z3a3yZP1R2ZHeWPFF0HDNZYXOSVGeIFStRGjBVGDRjGDRjFjJhJ0JuY3mcZHmcITxnMkx1bIGiOlJ4HzljY3iaWG6RHDZgGjRgGDRgFTFdJkFran6gSmGGEi1aQVl/RVyCY3eZVGuPGTRhGjVgGzZh"
 
 
+# Native Japanese 三人麻雀 label from the independently reviewed 300+0 room.
+_SANMA_LABEL = "Ij5uIj9vLEh2N1F8NlB8N1F8NlB7JUFwIj5uID1tQFmCLEh2IT1tIj9uJEFwKUVzSGCHSGCHJ0NxKERzIT5vOFF8RV2FNlB7O1V/ID1tIj5uIz9vHzxsQlqDboGhbH+fbYCgaX6eLUl2IT5uHDprjp21SF+HHzxtHjxtcIOif5Crj562gJGshJOuQ1yEWW6SaHydgJCse4yphZawQ1yEHz1tIj9uIj9vJEBwO1R/PVaAP1iCMUx5IT5uIj5uIT5ts73NZHmaGzlqHjtsfY6qhZWwkZ+3ZXmaprLFQFmCSGCHeYuoxczZoa3CT2eNNU97ID1tIj9vIj9vKkZ0ZXmban2ebH+eSmGIHjtrHDlqSmGJg5SvgZKtJEFwHTprd4mmlKK5srzNeIqnzdTfPFaBVWuQrrjKkZ+3rLfJfI2pM015ID1tIj9vI0BvOlR+PleBPFaAPFV/Pld/LUl1NU97jpy1MEt4XHKVd4mnJkJxj522iZixfo6qf4+rjJq0WG6SGzlqlKK5jZy0rbfJdIWjLEd1IT1tIj5uIj5uX3SXdYakdIakdIWkdYelRV6GdIakRl6GHTtsHzxtaX2dZXmbXnOWPFWAXHGUMEt3YneYJEFwIz9vhpawfI2piZiydIekSF+HHz1s"
+
+
+def reviewed_sanma_300_plus_zero(frame: bytes) -> bool:
+    """Check calibrated three-player and 300+0 labels only.
+
+    This does not recognize player identities, CPU type or ready status; those
+    require human review of the preflight image and subsequent room binding.
+    The operator start path does not use this helper, and sanma play is not
+    authorized by a successful result.
+    """
+    try:
+        with Image.open(io.BytesIO(frame)) as source:
+            image = source.convert("RGB")
+        if image.size != (1920, 1080) or not reviewed_friend_clock_is_300_plus_zero(frame):
+            return False
+        reference = Image.frombytes("RGB", (27, 6), base64.b64decode(_SANMA_LABEL))
+        observed = image.crop((1670, 187, 1805, 218)).resize((27, 6))
+        return sum(ImageStat.Stat(ImageChops.difference(observed, reference)).mean) / 3 <= 3
+    except (OSError, ValueError):
+        return False
+
 def reviewed_friend_clock_is_300_plus_zero(frame: bytes) -> bool:
     try:
         with Image.open(io.BytesIO(frame)) as source:
@@ -43,11 +66,13 @@ def reviewed_friend_clock_is_300_plus_zero(frame: bytes) -> bool:
         return False
 
 
-def verified_friend_room(frame: bytes, reviewed_preflight: bytes) -> bool:
+def verified_friend_room(frame: bytes, reviewed_preflight: bytes, *, sanma: bool = False) -> bool:
     """Bind current room to a separately reviewed image; fail closed.
 
     The preflight must be supplied explicitly by the caller after inspecting
-    its settings. Matching the static heading and button prevents a generic
+    its settings, player identities, CPU types and ready status. The sanma
+    option binds the three slots to that image; it does not recognize their
+    contents independently and is not connected to the operator start path. Matching the static heading and button prevents a generic
     matchmaking or game screen from authorizing the start click.
     """
     try:
@@ -63,7 +88,16 @@ def verified_friend_room(frame: bytes, reviewed_preflight: bytes) -> bool:
                 observed = image.crop(box).resize((16, 8))
                 if sum(ImageStat.Stat(ImageChops.difference(observed, reference)).mean) / 3 > 5:
                     return False
-        for box in _BOUND_REGIONS:
+        if sanma and not (reviewed_sanma_300_plus_zero(frame) and reviewed_sanma_300_plus_zero(reviewed_preflight)):
+            return False
+        # Block the particular three-player 300+0 room that this template can
+        # identify from the existing four-player start path. This narrow check
+        # does not claim to identify other sanma settings or screen variants.
+        if not sanma and (reviewed_sanma_300_plus_zero(frame)
+                          or reviewed_sanma_300_plus_zero(reviewed_preflight)):
+            return False
+        regions = _BOUND_REGIONS if not sanma else tuple(box for box in _BOUND_REGIONS if box != (1230, 650, 1590, 910))
+        for box in regions:
             left = current.crop(box)
             right = reviewed.crop(box)
             # Text changes occupy only a small portion of a panel. Compare
@@ -92,7 +126,7 @@ def verified_friend_room(frame: bytes, reviewed_preflight: bytes) -> bool:
 
 
 def await_reviewed_friend_room(page, reviewed_preflight: bytes, *, attempts: int = 8,
-                               on_capture=None) -> int:
+                               on_capture=None, sanma: bool = False) -> int:
     """Require two consecutive fresh matches; retry transient visual overlays.
 
     Each capture independently passes all existing strict checks. A mismatch
@@ -101,7 +135,8 @@ def await_reviewed_friend_room(page, reviewed_preflight: bytes, *, attempts: int
     streak = 0
     for index in range(attempts):
         frame = page.screenshot(animations="disabled")
-        matched = verified_friend_room(frame, reviewed_preflight)
+        matched = (verified_friend_room(frame, reviewed_preflight, sanma=True) if sanma
+                   else verified_friend_room(frame, reviewed_preflight))
         if on_capture is not None:
             on_capture(index + 1, frame, matched)
         streak = streak + 1 if matched else 0

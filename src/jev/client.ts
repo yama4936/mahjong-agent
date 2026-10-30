@@ -1,3 +1,4 @@
+import { assertYonmaEvaluation } from "../game/state.js";
 import { isAllLastRound, type GameState } from "../game/state.js";
 import type { DiscardEvaluation } from "../game/ukeire.js";
 import type { LegalAction } from "../game/actions.js";
@@ -190,6 +191,7 @@ function matchPlacementContext(state: GameState) {
 }
 
 export function buildJevDeclarationRequest(state: GameState, actions: readonly LegalAction[], report: ClosedWaitReport, model: string): JevRequest {
+  assertYonmaEvaluation(state);
   if (actions.length !== 2 || !actions.some((action) => action.action === "discard")
     || !actions.some((action) => action.action === "riichi")
     || actions.some((action) => !("tile" in action) || action.tile !== report.discard)) {
@@ -214,6 +216,7 @@ export function buildJevDeclarationRequest(state: GameState, actions: readonly L
 }
 
 export function buildJevReactionRequest(state: GameState, actions: readonly LegalAction[], model: string): JevRequest {
+  assertYonmaEvaluation(state);
   if (!state.pendingDiscard) throw new Error("Reaction request requires pendingDiscard");
   const criteria = Object.fromEntries(actions.map((action) => [action.id, {
     action: action.action,
@@ -260,6 +263,7 @@ export function buildJevRequest(
   profile: JevPromptProfile,
   handPlan?: JevHandPlan,
 ): JevRequest {
+  assertYonmaEvaluation(state);
   const version = promptVersion(profile);
   const commonState = {
     promptVersion: version,

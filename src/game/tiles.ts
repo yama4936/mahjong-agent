@@ -5,6 +5,8 @@ export const TILE_NAMES = [
   "E", "S", "W", "N", "P", "F", "C",
 ] as const;
 
+export type GameRules = "yonma" | "sanma";
+
 export type Tile = (typeof TILE_NAMES)[number];
 export const RED_TILE_NAMES = ["0m", "0p", "0s"] as const;
 export type RedTile = (typeof RED_TILE_NAMES)[number];
@@ -72,9 +74,23 @@ export function isTerminalOrHonor(index: number): boolean {
   return index >= 27 || suitRank(index) === 0 || suitRank(index) === 8;
 }
 
-export function doraFromIndicator(indicatorInput: string): Tile {
+export function tileAvailableInRules(tile: string, rules: GameRules = "yonma"): boolean {
+  const index = tileIndex(tile);
+  return rules !== "sanma" || index === 0 || index >= 8;
+}
+
+export function assertTilesAvailable(tiles: readonly string[], rules: GameRules = "yonma"): void {
+  for (const tile of tiles) {
+    if (!tileAvailableInRules(tile, rules)) throw new Error(`Tile ${tile} is unavailable in ${rules}`);
+  }
+}
+
+export function doraFromIndicator(indicatorInput: string, rules: GameRules = "yonma"): Tile {
   const indicator = normalizeTile(indicatorInput);
   const index = tileIndex(indicator);
+  assertTilesAvailable([indicatorInput], rules);
+  if (rules === "sanma" && indicator === "1m") return "9m";
+  if (rules === "sanma" && indicator === "9m") return "1m";
   if (index < 27) {
     const suits = ["m", "p", "s"] as const;
     return normalizeTile(`${((suitRank(index) + 1) % 9) + 1}${suits[Math.floor(index / 9)]}`);

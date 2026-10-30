@@ -1,3 +1,4 @@
+import { assertYonmaEvaluation } from "../game/state.js";
 import { isAllLastRound, knownTilesOutsideHand, type GameState } from "../game/state.js";
 import { evaluateDiscards, type DiscardEvaluation } from "../game/ukeire.js";
 import { evaluateTileDanger } from "./defense.js";
@@ -16,6 +17,7 @@ export interface AdvisorResult {
 }
 
 export function safetyCheck(state: GameState, candidates: readonly DiscardEvaluation[], minRecognition = 0.98) {
+  assertYonmaEvaluation(state);
   const reasons: string[] = [];
   if (state.recognitionConfidence < minRecognition) reasons.push("recognition_confidence_below_threshold");
   if (candidates.length === 0) reasons.push("no_legal_action");
@@ -27,6 +29,7 @@ export function safetyCheck(state: GameState, candidates: readonly DiscardEvalua
 
 /** A structural closed wait can win by menzen tsumo; open waits need ordinary yaku evidence. */
 export function hasLiveWinningTenpai(candidate: DiscardEvaluation, state: GameState): boolean {
+  assertYonmaEvaluation(state);
   if (candidate.shanten !== 0 || candidate.ukeire <= 0) return false;
   const closed = state.openMelds === 0 || (state.melds.length === state.openMelds
     && state.melds.every(meld => meld.type === "ankan"));
@@ -48,6 +51,7 @@ function knownDiscardFuritenWaits(candidate: DiscardEvaluation, state: GameState
 }
 
 export function deterministicAdvice(state: GameState): AdvisorResult {
+  assertYonmaEvaluation(state);
   const hand = state.draw ? [...state.hand, state.draw] : state.hand;
   const ordinaryProgress = createOpenOneShantenAnalyzer(state);
   const structural = evaluateDiscards(

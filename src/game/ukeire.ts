@@ -1,5 +1,5 @@
 import { calculateShanten } from "./shanten.js";
-import { TILE_NAMES, isRedTile, normalizeTile, parseGameTile, tileFromIndex, tileIndex, toCounts, type GameTile, type Tile } from "./tiles.js";
+import { assertTilesAvailable, tileAvailableInRules, type GameRules, TILE_NAMES, isRedTile, normalizeTile, parseGameTile, tileFromIndex, tileIndex, toCounts, type GameTile, type Tile } from "./tiles.js";
 import type { OpenTenpaiScore } from "../evaluation/openTenpaiScore.js";
 import type { ClosedWaitReport } from "../evaluation/closedWaitScorer.js";
 import type { OpenOneShantenYaku } from "../evaluation/openOneShantenYaku.js";
@@ -36,10 +36,12 @@ export function evaluateDiscards(
   hand: readonly string[],
   visibleTiles: readonly string[] = [],
   openMelds = 0,
+  rules: GameRules = "yonma",
 ): DiscardEvaluation[] {
   if ((hand.length + openMelds * 3) % 3 !== 2) {
     throw new Error("Discard evaluation requires a 14-tile turn state");
   }
+  assertTilesAvailable([...hand, ...visibleTiles], rules);
   const canonical = hand.map(parseGameTile);
   const normalized = canonical.map(normalizeTile);
   const fullCounts = toCounts([...canonical, ...visibleTiles.map(parseGameTile)]);
@@ -52,6 +54,7 @@ export function evaluateDiscards(
     const base = calculateShanten(remainingHand, openMelds);
     const effectiveTiles: EffectiveTile[] = [];
     for (let index = 0; index < TILE_NAMES.length; index += 1) {
+      if (!tileAvailableInRules(tileFromIndex(index), rules)) continue;
       const remaining = 4 - fullCounts[index]!;
       if (remaining <= 0) continue;
       const next = calculateShanten([...remainingHand, tileFromIndex(index)], openMelds);

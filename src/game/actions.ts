@@ -40,6 +40,7 @@ function physicalConsumption(hand: readonly GameTile[], required: readonly Tile[
 }
 
 export function generateSelfTurnActions(state: GameState): LegalAction[] {
+  if (state.rules === "sanma") throw new Error("Sanma automatic actions are not implemented");
   if (state.phase !== "self_turn") throw new Error("Self-turn actions require phase=self_turn");
   const hand = state.draw ? [...state.hand, state.draw] : state.hand;
   const discards = evaluateDiscards(hand, knownTilesOutsideHand(state), state.openMelds);
@@ -84,6 +85,7 @@ function canChiFrom(fromSeat: GameState["seat"], ownSeat: GameState["seat"]): bo
 }
 
 export function generateReactionActions(state: GameState): LegalAction[] {
+  if (state.rules === "sanma") throw new Error("Sanma automatic actions are not implemented");
   if (state.phase !== "reaction" || !state.pendingDiscard) throw new Error("Reaction actions require a pending discard");
   const ui = new Set(state.availableUiActions);
   const tile = normalizeTile(state.pendingDiscard.tile);

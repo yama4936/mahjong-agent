@@ -1,3 +1,4 @@
+import { assertYonmaEvaluation } from "../game/state.js";
 import type { GameState } from "../game/state.js";
 import { TILE_NAMES, isTerminalOrHonor, normalizeTile, tileIndex, toCounts, type Tile } from "../game/tiles.js";
 import { standardWinningShapes, type WinningShape } from "../game/winningShapes.js";
@@ -28,6 +29,7 @@ export interface OpenTenpaiYaku {
 }
 
 export function knownOpenGroups(state: GameState): Group[] | undefined {
+  assertYonmaEvaluation(state);
   if (state.openMelds === 0 || state.melds.length !== state.openMelds
     || state.melds.every(meld => meld.type === "ankan") || !/^(east|south|west|north)_[1-4]$/.test(state.round)) return;
   const groups: Group[] = [];
@@ -47,6 +49,7 @@ export function knownOpenGroups(state: GameState): Group[] | undefined {
 
 export function ordinaryOpenShapeYaku(shape: WinningShape, exposed: Group[], winner: Tile, state: GameState,
   tsumo: boolean, winningGroupIndex?: number): string[] {
+  assertYonmaEvaluation(state);
   const groups: Group[] = [...exposed, ...shape.groups.map(group => ({ ...group, concealed: true, kan: false }))];
   const tiles = [shape.pair, shape.pair, ...groups.flatMap(group => group.tiles)];
   const yaku = new Set<string>();
@@ -96,6 +99,7 @@ export function ordinaryOpenShapeYaku(shape: WinningShape, exposed: Group[], win
  * Incomplete meld/wind evidence returns unknown rather than certifying no yaku.
  */
 export function openTenpaiYaku(candidate: DiscardEvaluation, state: GameState): OpenTenpaiYaku | undefined {
+  assertYonmaEvaluation(state);
   if (candidate.shanten !== 0) return;
   const exposed = knownOpenGroups(state);
   if (!exposed) return;

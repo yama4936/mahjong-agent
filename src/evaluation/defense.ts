@@ -1,3 +1,4 @@
+import { assertYonmaEvaluation } from "../game/state.js";
 import { knownTiles, type GameState } from "../game/state.js";
 import { doraFromIndicator, normalizeTile, suitRank, tileIndex, toCounts, type Tile } from "../game/tiles.js";
 
@@ -28,10 +29,11 @@ function hasFourKnownSets(opponent: GameState["opponents"][number]): boolean {
 }
 
 export function evaluateTileDanger(tileInput: string, state: GameState): TileDanger {
+  assertYonmaEvaluation(state);
   const tile = normalizeTile(tileInput);
   const visibleCounts = toCounts(knownTiles(state));
   const tileIdx = tileIndex(tile);
-  const isDora = state.doraIndicators.some((indicator) => doraFromIndicator(indicator) === tile);
+  const isDora = state.doraIndicators.some((indicator) => doraFromIndicator(indicator, state.rules) === tile);
 
   const byOpponent = state.opponents.map((opponent): OpponentDanger => {
     const discardedTypes = new Set(opponent.discards.map(normalizeTile));

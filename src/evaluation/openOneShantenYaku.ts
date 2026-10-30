@@ -1,3 +1,4 @@
+import { assertYonmaEvaluation } from "../game/state.js";
 import { knownTiles, type GameState } from "../game/state.js";
 import { normalizeTile, tileIndex, TILE_NAMES, toCounts } from "../game/tiles.js";
 import { standardWinningShapes } from "../game/winningShapes.js";
@@ -35,6 +36,7 @@ function legalPublicMeld(meld: GameState["melds"][number]): boolean {
  * cap or incomplete physical/meld/wind evidence returns unknown, never zero.
  */
 export function createOpenOneShantenAnalyzer(state: GameState) {
+  assertYonmaEvaluation(state);
   const exposed = knownOpenGroups(state);
   let counts: number[] | undefined;
   try {

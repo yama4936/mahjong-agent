@@ -1,3 +1,4 @@
+import { assertYonmaEvaluation } from "../game/state.js";
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { z } from "zod";
@@ -23,6 +24,7 @@ export type ClosedWaitReport = z.infer<typeof reportSchema>;
 /** Bounded offline scorer bridge. It does not change the selected action. */
 export function scoreClosedWaits(state: GameState, discard: string, waits: readonly string[],
   options: { timeoutMs?: number; python?: string; signal?: AbortSignal } = {}): Promise<ClosedWaitReport> {
+  assertYonmaEvaluation(state);
   const timeoutMs = options.timeoutMs ?? 750;
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new Error("Invalid scoring timeout");
   if (!waits.length || new Set(waits).size !== waits.length) throw new Error("Unique scoring waits required");

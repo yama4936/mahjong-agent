@@ -1,3 +1,4 @@
+import { assertYonmaEvaluation } from "../game/state.js";
 import type { GameState } from "../game/state.js";
 import { doraFromIndicator, isRedTile, isTerminalOrHonor, normalizeTile, parseGameTile, tileIndex } from "../game/tiles.js";
 import type { DiscardEvaluation } from "../game/ukeire.js";
@@ -33,12 +34,13 @@ export function estimateHeuristicRonPoints(han: number, dealer: boolean, sevenPa
  * outcome probabilities and must not independently unlock Auto Mode.
  */
 export function evaluateRoundValue(candidate: DiscardEvaluation, state: GameState): DiscardEvaluation {
+  assertYonmaEvaluation(state);
   const tiles = [...state.hand, ...(state.draw ? [state.draw] : [])].map(parseGameTile);
   const discardedIndex = tiles.indexOf(candidate.tile);
   if (discardedIndex < 0) throw new Error("Value evaluation requires a discard present in the concealed hand");
   tiles.splice(discardedIndex, 1);
   tiles.push(...state.melds.flatMap(meld => meld.tiles));
-  const dora = state.doraIndicators.map(doraFromIndicator);
+  const dora = state.doraIndicators.map((indicator) => doraFromIndicator(indicator, state.rules));
   const retainedDora = tiles.reduce((sum, tile) => sum
     + dora.filter(bonus => bonus === normalizeTile(tile)).length + (isRedTile(tile) ? 1 : 0), 0);
   const closed = state.openMelds === 0 || (state.melds.length === state.openMelds

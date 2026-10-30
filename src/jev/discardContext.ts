@@ -1,3 +1,4 @@
+import { assertYonmaEvaluation } from "../game/state.js";
 import { knownTilesOutsideHand, type GameState } from "../game/state.js";
 import type { DiscardEvaluation } from "../game/ukeire.js";
 import { calculateShanten } from "../game/shanten.js";
@@ -5,9 +6,10 @@ import { doraFromIndicator, isRedTile, normalizeTile, TILE_NAMES, toCounts } fro
 
 /** Facts derived from supplied tiles, not a second probabilistic policy. */
 export function discardTacticalContext(state: GameState, candidates: readonly DiscardEvaluation[]) {
+  assertYonmaEvaluation(state);
   const hand = [...state.hand, ...(state.draw ? [state.draw] : [])];
   const knownCounts = toCounts([...hand, ...knownTilesOutsideHand(state)]);
-  const dora = state.doraIndicators.map(doraFromIndicator);
+  const dora = state.doraIndicators.map((indicator) => doraFromIndicator(indicator, state.rules));
   const minimumShanten = candidates.length ? Math.min(...candidates.map(candidate => candidate.shanten)) : null;
   const bonusCount = (tiles: readonly string[]) => ({
     indicator_dora: state.doraIndicators.length ? tiles.reduce((sum, tile) => sum
