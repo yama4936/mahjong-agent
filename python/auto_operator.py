@@ -3858,6 +3858,17 @@ class PythonAutoOperator:
         if (result.get("digest") != expected_digest or hashlib.sha256(screenshot.read_bytes()).hexdigest() != expected_digest
                 or not isinstance(result.get("report"), dict) or result["report"].get("digest") != expected_digest):
             raise RuntimeError("resident sanma observation does not match screenshot")
+        # A newer right-river branch is optional. If present, it must be
+        # unverified evidence from this exact screenshot, never a complete or
+        # executable public state. An absent branch remains unknown.
+        if "rightRiver" in result:
+            right = result["rightRiver"]
+            if (not isinstance(right, dict) or right.get("scope") != "offline_untrusted_sanma_right_river"
+                    or right.get("frameSha256") != expected_digest or right.get("status") != "unknown"
+                    or right.get("verified") is not False or right.get("complete") is not False
+                    or right.get("operationAuthorized") is not False or not isinstance(right.get("candidates"), list)
+                    or any(not isinstance(item, dict) or item.get("verified") is not False for item in right["candidates"])):
+                raise RuntimeError("resident sanma right river is not matching unverified evidence")
         return result
 
     def inspect_sanma_self_turn(self, page: Page) -> dict[str, Any]:
