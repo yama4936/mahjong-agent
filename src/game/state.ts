@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { assertTilesAvailable, parseGameTile, toCounts, type GameTile } from "./tiles.js";
+import { assertTilesAvailable, normalizeTile, parseGameTile, toCounts, type GameTile } from "./tiles.js";
 
 const tileSchema = z.string().transform(parseGameTile);
 const seatSchema = z.enum(["east", "south", "west", "north"]);
@@ -122,6 +122,15 @@ function assertSanmaConsistency(state: PublicGameState): void {
   if (state.availableUiActions.includes("chi") || state.melds.some(meld => meld.type === "chi")
     || state.opponents.some(opponent => opponent.melds?.some(meld => meld.type === "chi"))) {
     throw new Error("Chi is unavailable in sanma");
+  }
+  // The generic shape schema permits 3–4 tiles and checks only the tile
+  // inventory. Sanma has no chi, so every actual meld must be one triplet
+  // or one four-of-a-kind, including red-five identity normalization.
+  for (const meld of [...state.melds, ...state.opponents.flatMap(opponent => opponent.melds ?? [])]) {
+    const expected = meld.type === "pon" ? 3 : 4;
+    if (meld.tiles.length !== expected || meld.tiles.some(tile => normalizeTile(tile) !== normalizeTile(meld.tiles[0]!))) {
+      throw new Error("Invalid sanma meld tiles");
+    }
   }
   const seats = state.opponents.map(opponent => opponent.seat);
   if (seats.length > 2 || new Set(seats).size !== seats.length || seats.includes(state.seat)) {

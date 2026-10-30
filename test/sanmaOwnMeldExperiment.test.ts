@@ -6,6 +6,7 @@ import sharp from "sharp";
 import { layoutSchema } from "../src/recognition/layout.js";
 import { HybridTileRecognizer } from "../src/recognition/hybridTileRecognizer.js";
 import { sanmaOwnMeldExperiment } from "../src/recognition/sanmaOwnMeldExperiment.js";
+import { inspectSanmaDiscardSafety } from "../src/game/sanmaDiscardSafetyExperiment.js";
 import { recognizeConfiguredPublicTilesWithVit, recognizeExposedMelds } from "../src/recognition/publicTileRecognizer.js";
 
 const fixture = "test/fixtures/sanma-melds/own-pon-kan-redacted.png";
@@ -41,6 +42,18 @@ test("the real seven-tile row extends beyond the existing own meld crop", {
     assert.deepEqual(result.hypotheses.map(m => [m.type, m.tiles]), [
       ["pon", ["7p", "7p", "7p"]], ["minkan", ["F", "F", "F", "F"]],
     ]);
+    // Only the meld shapes come from the saved image. The hand, empty rivers,
+    // north counts and absence of a prompt are explicit hypothetical inputs.
+    const opponent = (seat:string) => ({seat,openMelds:0,melds:[],discards:[],kitaCount:0});
+    const simulated = {rules:"sanma",seat:"east",phase:"self_turn",riichiDeclared:false,
+      hand:["1m","9m","1p","2p","3p","1s","2s"],draw:"3s",openMelds:2,
+      melds:result.hypotheses,visibleTiles:[],ownDiscards:[],doraIndicators:[],ownKitaCount:0,
+      opponents:[opponent("south"),opponent("west")]};
+    const decision = inspectSanmaDiscardSafety({state:simulated,riichiStatus:"not_declared",
+      ui:{status:"confirmed",actions:[]},turnContext:"ordinary_draw_confirmed",handEvidence:"confirmed",
+      meldEvidence:"confirmed",visibleEvidence:"confirmed_complete"});
+    assert.ok(decision.rows.length>0);
+    assert.equal(decision.operationAuthorized,false);
   } finally { await h.close(); }
 });
 
