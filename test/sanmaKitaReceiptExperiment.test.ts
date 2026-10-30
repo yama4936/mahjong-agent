@@ -18,7 +18,7 @@ async function scenario(name:string,beforeHand:string[],afterHand:string[],drawB
  const beforeFrame=await readFile(`${archive}/actions/${name}-before.png`),afterFrame=await readFile(`${archive}/actions/${name}-after.png`);
  const before={frameSha256:hash(beforeFrame),atMs:1,roundId:"E",hand:beforeHand,drawn:drawBefore,meldCount:0,ownKitaCount:0,wallRemaining:wall};
  const after={...before,frameSha256:hash(afterFrame),atMs:3,hand:afterHand,drawn:drawAfter,ownKitaCount:1,wallRemaining:wall-1};
- return {beforeFrame,afterFrame,before,after,click:{action:"kita" as const,atMs:2,x:1010,y:825},...await templates()};
+ return {beforeFrame,afterFrame,before,after,click:{action:"kita" as const,atMs:2,x:1010,y:825},maxBeforeClickMs:1,maxAfterClickMs:1,...await templates()};
 }
 test("archived north extraction stitches candidate button and manual state observations",{skip:!enabled},async()=>{
  const input=await scenario("2026-10-30T16-05-55-331Z",["1m","9m","9m","4p","0p","5p","6p","8p","2s","6s","S","S","N","E"],["1m","9m","9m","4p","0p","5p","6p","8p","2s","6s","E","S","S","4s"],"E","4s",52);
@@ -26,6 +26,18 @@ test("archived north extraction stitches candidate button and manual state obser
  const wrong=await inspectKitaReceiptExperiment({...input,after:{...input.after,ownKitaCount:0}});assert.equal(wrong.status,"unresolved");
  const stale=await inspectKitaReceiptExperiment({...input,before:{...input.before,frameSha256:"a".repeat(64)}});assert.equal(stale.status,"unresolved");
  const click=await inspectKitaReceiptExperiment({...input,click:{...input.click,x:500}});assert.equal(click.status,"unresolved");
+ for (const invalid of [
+   {...input, before:{...input.before,atMs:0}},
+   {...input, after:{...input.after,atMs:4}},
+   {...input, after:{...input.after,atMs:2}},
+   {...input, maxBeforeClickMs:0},
+   {...input, maxAfterClickMs:NaN},
+   {...input, before:{...input.before,atMs:Number.MAX_SAFE_INTEGER + 1}},
+ ]) {
+   const result=await inspectKitaReceiptExperiment(invalid);
+   assert.equal(result.status,"unresolved");
+   assert.equal(result.operationAuthorized,false);
+ }
 });
 test("north replacement keeps button visible and hand multiset unchanged",{skip:!enabled},async()=>{
  const hand=["2p","6p","7p","7p","8p","3s","6s","S","W","N","N","P","C","5p"];

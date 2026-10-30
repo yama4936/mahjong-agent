@@ -12,6 +12,8 @@ import type { ExperimentalTemplates } from "./sanmaButtonExperiment.js";
 export async function inspectKitaReceiptExperiment(input: {
   beforeFrame: Buffer; afterFrame: Buffer; before: KitaObservation; after: KitaObservation;
   click: { action: "kita"; atMs: number; x: number; y: number };
+  // Caller-chosen evidence window; timestamps remain untrusted claims.
+  maxBeforeClickMs: number; maxAfterClickMs: number;
   buttonTemplates: ExperimentalTemplates; skipTemplate: Buffer; emptyRow: Buffer; ronTemplate?: Buffer;
 }) {
   const failures: string[] = [];
@@ -19,6 +21,17 @@ export async function inspectKitaReceiptExperiment(input: {
   if (!Buffer.isBuffer(input.beforeFrame) || !Buffer.isBuffer(input.afterFrame)) throw new Error("Frame bytes required");
   if (digest(input.beforeFrame) !== input.before.frameSha256 || digest(input.afterFrame) !== input.after.frameSha256) failures.push("frame digest mismatch");
   if (!input.click || input.click.action !== "kita") failures.push("no kita click claim");
+  const times = [input.before.atMs, input.click?.atMs, input.after.atMs];
+  const limits = [input.maxBeforeClickMs, input.maxAfterClickMs];
+  if (!times.every(t => Number.isSafeInteger(t) && t >= 0) ||
+      !limits.every(t => Number.isSafeInteger(t) && t > 0)) {
+    failures.push("invalid evidence timing or window");
+  } else if (input.click.atMs - input.before.atMs <= 0 ||
+             input.click.atMs - input.before.atMs > input.maxBeforeClickMs ||
+             input.after.atMs - input.click.atMs <= 0 ||
+             input.after.atMs - input.click.atMs > input.maxAfterClickMs) {
+    failures.push("evidence outside timing window");
+  }
   const dimension = await sharp(input.beforeFrame).metadata();
   const afterDimension = await sharp(input.afterFrame).metadata();
   if (dimension.width !== 1920 || dimension.height !== 1080 || afterDimension.width !== 1920 || afterDimension.height !== 1080) failures.push("unreviewed frame dimensions");
