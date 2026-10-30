@@ -3356,7 +3356,7 @@ class AwayDialogDetectionTest(unittest.TestCase):
         operator.log = Mock()
         operator.action_evidence_started_at = operator.action_budget_started_at = 1.0
         with patch("auto_operator.time.monotonic", return_value=2.0):
-            for state in ("lobby", "ranked_room", "ranked_menu", "matchmaking"):
+            for state in ("lobby", "ranked_room", "ranked_menu", "connection_error", "session_conflict"):
                 operator.verified_friend_300_active = True
                 operator.verified_friend_300_match_seen = False
                 operator.verified_friend_300_started_at = 1.0
@@ -3371,6 +3371,27 @@ class AwayDialogDetectionTest(unittest.TestCase):
             operator.verified_friend_300_match_seen = False
             operator.verified_friend_300_started_at = 1.0
             operator.observe_ranked_match_screen("match")
+            self.assertFalse(operator.verified_friend_300_active)
+
+    def test_friend_start_transition_survives_only_before_match(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(mode="force-auto", ranked_loop=False,
+                                           action_deadline_ms=300000)
+        operator.log = Mock()
+        operator.action_evidence_started_at = operator.action_budget_started_at = 2.0
+        with patch("auto_operator.time.monotonic", return_value=3.0):
+            operator.verified_friend_300_active = True
+            operator.verified_friend_300_match_seen = False
+            operator.verified_friend_300_started_at = 1.0
+            for state in ("matchmaking", "black_screen", "loading", "match"):
+                operator.observe_ranked_match_screen(state)
+                self.assertTrue(operator.verified_friend_300_active, state)
+            self.assertEqual(operator.verified_friend_action_budget_ms(), 295000)
+            operator.observe_ranked_match_screen("black_screen")
+            self.assertFalse(operator.verified_friend_300_active)
+            self.assertEqual(operator.verified_friend_action_budget_ms(), 10000)
+            operator.verified_friend_300_active = True
+            operator.observe_ranked_match_screen("matchmaking")
             self.assertFalse(operator.verified_friend_300_active)
 
     def test_short_discard_selection_reserves_confirmed_second_click(self) -> None:

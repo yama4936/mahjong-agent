@@ -4706,8 +4706,10 @@ class PythonAutoOperator:
             elif state == "match":
                 self.verified_friend_300_match_seen = True
             elif (state in {"match_result", "rank_progress", "post_match_reward",
-                            "connection_error", "session_conflict", "black_screen",
-                            "lobby", "ranked_menu", "ranked_room", "matchmaking"}
+                            "connection_error", "session_conflict",
+                            "lobby", "ranked_menu", "ranked_room"}
+                  or (getattr(self, "verified_friend_300_match_seen", False)
+                      and state in {"matchmaking", "black_screen"})
                   or (getattr(self, "verified_friend_300_match_seen", False)
                       and state == "loading")):
                 self.revoke_verified_friend_300(state)
