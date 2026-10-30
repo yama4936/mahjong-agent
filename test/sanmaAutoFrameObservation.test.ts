@@ -7,7 +7,7 @@ import sharp from "sharp";
 import {layoutSchema} from "../src/recognition/layout.js";
 import {HybridTileRecognizer} from "../src/recognition/hybridTileRecognizer.js";
 import {EXPERIMENTAL_BUTTONS, type ExperimentalTemplates} from "../src/recognition/sanmaButtonExperiment.js";
-import {observeSanmaFrameAutomatically} from "../src/recognition/sanmaAutoFrameObservation.js";
+import {deriveSanmaActionCandidates, observeSanmaFrameAutomatically} from "../src/recognition/sanmaAutoFrameObservation.js";
 
 const file = "artifacts/sanma-manual-e48c562-20261031/actions/2026-10-30T16-05-55-331Z-before.png";
 const available = existsSync(file) && existsSync(".runtime/python-auto-venv/bin/python") &&
@@ -38,14 +38,33 @@ test("automatic same-frame board, hand, public and UI candidates remain unverifi
     if(result.report.buttonRow.status === "candidate") assert.deepEqual(result.report.buttonRow.value.slots.flatMap(s=>s.status==="candidate"?[s.action]:[]),["kita","skip"]);
     assert.equal(result.report.ownMelds.status,"candidate");
     if(result.report.ownMelds.status === "candidate") assert.equal(result.report.ownMelds.value.reason,"hand_extent_unknown");
+    assert.equal(result.candidates.status,"hypotheses");
+    assert.deepEqual(result.candidates.candidates,[{action:"kita",slot:1,handSupport:"north_candidate",northIndexes:[12]}]);
+    assert.ok(result.candidates.missing.includes("hand labels below confidence threshold"));
+    assert.equal(result.candidates.operationAuthorized,false);
+    assert.ok(result.candidates.missing.includes("ron reference unavailable"));
+    assert.deepEqual(result.report.shape,{status:"unresolved",reason:"visible tile completeness unavailable"});
     assert.equal(result.report.decision.status,"blocked");
     assert.equal(result.operationAuthorized,false);
+    if (result.report.hand.status === "candidate") {
+      const noNorth = {...result.report, hand:{...result.report.hand, value:{...result.report.hand.value,
+        tiles:result.report.hand.value.tiles.map(t=>t === "N" ? "W" as const : t)}}};
+      const conflict = deriveSanmaActionCandidates(noNorth, true);
+      assert.equal(conflict.status,"unresolved");
+      assert.deepEqual(conflict.candidates,[]);
+      assert.ok(conflict.missing.includes("kita button conflicts with recognized hand; neither result is verified"));
+      const unknownSeat = deriveSanmaActionCandidates(result.report, false);
+      assert.equal(unknownSeat.status,"unresolved");
+      assert.deepEqual(unknownSeat.candidates,[]);
+    }
     // The same black 1920x1080 image has no identifiable board or seat;
     // mapping is withheld, not silently assigned East.
     const blank = await sharp({create:{width:1920,height:1080,channels:3,background:"black"}}).png().toBuffer();
     const negative = await observeSanmaFrameAutomatically({frame:blank,layout,buttonTemplates,buttonRowReferences,
       templates:"templates/bootstrap",publicClassifier:model});
     assert.equal(negative.ownSeat.status,"unknown");
+    assert.equal(negative.candidates.status,"unresolved");
+    assert.deepEqual(negative.candidates.candidates,[]);
     assert.equal(negative.report.publicTiles.status,"unresolved");
     assert.equal(negative.operationAuthorized,false);
     const four = await readFile("test/fixtures/board-cache-score-25400-20261020.jpg");
@@ -53,6 +72,8 @@ test("automatic same-frame board, hand, public and UI candidates remain unverifi
       templates:"templates/bootstrap",publicClassifier:model});
     assert.equal(fourResult.board.reason,"unexpected_right_score");
     assert.equal(fourResult.ownSeat.status,"unknown");
+    assert.equal(fourResult.candidates.status,"unresolved");
+    assert.deepEqual(fourResult.candidates.candidates,[]);
     assert.equal(fourResult.report.publicTiles.status,"unresolved");
     assert.equal(fourResult.operationAuthorized,false);
   } finally { await model.close(); }

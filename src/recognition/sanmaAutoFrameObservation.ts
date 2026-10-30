@@ -38,8 +38,45 @@ export async function observeSanmaFrameAutomatically(input: {
     buttonTemplates: input.buttonTemplates, publicClassifier: input.publicClassifier,
     ...(ownSeat ? { ownSeat } : {}), ...(input.buttonRowReferences ? { buttonRowReferences: input.buttonRowReferences } : {}) });
   if (report.digest !== digest) throw new Error("snapshot digest mismatch");
-  return { scope: "offline_untrusted_sanma_auto_observation" as const, digest, board,
+  // The older diagnostic evaluates with an assumed empty visible-tile list.
+  // Do not expose it in the automatic observation as if unknown tiles were zero.
+  report.shape = {status: "unresolved", reason: "visible tile completeness unavailable"};
+  const candidates = deriveSanmaActionCandidates(report, ownSeat !== undefined);
+  if (!input.buttonRowReferences?.ron) candidates.missing.push("ron reference unavailable");
+  return { scope: "offline_untrusted_sanma_auto_observation" as const, digest, board, candidates,
     ownSeat: ownSeat ? { status: "candidate" as const, value: ownSeat, verified: false as const }
       : { status: "unknown" as const, reason: board.reason ?? "seat unavailable" },
     report, operationAuthorized: false as const };
+}
+
+
+type ObservedFrame = Awaited<ReturnType<typeof inspectSanmaFrame>>;
+/** Read-only action hypotheses; these are not legal actions or priority decisions. */
+export function deriveSanmaActionCandidates(report: ObservedFrame, hasSeatCandidate: boolean) {
+  const missing = ["game rules and OCR seat unverified", "action row incomplete", "turn and riichi status unverified",
+    "public tiles and extracted north counts incomplete", "physical action targets uncalibrated"];
+  if (!hasSeatCandidate) missing.push("own seat unavailable");
+  if (report.hand.status !== "candidate") missing.push("hand recognition unavailable");
+  else if (!report.hand.value.safe) missing.push("hand labels below confidence threshold");
+  if (report.buttonRow.status !== "candidate") {
+    missing.push("button row unavailable");
+    return { status: "unresolved" as const, candidates: [], missing, operationAuthorized: false as const };
+  }
+  if (report.buttonRow.value.slots.some(slot => slot.status === "unresolved")) missing.push("some button slots unresolved");
+  if (!hasSeatCandidate) return { status: "unresolved" as const, candidates: [], missing, operationAuthorized: false as const };
+  type Candidate = { action: "kita" | "riichi" | "tsumo" | "ron" | "pon" | "kan"; slot: number;
+    handSupport: "not_checked" | "unknown" | "north_not_observed" | "north_candidate"; northIndexes?: number[] };
+  const candidates = report.buttonRow.value.slots.flatMap<Candidate>(slot => {
+    if (slot.status !== "candidate" || slot.action === "skip") return [];
+    if (slot.action !== "kita") return [{action:slot.action, slot:slot.slot, handSupport:"not_checked" as const}];
+    if (report.hand.status !== "candidate") return [{action:slot.action, slot:slot.slot, handSupport:"unknown" as const}];
+    const northIndexes = report.hand.value.tiles.flatMap((tile, index) => tile === "N" ? [index] : []);
+    if (!northIndexes.length) return [{action:slot.action, slot:slot.slot, handSupport:"north_not_observed" as const}];
+    return [{action:slot.action, slot:slot.slot, handSupport:"north_candidate" as const, northIndexes}];
+  });
+  const conflicts = candidates.filter(candidate => candidate.handSupport === "north_not_observed");
+  const supported = candidates.filter(candidate => candidate.handSupport !== "north_not_observed");
+  if (conflicts.length) missing.push("kita button conflicts with recognized hand; neither result is verified");
+  return { status: supported.length ? "hypotheses" as const : "unresolved" as const,
+    candidates: supported, conflicts, missing, operationAuthorized: false as const };
 }
