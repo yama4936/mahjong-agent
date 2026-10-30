@@ -28,6 +28,7 @@ class ExperimentalSanmaFriendLoopTest(unittest.TestCase):
         self.op.inspect_sanma_self_turn = Mock(return_value=self.receipt)
         self.op.execute_sanma_friend_tsumo_candidate = Mock(return_value={'clicked':True,'confirmation':'unknown'})
         self.op.execute_sanma_friend_kita_candidate = Mock(return_value={'clicked':True,'confirmation':'unknown'})
+        self.op.observe_sanma_friend_transition = Mock(return_value={'status':'unresolved','confirmed':False})
 
     def run_room(self):
         with patch('auto_operator.inspect_sanma_friend_start',return_value={'operationAuthorized':False}), \
@@ -58,23 +59,43 @@ class ExperimentalSanmaFriendLoopTest(unittest.TestCase):
             self.op.run(self.page)
         self.page.mouse.click.assert_called_once_with(1140,998)
         self.op.execute_sanma_friend_tsumo_candidate.assert_not_called()
-        self.assertTrue(any(call.kwargs.get('reason')=='observation_or_action_failed' for call in self.op.log.call_args_list))
+        self.assertTrue(any(call.kwargs.get('reason')=='friend_monitor_limit' for call in self.op.log.call_args_list))
 
     def test_kita_routes_to_friend_adapter_and_stops(self):
         self.receipt['candidates'] = {'candidates': [{'action':'kita'}]}
         self.run_room()
         self.op.execute_sanma_friend_kita_candidate.assert_called_once_with(self.page,self.receipt)
         self.op.execute_sanma_friend_tsumo_candidate.assert_not_called()
-        self.assertTrue(any(call.kwargs.get('reason')=='candidate_click_outcome_requires_review' for call in self.op.log.call_args_list))
+        self.assertTrue(any(call.kwargs.get('reason')=='transition_requires_review' for call in self.op.log.call_args_list))
 
     def test_no_prompt_routes_to_draw_adapter_and_stops(self):
         self.receipt['candidates'] = {'candidates': []}
+        self.receipt['drawCandidate'] = {'status':'candidate'}
         with patch('sanma_friend_discard_experiment.execute_friend_draw_candidate',return_value={'status':'selection_confirmed','result':'discard_not_verified'}) as draw:
             self.run_room()
         draw.assert_called_once_with(self.op,self.page,self.receipt)
         self.page.mouse.click.assert_called_once_with(1140,998)
         self.op.execute_sanma_friend_tsumo_candidate.assert_not_called()
-        self.assertTrue(any(call.kwargs.get('reason')=='candidate_click_outcome_requires_review' for call in self.op.log.call_args_list))
+        self.assertTrue(any(call.kwargs.get('reason')=='transition_requires_review' for call in self.op.log.call_args_list))
+
+    def test_changed_unconfirmed_transition_reobserves_before_next_action(self):
+        self.op.args.max_iterations = 2
+        self.op.observe_sanma_friend_transition.return_value = {'status':'visual_change_unconfirmed','confirmed':False}
+        next_receipt = {'candidates': {'candidates':[{'action':'kan'}]}, 'digest':'next', 'screenshot':'next.png'}
+        self.op.inspect_sanma_self_turn.side_effect = [self.receipt,next_receipt]
+        self.run_room()
+        self.assertEqual(self.op.inspect_sanma_self_turn.call_count,2)
+        self.op.execute_sanma_friend_tsumo_candidate.assert_called_once()
+        self.assertTrue(any(call.kwargs.get('reason')=='unsupported_or_unknown_action' for call in self.op.log.call_args_list))
+        self.assertTrue(any(call.args[0]=='sanma_friend_action_unconfirmed' and call.kwargs.get('confirmed') is False
+                            for call in self.op.log.call_args_list))
+
+    def test_same_frame_after_unconfirmed_transition_never_repeats_click(self):
+        self.op.args.max_iterations = 2
+        self.op.observe_sanma_friend_transition.return_value = {'status':'visual_change_unconfirmed','confirmed':False}
+        self.run_room()
+        self.op.execute_sanma_friend_tsumo_candidate.assert_called_once()
+        self.assertTrue(any(call.kwargs.get('reason')=='frame_already_attempted_or_unknown' for call in self.op.log.call_args_list))
 
     def test_failed_room_verification_never_clicks(self):
         with patch('auto_operator.inspect_sanma_friend_start',side_effect=ValueError('room changed')):

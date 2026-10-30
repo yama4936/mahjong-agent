@@ -8399,21 +8399,78 @@ class PythonAutoOperator:
             return None
         return min(original_gate_captured_at, gate_processing_started_at)
 
+    def observe_sanma_friend_transition(self, page: Page, receipt: dict[str, Any], action: str) -> dict[str, Any]:
+        """Wait for a stable visible change, never certifying the preceding action."""
+        try:
+            before = Path(receipt["screenshot"]).read_bytes()
+            digest = hashlib.sha256(before).hexdigest()
+            if digest != receipt.get("digest"):
+                raise ValueError("before image changed")
+        except (KeyError, OSError, ValueError) as error:
+            return {"status":"unresolved", "reason":str(error), "confirmed":False}
+        other = ({"x":1180,"y":750,"width":310,"height":110} if action == "kita"
+                 else self.river_clip)
+        prompt = {"x":600,"y":785,"width":825,"height":90}
+        previous = None
+        last = None
+        for _ in range(20):
+            if self.verified_friend_300_active is not True:
+                return {"status":"unresolved", "reason":"friend session revoked", "confirmed":False}
+            page.wait_for_timeout(500)
+            try:
+                frame = page.screenshot(animations="disabled")
+                state, confidence = classify_screen(frame, self.screen_references)
+                if state in {"round_result", "match_result"}:
+                    path = self.frames / f"{utc_stamp()}.{uuid.uuid4().hex}.sanma-friend-result.png"
+                    path.write_bytes(frame)
+                    return {"status":"terminal", "screenState":state, "confidence":confidence,
+                            "screenshot":str(path), "confirmed":False}
+                if action == "tsumo":
+                    last = frame
+                    continue
+                if state != "match" or confidence < 0.95:
+                    last = frame
+                    continue
+                hand_change = mean_pixel_delta(crop_screenshot(before, self.hand_clip), crop_screenshot(frame, self.hand_clip))
+                other_change = mean_pixel_delta(crop_screenshot(before, other), crop_screenshot(frame, other))
+                stable = previous is not None and all(
+                    mean_pixel_delta(crop_screenshot(previous, region), crop_screenshot(frame, region)) < 0.5
+                    for region in (self.hand_clip, other, prompt))
+                if hand_change >= 1.5 and other_change >= 1.0 and stable:
+                    path = self.frames / f"{utc_stamp()}.{uuid.uuid4().hex}.sanma-friend-transition.png"
+                    path.write_bytes(frame)
+                    return {"status":"visual_change_unconfirmed", "action":action, "beforeDigest":digest,
+                            "afterDigest":hashlib.sha256(frame).hexdigest(), "screenshot":str(path),
+                            "handDelta":hand_change, "otherDelta":other_change, "confirmed":False}
+                previous = frame
+                last = frame
+            except Exception as error:
+                return {"status":"unresolved", "reason":f"transition observation failed: {error}", "confirmed":False}
+        if isinstance(last, bytes) and last:
+            path = self.frames / f"{utc_stamp()}.{uuid.uuid4().hex}.sanma-friend-transition-unknown.png"
+            path.write_bytes(last)
+            return {"status":"unresolved", "reason":"transition_not_observed", "screenshot":str(path), "confirmed":False}
+        return {"status":"unresolved", "reason":"transition_not_observed", "confirmed":False}
+
     def run_experimental_sanma_friend(self, page: Page) -> None:
-        """After a reviewed 300+0 room start, try only a visible tsumo; stop on unknown."""
+        """Run bounded friend-only actions while recording unconfirmed transitions."""
         if not experimental_sanma_friend_allowed(self.args) or self.verified_friend_300_active is not True:
             raise RuntimeError("experimental sanma friend session is not verified")
         started = time.monotonic()
         polls = 0
         last_frame = None
+        attempted_frames: set[str] = set()
+        unknown_streak = 0
         def preserve(frame: bytes | None) -> str | None:
             if not isinstance(frame, bytes) or not frame:
                 return None
             path = self.frames / f"{utc_stamp()}.{uuid.uuid4().hex}.sanma-friend-stop.png"
             path.write_bytes(frame)
             return str(path)
-        while time.monotonic() - started < 60:
+        while time.monotonic() - started < 300:
             polls += 1
+            if getattr(self.args, "max_iterations", 0) and polls > self.args.max_iterations:
+                break
             if self.verified_friend_300_active is not True:
                 self.log("sanma_friend_stopped", reason="friend_session_revoked", screenshot=preserve(last_frame))
                 return
@@ -8434,21 +8491,46 @@ class PythonAutoOperator:
                         self.log("sanma_friend_stopped", reason="unsupported_or_unknown_action", screenshot=receipt.get("screenshot"),
                                  digest=receipt.get("digest"), candidates=candidates, operationAuthorized=False)
                         return
+                    frame_digest = receipt.get("digest")
+                    if not isinstance(frame_digest, str) or frame_digest in attempted_frames:
+                        self.log("sanma_friend_stopped", reason="frame_already_attempted_or_unknown", screenshot=receipt.get("screenshot"))
+                        return
                     if any(isinstance(item, dict) and item.get("action") == "tsumo" for item in actions):
+                        action = "tsumo"
                         result = self.execute_sanma_friend_tsumo_candidate(page, receipt)
                     elif any(isinstance(item, dict) and item.get("action") == "kita" for item in actions):
+                        action = "kita"
                         result = self.execute_sanma_friend_kita_candidate(page, receipt)
                     elif not actions:
-                        # A draw-only experiment is allowed only if its own
-                        # adapter can verify the full hand and empty button row.
+                        # No draw may mean an opponent turn or unavailable
+                        # recognition. Reobserve a bounded number of times.
+                        draw = receipt.get("drawCandidate")
+                        if not isinstance(draw, dict) or draw.get("status") != "candidate":
+                            unknown_streak += 1
+                            self.log("sanma_friend_wait", reason="draw_or_turn_unknown", screenshot=receipt.get("screenshot"), streak=unknown_streak)
+                            if unknown_streak >= 3:
+                                self.log("sanma_friend_stopped", reason="draw_or_turn_unknown", screenshot=receipt.get("screenshot"))
+                                return
+                            page.wait_for_timeout(500)
+                            continue
+                        action = "discard"
                         from sanma_friend_discard_experiment import execute_friend_draw_candidate
                         result = execute_friend_draw_candidate(self, page, receipt)
                     else:
                         self.log("sanma_friend_stopped", reason="unsupported_or_unknown_action", screenshot=receipt.get("screenshot"),
-                                 digest=receipt.get("digest"), candidates=candidates, operationAuthorized=False)
+                                 digest=frame_digest, candidates=candidates, operationAuthorized=False)
                         return
-                    self.log("sanma_friend_stopped", reason="candidate_click_outcome_requires_review", result=result)
-                    return
+                    attempted_frames.add(frame_digest)
+                    unknown_streak = 0
+                    self.log("sanma_friend_action_unconfirmed", action=action, result=result, confirmed=False)
+                    transition = self.observe_sanma_friend_transition(page, receipt, action)
+                    self.log("sanma_friend_transition", **transition)
+                    if transition.get("status") != "visual_change_unconfirmed":
+                        self.log("sanma_friend_stopped", reason="transition_requires_review", transition=transition)
+                        return
+                    # This is not confirmation. Start a new independent screen
+                    # observation; unchanged or reused frames cannot click.
+                    continue
                 except Exception as error:
                     self.log("sanma_friend_stopped", reason="observation_or_action_failed", error=str(error),
                              screenshot=preserve(last_frame), operationAuthorized=False)
@@ -8460,7 +8542,7 @@ class PythonAutoOperator:
             if getattr(self.args, "max_iterations", 0) and polls >= self.args.max_iterations:
                 break
             page.wait_for_timeout(500)
-        self.log("sanma_friend_stopped", reason="match_screen_timeout", polls=polls, screenshot=preserve(last_frame))
+        self.log("sanma_friend_stopped", reason="friend_monitor_limit", polls=polls, screenshot=preserve(last_frame))
 
     def run(self, page: Page) -> None:
         self.ensure_viewport(page, force=True)
