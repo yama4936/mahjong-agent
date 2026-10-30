@@ -7,15 +7,16 @@ from sanma_opposite_kita_experiment import opposite_north_candidate
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / 'test/fixtures/sanma-opposite-kita'
 TEMPLATE = FIXTURES / 'north-glyph-reference.png'
+SHADOW_TEMPLATE = FIXTURES / 'north-glyph-shadow-reference.png'
 
 class OppositeKitaExperimentTest(unittest.TestCase):
-    def probe(self, name):
+    def probe(self, name, shadow=False):
         image = Image.new('RGB', (1920, 1080))
         image.paste(Image.open(FIXTURES / (name + '.png')), (500, 80))
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp) / 'frame.png'
             image.save(path)
-            return opposite_north_candidate(path, TEMPLATE)
+            return opposite_north_candidate(path, TEMPLATE, shadow_template_path=SHADOW_TEMPLATE if shadow else None)
 
     def test_independent_real_crops_match_only_as_candidates(self):
         # Reference from frame 571; these are later frames in the same game.
@@ -37,6 +38,39 @@ class OppositeKitaExperimentTest(unittest.TestCase):
                 self.assertIsNone(result['candidate'])
                 self.assertEqual(result['status'], 'unknown')
                 self.assertFalse(result['complete'])
+
+    def test_secondary_reference_recovers_unseen_shadow_frames_as_unverified_candidates(self):
+        # Reference is from 451; held-out examples 433, 497, 543 all visibly contain north.
+        for name in ('433', '497', '543'):
+            with self.subTest(name=name):
+                self.assertIsNone(self.probe(name)['candidate'])
+                result = self.probe(name, shadow=True)
+                self.assertEqual(result['candidate']['reference'], 'shadow')
+                self.assertGreaterEqual(result['candidate']['similarity'], .97)
+                self.assertEqual(result['status'], 'unknown')
+                self.assertFalse(result['verified'])
+                self.assertFalse(result['complete'])
+        for name in ('301', '901', '1801'):
+            self.assertIsNone(self.probe(name, shadow=True)['candidate'])
+
+    def test_shadow_template_never_makes_four_player_control_a_match(self):
+        paths = list((ROOT / 'test/fixtures').glob('board-*.png')) + list((ROOT / 'test/fixtures').glob('board-*.jpg'))
+        self.assertEqual(len(paths), 9)
+        for path in paths:
+            with self.subTest(path=path.name):
+                result = opposite_north_candidate(path, TEMPLATE, shadow_template_path=SHADOW_TEMPLATE)
+                self.assertIsNone(result.get('candidate'))
+                self.assertEqual(result['status'], 'unknown')
+
+    def test_invalid_shadow_reference_is_not_ignored(self):
+        with tempfile.TemporaryDirectory() as temp:
+            image = Path(temp) / 'frame.png'
+            template = Path(temp) / 'blank.png'
+            Image.new('L', (1920, 1080)).save(image)
+            Image.new('L', (40, 29)).save(template)
+            result = opposite_north_candidate(image, TEMPLATE, shadow_template_path=template)
+            self.assertEqual(result['reason'], 'uncalibrated_or_unreadable_shadow_template')
+            self.assertNotIn('candidate', result)
 
     def test_final_overlay_can_match_stale_board(self):
         result = self.probe('2911')

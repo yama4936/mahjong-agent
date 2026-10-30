@@ -13,7 +13,7 @@ const run = promisify(execFile);
 /** Offline OCR plus image analysis from one immutable byte snapshot; never a live operation certificate. */
 export async function observeSanmaFrameAutomatically(input: {
   frame: Buffer; layout: ScreenLayout; templates: string; buttonTemplates: ExperimentalTemplates;
-  publicClassifier: PublicVitClassifier; buttonRowReferences?: { skip: Buffer; emptyRow: Buffer };
+  publicClassifier: PublicVitClassifier; buttonRowReferences?: { skip: Buffer; emptyRow: Buffer; ron?: Buffer };
 }) {
   if (!Buffer.isBuffer(input.frame)) throw new Error("Frame bytes required");
   const frame = Buffer.from(input.frame);
