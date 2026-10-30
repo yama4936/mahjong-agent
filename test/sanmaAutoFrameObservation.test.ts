@@ -63,7 +63,12 @@ test("automatic same-frame board, hand, public and UI candidates remain unverifi
     if (result.report.hand.status === "candidate") {
       const noNorth = {...result.report, hand:{...result.report.hand, value:{...result.report.hand.value,
         tiles:result.report.hand.value.tiles.map(t=>t === "N" ? "W" as const : t)}}};
-      const conflict = deriveSanmaActionCandidates(noNorth, true);
+      const incomplete = deriveSanmaActionCandidates(noNorth, true);
+      assert.equal(incomplete.status,"hypotheses");
+      assert.deepEqual(incomplete.candidates,[{action:"kita",slot:1,handSupport:"unknown"}]);
+      assert.equal(incomplete.operationAuthorized,false);
+      const reviewedHand = {...noNorth, hand:{...noNorth.hand, value:{...noNorth.hand.value, safe:true, turnReady:true}}};
+      const conflict = deriveSanmaActionCandidates(reviewedHand, true);
       assert.equal(conflict.status,"unresolved");
       assert.deepEqual(conflict.candidates,[]);
       assert.ok(conflict.missing.includes("kita button conflicts with recognized hand; neither result is verified"));

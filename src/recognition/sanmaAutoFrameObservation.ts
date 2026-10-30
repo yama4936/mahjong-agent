@@ -108,7 +108,14 @@ export function deriveSanmaActionCandidates(report: ObservedFrame, hasSeatCandid
     if (slot.action !== "kita") return [{action:slot.action, slot:slot.slot, handSupport:"not_checked" as const}];
     if (report.hand.status !== "candidate") return [{action:slot.action, slot:slot.slot, handSupport:"unknown" as const}];
     const northIndexes = report.hand.value.tiles.flatMap((tile, index) => tile === "N" ? [index] : []);
-    if (!northIndexes.length) return [{action:slot.action, slot:slot.slot, handSupport:"north_not_observed" as const}];
+    if (!northIndexes.length) {
+      // A truncated or low-confidence hand can omit an actual north. Its
+      // absence is not contrary evidence against the visible button.
+      if (!report.hand.value.safe || !report.hand.value.turnReady || report.hand.value.tiles.length !== 14) {
+        return [{action:slot.action, slot:slot.slot, handSupport:"unknown" as const}];
+      }
+      return [{action:slot.action, slot:slot.slot, handSupport:"north_not_observed" as const}];
+    }
     return [{action:slot.action, slot:slot.slot, handSupport:"north_candidate" as const, northIndexes}];
   });
   const conflicts = candidates.filter(candidate => candidate.handSupport === "north_not_observed");
