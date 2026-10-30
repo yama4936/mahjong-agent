@@ -11,7 +11,7 @@ import { detectConfiguredPublicRegions } from "../src/recognition/regionDetector
 import { knownTiles, knownTilesOutsideHand, parseGameState, parsePublicGameState } from "../src/game/state.js";
 import { decide } from "../src/agent/decision.js";
 import { cachedPublicStatePatch } from "../src/agent/publicCache.js";
-import { assertTemporalPublicObservation, hasSidewaysRiichiTile, recognizeConfiguredPublicTiles, recognizeConfiguredPublicTilesWithVit, recognizeExposedMelds, toPublicTileObservation, type PublicTileObservation, type PublicTileRecognitionRegion } from "../src/recognition/publicTileRecognizer.js";
+import { assertTemporalPublicObservation, hasSidewaysRiichiTile, recognizeSanmaPublicCandidates, recognizeConfiguredPublicTiles, recognizeConfiguredPublicTilesWithVit, recognizeExposedMelds, toPublicTileObservation, type PublicTileObservation, type PublicTileRecognitionRegion } from "../src/recognition/publicTileRecognizer.js";
 
 function publicRegion(tiles: Array<{ tile: any; x: number; y?: number; width?: number; height?: number }>, rotationToUpright: 0 | 90 | 180 | 270 = 0): PublicTileRecognitionRegion {
   return {
@@ -815,4 +815,81 @@ test("production own river preserves third-row three man and an early sideways W
     assert.equal(early.ownDiscards!.recognized[1]!.sideways, true);
     assert.equal(toPublicTileObservation(early).ownRiichiDeclared, true);
   } finally { await recognizer.close(); }
+});
+
+test("sanma observations map two seats and keep missing regions unknown", () => {
+  for (const [seat, opposite, left] of [["east", "south", "west"], ["south", "west", "east"], ["west", "east", "south"]] as const) {
+    const obs = toPublicTileObservation({ oppositeDiscards: publicRegion([{tile: "1m", x: 0}]),
+      leftDiscards: publicRegion([{tile: "9m", x: 0}]) }, seat, "sanma");
+    assert.deepEqual(obs.opponentDiscards.map(o => [o.seat, o.discards]), [[opposite, ["1m"]], [left, ["9m"]]]);
+    assert.equal(obs.opponentDiscards.every(o => o.meldsObserved === false), true);
+    assert.equal(obs.ownMeldsObserved, false);
+    assert.equal(obs.complete, false);
+  }
+  const unsafeEmpty = {...publicRegion([]), classificationSafe: false};
+  const obs = toPublicTileObservation({oppositeMelds: unsafeEmpty, ownMelds: unsafeEmpty}, "east", "sanma");
+  assert.equal(obs.opponentDiscards[0]!.meldsObserved, false);
+  assert.equal(obs.ownMeldsObserved, false);
+  assert.equal(obs.ownRiichiDeclared, undefined);
+  assert.equal(obs.opponentDiscards[0]!.riichiDeclared, undefined);
+  assert.equal(obs.opponentDiscards[1]!.riichiDeclared, undefined);
+  assert.deepEqual(toPublicTileObservation({}, "south"), toPublicTileObservation({}, "south", "yonma"));
+});
+
+test("sanma observations reject impossible confident public evidence", () => {
+  assert.throws(() => toPublicTileObservation({}, "north", "sanma"), /seat/);
+  assert.throws(() => toPublicTileObservation({rightDiscards: publicRegion([])}, "east", "sanma"), /right/);
+  assert.throws(() => toPublicTileObservation({leftDiscards: publicRegion([{tile: "2m", x: 0}])}, "east", "sanma"), /unavailable/);
+  const chi = publicRegion([{tile:"1p",x:0},{tile:"2p",x:30},{tile:"3p",x:60}]);
+  assert.throws(() => toPublicTileObservation({ownMelds: chi}, "east", "sanma"), /Chi/);
+  assert.throws(() => toPublicTileObservation({leftMelds: chi}, "east", "sanma"), /Chi/);
+  assert.equal(toPublicTileObservation({ownMelds: chi}, "east").ownMelds?.[0]?.type, "chi");
+});
+
+test("sanma region detection cannot certify completeness or update cached state", () => {
+  const river = publicRegion([{tile: "1p", x: 0, width: 60, height: 30}]);
+  const empty = publicRegion([]);
+  const obs = toPublicTileObservation({ownDiscards: river, oppositeDiscards: river, leftDiscards: river,
+    ownMelds: empty, oppositeMelds: empty, leftMelds: empty}, "east", "sanma");
+  assert.equal(obs.ownDiscardsObserved, false);
+  assert.equal(obs.ownMeldsObserved, false);
+  assert.equal(obs.ownRiichiDeclared, undefined);
+  for (const opponent of obs.opponentDiscards) {
+    assert.equal(opponent.discardsObserved, false);
+    assert.equal(opponent.meldsObserved, false);
+    assert.equal(opponent.riichiDeclared, undefined);
+  }
+  assert.throws(() => opponentStatesFromObservation(obs), /incomplete/);
+  assert.throws(() => cachedPublicStatePatch({ ...obs, capturedAt: "", recognizedAt: "", recognitionLatencyMs: 0, configuredRegions: [] }, []), /incomplete/);
+  assert.doesNotThrow(() => opponentStatesFromObservation(toPublicTileObservation({}, "east", "yonma")));
+});
+
+
+test("sanma candidate pipeline excludes right regions on recorded three-seat frames", {
+  skip: !existsSync(".runtime/hybrid-vision/cvmaj-pretrained.tar") || !existsSync(".runtime/hybrid-vision/automajsoul-best-model.pt")
+    || !existsSync("artifacts/sanma-manual-e48c562-20261031/actions/2026-10-30T16-05-55-331Z-before.png"),
+}, async () => {
+  const layout = layoutSchema.parse(JSON.parse(await readFile("config/layout-300-regression.json", "utf8")));
+  const original = JSON.stringify(layout);
+  assert.ok(layout.publicTileRegions?.rightDiscards);
+  assert.ok(layout.publicTileRegions?.rightMelds);
+  const model = new HybridTileRecognizer();
+  try {
+    for (const [name, seat, expected] of [
+      ["2026-10-30T16-05-55-331Z-before.png", "west", ["east", "south"]],
+      ["2026-10-30T16-30-00-848Z-before.png", "south", ["west", "east"]],
+      ["2026-10-30T17-20-14-718Z-after.png", "east", ["south", "west"]],
+    ] as const) {
+      const {recognition, observation} = await recognizeSanmaPublicCandidates(
+        `artifacts/sanma-manual-e48c562-20261031/actions/${name}`, layout, seat, model);
+      assert.equal(Object.hasOwn(recognition, "rightDiscards"), false);
+      assert.equal(Object.hasOwn(recognition, "rightMelds"), false);
+      assert.deepEqual(observation.opponentDiscards.map(o => o.seat), expected);
+      assert.equal(observation.ownDiscardsObserved, false);
+      assert.equal(observation.ownMeldsObserved, false);
+      assert.ok(observation.opponentDiscards.every(o => o.discardsObserved === false && o.meldsObserved === false));
+      assert.throws(() => opponentStatesFromObservation(observation), /incomplete/);
+    }
+    assert.equal(JSON.stringify(layout), original);
+  } finally { await model.close(); }
 });

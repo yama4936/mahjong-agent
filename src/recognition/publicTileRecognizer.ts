@@ -1,6 +1,6 @@
 import sharp from "sharp";
 import type { PublicGameState } from "../game/state.js";
-import { normalizeTile, suitRank, tileIndex, type GameTile } from "../game/tiles.js";
+import { assertTilesAvailable, normalizeTile, suitRank, tileIndex, type GameRules, type GameTile } from "../game/tiles.js";
 import type { PublicTileRegion, PublicTileRegionName, ScreenLayout } from "./layout.js";
 import { classifyTile, loadTemplates } from "./templateMatcher.js";
 import { detectConfiguredPublicRegions, type RegionCandidate, type RegionDetectionOptions } from "./regionDetector.js";
@@ -42,6 +42,8 @@ export interface PublicTileRecognitionOptions extends RegionDetectionOptions {
 }
 
 export interface PublicTileObservation {
+  /** Sanma region completeness is not calibrated; never promote into live state. */
+  rules?: "sanma";
   doraIndicators: GameTile[];
   ownDiscards: GameTile[];
   ownDiscardsObserved?: boolean;
@@ -164,7 +166,20 @@ export function recognizeExposedMelds(region?: PublicTileRecognitionRegion): Rec
 export function toPublicTileObservation(
   recognition: Partial<Record<PublicTileRegionName, PublicTileRecognitionRegion>>,
   ownSeat: "east" | "south" | "west" | "north" = "east",
+  rules: GameRules = "yonma",
 ): PublicTileObservation {
+  if (rules !== "yonma" && rules !== "sanma") throw new Error("Unknown rules");
+  if (rules === "sanma") {
+    if (!["east", "south", "west"].includes(ownSeat)) throw new Error("Invalid sanma seat");
+    if (Object.hasOwn(recognition, "rightDiscards") || Object.hasOwn(recognition, "rightMelds")) {
+      throw new Error("Sanma has no right opponent region");
+    }
+    // A confident impossible tile is evidence of a bad crop or classification,
+    // not evidence that the physical tile exists in a three-player game.
+    for (const region of Object.values(recognition)) {
+      if (region?.classificationSafe) assertTilesAvailable(region.recognized.filter(tile => tile.safe).map(tile => tile.tile), "sanma");
+    }
+  }
   const safeTiles = (name: PublicTileRegionName) => {
     const region = recognition[name];
     if (!region?.classificationSafe) return [];
@@ -176,32 +191,35 @@ export function toPublicTileObservation(
   const ownIndex = seats.indexOf(ownSeat);
   const riverObserved = (name: PublicTileRegionName) => {
     const region = recognition[name];
-    return Boolean(region?.classificationSafe && region.candidateCount === region.recognized.length
+    return Boolean(rules !== "sanma" && region?.classificationSafe && region.candidateCount === region.recognized.length
       && region.recognized.every(tile => tile.safe));
   };
   const meldEvidence = (name: PublicTileRegionName) => {
     const region = recognition[name];
     const melds = recognizeExposedMelds(region);
-    return { melds, meldsObserved: Boolean(region && (
-      region.candidateCount === 0
+    return { melds, meldsObserved: Boolean(rules !== "sanma" && region && (
+      (region.candidateCount === 0 && (rules === "yonma" || (region.classificationSafe && region.recognized.length === 0)))
       || (region.classificationSafe
         && region.candidateCount === region.recognized.length
         && melds.reduce((count, meld) => count + meld.tiles.length, 0) === region.recognized.length)
     )) };
   };
   const opponentDiscards = [
-    { seat: seats[(ownIndex + 1) % 4]!, discards: safeTiles("rightDiscards"), discardsObserved: riverObserved("rightDiscards"), riichiDeclared: hasSidewaysRiichiTile(recognition.rightDiscards), ...meldEvidence("rightMelds") },
-    { seat: seats[(ownIndex + 2) % 4]!, discards: safeTiles("oppositeDiscards"), discardsObserved: riverObserved("oppositeDiscards"), riichiDeclared: hasSidewaysRiichiTile(recognition.oppositeDiscards), ...meldEvidence("oppositeMelds") },
-    { seat: seats[(ownIndex + 3) % 4]!, discards: safeTiles("leftDiscards"), discardsObserved: riverObserved("leftDiscards"), riichiDeclared: hasSidewaysRiichiTile(recognition.leftDiscards), ...meldEvidence("leftMelds") },
+    ...(rules === "yonma" ? [{ seat: seats[(ownIndex + 1) % 4]!, discards: safeTiles("rightDiscards"), discardsObserved: riverObserved("rightDiscards"), riichiDeclared: hasSidewaysRiichiTile(recognition.rightDiscards), ...meldEvidence("rightMelds") }] : []),
+    { seat: rules === "sanma" ? (["east", "south", "west"] as const)[(ownIndex + 1) % 3]! : seats[(ownIndex + 2) % 4]!, discards: safeTiles("oppositeDiscards"), discardsObserved: riverObserved("oppositeDiscards"), ...(rules === "sanma" ? {} : { riichiDeclared: hasSidewaysRiichiTile(recognition.oppositeDiscards) }), ...meldEvidence("oppositeMelds") },
+    { seat: rules === "sanma" ? (["east", "south", "west"] as const)[(ownIndex + 2) % 3]! : seats[(ownIndex + 3) % 4]!, discards: safeTiles("leftDiscards"), discardsObserved: riverObserved("leftDiscards"), ...(rules === "sanma" ? {} : { riichiDeclared: hasSidewaysRiichiTile(recognition.leftDiscards) }), ...meldEvidence("leftMelds") },
   ];
   const ownMelds = recognizeExposedMelds(recognition.ownMelds);
   // Do not publish individually plausible crops as known tiles unless every
   // crop belongs to a complete legal meld.  In particular, text/buttons in a
   // miscalibrated region must not become a phantom honor kan in the cache.
+  if (rules === "sanma" && [...ownMelds, ...opponentDiscards.flatMap(opponent => opponent.melds)].some(meld => meld.type === "chi")) {
+    throw new Error("Chi is unavailable in sanma");
+  }
   const ownMeldTiles = ownMelds.flatMap((meld) => meld.tiles);
   const ownMeldRegion = recognition.ownMelds;
-  const ownMeldsObserved = Boolean(ownMeldRegion && (
-    ownMeldRegion.candidateCount === 0
+  const ownMeldsObserved = Boolean(rules !== "sanma" && ownMeldRegion && (
+    (ownMeldRegion.candidateCount === 0 && (rules === "yonma" || (ownMeldRegion.classificationSafe && ownMeldRegion.recognized.length === 0)))
     || (ownMeldRegion.classificationSafe
       && ownMeldRegion.candidateCount === ownMeldRegion.recognized.length
       && ownMeldTiles.length === ownMeldRegion.recognized.length)
@@ -209,10 +227,12 @@ export function toPublicTileObservation(
   const opponentMeldTiles = opponentDiscards.flatMap((opponent) => opponent.melds.flatMap((meld) => meld.tiles));
   const otherVisibleTiles = [...opponentDiscards.flatMap((opponent) => opponent.discards), ...ownMeldTiles, ...opponentMeldTiles];
   return {
+    ...(rules === "sanma" ? { rules: "sanma" as const } : {}),
     doraIndicators,
     ownDiscards,
     ownDiscardsObserved: riverObserved("ownDiscards"),
-    ownRiichiDeclared: hasSidewaysRiichiTile(recognition.ownDiscards),
+    ...(rules === "sanma" ? {}
+      : { ownRiichiDeclared: hasSidewaysRiichiTile(recognition.ownDiscards) }),
     ownMelds,
     ownMeldsObserved,
     opponentDiscards,
@@ -230,6 +250,7 @@ export function opponentStatesFromObservation(
   observation: PublicTileObservation,
   prior: PublicGameState["opponents"] = [],
 ): PublicGameState["opponents"] {
+  if (observation.rules === "sanma") throw new Error("Sanma public observation is incomplete and cannot update state");
   return observation.opponentDiscards.map((opponent) => {
     const previous = prior.find((item) => item.seat === opponent.seat);
     const observedCount = opponent.melds?.length ?? 0;
@@ -247,6 +268,26 @@ export function opponentStatesFromObservation(
         : observedCount >= (previous?.melds?.length ?? 0) ? opponent.melds : previous?.melds,
     };
   });
+}
+
+/**
+ * Read-only candidate pipeline. The supplied layout is not certified for
+ * sanma: it may miss tiles or include unrelated objects. In particular, no
+ * observation from this pipeline may update the automatic player's state.
+ * Existing layouts commonly contain right-seat regions, which must not be
+ * run on a table with only two opponents.
+ */
+export async function recognizeSanmaPublicCandidates(
+  screenshot: string | Buffer, layout: ScreenLayout, ownSeat: "east" | "south" | "west",
+  classifier: PublicVitClassifier, options: PublicTileRecognitionOptions = {},
+): Promise<{ recognition: Partial<Record<PublicTileRegionName, PublicTileRecognitionRegion>>; observation: PublicTileObservation }> {
+  if (!["east", "south", "west"].includes(ownSeat)) throw new Error("Invalid sanma seat");
+  const regions = { ...layout.publicTileRegions };
+  delete regions.rightDiscards;
+  delete regions.rightMelds;
+  const recognition = await recognizeConfiguredPublicTilesWithVit(screenshot, { ...layout, publicTileRegions: regions }, classifier, options);
+  const observation = toPublicTileObservation(recognition, ownSeat, "sanma");
+  return { recognition, observation };
 }
 
 function hasPrefix<T>(current: readonly T[], previous: readonly T[]): boolean {
