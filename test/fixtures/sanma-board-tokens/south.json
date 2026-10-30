@@ -1,0 +1,74 @@
+[
+  {
+    "text": "東",
+    "confidence": 0.99891,
+    "x": 835.3333320617676,
+    "y": 334.8333339691162
+  },
+  {
+    "text": "32000",
+    "confidence": 0.99997,
+    "x": 875.4166641235352,
+    "y": 422.08333587646484
+  },
+  {
+    "text": "東2局",
+    "confidence": 0.99974,
+    "x": 960.1666717529297,
+    "y": 404.5
+  },
+  {
+    "text": "余40",
+    "confidence": 0.9985,
+    "x": 958.6666717529297,
+    "y": 442.6666717529297
+  },
+  {
+    "text": "42000",
+    "confidence": 0.99999,
+    "x": 958.6666717529297,
+    "y": 481.5
+  },
+  {
+    "text": "南",
+    "confidence": 1.0,
+    "x": 824.0,
+    "y": 514.1666717529297
+  },
+  {
+    "text": "1",
+    "confidence": 0.65543,
+    "x": 1047,
+    "y": 419,
+    "source": "upright_right_score_crop",
+    "cropWidth": 412
+  },
+  {
+    "text": "1",
+    "confidence": 0.69689,
+    "x": 1047,
+    "y": 419,
+    "source": "upright_right_score_crop",
+    "cropWidth": 328
+  },
+  {
+    "text": "31000",
+    "confidence": 0.99998,
+    "x": 958,
+    "y": 364,
+    "source": "upright_opposite_score_crop",
+    "cropWidth": 412
+  },
+  {
+    "text": "0",
+    "confidence": 0.99941,
+    "x": 132,
+    "y": 155
+  },
+  {
+    "text": "0",
+    "confidence": 0.99968,
+    "x": 268,
+    "y": 155
+  }
+]

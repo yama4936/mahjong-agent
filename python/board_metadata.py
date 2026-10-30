@@ -350,6 +350,59 @@ def validate_sanma_board_consistency(snapshot: dict, *, expected_total_points: i
     return {"consistent": True, "scope": "sanma_supplied_values_only"}
 
 
+def parse_sanma_board_tokens(tokens: list[dict], *, expected_total_points: int | None,
+                             payment_phase: str | None) -> dict:
+    """Offline candidate parsing only; never certifies OCR or game mode.
+
+    Token coordinates use the three native 1920x1080 frames documented in the
+    validation. Caller supplies separately verified settings and payment phase.
+    The function is not connected to screenshot acquisition or live control.
+    """
+    result = {"verified": False, "scope": "sanma_offline_ocr_candidate"}
+    if not isinstance(tokens, list) or any(not isinstance(t, dict) for t in tokens):
+        return {**result, "reason": "invalid_tokens"}
+
+    def at(x, y, pattern, minimum=0.98):
+        matches = []
+        for item in tokens:
+            text, confidence, px, py = (item.get(k) for k in ("text", "confidence", "x", "y"))
+            if (isinstance(text, str) and type(confidence) in (int, float)
+                    and type(px) in (int, float) and type(py) in (int, float)
+                    and minimum <= confidence <= 1 and abs(px - x) <= 24 and abs(py - y) <= 20
+                    and re.fullmatch(pattern, text)):
+                matches.append(text)
+        return matches[0] if len(matches) == 1 else None
+
+    wind = at(824, 514, "[東南西]")
+    round_text = at(960, 405, "[東南西北][1-3]局")
+    sticks = at(132, 155, r"\d{1,2}")
+    honba = at(268, 155, r"\d{1,2}")
+    positions = (("own", 960, 482), ("left", 876, 423), ("opposite", 958, 364))
+    numbers = {}
+    for position, x, y in positions:
+        number = at(x, y, r"-?\d{3,6}")
+        if number is None:
+            number = at(x, y, r"0", 0.95)
+        numbers[position] = number
+    if not wind or not round_text or sticks is None or honba is None or any(v is None for v in numbers.values()):
+        return {**result, "reason": "incomplete_or_ambiguous_tokens"}
+    if any(isinstance(t.get("text"), str) and re.fullmatch(r"-?\d{1,6}", t["text"])
+           and type(t.get("confidence")) in (int, float) and 0.98 <= t["confidence"] <= 1
+           and type(t.get("x")) in (int, float) and type(t.get("y")) in (int, float)
+           and abs(t["x"] - 1047) <= 24 and abs(t["y"] - 419) <= 20 for t in tokens):
+        return {**result, "reason": "unexpected_right_score"}
+    seat = WINDS[wind]
+    mapping = sanma_seats_by_screen_position(seat)
+    candidate = {"seat": seat, "round": f"{WINDS[round_text[0]]}_{round_text[1]}",
+                 "scores": {mapping[position]: int(value) for position, value in numbers.items()},
+                 "riichiSticks": int(sticks), "honba": int(honba)}
+    check = validate_sanma_board_consistency(candidate, expected_total_points=expected_total_points,
+                                              payment_phase=payment_phase)
+    if not check["consistent"]:
+        return {**result, "reason": check["reason"], "candidate": candidate}
+    return {**result, "consistent": True, "candidate": candidate}
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("screenshot", type=Path)
