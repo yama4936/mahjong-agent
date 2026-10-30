@@ -7,9 +7,20 @@ import { promisify } from "node:util";
 import { inspectSanmaFrame } from "./sanmaFrameExperiment.js";
 import type { ScreenLayout } from "./layout.js";
 import type { ExperimentalTemplates } from "./sanmaButtonExperiment.js";
+import { mapPublicOpponentPositions } from "./publicSeatMapping.js";
 import type { PublicVitClassifier } from "./publicTileRecognizer.js";
 
 const run = promisify(execFile);
+type NorthPosition = { verified: false; complete: false; frame_sha256?: string; [key: string]: unknown };
+type NorthPositions = { own: NorthPosition; opposite: NorthPosition; left: NorthPosition };
+type NorthResult = { status: "unknown"; verified: false; complete: false; reason?: string; positions?: NorthPositions };
+
+/** Maps screen positions under an unverified seat candidate; never counts extracts. */
+export function mapSanmaNorthCandidates(ownSeat: "east" | "south" | "west" | undefined, positions: NorthPositions | undefined) {
+  if (!ownSeat || !positions) return undefined;
+  return { [ownSeat]: positions.own,
+    ...mapPublicOpponentPositions(ownSeat, { opposite: positions.opposite, left: positions.left }, "sanma") };
+}
 /** Offline OCR plus image analysis from one immutable byte snapshot; never a live operation certificate. */
 export async function observeSanmaFrameAutomatically(input: {
   frame: Buffer; layout: ScreenLayout; templates: string; buttonTemplates: ExperimentalTemplates;
@@ -20,16 +31,26 @@ export async function observeSanmaFrameAutomatically(input: {
   const digest = createHash("sha256").update(frame).digest("hex");
   const directory = await mkdtemp(path.join(tmpdir(), "jantama-sanma-observe-"));
   let board: { verified: false; reason?: string; candidate?: { seat?: string } };
+  let north: NorthResult = { status: "unknown", verified: false, complete: false, reason: "north observations unavailable" };
   try {
     const file = path.join(directory, "frame.png");
     await writeFile(file, frame, { mode: 0o600, flag: "wx" });
     try {
       const result = await run(path.resolve(".runtime/python-auto-venv/bin/python"),
-        [path.resolve("python/sanma_board_image.py"), file], { timeout: 30_000, maxBuffer: 2_000_000 });
-      const data = JSON.parse(result.stdout) as typeof board;
-      if (data.verified !== false) throw new Error("board OCR did not return an unverified candidate");
+        [path.resolve("python/sanma_board_image.py"), file, "--with-north"], { timeout: 30_000, maxBuffer: 2_000_000 });
+      const data = JSON.parse(result.stdout) as { board: typeof board; north: NorthResult };
+      if (data.board?.verified !== false) throw new Error("board OCR did not return an unverified candidate");
       if (createHash("sha256").update(await readFile(file)).digest("hex") !== digest) throw new Error("OCR frame changed");
-      board = data;
+      board = data.board;
+      if (data.north?.status !== "unknown" || data.north.verified !== false || data.north.complete !== false) {
+        throw new Error("north observations lack unverified/incomplete flags");
+      }
+      for (const value of Object.values(data.north.positions ?? {})) {
+        if (value.verified !== false || value.complete !== false || (value.frame_sha256 !== undefined && value.frame_sha256 !== digest)) {
+          throw new Error("north observation frame or status mismatch");
+        }
+      }
+      north = data.north;
     } catch (error) { board = { verified: false, reason: `board observation failed: ${error instanceof Error ? error.message : String(error)}` }; }
   } finally { await rm(directory, { recursive: true, force: true }); }
   const seat = board.candidate?.seat;
@@ -41,9 +62,11 @@ export async function observeSanmaFrameAutomatically(input: {
   // The older diagnostic evaluates with an assumed empty visible-tile list.
   // Do not expose it in the automatic observation as if unknown tiles were zero.
   report.shape = {status: "unresolved", reason: "visible tile completeness unavailable"};
+  const positions = north.positions;
+  const bySeat = mapSanmaNorthCandidates(ownSeat, positions);
   const candidates = deriveSanmaActionCandidates(report, ownSeat !== undefined);
   if (!input.buttonRowReferences?.ron) candidates.missing.push("ron reference unavailable");
-  return { scope: "offline_untrusted_sanma_auto_observation" as const, digest, board, candidates,
+  return { scope: "offline_untrusted_sanma_auto_observation" as const, digest, board, north: { ...north, ...(bySeat ? { bySeat, mappingVerified: false as const } : {}) }, candidates,
     ownSeat: ownSeat ? { status: "candidate" as const, value: ownSeat, verified: false as const }
       : { status: "unknown" as const, reason: board.reason ?? "seat unavailable" },
     report, operationAuthorized: false as const };

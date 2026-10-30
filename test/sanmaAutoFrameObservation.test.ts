@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {existsSync} from "node:fs";
-import {readFile} from "node:fs/promises";
+import {readFile, readdir} from "node:fs/promises";
 import {createHash} from "node:crypto";
 import sharp from "sharp";
 import {layoutSchema} from "../src/recognition/layout.js";
@@ -29,6 +29,20 @@ test("automatic same-frame board, hand, public and UI candidates remain unverifi
     assert.equal(result.digest, createHash("sha256").update(frame).digest("hex"));
     assert.equal(result.report.digest,result.digest);
     assert.equal(result.board.verified,false);
+    assert.equal(result.north.status,"unknown");
+    assert.equal(result.north.complete,false);
+    assert.equal(result.north.mappingVerified,false);
+    assert.ok(result.north.positions);
+    assert.deepEqual(Object.keys(result.north.bySeat ?? {}).sort(),["east","south","west"]);
+    assert.equal(result.north.bySeat?.west,result.north.positions?.own);
+    assert.equal(result.north.bySeat?.east,result.north.positions?.opposite);
+    assert.equal(result.north.bySeat?.south,result.north.positions?.left);
+    for (const position of Object.values(result.north.positions ?? {})) {
+      assert.equal(position.complete,false);
+      assert.equal(position.verified,false);
+      assert.equal(position.frame_sha256,result.digest);
+      assert.equal("count" in position,false);
+    }
     assert.equal(result.board.reason,"expected_total_points_unknown");
     assert.deepEqual(result.ownSeat,{status:"candidate",value:"west",verified:false});
     assert.equal(result.report.publicTiles.status,"candidate");
@@ -63,6 +77,8 @@ test("automatic same-frame board, hand, public and UI candidates remain unverifi
     const negative = await observeSanmaFrameAutomatically({frame:blank,layout,buttonTemplates,buttonRowReferences,
       templates:"templates/bootstrap",publicClassifier:model});
     assert.equal(negative.ownSeat.status,"unknown");
+    assert.equal(negative.north.complete,false);
+    assert.equal(negative.north.bySeat,undefined);
     assert.equal(negative.candidates.status,"unresolved");
     assert.deepEqual(negative.candidates.candidates,[]);
     assert.equal(negative.report.publicTiles.status,"unresolved");
@@ -72,9 +88,20 @@ test("automatic same-frame board, hand, public and UI candidates remain unverifi
       templates:"templates/bootstrap",publicClassifier:model});
     assert.equal(fourResult.board.reason,"unexpected_right_score");
     assert.equal(fourResult.ownSeat.status,"unknown");
+    assert.equal(fourResult.north.bySeat,undefined);
     assert.equal(fourResult.candidates.status,"unresolved");
     assert.deepEqual(fourResult.candidates.candidates,[]);
     assert.equal(fourResult.report.publicTiles.status,"unresolved");
     assert.equal(fourResult.operationAuthorized,false);
+    const folder = "artifacts/sanma-manual-e48c562-20261031/continuous";
+    const name = (await readdir(folder)).find(n=>n.startsWith("frame-000216-"));
+    assert.ok(name);
+    const leftFrame = await readFile(`${folder}/${name}`);
+    const leftResult = await observeSanmaFrameAutomatically({frame:leftFrame,layout,buttonTemplates,buttonRowReferences,
+      templates:"templates/bootstrap",publicClassifier:model});
+    assert.equal(leftResult.north.complete,false);
+    assert.ok(leftResult.north.positions?.left.candidate);
+    assert.equal(leftResult.north.positions?.left.frame_sha256,leftResult.digest);
+    assert.equal(leftResult.operationAuthorized,false);
   } finally { await model.close(); }
 });

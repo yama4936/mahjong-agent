@@ -28,7 +28,26 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('screenshot', type=Path)
+    parser.add_argument('--with-north', action='store_true')
     arguments = parser.parse_args()
     # Unknown room total and payment phase are never inferred from the image.
-    print(json.dumps(recognize_sanma_board_candidate(arguments.screenshot,
-        expected_total_points=None, payment_phase=None), ensure_ascii=False))
+    board = recognize_sanma_board_candidate(arguments.screenshot, expected_total_points=None, payment_phase=None)
+    if not arguments.with_north:
+        print(json.dumps(board, ensure_ascii=False))
+    else:
+        from sanma_kita_image_experiment import detect_own_north_candidates
+        from sanma_opposite_kita_experiment import opposite_north_candidate
+        from sanma_left_kita_experiment import left_north_candidate
+        root = Path(__file__).resolve().parents[1] / 'test/fixtures'
+        try:
+            observations = {
+                'own': detect_own_north_candidates(arguments.screenshot, root / 'sanma-public-experiment/own-north-face.png'),
+                'opposite': opposite_north_candidate(arguments.screenshot, root / 'sanma-opposite-kita/north-glyph-reference.png',
+                    shadow_template_path=root / 'sanma-opposite-kita/north-glyph-shadow-reference.png'),
+                'left': left_north_candidate(arguments.screenshot, root / 'sanma-left-kita/left-north-reference.png'),
+            }
+            result = {'status': 'unknown', 'verified': False, 'complete': False, 'positions': observations}
+        except Exception as error:
+            result = {'status': 'unknown', 'verified': False, 'complete': False,
+                      'reason': f'north observation failed: {error}'}
+        print(json.dumps({'board': board, 'north': result}, ensure_ascii=False))
