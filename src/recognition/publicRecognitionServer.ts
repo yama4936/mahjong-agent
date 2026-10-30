@@ -5,8 +5,10 @@ import { layoutSchema } from "./layout.js";
 import { recognizeConfiguredPublicTilesWithVit, toPublicTileObservation } from "./publicTileRecognizer.js";
 import { recognizeHighlightedDiscard } from "./highlightedDiscard.js";
 import { handPlanInputCacheKey, JevClient, type HandPlanInput, type JevHandPlan } from "../jev/client.js";
+import { exitWhenOutputPipeBreaks } from "./outputPipe.js";
 
 const [layoutPath, ownSeatArgument = "east"] = process.argv.slice(2);
+exitWhenOutputPipeBreaks();
 if (!layoutPath) throw new Error("Usage: publicRecognitionServer <layout.json> [seat]");
 if (!(["east", "south", "west", "north"] as const).includes(ownSeatArgument as any)) {
   throw new Error(`Invalid seat: ${ownSeatArgument}`);

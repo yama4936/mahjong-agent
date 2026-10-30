@@ -10,8 +10,10 @@ import { calibratedOpenHandProposal, resolveOpenDrawGap, proposeLiveHandLayout }
 import { layoutSchema } from "./layout.js";
 import { recognizeHand, recognizeTileSlots, warmTemplateCache, type MatcherOptions } from "./templateMatcher.js";
 import { confirmWeakOpenDraw, createOpenDrawVerifier, selectedTileRecognition } from "./openDrawEvidence.js";
+import { exitWhenOutputPipeBreaks } from "./outputPipe.js";
 
 const [layoutPath, templateDirectory, statePath] = process.argv.slice(2);
+exitWhenOutputPipeBreaks();
 if (!layoutPath || !templateDirectory) {
   throw new Error("Usage: recognitionServer <layout.json> <templates>");
 }
