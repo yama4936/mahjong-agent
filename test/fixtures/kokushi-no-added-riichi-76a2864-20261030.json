@@ -1,0 +1,370 @@
+{
+  "schemaVersion": 1,
+  "scope": "Exact recorded state and decision evidence; tests do not invoke a model or scoring subprocess.",
+  "source": "artifacts/practice-5-20-76a2864-20261030/replays/decisions.jsonl",
+  "sourceLine": 51,
+  "sourceSha256": "5fb39985ab8562fb4c4d014b6fd69e547a9b5a260f277a74b165e9a6b1d3ed3f",
+  "sourceCommit": "76a2864",
+  "timestamp": "2026-10-30T01:18:20.060913+00:00",
+  "state": {
+    "round": "east_4",
+    "honba": 2,
+    "riichiSticks": 1,
+    "seat": "north",
+    "scores": {
+      "north": 22500,
+      "east": 25000,
+      "south": 29000,
+      "west": 22500
+    },
+    "hand": [
+      "1m",
+      "9m",
+      "1p",
+      "1p",
+      "3p",
+      "9p",
+      "1s",
+      "E",
+      "S",
+      "W",
+      "P",
+      "F",
+      "C"
+    ],
+    "draw": "N",
+    "doraIndicators": [
+      "5s"
+    ],
+    "ownDiscards": [
+      "5s",
+      "C",
+      "8p",
+      "3p",
+      "S"
+    ],
+    "melds": [],
+    "visibleTiles": [],
+    "openMelds": 0,
+    "turn": 5,
+    "remainingTiles": 46,
+    "phase": "self_turn",
+    "recognitionConfidence": 0,
+    "publicStateConfidence": 0,
+    "riichiDeclared": false,
+    "availableUiActions": [
+      "riichi",
+      "tsumo",
+      "kan",
+      "kyuushu"
+    ],
+    "opponents": [
+      {
+        "seat": "east",
+        "discards": [
+          "N",
+          "P",
+          "4s",
+          "3m",
+          "C",
+          "C"
+        ],
+        "riichi": false,
+        "openMelds": 0,
+        "openMeldsObserved": true,
+        "melds": []
+      },
+      {
+        "seat": "south",
+        "discards": [
+          "W",
+          "6m",
+          "N",
+          "8m",
+          "4m",
+          "8s"
+        ],
+        "riichi": false,
+        "openMelds": 0,
+        "openMeldsObserved": true,
+        "melds": []
+      },
+      {
+        "seat": "west",
+        "discards": [
+          "1m",
+          "9p",
+          "2p",
+          "E",
+          "P",
+          "6p"
+        ],
+        "riichi": false,
+        "openMelds": 0,
+        "openMeldsObserved": true,
+        "melds": []
+      }
+    ]
+  },
+  "original": {
+    "selectedAction": {
+      "id": "riichi_discard_3p",
+      "action": "riichi",
+      "tile": "3p"
+    },
+    "riichiAssessment": {
+      "actionId": "riichi_discard_3p",
+      "approved": true,
+      "remainingWinningTiles": 4,
+      "standardWaits": [
+        {
+          "tile": "9s",
+          "shapes": []
+        }
+      ],
+      "reasons": []
+    },
+    "declarationComparison": {
+      "status": "fallback",
+      "reason": "Invalid or low-confidence declaration choice",
+      "report": {
+        "library": "mahjong==2.0.0",
+        "discard": "3p",
+        "scope": "closed_hand_scoring_not_policy_ev",
+        "assumptions": {
+          "ippatsu": false,
+          "ura_dora": false,
+          "last_tile_bonus": false,
+          "honba_and_deposits_excluded": true,
+          "furiten_not_checked": true,
+          "riichi_self_deposit_return_cancels_on_own_win": true
+        },
+        "rows": [
+          {
+            "wait": "9s",
+            "riichi": false,
+            "tsumo": false,
+            "error": null,
+            "han": 13,
+            "fu": 0,
+            "yaku": [
+              "Kokushi Musou"
+            ],
+            "cost": {
+              "main": 32000,
+              "additional": 0,
+              "main_bonus": 0,
+              "additional_bonus": 0,
+              "kyoutaku_bonus": 0,
+              "total": 32000,
+              "yaku_level": "yakuman"
+            },
+            "scoreScenarios": [
+              {
+                "payer": "east",
+                "scores": {
+                  "north": 54500,
+                  "east": -7000,
+                  "south": 29000,
+                  "west": 22500
+                },
+                "rankRange": [
+                  1,
+                  1
+                ],
+                "scope": "immediate_scores_not_final_match_rank",
+                "dealer_win": false
+              },
+              {
+                "payer": "south",
+                "scores": {
+                  "north": 54500,
+                  "east": 25000,
+                  "south": -3000,
+                  "west": 22500
+                },
+                "rankRange": [
+                  1,
+                  1
+                ],
+                "scope": "immediate_scores_not_final_match_rank",
+                "dealer_win": false
+              },
+              {
+                "payer": "west",
+                "scores": {
+                  "north": 54500,
+                  "east": 25000,
+                  "south": 29000,
+                  "west": -9500
+                },
+                "rankRange": [
+                  1,
+                  1
+                ],
+                "scope": "immediate_scores_not_final_match_rank",
+                "dealer_win": false
+              }
+            ]
+          },
+          {
+            "wait": "9s",
+            "riichi": false,
+            "tsumo": true,
+            "error": null,
+            "han": 13,
+            "fu": 0,
+            "yaku": [
+              "Kokushi Musou"
+            ],
+            "cost": {
+              "main": 16000,
+              "additional": 8000,
+              "main_bonus": 0,
+              "additional_bonus": 0,
+              "kyoutaku_bonus": 0,
+              "total": 32000,
+              "yaku_level": "yakuman"
+            },
+            "scoreScenarios": [
+              {
+                "payer": null,
+                "scores": {
+                  "north": 54500,
+                  "east": 9000,
+                  "south": 21000,
+                  "west": 14500
+                },
+                "rankRange": [
+                  1,
+                  1
+                ],
+                "scope": "immediate_scores_not_final_match_rank",
+                "dealer_win": false
+              }
+            ]
+          },
+          {
+            "wait": "9s",
+            "riichi": true,
+            "tsumo": false,
+            "error": null,
+            "han": 13,
+            "fu": 0,
+            "yaku": [
+              "Kokushi Musou"
+            ],
+            "cost": {
+              "main": 32000,
+              "additional": 0,
+              "main_bonus": 0,
+              "additional_bonus": 0,
+              "kyoutaku_bonus": 0,
+              "total": 32000,
+              "yaku_level": "yakuman"
+            },
+            "scoreScenarios": [
+              {
+                "payer": "east",
+                "scores": {
+                  "north": 54500,
+                  "east": -7000,
+                  "south": 29000,
+                  "west": 22500
+                },
+                "rankRange": [
+                  1,
+                  1
+                ],
+                "scope": "immediate_scores_not_final_match_rank",
+                "dealer_win": false
+              },
+              {
+                "payer": "south",
+                "scores": {
+                  "north": 54500,
+                  "east": 25000,
+                  "south": -3000,
+                  "west": 22500
+                },
+                "rankRange": [
+                  1,
+                  1
+                ],
+                "scope": "immediate_scores_not_final_match_rank",
+                "dealer_win": false
+              },
+              {
+                "payer": "west",
+                "scores": {
+                  "north": 54500,
+                  "east": 25000,
+                  "south": 29000,
+                  "west": -9500
+                },
+                "rankRange": [
+                  1,
+                  1
+                ],
+                "scope": "immediate_scores_not_final_match_rank",
+                "dealer_win": false
+              }
+            ]
+          },
+          {
+            "wait": "9s",
+            "riichi": true,
+            "tsumo": true,
+            "error": null,
+            "han": 13,
+            "fu": 0,
+            "yaku": [
+              "Kokushi Musou"
+            ],
+            "cost": {
+              "main": 16000,
+              "additional": 8000,
+              "main_bonus": 0,
+              "additional_bonus": 0,
+              "kyoutaku_bonus": 0,
+              "total": 32000,
+              "yaku_level": "yakuman"
+            },
+            "scoreScenarios": [
+              {
+                "payer": null,
+                "scores": {
+                  "north": 54500,
+                  "east": 9000,
+                  "south": 21000,
+                  "west": 14500
+                },
+                "rankRange": [
+                  1,
+                  1
+                ],
+                "scope": "immediate_scores_not_final_match_rank",
+                "dealer_win": false
+              }
+            ]
+          }
+        ]
+      },
+      "decision": {
+        "actionId": "riichi_discard_3p",
+        "confidence": 0.14,
+        "probabilities": {
+          "discard_3p": 0.43,
+          "riichi_discard_3p": 0.57
+        },
+        "model": "jev-1.14.0",
+        "promptVersion": "mahjong-declaration-v1",
+        "latencyMs": 196,
+        "usage": {
+          "input_tokens": 2368,
+          "output_tokens": 46
+        }
+      }
+    }
+  }
+}

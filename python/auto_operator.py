@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import base64
 import copy
+import errno
 import hashlib
 import io
 import json
@@ -742,11 +743,17 @@ def confirmed_call_meld(selected_action: dict[str, Any] | None) -> dict[str, Any
 def selected_chi_choice_point(
     points: list[dict[str, float]], selected_action: dict[str, Any] | None,
     legal_actions: list[dict[str, Any]] | None,
+    *, screenshot: bytes | None = None, viewport: dict[str, int] | None = None,
 ) -> dict[str, float] | None:
     """Map Mahjong Soul's left-to-right chi variants to the legal action order."""
     if not points:
         return None
     chi_actions = [action for action in legal_actions or [] if action.get("action") == "chi"]
+    if any("consumedTileChoices" in action for action in chi_actions):
+        # Structural legal actions collapse red/normal alternatives, whereas
+        # the UI exposes both physical choices. Never use the structural index
+        # (or its first/default physical alternative) to guess that UI order.
+        return physical_sou_chi_choice_point(points, selected_action, chi_actions, screenshot, viewport)
     selected_id = selected_action.get("id") if selected_action else None
     selected_index = next(
         (index for index, action in enumerate(chi_actions) if action.get("id") == selected_id), None,
@@ -756,6 +763,88 @@ def selected_chi_choice_point(
     if len(points) != len(chi_actions) or selected_index >= len(points):
         return None
     return points[selected_index]
+
+
+def physical_sou_chi_choice_point(
+    points: list[dict[str, float]], selected: dict[str, Any] | None,
+    actions: list[dict[str, Any]], screenshot: bytes | None, viewport: dict[str, int] | None,
+) -> dict[str, float] | None:
+    """Recognize only the native, recorded red/normal 56s selector for chi 7s.
+
+    This is deliberately not a generic tile classifier. Other ambiguous calls,
+    layouts or incomplete choices remain unclickable. Both complete physical
+    pairs must match independently; order of either UI or legal alternatives
+    is immaterial. Existing non-ambiguous structural selectors are unchanged.
+    """
+    if (not screenshot or viewport != {"width": 1920, "height": 1080}
+            or len(points) != 2 or len(actions) != 1 or not isinstance(selected, dict)):
+        return None
+    action = actions[0]
+    if (action.get("tile") != "7s" or selected.get("action") != "chi"
+            or selected.get("id") != action.get("id") or selected.get("tile") != "7s"):
+        return None
+
+    def physical_pair(value: Any) -> tuple[str, ...] | None:
+        return tuple(sorted(value)) if (isinstance(value, list) and len(value) == 2
+                                       and all(isinstance(tile, str) for tile in value)) else None
+
+    expected = {("0s", "6s"), ("5s", "6s")}
+    alternatives = action.get("consumedTileChoices")
+    target = physical_pair(selected.get("consumedTiles"))
+    if (not isinstance(alternatives, list) or len(alternatives) != 2
+            or {physical_pair(pair) for pair in alternatives} != expected or target not in expected):
+        return None
+    template = load_json(Path(__file__).resolve().parents[1] / "templates/screens/chi-physical-sou-20261030.json")
+    with Image.open(io.BytesIO(screenshot)) as image:
+        if image.size != (1920, 1080):
+            return None
+        pixels = image.convert("RGB")
+    references = {}
+    for entry in template["pairs"]:
+        with Image.open(io.BytesIO(base64.b64decode(entry["pngBase64"]))) as image:
+            references[tuple(entry["tiles"])] = image.convert("RGB")
+
+    def masks(pair: Image.Image) -> list[Image.Image]:
+        result = []
+        for slot in (0, 1):
+            # Interior excludes the orange back/edge, selector border and timer.
+            face = pair.crop((slot * 80 + 7, 23, slot * 80 + 73, 113))
+            red, green, blue = face.split()
+            for channel, minimum, other1, delta1, other2, delta2 in (
+                    (red, 90, green, 35, blue, 20), (green, 55, red, 15, blue, 8)):
+                mask = ImageChops.logical_and(
+                    channel.point(lambda value: value >= minimum, "1"),
+                    ImageChops.logical_and(
+                        ImageChops.subtract(channel, other1).point(lambda value: value >= delta1, "1"),
+                        ImageChops.subtract(channel, other2).point(lambda value: value >= delta2, "1")))
+                result.append(mask.convert("L"))
+        return result
+
+    reference_masks = {key: masks(pair) for key, pair in references.items()}
+    observed = {}
+    for point in points:
+        if any(isinstance(point.get(axis), bool) or not isinstance(point.get(axis), (int, float))
+               or not isfinite(point[axis]) for axis in ("x", "y")) or point["y"] != 794.0:
+            return None
+        x = round(point["x"] - 80)
+        if not 480 <= x <= 1280:
+            return None
+        candidate_masks = masks(pixels.crop((x, 707, x + 160, 827)))
+        matches = []
+        for key, expected_masks in reference_masks.items():
+            # One-pixel chroma/edge tolerance, not a relaxed selector position.
+            # Native and JPEG55 re-encodes have <=2.16% unmatched interior;
+            # red/normal glyph swaps have >=37.39%. Require every tile/color.
+            if all(max(
+                    ImageChops.subtract(actual, reference.filter(ImageFilter.MaxFilter(3))).histogram()[255],
+                    ImageChops.subtract(reference, actual.filter(ImageFilter.MaxFilter(3))).histogram()[255],
+                    ) / (actual.width * actual.height) <= 0.025
+                    for actual, reference in zip(candidate_masks, expected_masks)):
+                matches.append(key)
+        if len(matches) != 1 or matches[0] in observed:
+            return None
+        observed[matches[0]] = point
+    return observed.get(target) if set(observed) == expected else None
 
 
 def should_retry_call_policy(error: Exception, elapsed_ms: int) -> bool:
@@ -4138,7 +4227,29 @@ class PythonAutoOperator:
         record = {"timestamp": datetime.now(timezone.utc).isoformat(), "event": event, **payload}
         with self.log_path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n")
-        print(json.dumps(record, ensure_ascii=False), flush=True)
+        # JSONL above is the mandatory evidence sink. A disconnected terminal
+        # mirror must not turn a successful durable write into a game failure.
+        # Do not catch errors from recognition RPC pipes or the JSONL itself.
+        if not getattr(self, "console_mirror_disconnected", False):
+            try:
+                print(json.dumps(record, ensure_ascii=False), flush=True)
+            except OSError as error:
+                if not isinstance(error, BrokenPipeError) and error.errno != errno.EPIPE:
+                    raise
+                self.console_mirror_disconnected = True
+                # TextIOWrapper can retain a failed flush and otherwise make
+                # CPython exit 120 at shutdown. Redirect only this console FD;
+                # resident RPC pipes, stderr and the JSONL remain untouched.
+                try:
+                    console_fd = sys.stdout.fileno()
+                except (AttributeError, io.UnsupportedOperation):
+                    console_fd = None
+                if console_fd is not None:
+                    null_fd = os.open(os.devnull, os.O_WRONLY)
+                    try:
+                        os.dup2(null_fd, console_fd)
+                    finally:
+                        os.close(null_fd)
         # Analysis must never interrupt gameplay or replace the raw evidence log.
         try:
             if not hasattr(self, "analysis_recorder"):
@@ -7085,9 +7196,18 @@ class PythonAutoOperator:
             if call_action == "chi" and not chi_choice_sent:
                 choices = force_auto_chi_choice_points(current, self.layout["viewport"])
                 if choices:
-                    choice = selected_chi_choice_point(choices, selected_action, legal_actions)
+                    choice = selected_chi_choice_point(
+                        choices, selected_action, legal_actions,
+                        screenshot=current, viewport=self.layout["viewport"],
+                    )
                     if choice is None:
                         raise RetryableSafetyAbort("chi choice variants did not match the selected legal action")
+                    # Polling and physical-choice matching consume the original
+                    # opportunity. Do not mint a new receipt/action clock here.
+                    self.require_force_auto_click_budget(
+                        evaluated_captured_at, phase="before_chi_choice_click",
+                    )
+                    self.require_action_deadline()
                     self.log("action_click_sent", action="chi_choice", clickPoint=choice,
                              choiceCount=len(choices), source="complete_two_tile_choice")
                     page.mouse.click(choice["x"], choice["y"])

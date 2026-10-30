@@ -3,8 +3,8 @@ import { deterministicAdvice, type AdvisorResult } from "../evaluation/advisor.j
 import { JevClient, type JevDecision, type JevHandPlan } from "../jev/client.js";
 import { generateLegalActions, type LegalAction } from "../game/actions.js";
 import { calculateShanten } from "../game/shanten.js";
-import { evaluateDiscards } from "../game/ukeire.js";
-import { isTerminalOrHonor, normalizeTile, tileIndex, type GameTile } from "../game/tiles.js";
+import { evaluateDiscards, type DiscardEvaluation } from "../game/ukeire.js";
+import { isTerminalOrHonor, normalizeTile, tileIndex, TILE_NAMES, toCounts, type GameTile } from "../game/tiles.js";
 import { standardWaitShapes, type WaitShape } from "../game/winningShapes.js";
 import { scoreClosedWaits, type ClosedWaitReport } from "../evaluation/closedWaitScorer.js";
 import { openTenpaiYaku, type OpenTenpaiYaku } from "../evaluation/openTenpaiYaku.js";
@@ -24,7 +24,46 @@ export interface DecisionResult extends AdvisorResult {
   callAssessments?: CallAssessment[];
   declarationComparison?: { status: "selected" | "fallback"; report?: ClosedWaitReport; decision?: JevDecision; reason?: string };
   riichiAssessment?: { actionId: string; approved: boolean; remainingWinningTiles: number; reasons: string[];
-    standardWaits: Array<{ tile: string; shapes: WaitShape[] }> };
+    standardWaits: Array<{ tile: string; shapes: WaitShape[] }>; kokushiPolicy?: KokushiRiichiPolicy };
+}
+
+interface KokushiRiichiPolicy {
+  scope: "natural_kokushi_scoring_only_not_ev_dominance";
+  policy: "keep_same_tile_dama_without_riichi_scoring_gain";
+  discardTile: string;
+  postDiscardCount: 13;
+  structuralWaits: string[];
+}
+
+/** A narrow scoring fact and explicit policy, not a theorem about win rate.
+ * Never trust a candidate's form label alone. After this exact physical
+ * discard, all thirteen concealed tiles must be orphans and every supplied
+ * live wait must complete all thirteen orphan types. Natural kokushi already
+ * scores yakuman, so riichi adds no scoring yaku; double-yakuman rule variants
+ * do not alter that fact. Keep legal choices, discard selection and defense.
+ */
+function kokushiRiichiPolicy(state: GameState, candidate: DiscardEvaluation): KokushiRiichiPolicy | undefined {
+  if (state.phase !== "self_turn" || state.riichiDeclared || state.openMelds !== 0 || state.melds.length
+    || candidate.shanten !== 0 || candidate.ukeire <= 0 || !candidate.effectiveTiles.length) return;
+  const tiles = [...state.hand, ...(state.draw ? [state.draw] : [])];
+  const index = tiles.indexOf(candidate.tile);
+  if (tiles.length !== 14 || index < 0) return;
+  tiles.splice(index, 1);
+  try {
+    const counts = toCounts(tiles);
+    if (counts.some((count, index) => count > 0 && !isTerminalOrHonor(index))) return;
+    const orphans = TILE_NAMES.filter((_, index) => isTerminalOrHonor(index));
+    const waits = orphans.filter(tile => counts[tileIndex(tile)]! < 4 && orphans.every(orphan =>
+      counts[tileIndex(orphan)]! + Number(orphan === tile) >= 1));
+    const supplied = candidate.effectiveTiles.map(wait => normalizeTile(wait.tile));
+    if (!waits.length || new Set(supplied).size !== supplied.length
+      || candidate.effectiveTiles.some(wait => !Number.isInteger(wait.remaining) || wait.remaining <= 0)
+      || candidate.effectiveTiles.reduce((sum, wait) => sum + wait.remaining, 0) !== candidate.ukeire
+      || supplied.some(wait => !waits.includes(wait))) return;
+    return { scope: "natural_kokushi_scoring_only_not_ev_dominance",
+      policy: "keep_same_tile_dama_without_riichi_scoring_gain", discardTile: candidate.tile,
+      postDiscardCount: 13, structuralWaits: waits };
+  } catch { return; }
 }
 
 export interface StrategyHandPlan {
@@ -266,6 +305,7 @@ async function decideWithAnalysis(
   }
 
   let selectedAction: LegalAction = legalActions.find((action) => action.id === selected.actionId)!;
+  let selectedKokushiPolicy: KokushiRiichiPolicy | undefined;
   const winAction = legalActions.find((action) => action.action === "tsumo");
   if (winAction) {
     selectedAction = winAction;
@@ -276,7 +316,10 @@ async function decideWithAnalysis(
     removeSafetyReason(safetyReasons, "jev_confidence_below_threshold");
   } else {
     const riichi = legalActions.find((action) => action.action === "riichi" && action.tile === selected.tile);
-    if (riichi && selected.ukeire > 0 && (state.remainingTiles === undefined || state.remainingTiles >= 4)) selectedAction = riichi;
+    if (riichi && selected.ukeire > 0 && (state.remainingTiles === undefined || state.remainingTiles >= 4)) {
+      selectedKokushiPolicy = kokushiRiichiPolicy(state, selected);
+      if (!selectedKokushiPolicy) selectedAction = riichi;
+    }
   }
 
   const concealedAfterDiscard = [...state.hand, ...(state.draw ? [state.draw] : [])];
@@ -329,10 +372,12 @@ async function decideWithAnalysis(
           tile: wait.tile, shapes: standardWaitShapes(concealedAfterDiscard, wait.tile, state.openMelds),
         })),
         reasons: [
+          ...(selectedKokushiPolicy ? ["kokushi_no_riichi_scoring_gain"] : []),
           ...(declarationComparison?.status === "selected" && selectedAction.action === "discard" ? ["declaration_comparison_selected_dama"] : []),
           ...(selected.ukeire === 0 ? ["no_remaining_winning_tiles"] : []),
           ...(state.remainingTiles !== undefined && state.remainingTiles < 4 ? ["insufficient_wall_for_riichi"] : []),
         ],
+        ...(selectedKokushiPolicy ? { kokushiPolicy: selectedKokushiPolicy } : {}),
       },
     } : {}),
     ...(jev ? { jev } : {}),
