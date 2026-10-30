@@ -7,6 +7,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 // @ts-ignore Local launcher modules are JavaScript.
 import { explicitOperatorArtifacts, spawnOperatorWithStderr } from "../scripts/operator-stderr.mjs";
+// @ts-ignore Local launcher modules are JavaScript.
+import { operatorLifecycleDirectory, recordOperatorLifecycle } from "../scripts/operator-lifecycle.mjs";
 
 test("only explicit artifacts flags select the canonical stderr sink, with argparse last-option precedence", () => {
   assert.equal(explicitOperatorArtifacts("/work", []), undefined);
@@ -15,6 +17,20 @@ test("only explicit artifacts flags select the canonical stderr sink, with argpa
   assert.equal(explicitOperatorArtifacts("/work", ["--artifacts", "one", "--artifacts=two"]), "/work/two");
   assert.equal(explicitOperatorArtifacts("/work", ["--artifacts"]), undefined);
   assert.equal(explicitOperatorArtifacts("/work", ["--artifacts", "--ranked-loop"]), undefined);
+});
+
+test("lifecycle records use the explicit artifact directory and preserve append-only signal evidence", (context) => {
+  const root = fs.mkdtempSync(path.join(tmpdir(), "operator-lifecycle-root-"));
+  context.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const directory = operatorLifecycleDirectory(root, path.join(root, "evidence"));
+  assert.equal(directory, path.join(root, "evidence"));
+  recordOperatorLifecycle(directory, "launcher_started", { launcherPid: 1, operatorPid: 2 });
+  recordOperatorLifecycle(directory, "launcher_signal_received", { launcherPid: 1, signal: "SIGHUP" });
+  const records = fs.readFileSync(path.join(directory, "operator-lifecycle.jsonl"), "utf8")
+    .trim().split("\n").map((line: string) => JSON.parse(line));
+  assert.deepEqual(records.map((record: any) => record.event), ["launcher_started", "launcher_signal_received"]);
+  assert.equal(records[1].signal, "SIGHUP");
+  assert.equal(operatorLifecycleDirectory(root, undefined), path.join(root, "artifacts/python-auto"));
 });
 
 test("default inheritance, environment and child exit remain unchanged", () => {
