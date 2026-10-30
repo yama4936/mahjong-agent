@@ -61,12 +61,43 @@ class SelectionStateUncertainAbort(RetryableSafetyAbort):
 
 
 @dataclass(frozen=True)
+class _SelectionStreamReceipt:
+    """Pixels and their actual local CDP receipt metadata, published together."""
+    frame: bytes
+    captured_at: float
+    sequence: int
+
+
+@dataclass(frozen=True)
 class _RiichiSelectionBudget:
     """Execute-local proof; never retained on the operator or another turn."""
     action_started_at: float
     budget_started_at: float
     captured_at: float
     own_river: bytes
+    deadline_ms: int | None = None
+    click_budget_ms: int | None = None
+
+
+@dataclass(frozen=True)
+class _RiichiConfirmationBudget:
+    """Second-click-only proof over the exact frame that proved the raised face."""
+    selection: _RiichiSelectionBudget
+    receipt: _SelectionStreamReceipt
+    first_click_at: float
+    sequence_before: int
+
+    @property
+    def action_started_at(self) -> float:
+        return self.selection.action_started_at
+
+    @property
+    def budget_started_at(self) -> float:
+        return self.selection.budget_started_at
+
+    @property
+    def captured_at(self) -> float:
+        return self.receipt.captured_at
 
 
 def utc_stamp() -> str:
@@ -477,6 +508,117 @@ def is_contextual_reaction_pass(
     return dark >= 0.25 and neutral >= 0.02
 
 
+def supported_call_palette_mask(mask: Image.Image) -> Image.Image:
+    """Drop only 8-connected palette components smaller than five pixels.
+
+    The existing column gate requires five palette pixels, but its min/max
+    used to include a disconnected single JPEG pixel above those five. That
+    one pixel could shift the click center by 27px. Count support in 2D before
+    taking column bounds. Thin labels and detached body/label components of
+    five or more pixels remain intact; neither colors nor geometry widen.
+    Row runs avoid a Python visit to every pixel on this latency-critical path.
+    """
+    raw = mask.tobytes()
+    width, height = mask.size
+    parents = []
+    areas = []
+    runs = []
+    previous = []
+
+    def root(index):
+        while parents[index] != index:
+            parents[index] = parents[parents[index]]
+            index = parents[index]
+        return index
+
+    for y in range(height):
+        row_end = (y + 1) * width
+        cursor = y * width
+        current = []
+        previous_index = 0
+        while True:
+            start = raw.find(b"\xff", cursor, row_end)
+            if start < 0:
+                break
+            end = raw.find(b"\0", start, row_end)
+            if end < 0:
+                end = row_end
+            left, right = start - y * width, end - y * width
+            index = len(parents)
+            parents.append(index)
+            areas.append(right - left)
+            runs.append((left, right, y, index))
+            current.append((left, right, index))
+            # Exclusive right bounds allow diagonal 8-connected neighbours.
+            while previous_index < len(previous) and previous[previous_index][1] < left:
+                previous_index += 1
+            other = previous_index
+            while other < len(previous) and previous[other][0] <= right:
+                a, b = root(index), root(previous[other][2])
+                if a != b:
+                    parents[b] = a
+                    areas[a] += areas[b]
+                other += 1
+            cursor = end
+        previous = current
+    cleaned = None
+    for left, right, y, index in runs:
+        if areas[root(index)] < 5:
+            if cleaned is None:
+                cleaned = mask.copy()
+            cleaned.paste(0, (left, y, right, y + 1))
+    return mask if cleaned is None else cleaned
+
+
+def calibrated_skip_body_comparison(
+    before: bytes, confirmed: bytes, layout: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Exclude the adjacent timer only for the reviewed fixed native skip UI.
+
+    Both complete labels must match the native reference. Unknown geometry,
+    skins, partial clips or moved/changed labels retain the old full-ROI
+    comparison. The retained rectangle contains the entire reviewed label;
+    this does not change the stability threshold or the pass click point.
+    """
+    region = layout.get("actionButtonRegions", {}).get("pass", {})
+    viewport = layout.get("viewport", {})
+    if ((viewport.get("width"), viewport.get("height")) != (1920, 1080)
+            or tuple(region.get(key) for key in ("x", "y", "width", "height")) != (1170, 775, 275, 105)):
+        return None
+    try:
+        data = load_json(Path(__file__).resolve().parents[1] / "templates/screens/reaction-skip-body.json")
+        if (data.get("schemaVersion") != 1 or data.get("signatureSize") != [64, 24]
+                or data.get("labelLocalBox") != [25, 15, 245, 85]
+                or data.get("comparisonLocalBox") != [0, 0, 248, 105]
+                or data.get("minimumSimilarity") != .98):
+            return None
+        reference_png = base64.b64decode(data["pngBase64"], validate=True)
+        if hashlib.sha256(reference_png).hexdigest() != data["sha256"]:
+            return None
+        with Image.open(io.BytesIO(reference_png)) as reference:
+            if reference.size != (64, 24):
+                return None
+            reference = reference.convert("RGB")
+        similarities = []
+        bodies = []
+        for raw in (before, confirmed):
+            with Image.open(io.BytesIO(raw)) as image:
+                if image.size != (275, 105):
+                    return None
+                rgb = image.convert("RGB")
+            signature = rgb.crop((25, 15, 245, 85)).resize((64, 24), Image.Resampling.BILINEAR)
+            similarity = 1 - sum(ImageStat.Stat(ImageChops.difference(reference, signature)).mean) / 3 / 255
+            if similarity < .98:
+                return None
+            similarities.append(similarity)
+            bodies.append(rgb.crop((0, 0, 248, 105)))
+        return {"buttonPixelDelta": sum(ImageStat.Stat(ImageChops.difference(*bodies)).mean) / 3,
+                "comparisonLocalBox": [0, 0, 248, 105], "labelSimilarities": similarities}
+    except (OSError, ValueError, KeyError, TypeError):
+        # A missing/corrupt reference may never grant a timer exemption.
+        return None
+
+
 def force_auto_call_buttons(screenshot: bytes, viewport: dict[str, int]) -> list[dict[str, Any]]:
     """Locate green/cyan chi/pon/kan buttons without confusing the hand row."""
     left = round(viewport["width"] * 0.30)
@@ -507,12 +649,19 @@ def force_auto_call_buttons(screenshot: bytes, viewport: dict[str, int]) -> list
         }
         groups: list[tuple[str, list[tuple[int, int, int]]]] = []
         for palette, mask in masks.items():
+            supported = supported_call_palette_mask(mask)
             active_columns: list[tuple[int, int, int]] = []
             for x in range(mask.width):
                 column = mask.crop((x, 0, x + 1, mask.height))
                 if column.histogram()[255] >= 5:
-                    bounds = column.getbbox()
-                    active_columns.append((left + x, top + bounds[1], top + bounds[3] - 1))
+                    # Keep the original five-pixel column admission/grouping.
+                    # A real thin label can have <5 supported pixels in this
+                    # column but >5 in its connected component. Only remove
+                    # unsupported pixels from its bounds, not that column.
+                    bounds = (column if supported is mask else supported.crop(
+                        (x, 0, x + 1, supported.height))).getbbox()
+                    if bounds is not None:
+                        active_columns.append((left + x, top + bounds[1], top + bounds[3] - 1))
             palette_groups: list[list[tuple[int, int, int]]] = []
             for column in active_columns:
                 if not palette_groups or column[0] - palette_groups[-1][-1][0] > 10:
@@ -2161,6 +2310,7 @@ class PythonAutoOperator:
         # this separately from the evidence clock so a stale decision cannot
         # be clicked just because the table has not changed yet.
         self.latest_screencast_captured_at: float | None = None
+        self.latest_selection_stream_receipt: _SelectionStreamReceipt | None = None
         self.screencast_sequence = 0
         # Sequence of the last frame that could still precede this
         # operator's explicit pointer retreat.  A later frame is required
@@ -2441,7 +2591,7 @@ class PythonAutoOperator:
     def require_force_auto_click_budget(
         self, captured_at: float | None, *, phase: str,
         include_action_evidence: bool = True,
-        riichi_selection: _RiichiSelectionBudget | None = None,
+        riichi_selection: _RiichiSelectionBudget | _RiichiConfirmationBudget | None = None,
     ) -> None:
         """Fail closed when a force-auto decision is based on an old frame.
 
@@ -2579,7 +2729,8 @@ class PythonAutoOperator:
             reject("river_changed")
 
     def riichi_selection_grace_ms(
-        self, certificate: _RiichiSelectionBudget | None, captured_at: float | None, phase: str,
+        self, certificate: _RiichiSelectionBudget | _RiichiConfirmationBudget | None,
+        captured_at: float | None, phase: str,
     ) -> int:
         if certificate is None:
             return 0
@@ -2589,6 +2740,21 @@ class PythonAutoOperator:
         if current_budget_start is None:
             current_budget_start = current_start
         now = time.monotonic()
+        selection = certificate.selection if isinstance(certificate, _RiichiConfirmationBudget) else certificate
+        if isinstance(certificate, _RiichiConfirmationBudget):
+            stamps = (selection.action_started_at, selection.budget_started_at,
+                      selection.captured_at, certificate.first_click_at, certificate.captured_at)
+            sequences = (certificate.sequence_before, certificate.receipt.sequence)
+            if (phase != "before_discard_confirmation_click"
+                    or any(isinstance(stamp, bool) or not isinstance(stamp, (int, float))
+                           or not isfinite(stamp) for stamp in stamps)
+                    or not 0 <= selection.action_started_at <= selection.budget_started_at
+                    <= selection.captured_at <= certificate.first_click_at <= certificate.captured_at <= now
+                    or any(isinstance(seq, bool) or not isinstance(seq, int) or seq < 0 for seq in sequences)
+                    or not certificate.sequence_before < certificate.receipt.sequence
+                    or any(isinstance(value, bool) or not isinstance(value, int) or value <= 0
+                           for value in (selection.deadline_ms, selection.click_budget_ms))):
+                raise RetryableSafetyAbort("riichi confirmation receipt is not a valid second-click proof")
         if (budget is None or budget > FORCE_AUTO_SHORT_CLICK_BUDGET_MAX_MS
                 or phase not in {"before_discard_click", "before_discard_confirmation_click"}
                 or getattr(self, "action_evidence_kind", None) != "discard"
@@ -2596,10 +2762,55 @@ class PythonAutoOperator:
                 or current_budget_start != certificate.budget_started_at
                 or captured_at != certificate.captured_at
                 or not isfinite(certificate.captured_at) or certificate.captured_at > now
+                or (selection.deadline_ms is not None and selection.deadline_ms != self.configured_action_deadline_ms())
+                or (selection.click_budget_ms is not None and selection.click_budget_ms != budget)
                 or getattr(self, "selection_uncertainty_latch", None)
                 or getattr(self, "pending_post_call_discard", False)):
             raise RetryableSafetyAbort("confirmed riichi selection budget certificate is no longer valid")
         return max(0, FORCE_AUTO_SAME_DRAW_ACTION_BUDGET_MS - budget)
+
+    def certify_riichi_confirmation_budget(
+        self, selection: _RiichiSelectionBudget, receipt: _SelectionStreamReceipt,
+        *, raised_frame: bytes, first_click_at: float, sequence_before: int,
+    ) -> _RiichiConfirmationBudget:
+        """Refresh only second-click image freshness, never either original clock.
+
+        The caller has just proved the unique physical raised face from these
+        exact returned bytes. A later latest-frame timestamp cannot certify
+        those pixels. All image validation and evidence writes below are still
+        charged from this receipt's immutable arrival time.
+        """
+        if (not isinstance(receipt, _SelectionStreamReceipt) or receipt.frame is not raised_frame
+                or not isinstance(raised_frame, bytes)):
+            raise RetryableSafetyAbort("riichi raised pixels lack their coupled stream metadata")
+        certificate = _RiichiConfirmationBudget(selection, receipt, first_click_at, sequence_before)
+        self.riichi_selection_grace_ms(certificate, receipt.captured_at, "before_discard_confirmation_click")
+        self.require_riichi_confirmation_receipt(selection, raised_frame)
+        path = None
+        if hasattr(self, "frames"):
+            path = self.frames / f"{utc_stamp()}.riichi-confirmation-receipt.png"
+            path.write_bytes(raised_frame)
+            path.chmod(0o600)
+        self.log("riichi_confirmation_receipt_certified",
+                 originalActionStartedAt=selection.action_started_at,
+                 originalBudgetStartedAt=selection.budget_started_at,
+                 settledCaptureStartedAt=selection.captured_at,
+                 firstClickAt=first_click_at, receiptCapturedAt=receipt.captured_at,
+                 beforeSequence=sequence_before, receiptSequence=receipt.sequence,
+                 screenshot=str(path) if path else None,
+                 sha256=hashlib.sha256(raised_frame).hexdigest(),
+                 scope="second_click_only_original_turn_and_deadline_unchanged")
+        self.require_force_auto_click_budget(receipt.captured_at,
+            phase="before_discard_confirmation_click", riichi_selection=certificate)
+        remaining = min(
+            self.force_auto_click_budget_ms() - self.force_auto_capture_age_ms(receipt.captured_at),
+            FORCE_AUTO_SAME_DRAW_ACTION_BUDGET_MS - self.force_auto_action_evidence_age_ms(),
+            self.action_deadline_remaining_ms(),
+        )
+        if remaining < FORCE_AUTO_DISCARD_SELECTION_RESERVE_MS:
+            raise RetryableSafetyAbort("riichi confirmation receipt lacks original deadline and click reserve")
+        self.require_action_deadline()
+        return certificate
 
     def require_force_auto_discard_selection_window(
         self, captured_at: float | None, *, riichi_selection: _RiichiSelectionBudget | None = None,
@@ -2987,6 +3198,24 @@ class PythonAutoOperator:
         if prior is not None and pending_discard:
             prior_own = receipt_prior.get("ownDiscards", [])
             merged_own = merged.get("ownDiscards", [])
+            candidate = getattr(self, "pending_own_river_confirmation", None)
+            if candidate is not None and merged_own == prior_own:
+                # Preserve the worker's actual input before history retention
+                # hides a missing/partial river. This is diagnostic only: no
+                # raw tile becomes trusted and no pending receipt is retired.
+                signature = (pending_discard.get("clickedAt"), pending_discard.get("tile"),
+                             tuple(current.get("ownDiscards", [])),
+                             current.get("ownDiscardsObserved"), tuple(prior_own), tuple(candidate))
+                if signature != getattr(self, "last_reconciliation_public_diagnostic", None):
+                    self.last_reconciliation_public_diagnostic = signature
+                    self.log("own_discard_reconciliation_public_observation",
+                             expected=pending_discard.get("tile"),
+                             capturedAt=current.get("capturedAt"),
+                             rawOwnDiscards=current.get("ownDiscards"),
+                             rawOwnDiscardsObserved=current.get("ownDiscardsObserved"),
+                             retainedOwnDiscards=list(prior_own), confirmationCandidate=list(candidate),
+                             acceptedTiles=current.get("acceptedTiles"),
+                             detectedCandidates=current.get("detectedCandidates"))
             if merged_own != prior_own:
                 pending_discard.pop("riverWithdrawalCapturedAt", None)
                 confirmed = getattr(self, "pending_own_river_confirmation", None)
@@ -3116,6 +3345,7 @@ class PythonAutoOperator:
             # as apparently valid evidence after this stream gate was
             # invalidated).
             self.latest_screencast_captured_at = None
+            self.latest_selection_stream_receipt = None
             self.screencast_draw_occupied = None
             if actual != self.rejected_screencast_size:
                 self.log("screencast_frame_rejected", expected=list(expected), actual=list(actual))
@@ -3152,7 +3382,27 @@ class PythonAutoOperator:
                 self.screencast_draw_generation += 1
                 self.screencast_draw_generation_at = self.latest_screencast_captured_at
             self.screencast_draw_occupied = occupied
+        self.latest_selection_stream_receipt = _SelectionStreamReceipt(
+            frame, self.latest_screencast_captured_at, self.screencast_sequence,
+        )
         return True
+
+    def frozen_selection_stream_receipt(
+        self, sequence_before: int | None, first_click_at: float,
+    ) -> _SelectionStreamReceipt | None:
+        """Read one immutable publication; never reconstruct metadata from latest fields."""
+        receipt = getattr(self, "latest_selection_stream_receipt", None)
+        if not isinstance(receipt, _SelectionStreamReceipt):
+            return None
+        stamps = (first_click_at, receipt.captured_at)
+        if (isinstance(sequence_before, bool) or not isinstance(sequence_before, int)
+                or isinstance(receipt.sequence, bool) or not isinstance(receipt.sequence, int)
+                or sequence_before < 0 or receipt.sequence <= sequence_before
+                or any(isinstance(stamp, bool) or not isinstance(stamp, (int, float))
+                       or not isfinite(stamp) for stamp in stamps)
+                or not 0 <= first_click_at <= receipt.captured_at <= time.monotonic()):
+            return None
+        return receipt
 
     def fresh_screencast_selection_receipt(
         self, sequence_before: int | None, first_click_at: float,
@@ -3243,6 +3493,7 @@ class PythonAutoOperator:
         finally:
             self.screencast_session = None
             self.latest_screencast_frame = None
+            self.latest_selection_stream_receipt = None
             self.screencast_draw_occupied = None
 
     def restart_screencast_gate(self, page: Page) -> None:
@@ -5475,8 +5726,21 @@ class PythonAutoOperator:
         sees the updated public state and the normal pre-click guards apply.
         """
         if not getattr(self.args, "board_metadata", False) \
-                or not self.force_auto_has_recognition_window(captured_at) \
-                or self.cached_board_metadata(screenshot) is None:
+                or not self.force_auto_has_recognition_window(captured_at):
+            return None
+        try:
+            self.require_force_auto_click_budget(captured_at, phase="before_reconciliation_hand_stage")
+            self.require_action_deadline()
+        except RetryableSafetyAbort as error:
+            self.log("reconciliation_hand_stage_deferred", error=str(error), reason="expired_original_window")
+            return None
+        if self.cached_board_metadata(screenshot) is None:
+            # This branch precedes the ordinary evaluator's metadata warmup.
+            # Reuse its asynchronous scheduler (including live-worker/cache
+            # deduplication), rather than waiting forever on an expired HUD.
+            self.schedule_board_metadata(screenshot.read_bytes())
+            self.log("reconciliation_hand_stage_deferred", reason="board_metadata_refresh_requested",
+                     screenshot=str(screenshot))
             return None
         try:
             staged = self.recognize_resident(
@@ -5490,6 +5754,12 @@ class PythonAutoOperator:
         self.poll_public_recognition()
         self.reconcile_own_discard()
         if self.own_discard_reconciliation_pending():
+            return None
+        try:
+            self.require_force_auto_click_budget(captured_at, phase="after_reconciliation_hand_stage")
+            self.require_action_deadline()
+        except RetryableSafetyAbort as error:
+            self.log("reconciliation_hand_stage_deferred", error=str(error), reason="expired_original_window")
             return None
         return staged
 
@@ -5974,6 +6244,8 @@ class PythonAutoOperator:
         riichi_selection_budget: _RiichiSelectionBudget | None = None
         original_action_start = getattr(self, "action_evidence_started_at", None)
         original_budget_start = getattr(self, "action_budget_started_at", None)
+        original_deadline_ms = self.configured_action_deadline_ms()
+        original_click_budget_ms = self.force_auto_click_budget_ms()
         if original_budget_start is None:
             original_budget_start = original_action_start
         if (force_auto and selected_action == "riichi" and self.force_auto_click_budget_ms() is not None
@@ -6338,6 +6610,7 @@ class PythonAutoOperator:
                         raise RetryableSafetyAbort("own river changed during confirmed riichi selection")
                     riichi_selection_budget = _RiichiSelectionBudget(
                         original_action_start, original_budget_start, settled_riichi_captured_at, settled_river,
+                        original_deadline_ms, original_click_budget_ms,
                     )
                     evaluated_captured_at = settled_riichi_captured_at
                     evidence_paths = {}
@@ -6428,19 +6701,38 @@ class PythonAutoOperator:
         selection_sequence_before = getattr(self, "screencast_sequence", None)
 
         last_selection_receipt: bytes | None = None
+        last_selection_observation: _SelectionStreamReceipt | None = None
+        selection_first_click_at: float | None = None
 
         def observe_selection_receipt(first_click_at: float) -> bytes | None:
-            nonlocal last_selection_receipt
+            nonlocal last_selection_receipt, last_selection_observation, selection_first_click_at
+            selection_first_click_at = first_click_at
+            if riichi_selection_budget is not None and hasattr(self, "latest_selection_stream_receipt"):
+                last_selection_observation = self.frozen_selection_stream_receipt(selection_sequence_before, first_click_at)
+                last_selection_receipt = last_selection_observation.frame if last_selection_observation else None
+                return last_selection_receipt
+            # Legacy __new__ fixtures and non-riichi actions keep the existing
+            # bytes-only path; it never grants a new image freshness origin.
             last_selection_receipt = self.fresh_screencast_selection_receipt(selection_sequence_before, first_click_at)
             return last_selection_receipt
 
         def before_confirmation_click() -> None:
+            confirmation_budget = riichi_selection_budget
+            confirmation_captured_at = evaluated_captured_at
             if riichi_selection_budget is not None:
-                self.require_riichi_confirmation_receipt(riichi_selection_budget, last_selection_receipt)
+                if hasattr(self, "latest_selection_stream_receipt"):
+                    confirmation_budget = self.certify_riichi_confirmation_budget(
+                        riichi_selection_budget, last_selection_observation,
+                        raised_frame=last_selection_receipt, first_click_at=selection_first_click_at,
+                        sequence_before=selection_sequence_before,
+                    )
+                    confirmation_captured_at = confirmation_budget.captured_at
+                else:
+                    self.require_riichi_confirmation_receipt(riichi_selection_budget, last_selection_receipt)
             self.require_force_auto_click_budget(
-                evaluated_captured_at, phase="before_discard_confirmation_click",
+                confirmation_captured_at, phase="before_discard_confirmation_click",
                 **({"include_action_evidence": False} if selection_local_budget else {}),
-                **({"riichi_selection": riichi_selection_budget} if riichi_selection_budget else {}),
+                **({"riichi_selection": confirmation_budget} if confirmation_budget else {}),
             )
             self.require_action_deadline()
 
@@ -6558,7 +6850,14 @@ class PythonAutoOperator:
             before = page.screenshot(clip=button_clip, animations="disabled")
             page.wait_for_timeout(120)
             confirmed = page.screenshot(clip=button_clip, animations="disabled")
-        button_delta = mean_pixel_delta(before, confirmed)
+        raw_button_delta = mean_pixel_delta(before, confirmed)
+        body_comparison = (calibrated_skip_body_comparison(before, confirmed, self.layout)
+                           if (self.args.mode == "force-auto"
+                               and observed.get("source") == "force_auto_fixed_geometry") else None)
+        button_delta = body_comparison["buttonPixelDelta"] if body_comparison else raw_button_delta
+        if body_comparison and raw_button_delta > self.args.stability_pixel_delta:
+            self.log("reaction_pass_calibrated_body_comparison", rawButtonPixelDelta=raw_button_delta,
+                     **body_comparison)
         if button_delta > self.args.stability_pixel_delta:
             evidence = {}
             save_errors = {}
@@ -6575,6 +6874,8 @@ class PythonAutoOperator:
                         # accidentally turn a failed comparison into input.
                         save_errors[name] = str(error)
             self.log("reaction_pass_stability_rejected", buttonPixelDelta=button_delta,
+                     rawButtonPixelDelta=raw_button_delta,
+                     comparisonLocalBox=body_comparison["comparisonLocalBox"] if body_comparison else None,
                      stabilityPixelDelta=self.args.stability_pixel_delta,
                      verificationSource=("expired_optional_full_pair" if expired_optional_call is not None else
                                          "stream_pair" if stream_guard else
@@ -6616,6 +6917,33 @@ class PythonAutoOperator:
         return {"clicked": True, "policy": "force_auto" if self.args.mode == "force-auto" else "certified_auto", "action": "pass",
                 "clickPoint": point, **receipt}
 
+    def record_expired_optional_pass_failure(
+        self, *, expected_call: dict[str, Any], receipts: list[CaptureReceipt],
+        observations: list[dict[str, Any]], stage: str, reason: str,
+        error: Exception, original_clock: tuple[Any, ...],
+    ) -> None:
+        """Best-effort exact full receipts; never replace the input guard error."""
+        snapshots = []
+        stamp = utc_stamp()
+        for index, receipt in enumerate(receipts):
+            record = {"ordinal": index + 1, "attemptStartedAt": receipt.attempt_started_at,
+                      "startedAt": receipt.started_at, "completedAt": receipt.completed_at,
+                      "method": receipt.method, "size": [receipt.width, receipt.height],
+                      "sha256": hashlib.sha256(receipt.png).hexdigest()}
+            if getattr(self, "frames", None) is not None:
+                path = self.frames / f"{stamp}.expired-pass-{index + 1}.png"
+                try:
+                    path.write_bytes(receipt.png)
+                    path.chmod(0o600)
+                    record["screenshot"] = str(path)
+                except Exception as save_error:
+                    record["evidenceSaveError"] = str(save_error)
+            snapshots.append(record)
+        self.log("expired_optional_pass_confirmation_rejected", stage=stage, reason=reason,
+                 error=str(error), expectedCall=expected_call,
+                 originalActionStartedAt=original_clock[0], originalBudgetStartedAt=original_clock[1],
+                 originalActionKind=original_clock[2], observations=observations, snapshots=snapshots)
+
     def confirm_expired_optional_call_pass(
         self, page: Page, expected_call: dict[str, Any],
     ) -> tuple[bytes, bytes, float]:
@@ -6626,56 +6954,93 @@ class PythonAutoOperator:
         is a single orange control. Unknown/changed prompts abstain instead.
         This proves present skip UI, not when the original reaction began.
         """
-        if self.args.mode != "force-auto" or expected_call.get("action") not in {"chi", "pon", "minkan"}:
-            raise RetryableSafetyAbort("expired optional pass has no known call candidate")
         original_clock = tuple(getattr(self, field, None) for field in (
             "action_evidence_started_at", "action_budget_started_at", "action_evidence_kind"))
-        original_start, original_budget, original_kind = original_clock
-        effective_budget_start = original_start if original_budget is None else original_budget
-        now = time.monotonic()
-        if (original_kind != "reaction"
-                or any(isinstance(stamp, bool) or not isinstance(stamp, (int, float))
-                       or not isfinite(stamp) for stamp in (original_start, effective_budget_start))
-                or not 0 <= original_start <= effective_budget_start <= now):
-            raise RetryableSafetyAbort("expired optional pass has no valid original reaction clock")
-        viewport = self.layout["viewport"]
-        region = self.layout["actionButtonRegions"]["pass"]
         receipts = []
-        requested_at = time.monotonic()
-        for ordinal in ("first", "second"):
-            self.require_action_deadline()
-            if receipts:
-                page.wait_for_timeout(120)
-                requested_at = time.monotonic()
-            receipt = self.capture_full_action_frame(page, f"expired_optional_pass_{ordinal}")
-            stamps = (receipt.attempt_started_at, receipt.started_at, receipt.completed_at)
-            if (any(isinstance(stamp, bool) or not isinstance(stamp, (int, float))
-                    or not isfinite(stamp) for stamp in stamps)
-                    or not requested_at <= stamps[0] <= stamps[1] <= stamps[2] <= time.monotonic()
-                    or (receipts and stamps[0] <= receipts[0].completed_at)):
-                raise RetryableSafetyAbort("expired optional pass capture times are not ordered")
-            with Image.open(io.BytesIO(receipt.png)) as image:
-                complete_png = image.format == "PNG" and image.size == (viewport["width"], viewport["height"])
-            if (not complete_png or (receipt.width, receipt.height) != (viewport["width"], viewport["height"])
-                    or classify_screen(receipt.png, self.screen_references)[0] != "match"
-                    or self_turn_draw_visible(receipt.png, self.layout, self.cached_open_melds)
-                    or force_auto_self_action_buttons(receipt.png, viewport)):
-                raise RetryableSafetyAbort("expired optional pass full frame may contain a win or changed screen")
-            calls = force_auto_call_buttons(receipt.png, viewport)
-            if (len(calls) != 1 or calls[0].get("action") != expected_call["action"]
-                    or any(abs(calls[0]["center"][axis] - expected_call["center"][axis]) > 12 for axis in ("x", "y"))
-                    or not (is_force_auto_pass_prompt(receipt.png, region)
-                            or is_contextual_reaction_pass(receipt.png, region, 1))):
-                raise RetryableSafetyAbort("expired optional pass call or skip prompt changed")
-            if original_clock != tuple(getattr(self, field, None) for field in (
-                    "action_evidence_started_at", "action_budget_started_at", "action_evidence_kind")):
-                raise RetryableSafetyAbort("expired optional pass original clock changed")
-            receipts.append(receipt)
-            self.require_force_auto_click_budget(
-                receipts[0].attempt_started_at, phase="expired_optional_pass_confirmation",
-                include_action_evidence=False,
-            )
-            self.require_action_deadline()
+        observations = []
+        stage, reason = "before_capture", "invalid_call_candidate"
+        try:
+            if self.args.mode != "force-auto" or expected_call.get("action") not in {"chi", "pon", "minkan"}:
+                raise RetryableSafetyAbort("expired optional pass has no known call candidate")
+            reason = "invalid_original_clock"
+            original_start, original_budget, original_kind = original_clock
+            effective_budget_start = original_start if original_budget is None else original_budget
+            now = time.monotonic()
+            if (original_kind != "reaction"
+                    or any(isinstance(stamp, bool) or not isinstance(stamp, (int, float))
+                           or not isfinite(stamp) for stamp in (original_start, effective_budget_start))
+                    or not 0 <= original_start <= effective_budget_start <= now):
+                raise RetryableSafetyAbort("expired optional pass has no valid original reaction clock")
+            viewport = self.layout["viewport"]
+            region = self.layout["actionButtonRegions"]["pass"]
+            requested_at = time.monotonic()
+            for ordinal in ("first", "second"):
+                stage, reason = ordinal, "global_deadline"
+                self.require_action_deadline()
+                if receipts:
+                    page.wait_for_timeout(120)
+                    requested_at = time.monotonic()
+                reason = "capture_failed"
+                receipt = self.capture_full_action_frame(page, f"expired_optional_pass_{ordinal}")
+                receipts.append(receipt)  # Retain even the receipt that fails validation.
+                flags = {"ordinal": ordinal}
+                observations.append(flags)
+                reason = "invalid_capture_times"
+                stamps = (receipt.attempt_started_at, receipt.started_at, receipt.completed_at)
+                if (any(isinstance(stamp, bool) or not isinstance(stamp, (int, float))
+                        or not isfinite(stamp) for stamp in stamps)
+                        or not requested_at <= stamps[0] <= stamps[1] <= stamps[2] <= time.monotonic()
+                        or (len(receipts) == 2 and stamps[0] <= receipts[0].completed_at)):
+                    raise RetryableSafetyAbort("expired optional pass capture times are not ordered")
+                reason = "incomplete_png"
+                with Image.open(io.BytesIO(receipt.png)) as image:
+                    flags["completePng"] = image.format == "PNG" and image.size == (viewport["width"], viewport["height"])
+                if not flags["completePng"] or (receipt.width, receipt.height) != (viewport["width"], viewport["height"]):
+                    raise RetryableSafetyAbort("expired optional pass full frame may contain a win or changed screen")
+                flags["screenState"] = classify_screen(receipt.png, self.screen_references)[0]
+                flags["drawVisible"] = self_turn_draw_visible(receipt.png, self.layout, self.cached_open_melds)
+                flags["orangeButtons"] = force_auto_self_action_buttons(receipt.png, viewport)
+                flags["calls"] = calls = force_auto_call_buttons(receipt.png, viewport)
+                flags["plainPass"] = is_force_auto_pass_prompt(receipt.png, region)
+                flags["contextualPass"] = is_contextual_reaction_pass(receipt.png, region, len(calls))
+                flags["callCountMatches"] = len(calls) == 1
+                flags["callActionMatches"] = len(calls) == 1 and calls[0].get("action") == expected_call["action"]
+                flags["centerDelta"] = ({axis: calls[0]["center"][axis] - expected_call["center"][axis]
+                                         for axis in ("x", "y")} if len(calls) == 1 else None)
+                flags["callCenterMatches"] = bool(flags["centerDelta"] is not None and all(
+                    abs(delta) <= 12 for delta in flags["centerDelta"].values()))
+                reason = ("screen_not_match" if flags["screenState"] != "match" else
+                          "draw_present" if flags["drawVisible"] else "orange_present")
+                if flags["screenState"] != "match" or flags["drawVisible"] or flags["orangeButtons"]:
+                    raise RetryableSafetyAbort("expired optional pass full frame may contain a win or changed screen")
+                reason = ("call_count_changed" if not flags["callCountMatches"] else
+                          "call_action_changed" if not flags["callActionMatches"] else
+                          "call_center_changed" if not flags["callCenterMatches"] else "skip_missing")
+                if (not flags["callCountMatches"] or not flags["callActionMatches"]
+                        or not flags["callCenterMatches"] or not (flags["plainPass"] or flags["contextualPass"])):
+                    raise RetryableSafetyAbort("expired optional pass call or skip prompt changed")
+                reason = "original_clock_changed"
+                if original_clock != tuple(getattr(self, field, None) for field in (
+                        "action_evidence_started_at", "action_budget_started_at", "action_evidence_kind")):
+                    raise RetryableSafetyAbort("expired optional pass original clock changed")
+                reason = "click_budget_or_deadline"
+                self.require_force_auto_click_budget(
+                    receipts[0].attempt_started_at, phase="expired_optional_pass_confirmation",
+                    include_action_evidence=False,
+                )
+                self.require_action_deadline()
+        except Exception as error:
+            try:
+                self.record_expired_optional_pass_failure(
+                    expected_call=expected_call, receipts=receipts, observations=observations,
+                    stage=stage, reason=reason, error=error, original_clock=original_clock,
+                )
+            except Exception:
+                # Preserve even an unexpected evidence/logging failure as a
+                # diagnostic failure, never as permission to click or as a
+                # replacement for the original safety/transport exception.
+                pass
+            raise
         return receipts[0].png, receipts[1].png, receipts[0].attempt_started_at
 
     def execute_force_auto_call(
