@@ -20,7 +20,8 @@ class ResidentObservationTests(unittest.TestCase):
     def result(self):
         return {'scope': 'offline_untrusted_sanma_auto_observation', 'operationAuthorized': False,
                 'digest': self.digest, 'report': {'digest': self.digest},
-                'assembly': {'operationAuthorized': False, 'priority': {'status': 'blocked'}, 'evaluation': {'status': 'blocked'}}}
+                'assembly': {'operationAuthorized': False, 'priority': {'status': 'blocked'}, 'evaluation': {'status': 'blocked'}},
+                'structuralPositions': {'status': 'blocked', 'operationAuthorized': False, 'digest': self.digest, 'candidates': []}}
 
     def operator(self, response):
         op = object.__new__(PythonAutoOperator)
@@ -67,6 +68,19 @@ class ResidentObservationTests(unittest.TestCase):
         page.mouse.click.assert_not_called()
         op.log.assert_called_once()
 
+    def test_invalid_structural_positions_never_authorize_click(self):
+        for candidate in ({'status': 'blocked', 'operationAuthorized': True, 'digest': self.digest, 'candidates': []},
+                          {'status': 'blocked', 'operationAuthorized': False, 'digest': '0' * 64, 'candidates': []},
+                          {'status': 'blocked', 'operationAuthorized': False, 'digest': self.digest, 'candidates': None}):
+            result = self.result()
+            result['structuralPositions'] = candidate
+            op = self.operator({'id': 1, 'result': result})
+            page = Mock()
+            page.screenshot.return_value = b'fake frame'
+            with self.subTest(candidate=candidate), self.assertRaisesRegex(RuntimeError, 'structural positions'):
+                op.inspect_sanma_self_turn(page)
+            page.mouse.click.assert_not_called()
+
     def test_tampered_self_turn_receipt_is_rejected_before_capture(self):
         op = self.operator({'id': 1, 'result': self.result()})
         page = Mock()
@@ -98,7 +112,7 @@ class ResidentObservationTests(unittest.TestCase):
         after = (base / '2026-10-30T16-05-55-331Z-after.png').read_bytes()
         digest = hashlib.sha256(before).hexdigest()
         result = self.result()
-        result['digest'] = result['report']['digest'] = digest
+        result['digest'] = result['report']['digest'] = result['structuralPositions']['digest'] = digest
         op = self.operator({'id': 1, 'result': result})
         page = Mock()
         page.screenshot.side_effect = [before, after]
@@ -154,6 +168,10 @@ class ResidentSanmaEndToEndTests(unittest.TestCase):
             self.assertEqual(receipt['freshness']['status'], 'identical_pixels_candidate')
             self.assertFalse(receipt['freshness']['operationAuthorized'])
             self.assertFalse(receipt['operationAuthorized'])
+            self.assertEqual(receipt['structuralPositions']['digest'], receipt['digest'])
+            self.assertFalse(receipt['structuralPositions']['operationAuthorized'])
+            self.assertTrue(receipt['structuralPositions']['candidates'])
+            self.assertTrue(any(candidate['tile'] == 'N' and candidate['positions'] for candidate in receipt['structuralPositions']['candidates']))
             self.assertTrue(any(candidate['action'] == 'kita' for candidate in receipt['candidates']['candidates']))
             self.assertIn('complete independent review missing', receipt['priority']['reasons'])
             self.assertEqual(receipt['drawCandidate']['status'], 'candidate')

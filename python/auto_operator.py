@@ -3904,10 +3904,15 @@ class PythonAutoOperator:
         except Exception as error:
             freshness = {"status": "unknown", "operationAuthorized": False,
                          "reason": f"freshness observation failed: {error}"}
+        structural = result.get("structuralPositions")
+        if (not isinstance(structural, dict) or structural.get("status") != "blocked"
+                or structural.get("operationAuthorized") is not False
+                or structural.get("digest") != result["digest"] or not isinstance(structural.get("candidates"), list)):
+            raise RuntimeError("sanma structural positions missing or inconsistent")
         receipt = {"status": "blocked", "scope": "sanma_self_turn_observation", "operationAuthorized": False,
                    "digest": result["digest"], "screenshot": str(path),
                    "priority": assembly["priority"], "evaluation": assembly["evaluation"],
-                   "candidates": result.get("candidates"),
+                   "candidates": result.get("candidates"), "structuralPositions": structural,
                    "drawCandidate": sanma_draw_observation_candidate(result),
                    "sourceObservation": result, "freshness": freshness}
         self.log("sanma_self_turn_observed", digest=receipt["digest"], screenshot=str(path),

@@ -15,6 +15,7 @@ import { HybridTileRecognizer } from "./hybridTileRecognizer.js";
 import { SanmaBoardWorker } from "./sanmaBoardWorker.js";
 import { EXPERIMENTAL_BUTTONS, type ExperimentalTemplates } from "./sanmaButtonExperiment.js";
 import { assembleSanmaEvaluation } from "./sanmaFrameEvaluation.js";
+import { sanmaStructuralPositions } from "./sanmaStructuralPositions.js";
 import { observeSanmaFrameAutomatically } from "./sanmaAutoFrameObservation.js";
 import { exitWhenOutputPipeBreaks } from "./outputPipe.js";
 
@@ -127,7 +128,8 @@ for await (const line of lines) {
       const result = await observeSanmaFrameAutomatically({frame,layout,templates:templateDirectory,
         publicClassifier:sanmaClassifier,boardObserver:sanmaBoardWorker,...refs});
       const assembly = assembleSanmaEvaluation({frame, observation:result});
-      process.stdout.write(`${JSON.stringify({id,result:{...result,assembly}})}\n`);
+      const structuralPositions = sanmaStructuralPositions(frame, result.report);
+      process.stdout.write(`${JSON.stringify({id,result:{...result,assembly,structuralPositions}})}\n`);
       continue;
     }
     if (request.observeSanma !== undefined && request.observeSanma !== false) throw new Error("invalid sanma observation mode");
