@@ -88,11 +88,22 @@ class SanmaFriendOperatorIntegrationTests(unittest.TestCase):
             frame = (Path(__file__).resolve().parents[1] / "test/fixtures/sanma-friend-preflight.png").read_bytes()
             preflight.write_bytes(frame)
             page = Mock()
+            bad_deadline_operator = self.operator(preflight, 5000)
             with self.assertRaises(ValueError):
-                self.operator(preflight, 5000).run(page)
+                bad_deadline_operator.run(page)
             page.screenshot.assert_not_called()
             page.mouse.click.assert_not_called()
+            failure = [c for c in bad_deadline_operator.log.call_args_list if c.args[0] == "sanma_friend_start_inspection_failed"]
+            self.assertEqual(len(failure), 1)
+            self.assertEqual(failure[0].kwargs["actionDeadlineMs"], 5000)
+            self.assertFalse(failure[0].kwargs["operationAuthorized"])
             page.screenshot.return_value = b"invalid"
+            changed_room_operator = self.operator(preflight, 300000)
             with self.assertRaises(RuntimeError):
-                self.operator(preflight, 300000).run(page)
+                changed_room_operator.run(page)
+            failure = [c for c in changed_room_operator.log.call_args_list if c.args[0] == "sanma_friend_start_inspection_failed"]
+            self.assertEqual(len(failure), 1)
+            self.assertEqual(failure[0].kwargs["actionDeadlineMs"], 300000)
+            self.assertEqual(len(failure[0].kwargs["preflightSha256"]), 64)
+            self.assertFalse(failure[0].kwargs["operationAuthorized"])
             page.mouse.click.assert_not_called()

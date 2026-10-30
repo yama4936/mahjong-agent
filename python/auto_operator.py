@@ -8183,10 +8183,17 @@ class PythonAutoOperator:
                 # Preparation can be exercised offline in tests. The normal
                 # CLI rejects sanma before constructing an operator; retaining
                 # this guard also protects direct Python invocation.
-                inspection = inspect_sanma_friend_start(
-                    page, reviewed, action_deadline_ms=getattr(self.args, "action_deadline_ms", None),
-                    attempts=32, on_capture=save_friend_start_capture,
-                )
+                try:
+                    inspection = inspect_sanma_friend_start(
+                        page, reviewed, action_deadline_ms=getattr(self.args, "action_deadline_ms", None),
+                        attempts=32, on_capture=save_friend_start_capture,
+                    )
+                except (ValueError, RuntimeError) as error:
+                    self.log("sanma_friend_start_inspection_failed", preflight=str(preflight_path),
+                             preflightSha256=hashlib.sha256(reviewed).hexdigest(),
+                             actionDeadlineMs=getattr(self.args, "action_deadline_ms", None),
+                             reason=str(error), operationAuthorized=False)
+                    raise
                 self.log("sanma_friend_start_inspection", **inspection)
                 raise RuntimeError("sanma automatic decisions and screen operation are not implemented; startup stopped")
 
