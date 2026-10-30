@@ -2687,7 +2687,31 @@ class PythonAutoOperator:
                 or getattr(self, "action_evidence_kind", None) != "discard"
                 or getattr(self, "selection_uncertainty_latch", None)):
             return 0
-        return max(0, FORCE_AUTO_SAME_DRAW_ACTION_BUDGET_MS - budget)
+        return max(0, self.verified_friend_action_budget_ms() - budget)
+
+    def verified_friend_action_budget_ms(self) -> int:
+        """Use the long clock only for a room this process verified and started.
+
+        The budget remains anchored at the original action observation, not at
+        a later screenshot or recognition retry. Reserve five seconds for the
+        game's clock and delivery uncertainty. A reconnect cannot reconstruct
+        this in-memory proof.
+        """
+        args = getattr(self, "args", None)
+        start = getattr(self, "action_evidence_started_at", None)
+        budget_start = getattr(self, "action_budget_started_at", None)
+        if budget_start is None:
+            budget_start = start
+        if (getattr(self, "verified_friend_300_active", False)
+                and getattr(self, "verified_friend_300_match_seen", False)
+                and getattr(args, "mode", None) == "force-auto"
+                and not getattr(args, "ranked_loop", False)
+                and self.configured_action_deadline_ms() == 300000
+                and isinstance(start, (int, float)) and not isinstance(start, bool)
+                and isinstance(budget_start, (int, float)) and not isinstance(budget_start, bool)
+                and isfinite(start) and isfinite(budget_start) and 0 <= start <= budget_start <= time.monotonic()):
+            return max(0, 295000 - round((budget_start - start) * 1000))
+        return FORCE_AUTO_SAME_DRAW_ACTION_BUDGET_MS
 
     def force_auto_action_evidence_age_ms(self) -> int | None:
         """Age of the current self-action, when the turn gate observed one.
@@ -2901,7 +2925,7 @@ class PythonAutoOperator:
                 or getattr(self, "selection_uncertainty_latch", None)
                 or getattr(self, "pending_post_call_discard", False)):
             raise RetryableSafetyAbort("confirmed riichi selection budget certificate is no longer valid")
-        return max(0, FORCE_AUTO_SAME_DRAW_ACTION_BUDGET_MS - budget)
+        return max(0, self.verified_friend_action_budget_ms() - budget)
 
     def certify_riichi_confirmation_budget(
         self, selection: _RiichiSelectionBudget, receipt: _SelectionStreamReceipt,
@@ -2938,7 +2962,7 @@ class PythonAutoOperator:
             phase="before_discard_confirmation_click", riichi_selection=certificate)
         remaining = min(
             self.force_auto_click_budget_ms() - self.force_auto_capture_age_ms(receipt.captured_at),
-            FORCE_AUTO_SAME_DRAW_ACTION_BUDGET_MS - self.force_auto_action_evidence_age_ms(),
+            self.verified_friend_action_budget_ms() - self.force_auto_action_evidence_age_ms(),
             self.action_deadline_remaining_ms(),
         )
         if remaining < FORCE_AUTO_DISCARD_SELECTION_RESERVE_MS:
@@ -4668,7 +4692,25 @@ class PythonAutoOperator:
                  resultObserved=getattr(self, "round_terminal_result_observed", False))
         return True
 
+    def revoke_verified_friend_300(self, reason: str) -> None:
+        if getattr(self, "verified_friend_300_active", False):
+            self.verified_friend_300_active = False
+            self.log("verified_friend_300_proof_revoked", reason=reason)
+
     def observe_ranked_match_screen(self, state: str) -> None:
+        if getattr(self, "verified_friend_300_active", False):
+            started = getattr(self, "verified_friend_300_started_at", None)
+            if (not getattr(self, "verified_friend_300_match_seen", False)
+                    and (not isinstance(started, (int, float)) or time.monotonic() - started > 30)):
+                self.revoke_verified_friend_300("start_transition_timeout")
+            elif state == "match":
+                self.verified_friend_300_match_seen = True
+            elif (state in {"match_result", "rank_progress", "post_match_reward",
+                            "connection_error", "session_conflict", "black_screen",
+                            "lobby", "ranked_menu", "ranked_room", "matchmaking"}
+                  or (getattr(self, "verified_friend_300_match_seen", False)
+                      and state == "loading")):
+                self.revoke_verified_friend_300(state)
         # Result animations can briefly expose the old table. A completed
         # match stays completed until an authorized new room selection.
         if state == "match" and not getattr(self, "ranked_match_finished", False):
@@ -6774,7 +6816,7 @@ class PythonAutoOperator:
                     # Two verified selection screens and an unchanged river
                     # prove this execute is still finishing its declaration.
                     # Refresh image freshness only; keep the original turn,
-                    # deadline and existing ten-second action ceiling.
+                    # deadline and the authorized action ceiling.
                     timestamps = (original_action_start, original_budget_start, declaration_clicked_at,
                                   post_riichi_captured_at, post_riichi_capture.completed_at,
                                   settled_riichi_captured_at, settled_riichi_capture.completed_at)
@@ -6817,7 +6859,7 @@ class PythonAutoOperator:
                              settledCaptureStartedAt=settled_riichi_captured_at,
                              targetPixelDelta=round(target_delta, 3), riverStructureDeltasPercent=river_deltas,
                              screenshots=evidence_paths,
-                             effectiveActionBudgetMs=FORCE_AUTO_SAME_DRAW_ACTION_BUDGET_MS,
+                             effectiveActionBudgetMs=self.verified_friend_action_budget_ms(),
                              remainingGameExtraTimeMs=None, reason="game_timer_not_observed")
                 selection_local_budget = (
                     not getattr(self.args, "ranked_loop", False)
@@ -7817,6 +7859,8 @@ class PythonAutoOperator:
     def run(self, page: Page) -> None:
         self.ensure_viewport(page, force=True)
         startup_turn_guard = StartupTurnGuard()
+        self.verified_friend_300_active = False
+        self.verified_friend_300_match_seen = False
         reviewed_friend_start: bytes | None = None
         preflight_path = getattr(self.args, "start_reviewed_friend_room", None)
         if preflight_path:
@@ -7842,11 +7886,19 @@ class PythonAutoOperator:
                 captures += await_reviewed_friend_room(page, reviewed, attempts=16,
                                                        on_capture=save_friend_start_capture)
             started_at = time.monotonic()
+            page.on("framenavigated", lambda frame: self.revoke_verified_friend_300("navigation")
+                    if frame == page.main_frame else None)
             page.mouse.click(1140, 998)
             startup_turn_guard.record_verified_start_click(clicked_at=started_at)
             reviewed_friend_start = reviewed
+            self.verified_friend_300_active = (
+                self.configured_action_deadline_ms() == 300000
+                and reviewed_friend_clock_is_300_plus_zero(reviewed)
+            )
+            self.verified_friend_300_started_at = started_at
             self.log("reviewed_friend_start_clicked", preflight=str(preflight_path),
-                     captures=captures, point={"x": 1140, "y": 998})
+                     captures=captures, point={"x": 1140, "y": 998},
+                     verifiedFriend300=self.verified_friend_300_active)
         if self.args.mode == "force-auto":
             # Room-start clicks can leave the pointer over the initial hand.
             # Clear hover before starting the stream, so its first frame cannot

@@ -3306,6 +3306,73 @@ class AwayDialogDetectionTest(unittest.TestCase):
             with self.assertRaises(RetryableSafetyAbort):
                 operator.require_force_auto_click_budget(16.9, phase="before_recognition")
 
+    def test_verified_friend_budget_is_bounded_and_preserves_frame_freshness(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(mode="force-auto", ranked_loop=False,
+                                           force_auto_click_budget_ms=2600, action_deadline_ms=300000)
+        operator.log = Mock()
+        operator.verified_friend_300_active = True
+        operator.verified_friend_300_match_seen = True
+        operator.action_evidence_started_at = 10.0
+        operator.action_budget_started_at = 12.0
+        operator.action_evidence_kind = "discard"
+        operator.action_budget_draw_generation = operator.screencast_draw_generation = 1
+        operator.screencast_draw_occupied = True
+        with patch("auto_operator.time.monotonic", return_value=210.0):
+            self.assertEqual(operator.verified_friend_action_budget_ms(), 293000)
+            operator.require_force_auto_click_budget(209.9, phase="before_recognition")
+            with self.assertRaises(RetryableSafetyAbort):
+                operator.require_force_auto_click_budget(207.0, phase="before_recognition")
+        with patch("auto_operator.time.monotonic", return_value=305.0):
+            with self.assertRaises(RetryableSafetyAbort):
+                operator.require_force_auto_click_budget(304.9, phase="before_recognition")
+
+    def test_friend_proof_never_survives_ranked_reconnect_or_result(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(mode="force-auto", ranked_loop=False,
+                                           force_auto_click_budget_ms=2600, action_deadline_ms=300000)
+        operator.action_evidence_started_at = operator.action_budget_started_at = 1.0
+        operator.log = Mock()
+        with patch("auto_operator.time.monotonic", return_value=2.0):
+            self.assertEqual(operator.verified_friend_action_budget_ms(), 10000)
+            operator.verified_friend_300_active = True
+            operator.args.ranked_loop = True
+            self.assertEqual(operator.verified_friend_action_budget_ms(), 10000)
+            operator.args.ranked_loop = False
+            operator.verified_friend_300_started_at = 1.0
+            operator.observe_ranked_match_screen("match")
+            operator.observe_ranked_match_screen("round_result")
+            self.assertTrue(operator.verified_friend_300_active)
+            operator.observe_ranked_match_screen("connection_error")
+            self.assertFalse(operator.verified_friend_300_active)
+            operator.verified_friend_300_active = True
+            operator.observe_ranked_match_screen("match_result")
+            self.assertFalse(operator.verified_friend_300_active)
+
+    def test_friend_start_failure_and_navigation_revoke_proof(self) -> None:
+        operator = PythonAutoOperator.__new__(PythonAutoOperator)
+        operator.args = argparse.Namespace(mode="force-auto", ranked_loop=False,
+                                           force_auto_click_budget_ms=2600, action_deadline_ms=300000)
+        operator.log = Mock()
+        operator.action_evidence_started_at = operator.action_budget_started_at = 1.0
+        with patch("auto_operator.time.monotonic", return_value=2.0):
+            for state in ("lobby", "ranked_room", "ranked_menu", "matchmaking"):
+                operator.verified_friend_300_active = True
+                operator.verified_friend_300_match_seen = False
+                operator.verified_friend_300_started_at = 1.0
+                operator.observe_ranked_match_screen(state)
+                self.assertFalse(operator.verified_friend_300_active, state)
+            operator.verified_friend_300_active = True
+            operator.verified_friend_300_match_seen = True
+            operator.revoke_verified_friend_300("navigation")
+            self.assertEqual(operator.verified_friend_action_budget_ms(), 10000)
+        with patch("auto_operator.time.monotonic", return_value=32.0):
+            operator.verified_friend_300_active = True
+            operator.verified_friend_300_match_seen = False
+            operator.verified_friend_300_started_at = 1.0
+            operator.observe_ranked_match_screen("match")
+            self.assertFalse(operator.verified_friend_300_active)
+
     def test_short_discard_selection_reserves_confirmed_second_click(self) -> None:
         """Do not select a tile after the measured two-click reserve is gone."""
         operator = PythonAutoOperator.__new__(PythonAutoOperator)
