@@ -57,7 +57,16 @@ class ExperimentalSanmaFriendLoopTest(unittest.TestCase):
             self.op.run(self.page)
         self.page.mouse.click.assert_called_once_with(1140,998)
         self.op.execute_sanma_friend_tsumo_candidate.assert_not_called()
-        self.assertTrue(any(call.kwargs.get('reason')=='unsupported_or_unknown_action' for call in self.op.log.call_args_list))
+        self.assertTrue(any(call.kwargs.get('reason')=='observation_or_action_failed' for call in self.op.log.call_args_list))
+
+    def test_no_prompt_routes_to_draw_adapter_and_stops(self):
+        self.receipt['candidates'] = {'candidates': []}
+        with patch('sanma_friend_discard_experiment.execute_friend_draw_candidate',return_value={'status':'selection_confirmed','result':'discard_not_verified'}) as draw:
+            self.run_room()
+        draw.assert_called_once_with(self.op,self.page,self.receipt)
+        self.page.mouse.click.assert_called_once_with(1140,998)
+        self.op.execute_sanma_friend_tsumo_candidate.assert_not_called()
+        self.assertTrue(any(call.kwargs.get('reason')=='candidate_click_outcome_requires_review' for call in self.op.log.call_args_list))
 
     def test_failed_room_verification_never_clicks(self):
         with patch('auto_operator.inspect_sanma_friend_start',side_effect=ValueError('room changed')):

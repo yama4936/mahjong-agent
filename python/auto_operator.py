@@ -8341,11 +8341,21 @@ class PythonAutoOperator:
                     receipt = self.inspect_sanma_self_turn(page)
                     candidates = receipt.get("candidates")
                     actions = candidates.get("candidates") if isinstance(candidates, dict) else None
-                    if not isinstance(actions, list) or not any(isinstance(item, dict) and item.get("action") == "tsumo" for item in actions):
+                    if not isinstance(actions, list):
                         self.log("sanma_friend_stopped", reason="unsupported_or_unknown_action", screenshot=receipt.get("screenshot"),
                                  digest=receipt.get("digest"), candidates=candidates, operationAuthorized=False)
                         return
-                    result = self.execute_sanma_friend_tsumo_candidate(page, receipt)
+                    if any(isinstance(item, dict) and item.get("action") == "tsumo" for item in actions):
+                        result = self.execute_sanma_friend_tsumo_candidate(page, receipt)
+                    elif not actions:
+                        # A draw-only experiment is allowed only if its own
+                        # adapter can verify the full hand and empty button row.
+                        from sanma_friend_discard_experiment import execute_friend_draw_candidate
+                        result = execute_friend_draw_candidate(self, page, receipt)
+                    else:
+                        self.log("sanma_friend_stopped", reason="unsupported_or_unknown_action", screenshot=receipt.get("screenshot"),
+                                 digest=receipt.get("digest"), candidates=candidates, operationAuthorized=False)
+                        return
                     self.log("sanma_friend_stopped", reason="candidate_click_outcome_requires_review", result=result)
                     return
                 except Exception as error:
@@ -8401,9 +8411,14 @@ class PythonAutoOperator:
                 page.on("framenavigated", lambda frame: self.revoke_verified_friend_300("navigation")
                         if frame == page.main_frame else None)
                 started_at = time.monotonic()
-                page.mouse.click(1140, 998)
                 self.verified_friend_300_active = True
                 self.verified_friend_300_started_at = started_at
+                try:
+                    page.mouse.click(1140, 998)
+                except Exception:
+                    self.verified_friend_300_active = False
+                    self.log("sanma_friend_stopped", reason="friend_start_click_failed", preflight=str(preflight_path))
+                    raise
                 try:
                     commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=self.root,
                                             capture_output=True, text=True, check=True).stdout.strip()
