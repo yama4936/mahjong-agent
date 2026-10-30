@@ -13,6 +13,7 @@ import { confirmWeakOpenDraw, createOpenDrawVerifier, selectedTileRecognition } 
 import sharp from "sharp";
 import { HybridTileRecognizer } from "./hybridTileRecognizer.js";
 import { EXPERIMENTAL_BUTTONS, type ExperimentalTemplates } from "./sanmaButtonExperiment.js";
+import { assembleSanmaEvaluation } from "./sanmaFrameEvaluation.js";
 import { observeSanmaFrameAutomatically } from "./sanmaAutoFrameObservation.js";
 import { exitWhenOutputPipeBreaks } from "./outputPipe.js";
 
@@ -122,7 +123,8 @@ for await (const line of lines) {
       sanmaClassifier ??= new HybridTileRecognizer();
       const result = await observeSanmaFrameAutomatically({frame,layout,templates:templateDirectory,
         publicClassifier:sanmaClassifier,...refs});
-      process.stdout.write(`${JSON.stringify({id,result})}\n`);
+      const assembly = assembleSanmaEvaluation({frame, observation:result});
+      process.stdout.write(`${JSON.stringify({id,result:{...result,assembly}})}\n`);
       continue;
     }
     if (request.observeSanma !== undefined && request.observeSanma !== false) throw new Error("invalid sanma observation mode");

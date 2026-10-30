@@ -86,3 +86,62 @@ export function evaluateSanmaFrameCandidate(input: {
     return {status: "blocked" as const, reasons: [error instanceof Error ? error.message : String(error)], operationAuthorized: false as const};
   }
 }
+
+/**
+ * Assemble unverified observations for review without converting a missing
+ * region, empty recognition, or extracted-north occlusion into a zero value.
+ * Optional external review is a caller assertion and cannot authorize play.
+ */
+export function assembleSanmaEvaluation(input: {
+  frame: Buffer;
+  observation: Awaited<ReturnType<typeof import("./sanmaAutoFrameObservation.js").observeSanmaFrameAutomatically>>;
+  review?: ReviewedFrameEvidence;
+}) {
+  const {frame, observation, review} = input;
+  const digest = Buffer.isBuffer(frame) ? createHash("sha256").update(frame).digest("hex") : "";
+  if (digest !== observation.digest || digest !== observation.report.digest ||
+      Object.values(observation.north.positions ?? {}).some(position => position.frame_sha256 !== undefined && position.frame_sha256 !== digest)) {
+    return {scope:"offline_untrusted_sanma_evaluation_assembly" as const, status:"blocked" as const,
+      reasons:["frame evidence digest mismatch"], operationAuthorized:false as const};
+  }
+  const report = observation.report;
+  const partial: Record<string, unknown> = {};
+  // Candidate values are intentionally not promoted into a playable GameState.
+  if (observation.ownSeat.status === "candidate") partial.seat = observation.ownSeat.value;
+  if (observation.board.candidate) partial.board = observation.board.candidate;
+  if (report.hand.status === "candidate" && report.hand.value.tiles.length) {
+    partial.orderedHand = report.hand.value.tiles;
+    partial.handRecognizerAccepted = report.hand.value.safe;
+  }
+  if (report.publicTiles.status === "candidate") {
+    const publicTiles = report.publicTiles.value.observation;
+    const rivers = publicTiles.opponentDiscards.filter(o => o.discards.length).map(o => ({seat:o.seat, tiles:o.discards}));
+    if (publicTiles.ownDiscards.length) partial.ownRiverCandidates = publicTiles.ownDiscards;
+    if (publicTiles.doraIndicators.length) partial.doraCandidates = publicTiles.doraIndicators;
+    if (rivers.length) partial.opponentRiverCandidates = rivers;
+    if (publicTiles.ownMelds?.length) partial.ownMeldCandidates = publicTiles.ownMelds;
+  }
+  if (observation.candidates.candidates.length) partial.actionCandidates = observation.candidates.candidates;
+  const missing = ["rules and seat not verified", "hand and draw not verified", "turn and riichi status unknown",
+    "action list incomplete", "rivers and melds incomplete", "all three extracted north counts unknown"];
+  let northConflict = false;
+  if (review?.state && typeof review.state === "object" && !Array.isArray(review.state)) {
+    const state = review.state as Record<string, unknown>;
+    const own = observation.north.positions?.own;
+    if (state.ownKitaCount === 0 && Array.isArray(own?.matches) && own.matches.length) northConflict = true;
+    const seats = observation.north.bySeat;
+    if (seats && Array.isArray(state.opponents)) {
+      for (const opponent of state.opponents) {
+        if (!opponent || typeof opponent !== "object") continue;
+        const row = opponent as Record<string, unknown>;
+        const position = seats[String(row.seat) as keyof typeof seats];
+        if (row.kitaCount === 0 && position?.candidate) northConflict = true;
+      }
+    }
+  }
+  const evaluation = northConflict
+    ? {status:"blocked" as const, reasons:["reviewed zero north count conflicts with visual candidate"],operationAuthorized:false as const}
+    : evaluateSanmaFrameCandidate({frame, report, ...(review ? {review} : {})});
+  return {scope:"offline_untrusted_sanma_evaluation_assembly" as const, status:"blocked" as const,
+    digest, partial, missing, evaluation, operationAuthorized:false as const};
+}

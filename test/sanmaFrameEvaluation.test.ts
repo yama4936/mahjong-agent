@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { evaluateSanmaFrameCandidate, type ReviewedFrameEvidence } from "../src/recognition/sanmaFrameEvaluation.js";
+import { assembleSanmaEvaluation, evaluateSanmaFrameCandidate, type ReviewedFrameEvidence } from "../src/recognition/sanmaFrameEvaluation.js";
 
 const frame = Buffer.from("synthetic fixture, not a screenshot");
 const digest = createHash("sha256").update(frame).digest("hex");
@@ -73,4 +73,37 @@ test("reviewed complete river evidence is attached to each candidate without aut
   assert.equal(result.operationAuthorized,false);
   const missing = evaluateSanmaFrameCandidate({frame,report:candidateReport,review:{...review,state:{...state,opponents:[{...opponents[0],discards:undefined},opponents[1]]}}});
   assert.equal(missing.status,"blocked");
+});
+
+
+test("assembly preserves unknowns and only evaluates with matching explicit review", () => {
+  const observation = {digest,report, board:{verified:false,candidate:{seat:"east"}},
+    ownSeat:{status:"candidate",value:"east",verified:false},north:{status:"unknown",complete:false,verified:false},
+    candidates:{status:"unresolved",candidates:[],missing:[],operationAuthorized:false},operationAuthorized:false} as unknown as Parameters<typeof assembleSanmaEvaluation>[0]["observation"];
+  const absent = assembleSanmaEvaluation({frame,observation});
+  assert.equal(absent.status,"blocked");
+  assert.equal(absent.operationAuthorized,false);
+  if ("partial" in absent) {
+    assert.equal(absent.partial.seat,"east");
+    assert.equal("ownKitaCount" in absent.partial,false);
+    assert.equal("ownRiverCandidates" in absent.partial,false);
+    assert.equal(absent.evaluation?.status,"blocked");
+  }
+  const reviewed = assembleSanmaEvaluation({frame,observation,review});
+  assert.equal(reviewed.status,"blocked");
+  if ("evaluation" in reviewed) assert.equal(reviewed.evaluation?.status,"offline_evaluation");
+  assert.equal(reviewed.operationAuthorized,false);
+  const disputed = {...observation,north:{...observation.north,positions:{own:{verified:false as const,complete:false as const,matches:[{x:1395,y:775}]},
+    left:{verified:false as const,complete:false as const},opposite:{verified:false as const,complete:false as const}}}};
+  const conflict = assembleSanmaEvaluation({frame,observation:disputed,review});
+  if ("evaluation" in conflict) {
+    assert.equal(conflict.evaluation?.status,"blocked");
+    if (conflict.evaluation?.status === "blocked") assert.ok(conflict.evaluation.reasons.includes("reviewed zero north count conflicts with visual candidate"));
+  }
+  const badFrame = assembleSanmaEvaluation({frame:Buffer.from("other"),observation,review});
+  assert.equal(badFrame.status,"blocked");
+  assert.deepEqual("reasons" in badFrame && badFrame.reasons,["frame evidence digest mismatch"]);
+  const otherDigest = {...observation,north:{...observation.north,positions:{own:{verified:false as const,complete:false as const,frame_sha256:"wrong"},
+    left:{verified:false as const,complete:false as const},opposite:{verified:false as const,complete:false as const}}}};
+  assert.deepEqual((assembleSanmaEvaluation({frame,observation:otherDigest}) as {reasons:string[]}).reasons,["frame evidence digest mismatch"]);
 });
