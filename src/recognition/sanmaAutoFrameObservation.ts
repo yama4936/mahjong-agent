@@ -9,6 +9,7 @@ import type { ScreenLayout } from "./layout.js";
 import type { ExperimentalTemplates } from "./sanmaButtonExperiment.js";
 import { mapPublicOpponentPositions } from "./publicSeatMapping.js";
 import type { PublicVitClassifier } from "./publicTileRecognizer.js";
+import { inspectSanmaRightRiverCandidate } from "./sanmaRightRiverCandidate.js";
 
 const run = promisify(execFile);
 type NorthPosition = { verified: false; complete: false; frame_sha256?: string; [key: string]: unknown };
@@ -38,7 +39,8 @@ export async function observeSanmaFrameAutomatically(input: {
   // OCR and independent visual branches consume the same immutable bytes.
   // Public seat mapping still waits for OCR and remains unresolved on failure.
   const boardPromise = (async () => {
-    let board: { verified: false; reason?: string; candidate?: { seat?: string } };
+    let board: { verified: false; reason?: string; candidate?: { seat?: string };
+      layoutCandidate?: {verified?:boolean;opponents?:string[]} };
     let north: NorthResult = { status: "unknown", verified: false, complete: false, reason: "north observations unavailable" };
     try {
       let data: { board: typeof board; north: NorthResult; frame_sha256?: string };
@@ -78,6 +80,12 @@ export async function observeSanmaFrameAutomatically(input: {
     ...(input.buttonRowReferences ? { buttonRowReferences: input.buttonRowReferences } : {}) });
   const [{ board, north, ownSeat }, report] = await Promise.all([boardPromise, reportPromise]);
   if (report.digest !== digest) throw new Error("snapshot digest mismatch");
+  let rightRiver: Awaited<ReturnType<typeof inspectSanmaRightRiverCandidate>> | undefined;
+  if (board.reason === 'unsupported_right_opponent_layout' && board.layoutCandidate?.verified === false
+      && JSON.stringify(board.layoutCandidate.opponents) === JSON.stringify(['left','right'])) {
+    try { rightRiver = await inspectSanmaRightRiverCandidate(frame,input.layout,input.publicClassifier); }
+    catch { /* An unavailable visual branch remains absent, never an empty river. */ }
+  }
   // The older diagnostic evaluates with an assumed empty visible-tile list.
   // Do not expose it in the automatic observation as if unknown tiles were zero.
   report.shape = {status: "unresolved", reason: "visible tile completeness unavailable"};
@@ -86,6 +94,7 @@ export async function observeSanmaFrameAutomatically(input: {
   const candidates = deriveSanmaActionCandidates(report, ownSeat !== undefined);
   if (!input.buttonRowReferences?.ron) candidates.missing.push("ron reference unavailable");
   return { scope: "offline_untrusted_sanma_auto_observation" as const, digest, board, north: { ...north, ...(bySeat ? { bySeat, mappingVerified: false as const } : {}) }, candidates,
+    ...(rightRiver ? {rightRiver} : {}),
     ownSeat: ownSeat ? { status: "candidate" as const, value: ownSeat, verified: false as const }
       : { status: "unknown" as const, reason: board.reason ?? "seat unavailable" },
     report, operationAuthorized: false as const };
