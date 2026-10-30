@@ -4,9 +4,10 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import sharp from "sharp";
-import { inspectSanmaFrame } from "../src/recognition/sanmaFrameExperiment.js";
+import { bindSanmaDiscardHypothesis, inspectSanmaFrame } from "../src/recognition/sanmaFrameExperiment.js";
 import { EXPERIMENTAL_BUTTONS, type ExperimentalTemplates } from "../src/recognition/sanmaButtonExperiment.js";
 import { HybridTileRecognizer } from "../src/recognition/hybridTileRecognizer.js";
+import { evaluateDiscards } from "../src/game/ukeire.js";
 import { layoutSchema } from "../src/recognition/layout.js";
 
 const file = "artifacts/sanma-manual-e48c562-20261031/actions/2026-10-30T16-05-55-331Z-before.png";
@@ -32,6 +33,28 @@ test("one saved sanma frame is bound to untrusted hand, public and button observ
     if (report.publicTiles.status === "candidate") assert.deepEqual(report.publicTiles.value.observation.opponentDiscards.map(o => o.seat), ["east", "south"]);
     assert.equal(report.decision.status, "blocked");
     assert.equal(report.operationAuthorized, false);
+    const bound = bindSanmaDiscardHypothesis(report, frame, 0);
+    assert.equal(bound.status, "blocked");
+    assert.equal(bound.operationAuthorized, false);
+    assert.ok(bound.blockers.includes("hand recognition did not meet confidence requirements"));
+    assert.ok(bound.blockers.includes("button kita is only a single unverified crop"));
+    assert.ok(bound.blockers.includes("public tiles incomplete"));
+    if (report.hand.status === "candidate") {
+      const rows = evaluateDiscards(report.hand.value.tiles, [], 0, "sanma");
+      const index = rows.findIndex(row => row.tile === "9m");
+      const hypothetical = bindSanmaDiscardHypothesis({ ...report, shape: {status: "hypothesis", assumptions: ["synthetic test"], rows} }, frame, index);
+      assert.equal(hypothetical.operationAuthorized, false);
+      assert.deepEqual(hypothetical.hypothesis?.positions.map(position => position.index), [1, 2]);
+      assert.ok(hypothetical.blockers.includes("hand recognition did not meet confidence requirements"));
+    }
+    const otherFrame = Buffer.from(frame);
+    otherFrame[0] = otherFrame[0]! ^ 1;
+    const mismatch = bindSanmaDiscardHypothesis(report, otherFrame, 0);
+    assert.ok(mismatch.blockers.includes("frame digest differs from observation"));
+    assert.equal("hypothesis" in mismatch, false);
+    const unknownButton = bindSanmaDiscardHypothesis({ ...report, button: { status: "unresolved", reason: "test" } }, frame, 0);
+    assert.ok(unknownButton.blockers.includes("button crop unrecognized"));
+
   } finally { await classifier.close(); }
 });
 
