@@ -90,6 +90,16 @@ class ExperimentalSanmaFriendLoopTest(unittest.TestCase):
         self.assertTrue(any(call.args[0]=='sanma_friend_action_unconfirmed' and call.kwargs.get('confirmed') is False
                             for call in self.op.log.call_args_list))
 
+    def test_new_digest_cannot_repeat_an_unconfirmed_kita(self):
+        self.op.args.max_iterations = 2
+        self.op.observe_sanma_friend_transition.return_value = {'status':'visual_change_unconfirmed','confirmed':False}
+        self.receipt['candidates'] = {'candidates':[{'action':'kita'}]}
+        next_receipt = {'candidates':{'candidates':[{'action':'kita'}]},'digest':'changed-clock','screenshot':'next.png'}
+        self.op.inspect_sanma_self_turn.side_effect = [self.receipt,next_receipt]
+        self.run_room()
+        self.op.execute_sanma_friend_kita_candidate.assert_called_once()
+        self.assertTrue(any(call.kwargs.get('reason')=='previous_kita_unconfirmed' for call in self.op.log.call_args_list))
+
     def test_same_frame_after_unconfirmed_transition_never_repeats_click(self):
         self.op.args.max_iterations = 2
         self.op.observe_sanma_friend_transition.return_value = {'status':'visual_change_unconfirmed','confirmed':False}

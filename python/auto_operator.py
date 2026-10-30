@@ -8460,6 +8460,7 @@ class PythonAutoOperator:
         polls = 0
         last_frame = None
         attempted_frames: set[str] = set()
+        last_unconfirmed_action: str | None = None
         unknown_streak = 0
         def preserve(frame: bytes | None) -> str | None:
             if not isinstance(frame, bytes) or not frame:
@@ -8499,6 +8500,11 @@ class PythonAutoOperator:
                         action = "tsumo"
                         result = self.execute_sanma_friend_tsumo_candidate(page, receipt)
                     elif any(isinstance(item, dict) and item.get("action") == "kita" for item in actions):
+                        if last_unconfirmed_action == "kita":
+                            self.log("sanma_friend_stopped", reason="previous_kita_unconfirmed",
+                                     screenshot=receipt.get("screenshot"), digest=frame_digest,
+                                     previousActionConfirmed=False)
+                            return
                         action = "kita"
                         result = self.execute_sanma_friend_kita_candidate(page, receipt)
                     elif not actions:
@@ -8521,6 +8527,7 @@ class PythonAutoOperator:
                                  digest=frame_digest, candidates=candidates, operationAuthorized=False)
                         return
                     attempted_frames.add(frame_digest)
+                    last_unconfirmed_action = action
                     unknown_streak = 0
                     self.log("sanma_friend_action_unconfirmed", action=action, result=result, confirmed=False)
                     transition = self.observe_sanma_friend_transition(page, receipt, action)
