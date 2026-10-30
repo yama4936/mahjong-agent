@@ -23,6 +23,15 @@ export function safetyCheck(state: GameState, candidates: readonly DiscardEvalua
   return { allowed: reasons.length === 0, reasons };
 }
 
+/** A structural closed wait can win by menzen tsumo; open waits need ordinary yaku evidence. */
+export function hasLiveWinningTenpai(candidate: DiscardEvaluation, state: GameState): boolean {
+  if (candidate.shanten !== 0 || candidate.ukeire <= 0) return false;
+  const closed = state.openMelds === 0 || (state.melds.length === state.openMelds
+    && state.melds.every(meld => meld.type === "ankan"));
+  return closed || candidate.openTenpaiScore?.scope === "ordinary_open_hand_without_situational_yaku_honba_or_deposits"
+    && candidate.openTenpaiScore.winningUkeire > 0;
+}
+
 export function deterministicAdvice(state: GameState): AdvisorResult {
   const hand = state.draw ? [...state.hand, state.draw] : state.hand;
   const ordinaryProgress = createOpenOneShantenAnalyzer(state);
@@ -45,6 +54,13 @@ export function deterministicAdvice(state: GameState): AdvisorResult {
   const urgentPush = allLast && rank === 4;
   const protectLead = rank === 1;
   const candidates = evaluated.sort((left, right) => {
+    // Unopposed late-hand EV estimates must not break a live winning tenpai.
+    // A visible attack still allows folding; dead/uncertified open waits get no protection.
+    if (!underThreat) {
+      const leftLive = hasLiveWinningTenpai(left, state);
+      const rightLive = hasLiveWinningTenpai(right, state);
+      if (leftLive !== rightLive) return leftLive ? -1 : 1;
+    }
     if (phase === "early" && !underThreat) {
       return left.shanten - right.shanten || right.ukeire - left.ukeire
         || (right.expectedRoundValue ?? Number.NEGATIVE_INFINITY) - (left.expectedRoundValue ?? Number.NEGATIVE_INFINITY);

@@ -1,0 +1,292 @@
+[
+  {
+    "source": "artifacts/friend-300-6ce4901-direct-gesture-probe-20261030/replays/decisions.jsonl",
+    "timestamp": "2026-10-30T02:37:30.669785+00:00",
+    "state": {
+      "round": "east_1",
+      "matchLength": "east",
+      "honba": 0,
+      "riichiSticks": 0,
+      "seat": "west",
+      "scores": {
+        "west": 25000,
+        "north": 25000,
+        "east": 25000,
+        "south": 25000
+      },
+      "hand": [
+        "5m",
+        "6m",
+        "6m",
+        "7m",
+        "8m",
+        "5p",
+        "6p",
+        "7p",
+        "2s",
+        "2s",
+        "4s",
+        "9s",
+        "9s"
+      ],
+      "draw": "3s",
+      "doraIndicators": [
+        "6s"
+      ],
+      "ownDiscards": [
+        "P",
+        "E",
+        "S",
+        "6p",
+        "P",
+        "1s",
+        "1s",
+        "2m",
+        "W",
+        "7s",
+        "2p",
+        "4s",
+        "8s"
+      ],
+      "melds": [],
+      "visibleTiles": [],
+      "openMelds": 0,
+      "turn": 13,
+      "remainingTiles": 15,
+      "phase": "self_turn",
+      "recognitionConfidence": 0.9453251390875138,
+      "publicStateConfidence": 0,
+      "riichiDeclared": false,
+      "availableUiActions": [
+        "riichi",
+        "tsumo",
+        "kan",
+        "kyuushu"
+      ],
+      "opponents": [
+        {
+          "seat": "north",
+          "discards": [
+            "P",
+            "4p",
+            "S",
+            "W",
+            "3p",
+            "C",
+            "P",
+            "S",
+            "2m",
+            "N",
+            "3s",
+            "N",
+            "6s"
+          ],
+          "riichi": false,
+          "openMelds": 0,
+          "openMeldsObserved": true,
+          "melds": []
+        },
+        {
+          "seat": "east",
+          "discards": [
+            "F",
+            "9p",
+            "E",
+            "3p",
+            "6s",
+            "4s",
+            "1m",
+            "9m",
+            "6p",
+            "4s",
+            "8m",
+            "8s",
+            "8m"
+          ],
+          "riichi": false,
+          "openMelds": 0,
+          "openMeldsObserved": true,
+          "melds": []
+        },
+        {
+          "seat": "south",
+          "discards": [
+            "8p",
+            "C",
+            "4p",
+            "7m",
+            "1m",
+            "1s",
+            "7s",
+            "N",
+            "9s",
+            "3m",
+            "3m",
+            "1m",
+            "6s",
+            "8s"
+          ],
+          "riichi": false,
+          "openMelds": 0,
+          "openMeldsObserved": true,
+          "melds": []
+        }
+      ]
+    },
+    "previousDiscard": "9s",
+    "previousSource": "deterministic",
+    "previousExecutionStatus": "verified",
+    "expectedTenpaiDiscard": "2s",
+    "scope": "recognized-state regression, not independent verification of tile recognition"
+  },
+  {
+    "source": "artifacts/friend-300-41b5ea3-convenience-20261030/replays/decisions.jsonl",
+    "timestamp": "2026-10-30T02:14:46.906913+00:00",
+    "state": {
+      "round": "east_1",
+      "matchLength": "east",
+      "honba": 0,
+      "riichiSticks": 0,
+      "seat": "north",
+      "scores": {
+        "north": 25000,
+        "east": 25000,
+        "south": 25000,
+        "west": 25000
+      },
+      "hand": [
+        "4m",
+        "4m",
+        "6m",
+        "6m",
+        "1p",
+        "2p",
+        "3p",
+        "7p",
+        "8p",
+        "9p",
+        "2s",
+        "7s",
+        "8s"
+      ],
+      "draw": "6s",
+      "doraIndicators": [
+        "9s"
+      ],
+      "ownDiscards": [
+        "N",
+        "P",
+        "E",
+        "8p",
+        "1s",
+        "C",
+        "4p",
+        "W",
+        "7m",
+        "3m",
+        "P",
+        "1p"
+      ],
+      "melds": [],
+      "visibleTiles": [],
+      "openMelds": 0,
+      "turn": 12,
+      "remainingTiles": 15,
+      "phase": "self_turn",
+      "recognitionConfidence": 0.9580235059103217,
+      "publicStateConfidence": 0,
+      "riichiDeclared": false,
+      "availableUiActions": [
+        "riichi",
+        "tsumo",
+        "kan",
+        "kyuushu"
+      ],
+      "opponents": [
+        {
+          "seat": "east",
+          "discards": [
+            "F",
+            "P",
+            "8s",
+            "E",
+            "9p",
+            "7s",
+            "N",
+            "7p",
+            "5p",
+            "4s",
+            "9m",
+            "3s",
+            "W",
+            "7m"
+          ],
+          "riichi": false,
+          "openMelds": 1,
+          "openMeldsObserved": true,
+          "melds": [
+            {
+              "type": "chi",
+              "tiles": [
+                "3p",
+                "2p",
+                "1p"
+              ]
+            }
+          ]
+        },
+        {
+          "seat": "south",
+          "discards": [
+            "W",
+            "S",
+            "N",
+            "1s",
+            "E",
+            "C",
+            "3p",
+            "1m",
+            "3m",
+            "2p",
+            "1p",
+            "2p",
+            "1m",
+            "7m"
+          ],
+          "riichi": false,
+          "openMelds": 0,
+          "openMeldsObserved": true,
+          "melds": []
+        },
+        {
+          "seat": "west",
+          "discards": [
+            "8m",
+            "9m",
+            "N",
+            "F",
+            "C",
+            "1m",
+            "8p",
+            "8m",
+            "W",
+            "F",
+            "1m",
+            "9s",
+            "9p",
+            "7p"
+          ],
+          "riichi": false,
+          "openMelds": 0,
+          "openMeldsObserved": true,
+          "melds": []
+        }
+      ]
+    },
+    "previousDiscard": "9p",
+    "previousSource": "deterministic",
+    "previousExecutionStatus": "verified",
+    "expectedTenpaiDiscard": "2s",
+    "scope": "recognized-state regression, not independent verification of tile recognition"
+  }
+]

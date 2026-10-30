@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFile } from "node:fs/promises";
 import { decide } from "../src/agent/decision.js";
-import { deterministicAdvice } from "../src/evaluation/advisor.js";
+import { deterministicAdvice, hasLiveWinningTenpai } from "../src/evaluation/advisor.js";
 import { parseGameState } from "../src/game/state.js";
 import { estimateHeuristicRonPoints, evaluateRoundValue } from "../src/evaluation/value.js";
 import type { DiscardEvaluation } from "../src/game/ukeire.js";
@@ -13,6 +14,39 @@ const state = parseGameState({
   draw: "6p",
   doraIndicators: ["4m"],
   recognitionConfidence: 1,
+});
+
+test("logged late tenpai survives local fallback without a visible attack", async () => {
+  const fixtures = JSON.parse(await readFile("test/fixtures/discard-tenpai-regression-20261030.json", "utf8"));
+  for (const fixture of fixtures) {
+    // Recognized-state reproduction, not a certification of the source screenshot.
+    const live = parseGameState(fixture.state);
+    const advice = deterministicAdvice(live);
+    assert.equal(advice.tile, fixture.expectedTenpaiDiscard, fixture.timestamp);
+    assert.equal(advice.candidates[0]!.shanten, 0);
+    assert.ok(advice.candidates[0]!.ukeire > 0);
+    assert.ok(advice.candidates.find(c => c.tile === fixture.previousDiscard)!.shanten > 0);
+  }
+  const live = parseGameState(fixtures[0].state);
+  for (const attack of [{ riichi: true }, { openMelds: 2 }]) {
+    const threatened = parseGameState({ ...live, opponents: live.opponents.map(op => op.seat === "south" ? { ...op, ...attack } : op) });
+    assert.ok(deterministicAdvice(threatened).candidates[0]!.shanten > 0,
+      "a visible attack must still permit breaking tenpai");
+  }
+});
+
+test("tenpai priority requires live waits and ordinary scoring evidence for open hands", () => {
+  const candidate: DiscardEvaluation = { actionId: "discard_E", action: "discard", tile: "E", shanten: 0, form: "standard", ukeire: 2,
+    effectiveTiles: [{ tile: "1m", remaining: 2 }] };
+  assert.equal(hasLiveWinningTenpai(candidate, state), true);
+  assert.equal(hasLiveWinningTenpai({ ...candidate, ukeire: 0 }, state), false);
+  assert.equal(hasLiveWinningTenpai({ ...candidate, shanten: 1 }, state), false);
+  const open = { ...state, openMelds: 1 };
+  assert.equal(hasLiveWinningTenpai(candidate, open), false);
+  const report = { scope: "ordinary_open_hand_without_situational_yaku_honba_or_deposits" as const, redFivesPerSuit: 1 as const,
+    knownDiscardFuriten: false, waits: [], ronUkeire: 0, tsumoUkeire: 0, winningUkeire: 0, conditionalConservativePoints: 0 };
+  assert.equal(hasLiveWinningTenpai({ ...candidate, openTenpaiScore: report }, open), false);
+  assert.equal(hasLiveWinningTenpai({ ...candidate, openTenpaiScore: { ...report, winningUkeire: 2 } }, open), true);
 });
 
 test("limit estimates preserve boundaries and cap counted hands at one yakuman", () => {

@@ -35,9 +35,8 @@ test("late value ordering cannot hide the actual open-hand tenpai discard from J
       probabilities: { [candidates[0]!.actionId]: 1 }, model: "first-offered-test", promptVersion: "test", latencyMs: 0 };
   } } as unknown as JevClient;
   const result = await decide(live, { mode: "force-auto", jev });
-  // This exact late-hand ordering prefers a safer one-shanten candidate,
-  // while the physical eight-sou discard reaches tenpai. Both are legal.
-  assert.equal(result.candidates[0]!.shanten, 1);
+  // Preserve the certified open winning tenpai in both local ordering and Jev input.
+  assert.equal(result.candidates[0]!.shanten, 0);
   assert.equal(result.candidates.find(candidate => candidate.tile === "8s")!.shanten, 0);
   assert.deepEqual(offered, ["8s"]);
   assert.deepEqual(result.selectedAction, { id: "discard_8s", action: "discard", tile: "8s" });
@@ -72,6 +71,61 @@ test("declaration comparison can choose dama and invalid/scorer failures retain 
   const low = await decide(live, { mode: "advisor", jev: uncertain, riichiScorer: async () => report });
   assert.equal(low.selectedAction.action, "riichi");
   assert.equal(low.declarationComparison?.decision?.confidence, 0.5);
+});
+
+test("defensive candidate filter retains live dama and certified open tenpai without riichi UI", async () => {
+  const fixture = JSON.parse(await readFile("test/fixtures/late-open-tenpai-candidate-20261021.json", "utf8"));
+  const cases = [
+    { state: parseGameState({ ...fixture.state, availableUiActions: [], opponents: [{ seat: "south", discards: ["6m"], riichi: true }] }), tile: "8s" },
+    { state: parseGameState({ hand: ["2m", "2m", "3m", "3m", "4p", "4p", "5p", "5p", "6s", "6s", "7s", "7s", "8s"],
+      draw: "E", availableUiActions: [], opponents: [{ seat: "south", discards: ["2m"], riichi: true }] }), tile: "E" },
+  ];
+  for (const scenario of cases) {
+    const jev = { chooseDiscard: async (_state: unknown, candidates: any[]) => {
+      const tenpai = candidates.find(candidate => candidate.tile === scenario.tile);
+      assert.ok(tenpai, "a live winning tenpai must reach the push/fold comparison");
+      assert.equal(tenpai.shanten, 0);
+      if (scenario.state.openMelds) assert.ok(tenpai.openTenpaiScore.winningUkeire > 0);
+      assert.ok(candidates.some(candidate => candidate.shanten > 0), "safe retreats remain available");
+      return { actionId: tenpai.actionId, confidence: 1, probabilities: {}, model: "test", promptVersion: "test", latencyMs: 0 };
+    } } as unknown as JevClient;
+    const result = await decide(scenario.state, { mode: "force-auto", jev });
+    assert.equal(result.source, "jev");
+    assert.equal(result.tile, scenario.tile);
+    assert.equal(result.selectedAction.action, "discard");
+  }
+});
+
+test("discard adoption rejects legal candidates excluded from the supplied comparison", async () => {
+  const jev = { chooseDiscard: async (_state: unknown, candidates: any[]) => {
+    assert.ok(!candidates.some(candidate => candidate.actionId === "discard_1m"));
+    return { actionId: "discard_1m", confidence: 1, probabilities: {}, model: "test", promptVersion: "test", latencyMs: 0 };
+  } } as unknown as JevClient;
+  const result = await decide(state, { mode: "force-auto", jev });
+  assert.equal(result.source, "deterministic");
+  assert.notEqual(result.tile, "1m");
+  assert.ok(result.safety.reasons.some(reason => reason.includes("unknown candidate")));
+});
+
+test("discard comparison keeps completed scoring when a sibling exceeds its deadline", async () => {
+  const live = parseGameState({ hand: ["2m", "2m", "3m", "3m", "4p", "4p", "5p", "5p", "6s", "6s", "7s", "7s", "8s"],
+    draw: "E", availableUiActions: ["riichi"], scores: { east: 25000 } });
+  const report: ClosedWaitReport = { library: "mahjong==2.0.0", discard: "E",
+    scope: "closed_hand_scoring_not_policy_ev", assumptions: {}, rows: [] };
+  let abortedSlow = false;
+  const scorer = async (_state: unknown, tile: string, _waits: unknown, options: { signal?: AbortSignal } = {}) => {
+    if (tile === "E") return report;
+    options.signal?.addEventListener("abort", () => { abortedSlow = true; }, { once: true });
+    return new Promise<ClosedWaitReport>(() => {});
+  };
+  const jev = { chooseDiscard: async (_state: unknown, candidates: any[]) => {
+    assert.equal(candidates.find(candidate => candidate.tile === "E")?.closedWaitScore, report);
+    assert.equal(candidates.find(candidate => candidate.tile === "8s")?.closedWaitScore, undefined);
+    return { actionId: "discard_E", confidence: 1, probabilities: {}, model: "test", promptVersion: "test", latencyMs: 0 };
+  } } as unknown as JevClient;
+  const result = await decide(live, { mode: "force-auto", jev, riichiScorer: scorer });
+  assert.equal(result.source, "jev");
+  assert.equal(abortedSlow, true);
 });
 
 test("live south-three highlighted chi is passed without shanten gain or viable yaku", async () => {
@@ -411,7 +465,8 @@ test("force-auto restricts Jev to safer tiles under threat", async () => {
   assert.ok(offered.length > 0);
   const eligible = result.candidates.filter((candidate) => candidate.shanten <= Math.min(...result.candidates.map((item) => item.shanten)) + 1);
   const safest = Math.min(...eligible.map((candidate) => candidate.danger ?? 1));
-  assert.ok(offered.every((candidate) => (candidate.danger ?? 1) <= safest + 0.02));
+  assert.ok(offered.every((candidate) => (candidate.danger ?? 1) <= safest + 0.02
+    || candidate.shanten === 0 && candidate.ukeire > 0));
 });
 
 test("threat filtering retains live riichi discard for declaration comparison", async () => {

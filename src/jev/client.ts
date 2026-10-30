@@ -5,6 +5,7 @@ import { normalizeTile, parseGameTile } from "../game/tiles.js";
 import type { ClosedWaitReport } from "../evaluation/closedWaitScorer.js";
 import type { OpenTenpaiScore } from "../evaluation/openTenpaiScore.js";
 import { handPlanMeldSignature, isHandPlanFeasible, type HandPlanMeld } from "../agent/handPlanFeasibility.js";
+import { discardTacticalContext } from "./discardContext.js";
 
 export interface JevDecision {
   actionId: string;
@@ -303,12 +304,14 @@ export function buildJevRequest(
     };
   }
 
+  const tactical = discardTacticalContext(state, candidates);
   const bestUkeire = Math.max(...candidates.map((candidate) => candidate.ukeire));
   const bestShanten = Math.min(...candidates.map((candidate) => candidate.shanten));
   const criteria = Object.fromEntries(candidates.map((candidate) => [
     candidate.actionId,
     {
       action: `Discard ${candidate.tile}`,
+      tactical_facts: tactical.criteria.get(candidate.actionId)!,
       hand_progress: {
         shanten_after_discard: candidate.shanten,
         hand_form: candidate.form,
@@ -341,6 +344,7 @@ export function buildJevRequest(
     // context rot without adding evidence.
     state: {
       ...commonState,
+      tactical_summary: tactical.summary,
       ...(profile === "hierarchical-v3" ? { data_quality: {
         round_known: state.round !== "unknown",
         scores_complete: ["east", "south", "west", "north"].every((seat) => state.scores[seat] !== undefined),
@@ -357,6 +361,8 @@ export function buildJevRequest(
           use_evidence: [
             "Use the supplied candidate estimates; do not recompute exact arithmetic or invent missing facts.",
             "Preserve lower shanten unless a supplied expected-round-points or safety difference justifies another option.",
+            "Use tactical_facts to distinguish keeping tenpai from breaking it, live waits from exhausted waits, and exact red/indicator dora retained or lost. Dora are bonuses, not a yaku; do not preserve an isolated dora at any cost.",
+            "Discard-furiten covers all structural waits including exhausted ones; temporary and riichi-pass furiten are unobserved. Structural waits do not prove yaku or a legal ron.",
             "Compare ukeire quality, hand value, win chance and tenpai chance for offense.",
             "For closed tenpai, compare supplied riichi and dama scoring outcomes with other discards' danger; scoring is not a policy EV and does not establish furiten safety.",
             "Ordinary open waits distinguish scoring wins from structural ukeire; null scoring points mean no ordinary yaku for that mode. Situational yaku and UI win legality are outside that scoring scope.",
@@ -369,6 +375,9 @@ export function buildJevRequest(
           question: "Which legal discard best maximizes expected placement-adjusted match outcome from this position?",
           use_evidence: [
             "First preserve minimum shanten; deviate only for a material supplied safety or expected-round-points advantage.",
+            "Use tactical_facts to compare tenpai preservation, all structural waits and exact dora loss/retention. Do not break a live, legally scoring tenpai without a concrete defensive or placement justification; inferred EV is heuristic, not calibrated evidence.",
+            "Dora are bonuses, not a yaku. Discarding an isolated dora for tenpai or material efficiency/safety can be correct; never impose unconditional dora retention.",
+            "Discard-furiten includes exhausted structural waits. Temporary and riichi-pass furiten are unobserved, and structural waits alone do not prove yaku or legal ron.",
             "Second compare ukeire quality, hand value, win chance and tenpai chance using the supplied estimates.",
             "For closed tenpai, compare supplied riichi and dama scoring outcomes against defensive choices; scoring is not policy EV and does not establish furiten safety.",
             "Ordinary open waits distinguish scoring wins from structural ukeire; null scoring points mean no ordinary yaku for that mode. Situational yaku and UI win legality are outside that scoring scope.",

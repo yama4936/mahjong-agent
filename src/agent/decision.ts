@@ -1,5 +1,5 @@
 import { isAllLastRound, type GameState } from "../game/state.js";
-import { deterministicAdvice, type AdvisorResult } from "../evaluation/advisor.js";
+import { deterministicAdvice, hasLiveWinningTenpai, type AdvisorResult } from "../evaluation/advisor.js";
 import { JevClient, type JevDecision, type JevHandPlan } from "../jev/client.js";
 import { generateLegalActions, type LegalAction } from "../game/actions.js";
 import { calculateShanten } from "../game/shanten.js";
@@ -254,13 +254,12 @@ async function decideWithAnalysis(
         ? base.candidates.filter((candidate) => candidate.shanten <= minimumShanten + 1)
         : [];
       const safestDanger = Math.min(...defensible.map((candidate) => candidate.danger ?? 1));
-      // A defensive prefilter must not hide a legal tenpai declaration from
-      // the decision maker: its risk is still visible and it can be folded.
+      // Keep live winning tenpai (including dama and certified open hands) in
+      // the push/fold comparison. Its risk remains visible; folding is still legal.
       const riichiTiles = new Set(legalActions.filter((action) => action.action === "riichi").map((action) => action.tile));
       const jevCandidates = underThreat && defensible.length
         ? defensible.filter((candidate) => (candidate.danger ?? 1) <= safestDanger + 0.02
-          || (riichiTiles.has(candidate.tile) && candidate.shanten === 0 && candidate.ukeire > 0
-            && (state.remainingTiles === undefined || state.remainingTiles >= 4)))
+          || hasLiveWinningTenpai(candidate, state))
         : options.mode === "force-auto" && minimumShanten !== undefined
           ? base.candidates.filter((candidate) => candidate.shanten === minimumShanten)
           : base.candidates;
@@ -283,15 +282,20 @@ async function decideWithAnalysis(
         } catch { return candidate; }
       }));
       let scoringTimer: ReturnType<typeof setTimeout> | undefined;
-      const scoredCandidates = await Promise.race([
+      const completedCandidates = await Promise.race([
         scoring,
         new Promise<typeof jevCandidates>((resolve) => { scoringTimer = setTimeout(() => resolve(jevCandidates), 200); }),
       ]);
       if (scoringTimer) clearTimeout(scoringTimer);
       scoringController.abort();
       options.signal?.removeEventListener("abort", abortScoring);
+      // A slow sibling must not discard reports already completed inside the same budget.
+      const scoredCandidates = completedCandidates.map(candidate => {
+        const report = closedWaitReports.get(candidate.tile);
+        return report ? { ...candidate, closedWaitScore: report } : candidate;
+      });
       jev = await options.jev.chooseDiscard(state, scoredCandidates, options.signal, options.handPlan);
-      const candidate = base.candidates.find((item) => item.actionId === jev!.actionId);
+      const candidate = scoredCandidates.find((item) => item.actionId === jev!.actionId);
       if (!candidate) throw new Error("Jev selected an unknown candidate");
       selected = candidate;
       confidence = jev.confidence;
