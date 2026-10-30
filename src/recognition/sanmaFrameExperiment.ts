@@ -3,6 +3,7 @@ import sharp from "sharp";
 import { evaluateDiscards } from "../game/ukeire.js";
 import { proposeLiveHandLayout, knownOpenHandProposalFitsCalibratedRow } from "./handLayoutProposal.js";
 import { recoverSanmaRaisedHand } from "./sanmaRaisedHandRecovery.js";
+import { recoverSanmaRaisedDrawAfterTwoCalls } from "./sanmaRaisedDrawRecovery.js";
 import type { ScreenLayout } from "./layout.js";
 import { recognizeTileSlots } from "./templateMatcher.js";
 import { classifySanmaButtonCrop, type ExperimentalTemplates } from "./sanmaButtonExperiment.js";
@@ -33,7 +34,8 @@ export async function inspectSanmaFrame(input: {
   const handPromise = (async () => {
     let proposal = await proposeLiveHandLayout(frame);
     if (proposal.evidence.detectedTiles === 2 && !knownOpenHandProposalFitsCalibratedRow(proposal, input.layout, 4)) {
-      const recovered = await recoverSanmaRaisedHand(frame, input.layout, proposal);
+      const recovered = await recoverSanmaRaisedHand(frame, input.layout, proposal)
+        ?? await recoverSanmaRaisedDrawAfterTwoCalls(frame, input.layout, proposal);
       if (!recovered) throw new Error("suspected false compact hand and raised-row recovery unavailable");
       proposal = recovered;
     }
