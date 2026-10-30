@@ -19,6 +19,20 @@ CASES = [
 
 
 class SanmaBoardImageTests(unittest.TestCase):
+    @unittest.skipUnless((ACTIONS / '2026-10-30T17-30-50-782Z-before.png').exists(), 'local score frame unavailable')
+    def test_sanma_left_score_retry_recovers_unverified_candidate(self):
+        frame = ACTIONS / '2026-10-30T17-30-50-782Z-before.png'
+        default = recognize_board(frame)
+        self.assertFalse(any(t['text'] == '33000' and t['confidence'] >= .98 for t in default['tokens']))
+        result = recognize_sanma_board_candidate(frame, expected_total_points=None, payment_phase=None)
+        self.assertFalse(result['verified'])
+        self.assertFalse(result.get('consistent', False))
+        self.assertEqual(result['candidate']['remainingTiles'], 43)
+        self.assertEqual(result['candidate']['scores'], {'east': 41500, 'west': 33000, 'south': 30500})
+        self.assertTrue(any(t['text'] == '33000' and t['confidence'] >= .98 and
+                            t.get('source') == 'upright_left_score_crop' and t.get('cropWidth') == 328
+                            for t in result['tokens']))
+
     @unittest.skipUnless((ACTIONS / '2026-10-30T16-40-57-727Z-before.png').exists(), 'local compact hand frame unavailable')
     def test_compact_sanma_hand_can_yield_only_unverified_board_candidate(self):
         frame = ACTIONS / '2026-10-30T16-40-57-727Z-before.png'

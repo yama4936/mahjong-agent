@@ -170,7 +170,8 @@ def parse_board_tokens(tokens: list[dict], expected_total_points: int = 100000) 
             **({"remainingTiles": int(remaining[1:])} if remaining and int(remaining[1:]) <= 70 else {})}
 
 
-def recognize_board(image_path: Path, *, sanma_compact_candidate: bool = False) -> dict:
+def recognize_board(image_path: Path, *, sanma_compact_candidate: bool = False,
+                    sanma_extra_score_retry: bool = False) -> dict:
     # Optional dependencies stay outside the live operator until validated.
     from PIL import Image
     image = Image.open(image_path).convert("RGB")
@@ -221,7 +222,8 @@ def recognize_board(image_path: Path, *, sanma_compact_candidate: bool = False) 
             upright = image.crop(box).rotate(angle, expand=True)
             # A second aspect ratio recovers short right-seat scores without
             # cropping digits or weakening the confidence/conservation gates.
-            for width in ([412, 328] if side == "right" else [412]):
+            widths = [412, 328] if side == "right" or (side == "left" and sanma_extra_score_retry) else [412]
+            for width in widths:
                 score = engine(np.array(upright.resize((width, 128))),
                                use_det=False, use_cls=False, use_rec=True)
                 if score.txts is not None and len(score.txts) == 1:

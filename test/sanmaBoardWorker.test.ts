@@ -57,6 +57,18 @@ test("compact sanma hand retains board candidate through resident worker without
   } finally { worker.close(); }
 });
 
+test("resident sanma OCR retries an uncertain left score without certification", {skip: !available}, async () => {
+  const worker = new SanmaBoardWorker();
+  try {
+    const image = "artifacts/sanma-manual-e48c562-20261031/actions/2026-10-30T17-30-50-782Z-before.png";
+    const data = await worker.observe(await readFile(image)) as any;
+    assert.equal(data.board.candidate.remainingTiles, 43);
+    assert.equal(data.board.candidate.scores.west, 33000);
+    assert.equal(data.board.verified, false);
+    assert.equal(data.north.status, "unknown");
+  } finally { worker.close(); }
+});
+
 test("resident recognition server returns separate unchanged safe candidate snapshots", {skip: !available, timeout: 60_000}, async () => {
   const { spawn } = await import("node:child_process");
   const { createInterface } = await import("node:readline");

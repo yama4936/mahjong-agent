@@ -59,3 +59,7 @@ class SanmaBoardTokensTest(unittest.TestCase):
         changed = copy.deepcopy(tokens)
         changed.append({'text': '99999', 'confidence': 1.0, 'x': 960, 'y': 482})
         self.assertFalse(self.parse(changed).get('consistent', False))
+        changed = copy.deepcopy(tokens)
+        changed.append({'text': '31000', 'confidence': 1.0, 'x': 876, 'y': 423,
+                        'source': 'upright_left_score_crop', 'cropWidth': 328})
+        self.assertEqual(self.parse(changed)['reason'], 'incomplete_or_ambiguous_tokens')
