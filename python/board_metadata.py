@@ -10,6 +10,20 @@ WINDS = {"東": "east", "南": "south", "西": "west", "北": "north"}
 SEATS = ["east", "south", "west", "north"]
 
 
+def sanma_seats_by_screen_position(own_seat: str) -> dict[str, str]:
+    """Map observed sanma positions to winds; this is not screen recognition.
+
+    Input is an independently established current own seat. No right-hand
+    player exists. This mapping is not connected to the live OCR/operator.
+    """
+    seats = ("east", "south", "west")
+    if not isinstance(own_seat, str) or own_seat not in seats:
+        raise ValueError("Sanma own seat must be east, south or west")
+    index = seats.index(own_seat)
+    return {"own": own_seat, "left": seats[(index - 1) % 3],
+            "opposite": seats[(index + 1) % 3]}
+
+
 def remap_seats(value, source_seat: str, target_seat: str):
     """Rotate absolute labels while preserving screen-relative player identity."""
     shift = SEATS.index(target_seat) - SEATS.index(source_seat)
