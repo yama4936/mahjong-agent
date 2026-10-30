@@ -5,7 +5,7 @@ Status values: `todo`, `doing`, `done`, `blocked`.
 ## Current continuation — 2026-10-30
 
 - [x] `done` Complete the `19f3329` friend-room 32326 **300+0 / explicit action-deadline-ms=300000** functional run without manual gameplay/restart: second22000, final confirmation and process exit verified. Convenience display was disabled; this does not validate convenience-on/ranked play. See `VALIDATION-20260929.md` for exact evidence and limited branch coverage.
-- [ ] `doing` Correct the evidenced open-one-shanten ordinary-yaku valuation optimism; retain defensive choices and unknown-input fallback, then finish independent review, tests, commit/push and a fresh300+0 regression. A low-danger C discard itself is not proven wrong.
+- [ ] `doing` Open-one-shanten valuation repair is tested/reviewed/pushed as `93f9fac`; its300+0 run completes second27600 with one manual9s recovery, all hands closed (new field unexercised). Repair the independently reproduced PNG→JPEG55 `match→lobby` riichi-selection false classification and rerun300+0. Retain defensive choices/unknown fallback; a low-danger C discard itself is not proven wrong.
 - [ ] `todo` After functional regression, perform the user-requested **separate 5+20 practice before ranked**. Record its settings, commit, timing misses and results separately; do not count a300+0 success as short-clock reliability.
 - [ ] `todo` Continue permitted ranked/Bronze evaluation once the practice prerequisites are satisfied. On losses/stalls, reconcile recognition/state/decision/input evidence, practice and repair the supported causes, and repeat. Root operates the browser and recovers verified stalls; implementation may be delegated as explicitly requested. Do not edit running match code/config.
 

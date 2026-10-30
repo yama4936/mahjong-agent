@@ -217,11 +217,11 @@ def _is_reference_supported_riichi_selection(
     references: dict[str, tuple[ScreenState, Image.Image]],
     maximum_distance: float,
 ) -> bool:
-    """Recover one calibrated dim-riichi view, not arbitrary gray hand rows.
+    """Recover calibrated dim/mixed riichi views, not arbitrary hand rows.
 
     JPEG55 can move the disabled faces from just above to just below the
     ordinary 130 threshold. Do not lower that global threshold: require the
-    independent gold return control, inked dim faces, and a calibrated table
+    independent gold return control, inked dim/mixed faces, and a calibrated table
     reference (including its central HUD). Coordinates apply only at native
     1920x1080. In particular, a hand-like strip alone cannot override a lobby.
     """
@@ -249,7 +249,15 @@ def _is_reference_supported_riichi_selection(
     muted_fraction = ImageChops.multiply(muted, neutral).histogram()[255] / (row.width * row.height)
     ink = _rgb_fraction(row, (("<", 100),) * 3)
     bright = _rgb_fraction(row, ((">", 180),) * 3)
-    if muted_fraction < .45 or ink < .04 or bright > .25:
+    dim_row = muted_fraction >= .45
+    # In the recorded 93f9fac selection, several selectable faces remain
+    # bright while the disabled left faces cross 130 under JPEG55. Its muted
+    # fraction is .4266, not the .61 of the earlier all-dim fixture. Admit
+    # only the mixed pattern with independently substantial muted AND bright
+    # coverage (.5947 combined in the exact raised receipt); do not lower the
+    # global tile-face/lobby thresholds or accept a merely grayer strip.
+    mixed_row = muted_fraction >= .40 and bright >= .12 and muted_fraction + bright >= .58
+    if not (dim_row or mixed_row) or ink < .04 or bright > .25:
         return False
     hud = (800, 310, 1140, 535)
     return any(
