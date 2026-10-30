@@ -91,6 +91,29 @@ class ResidentObservationTests(unittest.TestCase):
         page.screenshot.assert_not_called()
         page.mouse.click.assert_not_called()
 
+    @unittest.skipUnless(Path('artifacts/sanma-manual-e48c562-20261031/actions/2026-10-30T16-05-55-331Z-before.png').exists(), 'saved sanma images unavailable')
+    def test_real_prompt_and_hand_change_is_detected_after_slow_observation(self):
+        base = Path('artifacts/sanma-manual-e48c562-20261031/actions')
+        before = (base / '2026-10-30T16-05-55-331Z-before.png').read_bytes()
+        after = (base / '2026-10-30T16-05-55-331Z-after.png').read_bytes()
+        digest = hashlib.sha256(before).hexdigest()
+        result = self.result()
+        result['digest'] = result['report']['digest'] = digest
+        op = self.operator({'id': 1, 'result': result})
+        page = Mock()
+        page.screenshot.side_effect = [before, after]
+        receipt = op.inspect_sanma_self_turn(page)
+        self.assertEqual(receipt['status'], 'blocked')
+        self.assertEqual(receipt['freshness']['status'], 'changed')
+        self.assertTrue(any(receipt['freshness']['regionsChanged'].values()))
+        self.assertFalse(receipt['freshness']['operationAuthorized'])
+        self.assertEqual(Path(receipt['freshness']['screenshot']).read_bytes(), after)
+        page.screenshot.reset_mock()
+        with self.assertRaisesRegex(RuntimeError, 'stale or freshness unknown'):
+            op.inspect_sanma_kita_confirmation(page, receipt)
+        page.screenshot.assert_not_called()
+        page.mouse.click.assert_not_called()
+
     def test_executable_priority_is_rejected_without_click(self):
         bad = self.result()
         bad['assembly']['priority'] = {'status': 'offline_priority'}
@@ -128,6 +151,8 @@ class ResidentSanmaEndToEndTests(unittest.TestCase):
             op.log = Mock()
             receipt = op.inspect_sanma_self_turn(page)
             self.assertEqual(receipt['status'], 'blocked')
+            self.assertEqual(receipt['freshness']['status'], 'identical_pixels_candidate')
+            self.assertFalse(receipt['freshness']['operationAuthorized'])
             self.assertFalse(receipt['operationAuthorized'])
             self.assertTrue(any(candidate['action'] == 'kita' for candidate in receipt['candidates']['candidates']))
             self.assertIn('complete independent review missing', receipt['priority']['reasons'])

@@ -3866,6 +3866,7 @@ class PythonAutoOperator:
         No returned candidate is authorized as an action. This method is not
         called by the playing loop and the sanma startup guard remains active.
         """
+        capture_started = time.monotonic()
         image = page.screenshot(animations="disabled")
         if not isinstance(image, bytes) or not image:
             raise RuntimeError("sanma screenshot unavailable")
@@ -3877,14 +3878,40 @@ class PythonAutoOperator:
                 or not isinstance(assembly.get("priority"), dict) or assembly["priority"].get("status") != "blocked"
                 or not isinstance(assembly.get("evaluation"), dict) or assembly["evaluation"].get("status") != "blocked"):
             raise RuntimeError("sanma read-only decision did not fail closed")
+        # Recognition may take longer than a turn. Compare a fresh capture
+        # with the original over both the hand and the whole observed prompt
+        # row. Identical pixels are only a weak candidate, not permission.
+        freshness: dict[str, Any] = {"status": "unknown", "operationAuthorized": False}
+        try:
+            latest = page.screenshot(animations="disabled")
+            if not isinstance(latest, bytes) or not latest:
+                raise ValueError("fresh screenshot unavailable")
+            with Image.open(io.BytesIO(image)) as first, Image.open(io.BytesIO(latest)) as second:
+                if first.size != (1920, 1080) or second.size != (1920, 1080):
+                    raise ValueError("unreviewed screenshot dimensions")
+                regions = {"hand": (180, 865, 1650, 1080), "actions": (600, 785, 1425, 875)}
+                changes = {}
+                for name, region in regions.items():
+                    changes[name] = ImageChops.difference(first.convert("RGB").crop(region),
+                                                          second.convert("RGB").crop(region)).getbbox() is not None
+            latest_path = self.frames / f"{utc_stamp()}.{uuid.uuid4().hex}.sanma-freshness.png"
+            latest_path.write_bytes(latest)
+            freshness = {"status": "changed" if any(changes.values()) else "identical_pixels_candidate",
+                         "operationAuthorized": False, "elapsedMs": round((time.monotonic() - capture_started) * 1000),
+                         "regionsChanged": changes, "digest": hashlib.sha256(latest).hexdigest(),
+                         "screenshot": str(latest_path),
+                         "reason": "identical pixels do not verify turn, state, or action"}
+        except Exception as error:
+            freshness = {"status": "unknown", "operationAuthorized": False,
+                         "reason": f"freshness observation failed: {error}"}
         receipt = {"status": "blocked", "scope": "sanma_self_turn_observation", "operationAuthorized": False,
                    "digest": result["digest"], "screenshot": str(path),
                    "priority": assembly["priority"], "evaluation": assembly["evaluation"],
                    "candidates": result.get("candidates"),
                    "drawCandidate": sanma_draw_observation_candidate(result),
-                   "sourceObservation": result}
+                   "sourceObservation": result, "freshness": freshness}
         self.log("sanma_self_turn_observed", digest=receipt["digest"], screenshot=str(path),
-                 priority=receipt["priority"], evaluation=receipt["evaluation"])
+                 priority=receipt["priority"], evaluation=receipt["evaluation"], freshness=freshness)
         return receipt
 
     def inspect_sanma_kita_confirmation(self, page: Page, before: dict[str, Any]) -> dict[str, Any]:
@@ -3912,6 +3939,10 @@ class PythonAutoOperator:
                 raise RuntimeError("sanma self-turn screenshot unavailable") from error
             if digest != receipt.get("digest"):
                 raise RuntimeError("sanma self-turn screenshot changed")
+            freshness = receipt.get("freshness")
+            if not isinstance(freshness, dict) or freshness.get("status") != "identical_pixels_candidate" \
+                    or freshness.get("operationAuthorized") is not False:
+                raise RuntimeError("sanma self-turn observation is stale or freshness unknown")
             before = source
         if (not isinstance(before, dict) or before.get("scope") != "offline_untrusted_sanma_auto_observation"
                 or before.get("operationAuthorized") is not False or not isinstance(before.get("digest"), str)
