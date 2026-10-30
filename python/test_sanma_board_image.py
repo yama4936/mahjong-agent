@@ -9,11 +9,11 @@ ROOT = Path(__file__).resolve().parents[1]
 ACTIONS = ROOT / 'artifacts/sanma-manual-e48c562-20261031/actions'
 CASES = [
     ('2026-10-30T16-05-55-331Z-before.png', 'west', 'east_1',
-     {'west': 35000, 'south': 35000, 'east': 35000}, 0),
+     {'west': 35000, 'south': 35000, 'east': 35000}, 0, 52),
     ('2026-10-30T16-30-00-848Z-before.png', 'south', 'east_2',
-     {'south': 42000, 'east': 32000, 'west': 31000}, 0),
+     {'south': 42000, 'east': 32000, 'west': 31000}, 0, 40),
     ('2026-10-30T17-20-14-718Z-after.png', 'east', 'east_3',
-     {'east': 41500, 'west': 33000, 'south': 30500}, 2),
+     {'east': 41500, 'west': 33000, 'south': 30500}, 2, 51),
 ]
 
 
@@ -49,14 +49,15 @@ class SanmaBoardImageTests(unittest.TestCase):
             import rapidocr  # noqa: F401
         except ImportError:
             self.skipTest('optional OCR dependencies unavailable')
-        for name, seat, round_name, scores, honba in CASES:
+        for name, seat, round_name, scores, honba, remaining in CASES:
             with self.subTest(seat=seat):
                 result = recognize_sanma_board_candidate(ACTIONS / name, expected_total_points=105000,
                                                           payment_phase='settled')
                 self.assertFalse(result['verified'])
                 self.assertTrue(result.get('consistent'), result)
                 self.assertEqual(result['candidate'], {'seat': seat, 'round': round_name,
-                                 'scores': scores, 'riichiSticks': 0, 'honba': honba})
+                                 'scores': scores, 'riichiSticks': 0, 'honba': honba,
+                                 'remainingTiles': remaining})
 
 
 if __name__ == '__main__':
