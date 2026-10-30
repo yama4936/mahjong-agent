@@ -4506,8 +4506,10 @@ class PythonAutoOperator:
 
 
     @staticmethod
-    def ranked_loop_click_point(state: str, viewport: dict[str, int]) -> dict[str, float] | None:
-        """Return the fixed navigation target for a Bronze Room East loop."""
+    def ranked_loop_click_point(state: str, viewport: dict[str, int], *, rules: str = "yonma") -> dict[str, float] | None:
+        """Return targets calibrated only for the four-player Bronze East loop."""
+        if rules != "yonma":
+            return None
         ratios = {
             "lobby": (0.724, 0.300),       # ranked match
             "ranked_menu": (0.724, 0.380), # Bronze Room
@@ -4894,7 +4896,7 @@ class PythonAutoOperator:
         """Enter or re-enter Bronze Room four-player East after every match."""
         if not self.args.ranked_loop or confidence < 0.25:
             return False
-        point = self.ranked_loop_click_point(state, self.layout["viewport"])
+        point = self.ranked_loop_click_point(state, self.layout["viewport"], rules=getattr(self.args, "rules", "yonma"))
         if point is None:
             self.last_ranked_navigation_deferred_state = None
             return False
