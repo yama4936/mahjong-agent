@@ -1,0 +1,85 @@
+{
+  "schemaVersion": 1,
+  "purpose": "planning_only_not_an_operator_configuration",
+  "preparedOn": "2026-10-31",
+  "category": "天佑神助",
+  "playerCount": 3,
+  "targetMatchType": "ranked",
+  "automaticPlayEnabled": false,
+  "runtimeSupport": "not_implemented",
+  "catalogStatus": "provisional_until_full_in_game_review",
+  "sources": [
+    "user_attachment_2026-10-31",
+    "https://game8.jp/jantama/632941",
+    "https://nekomimi.ws/~nikukyu/jantama/jt_jissekimain.html"
+  ],
+  "observedProgress": {
+    "source": "user_attachment_2026-10-31",
+    "categoryPercent": 0,
+    "fullyVisibleAchievementIds": ["tenhou", "chiihou", "daisangen"],
+    "remainingRowsReviewedInGame": false
+  },
+  "functionalTestPlan": {
+    "matchType": "friend",
+    "playerCount": 3,
+    "clock": "300+0",
+    "operatorActionDeadlineMs": 300000,
+    "matchLength": null,
+    "status": "not_run",
+    "results": [],
+    "countsTowardAchievements": false,
+    "countsTowardRankedPerformance": false
+  },
+  "rankedPlan": {
+    "status": "not_started",
+    "matchLength": null,
+    "room": null,
+    "operatorActionDeadlineMs": null,
+    "deadlineSource": "verify_actual_ranked_clock_separately",
+    "results": []
+  },
+  "progressPolicy": {
+    "unknownCount": null,
+    "acceptEstimatedYakuAsCompletion": false,
+    "acceptFriendResultsAsCompletion": false,
+    "requireInGameAchievementConfirmation": true,
+    "deduplicateBy": ["matchId", "roundId", "winEventId"],
+    "doubleYakumanCountsAsTwoWins": false,
+    "variantImpliesBaseAchievement": "verify_in_game_before_crediting"
+  },
+  "readiness": [
+    { "id": "in_game_catalog_review", "status": "pending", "requirement": "実績全行・三麻の対象条件・現在のカウンタをゲーム画面で確認" },
+    { "id": "three_player_state", "status": "pending", "requirement": "３席・他家２人・点数総和・東３／南３局の終局判定" },
+    { "id": "sanma_tile_pool", "status": "pending", "requirement": "二～八萬と赤五萬を除外し、受け入れ・待ち・ドラ循環を三麻化" },
+    { "id": "sanma_scoring", "status": "pending", "requirement": "ツモ損・本場・北抜きドラ・順位評価・役満の特殊形を検証" },
+    { "id": "sanma_screen_layout", "status": "pending", "requirement": "三麻の河・副露・点数・北抜き表示・結果画面を校正" },
+    { "id": "kita_action", "status": "pending", "requirement": "北抜きの合法条件・保持判断・操作確認・補充牌を実装し、チーを禁止" },
+    { "id": "yakuman_objective", "status": "pending", "requirement": "未達実績に応じた役満目標選択と撤退条件を独立方策として実装" },
+    { "id": "result_evidence", "status": "pending", "requirement": "自家の和了役・実績画面・局と対局識別子を証拠付きで記録" },
+    { "id": "offline_regression", "status": "pending", "requirement": "三麻差分と既存四麻の回帰チェック" },
+    { "id": "friend_300_plus_zero", "status": "pending", "requirement": "三麻友人戦300+0、期限300000msの機能試験と設定・結果の記録" },
+    { "id": "ranked_preflight", "status": "pending", "requirement": "実際の三麻段位戦の卓・東風／半荘・持ち時間に合わせて別途準備" }
+  ],
+  "targets": [
+    { "id": "tenhou", "name": "天の加護", "kind": "yaku", "yaku": "天和", "requiredCount": 1, "observedCount": 0, "evidence": "user_attachment_2026-10-31" },
+    { "id": "chiihou", "name": "地の加護", "kind": "yaku", "yaku": "地和", "requiredCount": 1, "observedCount": 0, "evidence": "user_attachment_2026-10-31" },
+    { "id": "daisangen", "name": "三位一体", "kind": "yaku", "yaku": "大三元", "requiredCount": 1, "observedCount": 0, "evidence": "user_attachment_2026-10-31" },
+    { "id": "suuankou", "name": "深謀遠慮", "kind": "yaku", "yaku": "四暗刻", "requiredCount": 1, "observedCount": null, "evidence": null },
+    { "id": "tsuuiisou", "name": "一色通行", "kind": "yaku", "yaku": "字一色", "requiredCount": 1, "observedCount": null, "evidence": null },
+    { "id": "ryuuiisou", "name": "世界巨樹", "kind": "yaku", "yaku": "緑一色", "requiredCount": 1, "observedCount": null, "evidence": null },
+    { "id": "chinroutou", "name": "五芒の輝き", "kind": "yaku", "yaku": "清老頭", "requiredCount": 1, "observedCount": null, "evidence": null },
+    { "id": "kokushi", "name": "国士無双", "kind": "yaku", "yaku": "国士無双", "requiredCount": 1, "observedCount": null, "evidence": null },
+    { "id": "shousuushi", "name": "風神の祈り", "kind": "yaku", "yaku": "小四喜", "requiredCount": 1, "observedCount": null, "evidence": null },
+    { "id": "suukantsu", "name": "十八羅漢", "kind": "yaku", "yaku": "四槓子", "requiredCount": 1, "observedCount": null, "evidence": null },
+    { "id": "chuuren", "name": "九仞之功", "kind": "yaku", "yaku": "九蓮宝燈", "requiredCount": 1, "observedCount": null, "evidence": null },
+    { "id": "junsei_chuuren", "name": "九品蓮台", "kind": "yaku", "yaku": "純正九蓮宝燈", "requiredCount": 1, "observedCount": null, "evidence": null },
+    { "id": "suuankou_tanki", "name": "一撃必殺", "kind": "yaku", "yaku": "四暗刻単騎", "requiredCount": 1, "observedCount": null, "evidence": null },
+    { "id": "kokushi_13", "name": "全面聴牌", "kind": "yaku", "yaku": "国士無双十三面待ち", "requiredCount": 1, "observedCount": null, "evidence": null },
+    { "id": "daisuushi", "name": "風神召喚", "kind": "yaku", "yaku": "大四喜", "requiredCount": 1, "observedCount": null, "evidence": null },
+    { "id": "kazoe", "name": "団結の力", "kind": "yaku", "yaku": "数え役満", "requiredCount": 1, "observedCount": null, "evidence": null },
+    { "id": "yakuman_1", "name": "降臨する祈り", "kind": "yakuman_wins", "includesKazoe": true, "requiredCount": 1, "observedCount": null, "evidence": null },
+    { "id": "yakuman_10", "name": "駆け巡る祈り", "kind": "yakuman_wins", "includesKazoe": true, "requiredCount": 10, "observedCount": null, "evidence": null },
+    { "id": "yakuman_100", "name": "祈りと共に", "kind": "yakuman_wins", "includesKazoe": true, "requiredCount": 100, "observedCount": null, "evidence": null },
+    { "id": "all_yakuman", "name": "天佑神助", "kind": "all_yaku_types", "requiredCount": 16, "observedCount": null, "evidence": null }
+  ]
+}

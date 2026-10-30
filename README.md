@@ -1,5 +1,7 @@
 # Jantama Advisor
 
+三人麻雀で「天佑神助」の全実績を目指す準備は [TASKS.md の三麻計画](TASKS.md#三麻で天佑神助を目指す準備--2026-10-31) と [実績・検証条件の計画データ](config/sanma-achievements.plan.json) に記録しています。現行操作者は三麻未対応です。この計画データは起動用設定ではありません。
+
 判定GUIは操作者と同時に `http://127.0.0.1:8787` で起動し、操作者の `--artifacts` 配下にある `python-operator.jsonl` を自動的に参照します。ライブ画面とは別に、保存ログの判定時刻・認識手牌・推奨打牌・選択確率・認識スコア・クリック実行記録・停止理由を表示します。GUIは閲覧専用です。GUIが不要な起動では `--no-dashboard` を指定できます。単独起動する場合は`npm run dashboard -- --operator-log artifacts/python-face-trial/python-operator.jsonl`も使用できます。
 
 雀魂のスクリーンショットを固定座標＋牌テンプレートで読み取り、合法な打牌候補のシャンテン・受け入れを計算し、任意でTypeSafe Jevに最終候補を選択させるMVPです。
