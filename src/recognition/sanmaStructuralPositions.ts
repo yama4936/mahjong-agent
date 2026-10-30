@@ -24,6 +24,23 @@ export function sanmaStructuralPositions(frame: Buffer, report: Awaited<ReturnTy
   // Counts from the recognized hand alone provide a conservative upper
   // bound, not actual live tiles. Rivers, melds and north extracts are unknown.
   const handCounts = toCounts(tiles);
+  // Candidate dora and river tiles can tighten the bound conditionally. These
+  // are unverified and can overlap or be misrecognized, so they never replace
+  // the hand-only bound or establish a complete public state.
+  const publicObservation = report.publicTiles?.status === "candidate"
+    ? report.publicTiles.value.observation : undefined;
+  const observedTiles = publicObservation ? [
+    ...publicObservation.doraIndicators, ...publicObservation.ownDiscards,
+    ...publicObservation.opponentDiscards.flatMap(opponent => opponent.discards),
+  ] : [];
+  let conditionalCounts: number[] | undefined;
+  let conditionalReason: string | undefined;
+  if (observedTiles.length) {
+    try {
+      assertTilesAvailable([...tiles, ...observedTiles], "sanma");
+      conditionalCounts = toCounts([...tiles, ...observedTiles]);
+    } catch { conditionalReason = "hand and observed public candidates conflict"; }
+  }
   const candidates = [...new Set(tiles)].map(tile => {
     const remainder = [...tiles];
     remainder.splice(remainder.indexOf(tile), 1);
@@ -33,10 +50,13 @@ export function sanmaStructuralPositions(frame: Buffer, report: Awaited<ReturnTy
       if (!tileAvailableInRules(draw, "sanma")) return [];
       const maximumUnseen = 4 - handCounts[index]!;
       if (maximumUnseen <= 0 || calculateShanten([...remainder, draw], melds).shanten >= shape.shanten) return [];
-      return [{tile:draw, maximumUnseen}];
+      return [{tile:draw, maximumUnseen,
+        ...(conditionalCounts ? {maximumUnseenIfObservedTilesCorrect: 4 - conditionalCounts[index]!} : {})}];
     });
     return {tile, shanten:shape.shanten, form:shape.bestForm, improvingDraws,
       maximumUnseenTotal:improvingDraws.reduce((sum, entry) => sum + entry.maximumUnseen, 0),
+      ...(conditionalCounts ? {maximumUnseenTotalIfObservedTilesCorrect:improvingDraws.reduce(
+        (sum, entry) => sum + entry.maximumUnseenIfObservedTilesCorrect!, 0)} : {}),
       positions: tiles.flatMap((observed, index) => observed === tile
         ? [{index, rect:slots[index], point:geometry.clickPoints[index]}] : [])};
   });
@@ -44,5 +64,8 @@ export function sanmaStructuralPositions(frame: Buffer, report: Awaited<ReturnTy
     reason:"unverified hand, meld count, turn and action priority; visible tiles and danger unknown",
     assumptions:["recognized tile labels and candidate meld count are correct",
       "draw totals are upper bounds from hand-only counts, not live or observed tile counts"],
+    ...(conditionalCounts ? {conditionalPublicEvidence:{tiles:observedTiles, verified:false as const, complete:false as const,
+      assumption:"all listed public candidates are correct, distinct physical tiles; other public tiles remain unknown"}} : {}),
+    ...(conditionalReason ? {conditionalPublicEvidence:{verified:false as const, complete:false as const, reason:conditionalReason}} : {}),
     positionCalibrationRequired:geometry.requiresHoldoutValidation};
 }

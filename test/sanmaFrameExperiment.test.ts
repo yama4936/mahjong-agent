@@ -8,6 +8,7 @@ import { bindSanmaDiscardHypothesis, inspectSanmaFrame } from "../src/recognitio
 import { EXPERIMENTAL_BUTTONS, type ExperimentalTemplates } from "../src/recognition/sanmaButtonExperiment.js";
 import { HybridTileRecognizer } from "../src/recognition/hybridTileRecognizer.js";
 import { evaluateSanmaFrameCandidate } from "../src/recognition/sanmaFrameEvaluation.js";
+import { sanmaStructuralPositions } from "../src/recognition/sanmaStructuralPositions.js";
 import { evaluateDiscards } from "../src/game/ukeire.js";
 import { layoutSchema } from "../src/recognition/layout.js";
 
@@ -49,6 +50,13 @@ test("one saved sanma frame is bound to untrusted hand, public and button observ
     assert.ok(report.decision.reasons.includes("possible skip in button slot 2"));
     assert.equal(report.decision.status, "blocked");
     assert.equal(report.operationAuthorized, false);
+    const positions = sanmaStructuralPositions(frame,report);
+    assert.equal(positions.operationAuthorized,false);
+    assert.ok(positions.candidates.length > 0);
+    if ("conditionalPublicEvidence" in positions && positions.conditionalPublicEvidence) {
+      assert.equal(positions.conditionalPublicEvidence.verified,false);
+      assert.equal(positions.conditionalPublicEvidence.complete,false);
+    }
     const evaluation = evaluateSanmaFrameCandidate({frame, report});
     assert.equal(evaluation.status, "blocked");
     if (evaluation.status === "blocked") {

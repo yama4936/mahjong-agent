@@ -48,6 +48,36 @@ test("unknown visible tiles produce upper bounds, never an assumed live count",(
       }
     }
   }
-  assert.ok(result.assumptions?.some(item=>item.includes("upper bounds")));
+  assert.ok("assumptions" in result && result.assumptions.some(item=>item.includes("upper bounds")));
   assert.equal(result.operationAuthorized,false);
+});
+
+test("observed river candidates tighten only a conditional upper bound",()=>{
+  const observed = ["1p","1s","F"];
+  const publicTiles={status:"candidate",value:{observation:{doraIndicators:["1p"],ownDiscards:["1s"],
+    opponentDiscards:[{discards:["F"]},{discards:[]}]}}};
+  const result=sanmaStructuralPositions(frame,{...report,publicTiles});
+  assert.ok("conditionalPublicEvidence" in result);
+  if (!("conditionalPublicEvidence" in result) || !result.conditionalPublicEvidence) throw new Error("missing evidence");
+  assert.equal(result.conditionalPublicEvidence.verified,false);
+  assert.equal(result.conditionalPublicEvidence.complete,false);
+  const complete=evaluateDiscards(tiles,observed,0,"sanma");
+  for(const row of result.candidates){
+    const exact=complete.find(item=>item.tile===row.tile)!;
+    assert.equal(row.maximumUnseenTotalIfObservedTilesCorrect,exact.ukeire);
+    assert.ok(row.maximumUnseenTotalIfObservedTilesCorrect! <= row.maximumUnseenTotal);
+  }
+  assert.equal(result.operationAuthorized,false);
+});
+
+test("contradictory or absent public candidates do not tighten the bound",()=>{
+  const missing=sanmaStructuralPositions(frame,report);
+  assert.ok(!("conditionalPublicEvidence" in missing));
+  const publicTiles={status:"candidate",value:{observation:{doraIndicators:["9m","9m","9m"],ownDiscards:[],opponentDiscards:[]}}};
+  const contradiction=sanmaStructuralPositions(frame,{...report,publicTiles});
+  assert.ok("conditionalPublicEvidence" in contradiction);
+  if (!("conditionalPublicEvidence" in contradiction) || !contradiction.conditionalPublicEvidence) throw new Error("missing conflict");
+  assert.equal(contradiction.conditionalPublicEvidence.reason,"hand and observed public candidates conflict");
+  assert.deepEqual(contradiction.candidates.map(row=>row.maximumUnseenTotal),missing.candidates.map(row=>row.maximumUnseenTotal));
+  assert.ok(contradiction.candidates.every(row=>!("maximumUnseenTotalIfObservedTilesCorrect" in row)));
 });
