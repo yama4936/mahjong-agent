@@ -165,3 +165,33 @@ test("reviewed compact hand connects draw and exposed meld to sanma evaluation",
   const unknownRow = {...openReport,hand:{...openReport.hand,value:{...(openReport.hand as any).value,slotClassificationSafe:false}}} as typeof report;
   assert.equal(evaluateSanmaFrameCandidate({frame,report:unknownRow,review:openReview}).status,"blocked");
 });
+
+test("post-riichi priority binds only the physical draw and refuses unknown prompts", () => {
+  const closed = ["1p","2p","3p","4p","5p","6p","1s","2s","3s","4s","5s","W","W"];
+  const riichiState = {...state,hand:closed,draw:"9s",riichiDeclared:true};
+  const riichiReport = {...report,hand:{status:"candidate" as const,value:{...((report.hand as any).value),tiles:[...closed,"9s"]}}} as typeof report;
+  const riichiReview = {...review,state:riichiState,riichiStatus:"declared" as const};
+  const result = evaluateSanmaFrameCandidate({frame,report:riichiReport,review:riichiReview,priorityOnly:true});
+  assert.equal(result.status,"offline_priority");
+  if(result.status === "offline_priority") {
+    assert.equal(result.priority.stage,"draw_discard_candidate");
+    assert.deepEqual(result.priority.candidates,[{action:"discard",tile:"9s",physicalPosition:"draw"}]);
+  }
+  assert.equal(result.operationAuthorized,false);
+  for(const broken of [
+    {...riichiReview,state:{...riichiState,draw:undefined}},
+    {...riichiReview,handEvidence:undefined} as unknown as typeof riichiReview,
+    {...riichiReview,turnContext:undefined} as unknown as typeof riichiReview,
+    {...riichiReview,state:{...riichiState,riichiDeclared:false}},
+    {...riichiReview,ui:{status:"confirmed" as const,actions:["kita" as const]}},
+    {...riichiReview,ui:{status:"confirmed" as const,actions:["kan" as const]}},
+    {...riichiReview,ui:{status:"confirmed" as const,actions:["tsumo" as const]}},
+  ]) assert.equal(evaluateSanmaFrameCandidate({frame,report:riichiReport,review:broken,priorityOnly:true}).status,"blocked");
+  assert.equal(evaluateSanmaFrameCandidate({frame,report:riichiReport,review:riichiReview}).status,"blocked");
+  const wonReport = {...riichiReport,hand:{status:"candidate" as const,value:{...((riichiReport.hand as any).value),tiles:[...closed,"6s"]}},
+    button:{status:"candidate" as const,value:{status:"matched" as const,action:"tsumo" as const,confidence:1,margin:1}}} as typeof report;
+  const win = evaluateSanmaFrameCandidate({frame,report:wonReport,review:{...riichiReview,state:{...riichiState,draw:"6s"},
+    ui:{status:"confirmed",actions:["tsumo"]}},priorityOnly:true});
+  assert.equal(win.status,"offline_priority");
+  if(win.status === "offline_priority") assert.equal(win.priority.stage,"win_candidate");
+});

@@ -53,6 +53,13 @@ test("one resident server handles yonma and read-only sanma without mixing execu
     assert.equal(row.verified,false);
     assert.equal(openResponse.result.assembly.priority.status,"blocked");
     assert.equal(openResponse.result.operationAuthorized,false);
+    const win = "artifacts/sanma-manual-e48c562-20261031/actions/2026-10-30T16-14-57-162Z-before.png";
+    send({id:6,screenshot:win,observeSanma:true});
+    const winResponse = await read();
+    assert.equal(winResponse.error,undefined);
+    assert.equal(winResponse.result.assembly.priority.status,"blocked");
+    assert.ok(winResponse.result.candidates.candidates.some((item:any)=>item.action === "tsumo"));
+    assert.equal(winResponse.result.operationAuthorized,false);
     send({id:4,screenshot:yonma});
     const after=await read();
     assert.equal(after.id,4);

@@ -12,7 +12,7 @@ type UiAction = "kita" | "tsumo" | "ron" | "pon" | "kan" | "pass" | "riichi";
  */
 export type ReviewedFrameEvidence = {
   digest: string; source: "external_review"; state: unknown;
-  riichiStatus: "not_declared"; ui: { status: "confirmed"; actions: readonly UiAction[] };
+  riichiStatus: "not_declared" | "declared"; ui: { status: "confirmed"; actions: readonly UiAction[] };
   turnContext: "ordinary_draw_confirmed"; handEvidence: "confirmed";
   meldEvidence: "confirmed"; visibleEvidence: "confirmed_complete";
 };
@@ -90,12 +90,17 @@ export function evaluateSanmaFrameCandidate(input: {
       })) return {status: "blocked" as const, reasons: ["reviewed public state conflicts with candidate tiles"], operationAuthorized: false as const};
   try {
     if (priorityOnly) {
+      if (review.handEvidence !== "confirmed" || review.meldEvidence !== "confirmed"
+          || review.turnContext !== "ordinary_draw_confirmed" || review.visibleEvidence !== "confirmed_complete") {
+        throw new Error("complete self-turn evidence required");
+      }
       const actions = review.ui.actions;
       if (actions.some(action => action === "ron" || action === "pon")) throw new Error("reaction action is not a self-turn priority");
       const priority = inspectSanmaSelfTurnPriority(review as Parameters<typeof inspectSanmaSelfTurnPriority>[0]);
       return { status:"offline_priority" as const, digest:report.digest, priority,
         assumptions:["external review is correct", "action list and self-turn status externally confirmed"], operationAuthorized:false as const };
     }
+    if (review.riichiStatus === "declared") throw new Error("post-riichi discard requires separate handling");
     if (review.ui.actions.includes("riichi")) throw new Error("riichi requires separate handling");
     const { rows } = inspectSanmaDiscardSafety(review as Parameters<typeof inspectSanmaDiscardSafety>[0]);
     return {status: "offline_evaluation" as const, digest: report.digest, rows,
