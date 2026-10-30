@@ -8583,8 +8583,18 @@ class PythonAutoOperator:
                 # comparison above bound the current room to that screenshot.
                 page.on("framenavigated", lambda frame: self.revoke_verified_friend_300("navigation")
                         if frame == page.main_frame else None)
-                started_at = time.monotonic()
                 self.verified_friend_300_active = True
+                try:
+                    inspect_sanma_friend_start(page, reviewed, action_deadline_ms=300000,
+                                               attempts=32, on_capture=save_friend_start_capture)
+                    if self.verified_friend_300_active is not True:
+                        raise RuntimeError("friend session revoked during final room check")
+                except Exception as error:
+                    self.verified_friend_300_active = False
+                    self.log("sanma_friend_stopped", reason="final_friend_room_check_failed",
+                             error=str(error), preflight=str(preflight_path))
+                    raise
+                started_at = time.monotonic()
                 self.verified_friend_300_started_at = started_at
                 try:
                     page.mouse.click(1140, 998)

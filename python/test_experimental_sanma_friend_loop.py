@@ -53,7 +53,7 @@ class ExperimentalSanmaFriendLoopTest(unittest.TestCase):
         fixture = Path(__file__).resolve().parents[1] / 'test/fixtures/sanma-friend-preflight.png'
         image = fixture.read_bytes()
         self.preflight.write_bytes(image)
-        self.page.screenshot.side_effect = [image, image, b'match screenshot']
+        self.page.screenshot.side_effect = [image, image, image, image, b'match screenshot']
         self.receipt['candidates'] = {'candidates': []}
         with patch('auto_operator.classify_screen',return_value=('match',1.0)):
             self.op.run(self.page)
@@ -100,6 +100,29 @@ class ExperimentalSanmaFriendLoopTest(unittest.TestCase):
     def test_failed_room_verification_never_clicks(self):
         with patch('auto_operator.inspect_sanma_friend_start',side_effect=ValueError('room changed')):
             with self.assertRaisesRegex(ValueError,'room changed'):
+                self.op.run(self.page)
+        self.page.mouse.click.assert_not_called()
+
+    def test_changed_room_at_final_check_never_starts(self):
+        with patch('auto_operator.inspect_sanma_friend_start', side_effect=[
+                {'operationAuthorized': False}, RuntimeError('room changed')]):
+            with self.assertRaisesRegex(RuntimeError, 'room changed'):
+                self.op.run(self.page)
+        self.page.mouse.click.assert_not_called()
+        self.assertFalse(self.op.verified_friend_300_active)
+        self.assertTrue(any(call.kwargs.get('reason') == 'final_friend_room_check_failed'
+                            for call in self.op.log.call_args_list))
+
+    def test_revoked_session_at_final_check_never_starts(self):
+        calls = 0
+        def inspect(*args, **kwargs):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                self.op.verified_friend_300_active = False
+            return {'operationAuthorized': False}
+        with patch('auto_operator.inspect_sanma_friend_start', side_effect=inspect):
+            with self.assertRaisesRegex(RuntimeError, 'session revoked'):
                 self.op.run(self.page)
         self.page.mouse.click.assert_not_called()
 
