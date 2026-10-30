@@ -2345,6 +2345,11 @@ def merge_public_observations(
 
 class PythonAutoOperator:
     def __init__(self, args: argparse.Namespace) -> None:
+        # The CLI already rejects sanma before the lease and Playwright. A
+        # direct constructor call must also stop before layout reads, child
+        # recognizers, or browser access; the implementation is incomplete.
+        if getattr(args, "rules", "yonma") == "sanma":
+            raise RuntimeError("sanma automatic decisions and screen operation are not implemented; startup stopped")
         self.args = args
         self.root = Path(args.project).resolve()
         reference_directory = getattr(args, "screen_references", None)
