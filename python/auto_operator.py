@@ -8550,6 +8550,7 @@ class PythonAutoOperator:
         attempted_frames: set[str] = set()
         last_unconfirmed_action: str | None = None
         unknown_streak = 0
+        unknown_since = None
         startup_unknown_polls = 0
         match_seen = False
         result_latched = None
@@ -8598,6 +8599,9 @@ class PythonAutoOperator:
                     if not isinstance(frame_digest, str) or frame_digest in attempted_frames:
                         self.log("sanma_friend_stopped", reason="frame_already_attempted_or_unknown", screenshot=receipt.get("screenshot"))
                         return
+                    if actions:
+                        unknown_streak = 0
+                        unknown_since = None
                     if any(isinstance(item, dict) and item.get("action") == "ron" for item in actions):
                         action = "ron"
                         result = self.execute_sanma_friend_ron_candidate(page, receipt)
@@ -8628,9 +8632,14 @@ class PythonAutoOperator:
                         # recognition. Reobserve a bounded number of times.
                         draw = receipt.get("drawCandidate")
                         if not isinstance(draw, dict) or draw.get("status") != "candidate":
+                            if unknown_since is None:
+                                unknown_since = time.monotonic()
                             unknown_streak += 1
-                            self.log("sanma_friend_wait", reason="draw_or_turn_unknown", screenshot=receipt.get("screenshot"), streak=unknown_streak)
-                            if unknown_streak >= 3:
+                            elapsed = time.monotonic() - unknown_since
+                            if unknown_streak == 1 or unknown_streak % 10 == 0:
+                                self.log("sanma_friend_wait", reason="draw_or_turn_unknown", screenshot=receipt.get("screenshot"),
+                                         streak=unknown_streak, elapsedSeconds=round(elapsed, 2), opponentTurnConfirmed=False)
+                            if unknown_streak >= 120 or elapsed >= 120:
                                 self.log("sanma_friend_stopped", reason="draw_or_turn_unknown", screenshot=receipt.get("screenshot"))
                                 return
                             page.wait_for_timeout(500)
@@ -8645,6 +8654,7 @@ class PythonAutoOperator:
                     attempted_frames.add(frame_digest)
                     last_unconfirmed_action = action
                     unknown_streak = 0
+                    unknown_since = None
                     self.log("sanma_friend_action_unconfirmed", action=action, result=result, confirmed=False)
                     transition = self.observe_sanma_friend_transition(page, receipt, action)
                     self.log("sanma_friend_transition", **transition)
@@ -8683,6 +8693,8 @@ class PythonAutoOperator:
                 self.advance_result_screen_once(page, state, confidence)
                 result_latched = state
                 action_observed_at = None
+                unknown_streak = 0
+                unknown_since = None
                 self.log("sanma_friend_result_advance_unconfirmed", screenState=state, screenshot=path, confirmed=False)
                 page.wait_for_timeout(500)
                 continue

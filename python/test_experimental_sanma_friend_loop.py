@@ -147,12 +147,51 @@ class ExperimentalSanmaFriendLoopTest(unittest.TestCase):
             observed.append(self.op.sanma_friend_action_observed_at)
             return self.receipt
         self.op.inspect_sanma_self_turn.side_effect = inspect
-        clock = iter([100.0, 101.0, 102.0, 110.0, 111.0, 112.0])
-        with patch('auto_operator.time.monotonic', side_effect=lambda: next(clock)), \
+        clock = iter([100.0, 101.0, 102.0, 103.0, 104.0, 110.0, 111.0, 112.0, 113.0])
+        with patch('auto_operator.time.monotonic', side_effect=lambda: next(clock, 114.0)), \
              patch('auto_operator.classify_screen', return_value=('match', 1.0)):
             self.op.run_experimental_sanma_friend(self.page)
         self.assertEqual(observed, [102.0, 102.0])
         self.assertEqual(sum(c.args[0]=='sanma_friend_action_clock_started' for c in self.op.log.call_args_list),1)
+
+    def test_waits_through_four_unknown_observations_then_handles_ron(self):
+        self.op.args.max_iterations = 5
+        self.op.verified_friend_300_active = True
+        self.op.execute_sanma_friend_ron_candidate = Mock(return_value={'confirmation':'unknown'})
+        unknown = {'candidates':{'candidates':[]}, 'digest':'unknown','screenshot':'unknown.png'}
+        ron = {'candidates':{'candidates':[{'action':'ron'}]}, 'digest':'ron','screenshot':'ron.png'}
+        self.op.inspect_sanma_self_turn.side_effect = [unknown]*4 + [ron]
+        with patch('auto_operator.classify_screen', return_value=('match',1.0)):
+            self.op.run_experimental_sanma_friend(self.page)
+        self.assertEqual(self.page.wait_for_timeout.call_count,4)
+        self.op.execute_sanma_friend_ron_candidate.assert_called_once()
+        self.assertTrue(any(c.kwargs.get('opponentTurnConfirmed') is False for c in self.op.log.call_args_list))
+
+    def test_unknown_turn_has_bounded_wait(self):
+        self.op.args.max_iterations = 0
+        self.op.verified_friend_300_active = True
+        self.receipt['candidates'] = {'candidates':[]}
+        with patch('auto_operator.classify_screen', return_value=('match',1.0)):
+            self.op.run_experimental_sanma_friend(self.page)
+        self.assertEqual(self.page.wait_for_timeout.call_count,119)
+        self.assertTrue(any(c.kwargs.get('reason')=='draw_or_turn_unknown' for c in self.op.log.call_args_list))
+
+    def test_captured_opponent_turn_frame_remains_observation_only(self):
+        frame = Path('/home/yama1/.codex/sanma-run-1740066-20261031/manual-17-after.png')
+        references = Path('/home/yama1/projects/jantama-auto/artifacts/live')
+        if not frame.exists() or not references.exists():
+            self.skipTest('recorded opponent frame or references unavailable')
+        from screen_state import load_references
+        self.op.screen_references = load_references(references)
+        self.op.args.max_iterations = 4
+        self.op.verified_friend_300_active = True
+        self.page.screenshot.return_value = frame.read_bytes()
+        self.op.inspect_sanma_self_turn.return_value = {
+            'candidates':{'candidates':[]}, 'drawCandidate':{'status':'unresolved'},
+            'digest':'real-opponent-observation','screenshot':str(frame)}
+        self.op.run_experimental_sanma_friend(self.page)
+        self.assertEqual(self.page.wait_for_timeout.call_count,4)
+        self.page.mouse.click.assert_not_called()
 
     def test_no_prompt_routes_to_draw_adapter_and_stops(self):
         self.receipt['candidates'] = {'candidates': []}
