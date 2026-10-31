@@ -7,3 +7,5 @@ For each pixel the guard compares `(R-G, B-G)` before and after, taking the larg
 An artificial conversion of the left-wall area to equal-luminance gray, which previously passed the existing glyph check, is rejected. The saved cd82c23 manual-4 before/after pair with observed opponent-side change is also rejected. This does not establish detection of all tile movement or all color-only changes. The five recovery pairs pass this added color guard, but the existing full comparison still rejects them; this change does not authorize black-screen recovery or live inputs.
 
 The supplementary saved-image test uses local, untracked live captures and a local recognition receipt; it skips when they are absent and therefore does not constitute a portable fixture. On the current host the guard took 0.15–0.17 seconds warm and approximately 0.24 seconds on the first invocation, measured only on one saved pair.
+
+Portable anonymized crops exercise the color veto without live data; see `python/fixtures/sanma-wall-color/README.md`. The separate saved-full-frame tests still require local captures and skip when absent.
