@@ -41,6 +41,30 @@ class SanmaFriendTransitionTest(unittest.TestCase):
         self.assertEqual(Path(result['screenshot']).read_bytes(),after)
         self.page.mouse.click.assert_not_called()
 
+    def test_real_exhausted_wall_lobby_classification_is_transition_candidate(self):
+        from screen_state import load_references
+        root=Path('/home/yama1/.codex/sanma-run-bf336af-20261031')
+        before=root/'manual-22-before.png';after=root/'manual-22-after.png'
+        refs=Path('/home/yama1/projects/jantama-auto/artifacts/live')
+        if not all(p.exists() for p in (before,after,refs)):
+            self.skipTest('saved friend transition evidence unavailable')
+        self.op.screen_references=load_references(refs)
+        self.page.screenshot.return_value=after.read_bytes()
+        result=self.op.observe_sanma_friend_transition(self.page,self.receipt(before.read_bytes()),'discard')
+        self.assertEqual(result['status'],'round_end_candidate')
+        self.assertEqual(result['screenState'],'lobby')
+        self.assertEqual(result['remainingCandidate'],0)
+        self.assertFalse(result['confirmed'])
+        self.page.mouse.click.assert_not_called()
+
+    def test_lobby_without_zero_wall_never_qualifies(self):
+        self.page.screenshot.return_value=b'not a result'
+        with patch('auto_operator.classify_screen',return_value=('lobby',1.0)), \
+             patch('board_metadata.recognize_remaining_count',return_value=2):
+            result=self.op.observe_sanma_friend_transition(self.page,self.receipt(b'before'),'discard')
+        self.assertEqual(result['status'],'unresolved')
+        self.page.mouse.click.assert_not_called()
+
     @unittest.skipUnless((OTHER/'27-turn.png').exists() and (OTHER/'28-pon.png').exists(), 'independent prompt images unavailable')
     def test_disappearing_pon_prompt_is_only_unconfirmed_visual_change(self):
         before=(OTHER/'27-turn.png').read_bytes()

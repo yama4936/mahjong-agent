@@ -8569,6 +8569,15 @@ class PythonAutoOperator:
                     path.write_bytes(frame)
                     return {"status":"terminal", "screenState":state, "confidence":confidence,
                             "screenshot":str(path), "confirmed":False}
+                if state == "lobby":
+                    path = self.frames / f"{utc_stamp()}.{uuid.uuid4().hex}.sanma-friend-round-candidate.png"
+                    path.write_bytes(frame)
+                    from board_metadata import recognize_remaining_count
+                    remaining = recognize_remaining_count(path)
+                    if remaining == 0:
+                        return {"status":"round_end_candidate", "screenState":state, "confidence":confidence,
+                                "remainingCandidate":0, "screenshot":str(path), "confirmed":False,
+                                "reason":"zero remaining is an unverified transition, not a result"}
                 if action in {"tsumo", "ron"}:
                     last = frame
                     continue
@@ -8625,6 +8634,7 @@ class PythonAutoOperator:
         match_seen = False
         result_latched = None
         action_observed_at = None
+        round_end_started = None
         def preserve(frame: bytes | None) -> str | None:
             if not isinstance(frame, bytes) or not frame:
                 return None
@@ -8648,6 +8658,11 @@ class PythonAutoOperator:
                          screenshot=preserve(last_frame))
                 return
             if state == "match" and confidence >= 0.95:
+                if round_end_started is not None:
+                    self.log("sanma_friend_round_transition_reobserved", screenState=state,
+                             screenshot=preserve(frame), confirmed=False)
+                    round_end_started = None
+                    action_observed_at = None
                 match_seen = True
                 if action_observed_at is None:
                     action_observed_at = observation_started
@@ -8751,9 +8766,11 @@ class PythonAutoOperator:
                     self.log("sanma_friend_action_unconfirmed", action=action, result=result, confirmed=False)
                     transition = self.observe_sanma_friend_transition(page, receipt, action)
                     self.log("sanma_friend_transition", **transition)
-                    if transition.get("status") not in {"visual_change_unconfirmed", "terminal"}:
+                    if transition.get("status") not in {"visual_change_unconfirmed", "terminal", "round_end_candidate"}:
                         self.log("sanma_friend_stopped", reason="transition_requires_review", transition=transition)
                         return
+                    if transition.get("status") == "round_end_candidate":
+                        round_end_started = time.monotonic()
                     action_observed_at = None
                     # This is not confirmation. Start a new independent screen
                     # observation; unchanged or reused frames cannot click.
@@ -8762,6 +8779,15 @@ class PythonAutoOperator:
                     self.log("sanma_friend_stopped", reason="observation_or_action_failed", error=str(error),
                              screenshot=preserve(last_frame), operationAuthorized=False)
                     return
+            if round_end_started is not None and state in {"lobby", "unknown"}:
+                elapsed = time.monotonic() - round_end_started
+                self.log("sanma_friend_wait", reason="round_end_unconfirmed", screenState=state,
+                         screenshot=preserve(frame), elapsedSeconds=round(elapsed,2), confirmed=False)
+                if elapsed >= 120:
+                    self.log("sanma_friend_stopped", reason="round_end_timeout", screenshot=preserve(frame))
+                    return
+                page.wait_for_timeout(500)
+                continue
             if state in {"round_result", "match_result"}:
                 path = preserve(frame)
                 self.log("sanma_friend_result_observed", screenState=state, confidence=confidence,
