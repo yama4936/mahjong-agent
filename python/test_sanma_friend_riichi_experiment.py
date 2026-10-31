@@ -1,3 +1,4 @@
+import copy
 import io
 import tempfile
 import time
@@ -21,6 +22,16 @@ class RiichiExperimentTests(unittest.TestCase):
   self.assertIsNone(unique_riichi_selection(out.getvalue(),self.layout))
   image=Image.open(io.BytesIO(self.selection)).convert('RGB');ImageDraw.Draw(image).rectangle((792,930,884,1030),fill=(0,0,0));out=io.BytesIO();image.save(out,format='PNG')
   self.assertIsNone(unique_riichi_selection(out.getvalue(),self.layout))
+ def test_click_geometry_must_match_selected_tile(self):
+  for case in ('other_tile','outside','not_finite','viewport','overlap'):
+   layout=copy.deepcopy(self.layout)
+   if case=='other_tile':layout['clickPoints'][7]=dict(layout['clickPoints'][6])
+   if case=='outside':layout['clickPoints'][7]['x']=1900
+   if case=='not_finite':layout['clickPoints'][7]['y']=float('nan')
+   if case=='viewport':layout['viewport']['width']=1280
+   if case=='overlap':layout['handSlots'][7]['x']=layout['handSlots'][6]['x']
+   with self.subTest(case=case):self.assertIsNone(unique_riichi_selection(self.selection,layout))
+
  def test_mocked_button_and_discard_selection(self):
   with tempfile.TemporaryDirectory() as d:
    op=Mock();op.layout=self.layout;op.frames=Path(d);op.verified_friend_300_active=True;op.sanma_friend_action_observed_at=time.monotonic()

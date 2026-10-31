@@ -1,5 +1,6 @@
 """Experimental friend-only declaration with a single visible legal discard."""
 import io
+import math
 import time
 from pathlib import Path
 from PIL import Image
@@ -12,13 +13,20 @@ def unique_riichi_selection(frame, layout):
     """Return one visually bright slot only; does not establish tile identity."""
     try:
         slots = [*layout['handSlots'],layout['drawSlot']]
-        if len(slots)!=14 or len(layout['clickPoints'])!=14 or not riichi_selection_is_visible(crop_screenshot(frame,clip_for_hand(layout))): return None
+        if (len(slots)!=14 or len(layout['clickPoints'])!=14
+                or layout.get('viewport') != {'width':1920,'height':1080}
+                or not riichi_selection_is_visible(crop_screenshot(frame,clip_for_hand(layout)))): return None
         with Image.open(io.BytesIO(frame)) as source:
             if source.size != (1920,1080): return None
             image=source.convert('RGB'); bright=[]
             for i,slot in enumerate(slots):
                 x,y,w,h=(slot[k] for k in ('x','y','width','height'))
                 if any(type(v) is not int for v in (x,y,w,h)) or not (85<=w<=100 and 140<=h<=160) or x<0 or y<0 or x+w>1920 or y+h>1080:return None
+                point=layout['clickPoints'][i]
+                if (not isinstance(point,dict) or set(point) != {'x','y'}
+                        or any(type(point[k]) not in (int,float) or not math.isfinite(point[k]) for k in ('x','y'))
+                        or abs(point['x']-(x+w/2))>2 or abs(point['y']-(y+h/2))>2):return None
+                if i and slots[i-1]['x']+slots[i-1]['width'] > x:return None
                 pixels=list(image.crop((x+10,y+10,x+w-10,y+h-38)).getdata());n=len(pixels)
                 light=sum(min(p)>180 and max(p)-min(p)<60 for p in pixels)/n
                 dim=sum(60<=min(p)<=160 and max(p)-min(p)<25 for p in pixels)/n
