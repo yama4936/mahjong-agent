@@ -20,7 +20,7 @@ class FriendPassTests(unittest.TestCase):
                {'slot':1,'status':'candidate','action':'pon','confidence':.999923},
                {'slot':2,'status':'candidate','action':'skip','confidence':.999971}]
         self.receipt={'scope':'sanma_self_turn_observation','status':'blocked','operationAuthorized':False,
-          'digest':digest,'screenshot':str(path),'freshness':{'status':'identical_pixels_candidate','operationAuthorized':False,'elapsedMs':1000},
+          'digest':digest,'screenshot':str(path),'candidates':{'candidates':[{'action':'pon'}]},'freshness':{'status':'identical_pixels_candidate','operationAuthorized':False,'elapsedMs':1000},
           'sourceObservation':{'digest':digest,'operationAuthorized':False,'report':{'digest':digest,
           'buttonRow':{'status':'candidate','value':{'slots':slots}}}}}
         self.op=Mock();self.op.args=SimpleNamespace(rules='sanma',mode='force-auto',action_deadline_ms=300000,
@@ -58,3 +58,29 @@ class FriendPassTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'expired'):
                 execute_friend_pon_pass(self.op, self.page, self.receipt)
         self.page.mouse.click.assert_not_called()
+
+    def test_real_riichi_and_pon_kan_candidate_prompts(self):
+        cases = [
+            (Path('/home/yama1/.codex/sanma-run-1740066-20261031/manual-18-before.png'),
+             [('empty_candidate',None,1.0),('candidate','riichi',1.0),('candidate','skip',.999971)], ['riichi']),
+            (Path('/home/yama1/projects/jantama-auto/artifacts/sanma-manual-e48c562-20261031/actions/2026-10-30T16-16-46-070Z-before.png'),
+             [('candidate','pon',.98616),('candidate','kan',1.0),('candidate','skip',.999988)], ['pon','kan'])]
+        for image, observed, options in cases:
+            if not image.exists():
+                self.skipTest('saved action prompt unavailable')
+            self.setUp()
+            frame = image.read_bytes()
+            path = Path(self.temp.name)/'real.png'; path.write_bytes(frame)
+            digest = hashlib.sha256(frame).hexdigest()
+            self.page.screenshot.return_value = frame
+            self.receipt['screenshot'] = str(path)
+            self.receipt['digest'] = digest
+            self.receipt['sourceObservation']['digest'] = digest
+            self.receipt['sourceObservation']['report']['digest'] = digest
+            self.receipt['candidates'] = {'candidates':[{'action':action} for action in options]}
+            self.receipt['sourceObservation']['report']['buttonRow']['value']['slots'] = [
+                {'slot':i,'status':status,'action':action,'confidence':confidence}
+                for i,(status,action,confidence) in enumerate(observed)]
+            result = execute_friend_pon_pass(self.op,self.page,self.receipt)
+            self.assertEqual(result['confirmation'],'unknown')
+            self.page.mouse.click.assert_called_once_with(1300,830)

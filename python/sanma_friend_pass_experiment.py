@@ -32,12 +32,21 @@ def execute_friend_pon_pass(operator, page, receipt):
             or type(freshness.get('elapsedMs')) not in (int,float) or not 0 <= freshness['elapsedMs'] <= 20000
             or row.get('status') != 'candidate' or not isinstance(slots,list) or len(slots) != 3):
         raise RuntimeError('observation is incomplete or stale')
-    if (any(not isinstance(slot,dict) or slot.get('slot') != i for i,slot in enumerate(slots))
-            or slots[0].get('status') != 'empty_candidate'
-            or slots[1].get('status') != 'candidate' or slots[1].get('action') != 'pon'
-            or slots[2].get('status') != 'candidate' or slots[2].get('action') != 'skip'
+    if any(not isinstance(slot,dict) or slot.get('slot') != i for i,slot in enumerate(slots)):
+        raise RuntimeError('action slots unknown')
+    first, second, skip = slots
+    permitted = (first.get('status') == 'empty_candidate' and second.get('action') in ('pon','kan','riichi')) or (
+        first.get('status') == 'candidate' and first.get('action') == 'pon'
+        and type(first.get('confidence')) in (float,int) and .98 <= first['confidence'] <= 1
+        and second.get('action') == 'kan')
+    if (not permitted or second.get('status') != 'candidate'
+            or skip.get('status') != 'candidate' or skip.get('action') != 'skip'
             or any(type(slots[i].get('confidence')) not in (float,int) or not .99 <= slots[i]['confidence'] <= 1 for i in (1,2))):
-        raise RuntimeError('pon-only prompt is unknown or ambiguous')
+        raise RuntimeError('optional prompt is unknown or ambiguous')
+    options = [slot['action'] for slot in slots[:2] if slot.get('status') == 'candidate']
+    candidates = (receipt.get('candidates') or {}).get('candidates')
+    if not isinstance(candidates,list) or sorted(item.get('action') for item in candidates if isinstance(item,dict)) != sorted(options):
+        raise RuntimeError('recognized options differ from candidate actions')
     baseline = Path(receipt['screenshot']).read_bytes()
     if hashlib.sha256(baseline).hexdigest() != receipt.get('digest'):
         raise RuntimeError('baseline changed')
@@ -50,7 +59,7 @@ def execute_friend_pon_pass(operator, page, receipt):
     if operator.verified_friend_300_active is not True or not 0 <= time.monotonic() - started < 300:
         raise RuntimeError('friend session or timing expired')
     latch_friend_action_target(operator,baseline,'pass')
-    operator.log('sanma_friend_candidate_click', action='pass_pon', screenshot=receipt['screenshot'],
+    operator.log('sanma_friend_candidate_click', action='pass_optional', options=options, screenshot=receipt['screenshot'],
                  digest=receipt['digest'], clickPoint={'x':1300,'y':830}, confirmed=False)
     page.mouse.click(1300,830)
-    return {'clicked':True,'action':'pass_pon','confirmation':'unknown','stopped':True}
+    return {'clicked':True,'action':'pass_optional','confirmation':'unknown','stopped':True}

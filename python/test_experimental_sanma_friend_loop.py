@@ -51,7 +51,7 @@ class ExperimentalSanmaFriendLoopTest(unittest.TestCase):
         self.assertTrue(any(call.kwargs.get('reason') == 'transition_requires_review' for call in self.op.log.call_args_list))
 
     def test_unsupported_or_unknown_action_stops_without_play_click(self):
-        self.receipt['candidates'] = {'candidates': [{'action':'kan'}]}
+        self.receipt['candidates'] = {'candidates': [{'action':'abort'}]}
         self.run_room()
         self.page.mouse.click.assert_called_once_with(1140,998)
         self.op.execute_sanma_friend_tsumo_candidate.assert_not_called()
@@ -108,6 +108,13 @@ class ExperimentalSanmaFriendLoopTest(unittest.TestCase):
             self.run_room()
         skip.assert_called_once_with(self.op, self.page, self.receipt)
         self.assertTrue(any(call.kwargs.get('reason') == 'pass_transition_requires_review' for call in self.op.log.call_args_list))
+
+    def test_optional_riichi_and_kan_route_to_pass(self):
+        for actions in ([{'action':'riichi'}], [{'action':'pon'},{'action':'kan'}]):
+            self.receipt['candidates'] = {'candidates': actions}
+            with self.subTest(actions=actions), patch('sanma_friend_pass_experiment.execute_friend_pon_pass', return_value={'confirmation':'unknown'}) as skip:
+                self.run_room()
+                skip.assert_called_once_with(self.op,self.page,self.receipt)
 
     def test_result_is_recorded_then_round_advanced_and_match_stopped(self):
         self.op.args.max_iterations = 3
@@ -206,7 +213,7 @@ class ExperimentalSanmaFriendLoopTest(unittest.TestCase):
     def test_changed_unconfirmed_transition_reobserves_before_next_action(self):
         self.op.args.max_iterations = 2
         self.op.observe_sanma_friend_transition.return_value = {'status':'visual_change_unconfirmed','confirmed':False}
-        next_receipt = {'candidates': {'candidates':[{'action':'kan'}]}, 'digest':'next', 'screenshot':'next.png'}
+        next_receipt = {'candidates': {'candidates':[{'action':'abort'}]}, 'digest':'next', 'screenshot':'next.png'}
         self.op.inspect_sanma_self_turn.side_effect = [self.receipt,next_receipt]
         self.run_room()
         self.assertEqual(self.op.inspect_sanma_self_turn.call_count,2)

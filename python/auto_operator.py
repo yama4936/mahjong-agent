@@ -8616,10 +8616,10 @@ class PythonAutoOperator:
                             return
                         action = "kita"
                         result = self.execute_sanma_friend_kita_candidate(page, receipt)
-                    elif len(actions) == 1 and isinstance(actions[0], dict) and actions[0].get("action") == "pon":
+                    elif actions and all(isinstance(item, dict) and item.get("action") in {"pon", "kan", "riichi"} for item in actions):
                         from sanma_friend_pass_experiment import execute_friend_pon_pass
                         result = execute_friend_pon_pass(self, page, receipt)
-                        self.log("sanma_friend_action_unconfirmed", action="pass_pon", result=result, confirmed=False)
+                        self.log("sanma_friend_action_unconfirmed", action="pass_optional", result=result, confirmed=False)
                         transition = self.observe_sanma_friend_transition(page, receipt, "pass_pon")
                         self.log("sanma_friend_transition", **transition)
                         if transition.get("status") not in {"visual_change_unconfirmed", "terminal"}:
