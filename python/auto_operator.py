@@ -1838,6 +1838,19 @@ def local_discard_allowed(args: argparse.Namespace, evaluation: dict[str, Any]) 
     )
 
 
+def experimental_friend_score_transfer_candidate(frame: bytes) -> bool:
+    """Recognize one reviewed score-transfer layout as a no-input wait candidate."""
+    try:
+        with Image.open(io.BytesIO(frame)) as image, Image.open(Path(__file__).parent/'fixtures'/'sanma-score-transfer-edge.png') as ref:
+            if image.size != (1920,1080) or ref.size != (65,225): return False
+            image=image.convert('RGB');ref=ref.convert('RGB')
+            boxes=((740,225,805,300),(1186,480,1251,555),(740,762,805,837))
+            return all(sum(ImageStat.Stat(ImageChops.difference(image.crop(box),ref.crop((0,i*75,65,(i+1)*75)))).mean)/3 <= 4
+                       for i,box in enumerate(boxes))
+    except (OSError,ValueError):
+        return False
+
+
 def experimental_kita_color_stable(before: bytes, after: bytes, boxes: list[dict[str, Any]]) -> bool:
     """Reject material changes in red/green glyph classes under relighting."""
     def kind(pixel):
@@ -8569,6 +8582,12 @@ class PythonAutoOperator:
                     path.write_bytes(frame)
                     return {"status":"terminal", "screenState":state, "confidence":confidence,
                             "screenshot":str(path), "confirmed":False}
+                if state in {"away", "unknown", "lobby"} and experimental_friend_score_transfer_candidate(frame):
+                    path = self.frames / f"{utc_stamp()}.{uuid.uuid4().hex}.sanma-friend-score-transfer.png"
+                    path.write_bytes(frame)
+                    return {"status":"round_end_candidate", "screenState":state, "confidence":confidence,
+                            "screenshot":str(path), "confirmed":False,
+                            "reason":"visual score-transfer candidate; no result or score is verified"}
                 if state == "lobby":
                     path = self.frames / f"{utc_stamp()}.{uuid.uuid4().hex}.sanma-friend-round-candidate.png"
                     path.write_bytes(frame)
@@ -8779,7 +8798,12 @@ class PythonAutoOperator:
                     self.log("sanma_friend_stopped", reason="observation_or_action_failed", error=str(error),
                              screenshot=preserve(last_frame), operationAuthorized=False)
                     return
-            if round_end_started is not None and state in {"lobby", "unknown"}:
+            if (round_end_started is None and match_seen and state in {"away", "unknown", "lobby"}
+                    and experimental_friend_score_transfer_candidate(frame)):
+                round_end_started = time.monotonic()
+                self.log("sanma_friend_score_transfer_candidate", screenState=state, confidence=confidence,
+                         screenshot=preserve(frame), confirmed=False)
+            if round_end_started is not None and state in {"lobby", "unknown", "away"}:
                 elapsed = time.monotonic() - round_end_started
                 self.log("sanma_friend_wait", reason="round_end_unconfirmed", screenState=state,
                          screenshot=preserve(frame), elapsedSeconds=round(elapsed,2), confirmed=False)
