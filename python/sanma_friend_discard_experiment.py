@@ -188,7 +188,7 @@ def execute_friend_draw_candidate(operator, page, receipt):
             or draw.get("point") != points[-1]):
         raise ValueError("unsafe hand, uncertain prompt or draw mismatch")
     slots = [{"tile": tile, **point} for tile, point in zip(tiles, points)]
-    from sanma_friend_shape_candidate import friend_shape_candidate, friend_non_riichi_hypothesis
+    from sanma_friend_shape_candidate import friend_shape_candidate, friend_non_riichi_hypothesis, friend_hand_click_geometry
     shape = friend_shape_candidate(receipt)
     # CPU-friend experiment: visual rail and hand confidence are hypotheses,
     # never an assertion that riichi status or turn are confirmed.
@@ -200,6 +200,7 @@ def execute_friend_draw_candidate(operator, page, receipt):
                     and all(slot.get("status") == "empty_candidate" for slot in row_slots)
                     and len(calibrated_points) == len(points) == len(calibrated_slots) == 14
                     and calibrated_points == points
+                    and friend_hand_click_geometry(calibrated_slots, calibrated_points)
                     and calibrated_slots == [*geo_value.get("handSlots", []), geo_value.get("drawSlot")]
                     and friend_non_riichi_hypothesis(baseline, hand_value))
     selected = shape if shape_choice else draw

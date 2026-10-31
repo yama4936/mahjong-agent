@@ -8736,7 +8736,8 @@ class PythonAutoOperator:
                     self.log("sanma_friend_round_transition_reobserved", screenState=state,
                              screenshot=preserve(frame), confirmed=False)
                     round_end_started = None
-                    self.sanma_friend_riichi_attempted = False
+                    # A visual round-end candidate does not establish a new
+                    # round; retain any attempted-riichi lock for this session.
                     action_observed_at = None
                 match_seen = True
                 if action_observed_at is None:

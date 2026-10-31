@@ -45,6 +45,22 @@ def friend_shape_candidate(receipt):
                 'reason':'incomplete, inconsistent, or unverified shape evidence'}
 
 
+def friend_hand_click_geometry(slots, points):
+    """Check every physical point against its tile, independent of source agreement."""
+    try:
+        if len(slots)!=14 or len(points)!=14:return False
+        for i,(rect,point) in enumerate(zip(slots,points)):
+            if not isinstance(rect,dict) or not isinstance(point,dict) or set(point)!={'x','y'}:return False
+            x,y,w,h=(rect[k] for k in ('x','y','width','height'))
+            if (any(type(v) is not int for v in (x,y,w,h)) or not (85<=w<=100 and 140<=h<=160)
+                    or x<0 or y<0 or x+w>1920 or y+h>1080
+                    or any(type(point[k]) not in (int,float) or not math.isfinite(point[k]) for k in ('x','y'))
+                    or abs(point['x']-(x+w/2))>2 or abs(point['y']-(y+h/2))>2):return False
+            if i and slots[i-1]['x']+slots[i-1]['width']>x:return False
+        return True
+    except (TypeError,KeyError,ValueError,IndexError):return False
+
+
 def friend_non_riichi_hypothesis(frame, hand):
     """Friend-only visual hypothesis; the unobserved past remains unknown."""
     import io
@@ -55,9 +71,10 @@ def friend_non_riichi_hypothesis(frame, hand):
         if (hand.get('turnReady') is not True or len(tiles)!=14 or len(matches)!=14 or len(presence)!=14
                 or any(m.get('tile')!=t or type(m.get('confidence')) not in (int,float)
                        or type(m.get('runnerUpConfidence')) not in (int,float)
+                       or not math.isfinite(m['confidence']) or not math.isfinite(m['runnerUpConfidence'])
                        or m['confidence']<.94 or m['confidence']-m['runnerUpConfidence']<.1
                        for t,m in zip(tiles,matches))
-                or any(type(p) not in (int,float) or p<.74 for p in presence)):
+                or any(type(p) not in (int,float) or not math.isfinite(p) or p<.74 for p in presence)):
             return False
         with Image.open(io.BytesIO(frame)) as source, Image.open(Path(__file__).parent/'fixtures/sanma-dd-no-riichi-rail.png') as reference:
             if source.size!=(1920,1080) or reference.size!=(160,15):return False

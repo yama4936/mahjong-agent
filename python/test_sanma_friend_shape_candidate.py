@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock,patch
-from sanma_friend_shape_candidate import friend_shape_candidate
+from sanma_friend_shape_candidate import friend_shape_candidate, friend_hand_click_geometry
 from sanma_friend_discard_experiment import execute_friend_draw_candidate
 
 ROOT=Path('/home/yama1/.codex/sanma-run-dd7175d-20261031')
@@ -39,6 +39,23 @@ class ShapeCandidateTests(unittest.TestCase):
   self.assertFalse(friend_non_riichi_hypothesis(out.getvalue(),hand))
   uncertain=copy.deepcopy(hand);uncertain['matches'][0]['confidence']=.5
   self.assertFalse(friend_non_riichi_hypothesis(frame,uncertain))
+ def test_matching_sources_do_not_prove_point_is_in_the_correct_tile(self):
+  geo=self.receipt['sourceObservation']['report']['handGeometry']['value']
+  slots=geo['handSlots']+[geo['drawSlot']];points=copy.deepcopy(geo['clickPoints'])
+  self.assertTrue(friend_hand_click_geometry(slots,points))
+  for case in ('wrong_tile','outside','overlap','nan'):
+   rects=copy.deepcopy(slots);p=copy.deepcopy(points)
+   if case=='wrong_tile':p[12]=dict(p[11])
+   if case=='outside':p[12]['x']=1900
+   if case=='nan':p[12]['y']=float('nan')
+   if case=='overlap':rects[12]['x']=rects[11]['x']
+   with self.subTest(case=case):self.assertFalse(friend_hand_click_geometry(rects,p))
+ def test_nan_confidence_does_not_authorize_hand_discard(self):
+  from sanma_friend_shape_candidate import friend_non_riichi_hypothesis
+  frame=(ROOT/'manual-12-before.png').read_bytes();hand=copy.deepcopy(self.receipt['sourceObservation']['report']['hand']['value'])
+  hand['matches'][0]['confidence']=float('nan')
+  self.assertFalse(friend_non_riichi_hypothesis(frame,hand))
+
  def test_shape_hypothesis_routes_to_candidate_in_friend_experiment(self):
   with tempfile.TemporaryDirectory() as d:
    p=Path(d)/'before.png';p.write_bytes((ROOT/'manual-12-before.png').read_bytes());self.receipt['screenshot']=str(p)

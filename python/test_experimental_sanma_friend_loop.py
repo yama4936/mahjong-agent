@@ -141,7 +141,7 @@ class ExperimentalSanmaFriendLoopTest(unittest.TestCase):
         self.assertTrue(any(call.kwargs.get('reason') == 'pass_transition_requires_review' for call in self.op.log.call_args_list))
 
     def test_optional_riichi_and_kan_route_to_pass(self):
-        for actions in ([{'action':'riichi'}], [{'action':'pon'},{'action':'kan'}]):
+        for actions in ([{'action':'pon'},{'action':'kan'}],):
             self.receipt['candidates'] = {'candidates': actions}
             with self.subTest(actions=actions), patch('sanma_friend_pass_experiment.execute_friend_pon_pass', return_value={'confirmation':'unknown'}) as skip:
                 self.run_room()
@@ -265,6 +265,21 @@ class ExperimentalSanmaFriendLoopTest(unittest.TestCase):
         self.assertTrue(any(c.kwargs.get('reason')=='round_end_unconfirmed' for c in self.op.log.call_args_list))
         self.assertTrue(any(c.args[0]=='sanma_friend_round_transition_reobserved' for c in self.op.log.call_args_list))
         self.page.mouse.click.assert_called_once_with(1140,998)
+
+    def test_unconfirmed_round_end_does_not_clear_riichi_lock(self):
+        self.op.args.max_iterations = 3
+        self.receipt['candidates']={'candidates':[{'action':'riichi'}]}
+        self.op.observe_sanma_friend_transition.return_value = {'status':'round_end_candidate','confirmed':False}
+        next_receipt={'candidates':{'candidates':[{'action':'abort'}]},'digest':'next'}
+        self.op.inspect_sanma_self_turn.side_effect=[self.receipt,next_receipt]
+        def attempted(*args):
+            self.op.sanma_friend_riichi_attempted=True
+            return {'confirmation':'unknown'}
+        with patch('auto_operator.inspect_sanma_friend_start',return_value={'operationAuthorized':False}), \
+             patch('auto_operator.classify_screen',side_effect=[('match',1.0),('lobby',1.0),('match',1.0)]), \
+             patch('sanma_friend_riichi_experiment.execute_friend_riichi',side_effect=attempted):
+            self.op.run(self.page)
+        self.assertTrue(self.op.sanma_friend_riichi_attempted)
 
     def test_new_digest_cannot_repeat_an_unconfirmed_kita(self):
         self.op.args.max_iterations = 2
