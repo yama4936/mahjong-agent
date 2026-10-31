@@ -115,14 +115,22 @@ class ResidentRiverCandidateTests(unittest.TestCase):
    self.assertTrue(json.loads(child.stdout.readline())['ready'])
    with tempfile.TemporaryDirectory(dir=Path(__file__).resolve().parent.parent) as d:
     op=object.__new__(PythonAutoOperator);op.recognition_request_id=0;op.recognition_server=child;op.frames=Path(d);op.log=Mock();page=Mock()
-    for number in (15,21):
+    for number in (15,21,23):
      page.screenshot.return_value=(ROOT/f'manual-{number:02}-before.png').read_bytes()
      receipt=op.inspect_sanma_self_turn(page);source=receipt['sourceObservation'];hand=source['report']['hand']['value']
      threats=friend_opponent_riichi_candidates(page.screenshot.return_value)
      result=friend_genbutsu_candidate(source,receipt['digest'],threats,hand['tiles'],hand['matches'])
      if number==15:
       self.assertEqual(result['tile'],'2p');self.assertFalse(hand['turnReady'])
-     else:self.assertIsNone(result)
+     else:
+      self.assertIsNone(result)
+      if number==23:
+       # 2p is visible in the left river and hand, but absent from
+       # the right river. It is not a candidate against both riichis.
+       self.assertEqual(threats,['right','left'])
+       self.assertIn('2p',[x['tile'] for x in source['leftRiver']['candidates']])
+       self.assertNotIn('2p',[x['tile'] for x in source['rightRiver']['candidates']])
+       self.assertEqual(hand['tiles'][-1],'2p')
      self.assertEqual(source['leftRiver']['frameSha256'],receipt['digest'])
      self.assertEqual(source['rightRiver']['frameSha256'],receipt['digest'])
      self.assertFalse(source['leftRiver']['verified']);page.mouse.click.assert_not_called()
