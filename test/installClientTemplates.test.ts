@@ -45,6 +45,20 @@ test('three-sou selection installs idempotently and preserves conflicts', async 
   } finally { await rm(dir,{recursive:true,force:true}); }
 });
 
+test('eight-sou installation is idempotent and preserves conflicts', async () => {
+  const dir = await mkdtemp(path.join(process.cwd(), '.client-template-test-'));
+  try {
+    await seedBase(dir);
+    const run = () => execFileSync(process.execPath, ['scripts/install-client-templates.mjs',dir,'8s'], {encoding:'utf8',stdio:['ignore','pipe','pipe']});
+    assert.equal(JSON.parse(run()).installed, '8s__fourplayer_friend.png');
+    assert.equal(JSON.parse(run()).alreadyPresent, true);
+    const target=path.join(dir,'8s__fourplayer_friend.png');
+    await writeFile(target,'other content');
+    assert.throws(run,/differs; preserved/);
+    assert.equal(await readFile(target,'utf8'),'other content');
+  } finally { await rm(dir,{recursive:true,force:true}); }
+});
+
 test('client template install rejects missing bootstrap base', async () => {
   const dir = await mkdtemp(path.join(process.cwd(), '.client-template-test-'));
   try {
