@@ -108,7 +108,7 @@ def friend_visible_empty_row_candidate(frame, row_slots):
             observed=source.convert('RGB').crop((1180,785,1425,875))
         # Include an independently observed two-north/clock layout. It is a
         # visible-pixel hypothesis, not evidence about the obscured action.
-        for name in ('sanma-friend-empty-slot-bf.png', 'sanma-friend-two-north-slot-dd.png'):
+        for name in ('sanma-friend-empty-slot-bf.png', 'sanma-friend-two-north-slot-dd.png', 'sanma-friend-empty-slot-6c.png'):
             with Image.open(Path(__file__).parent/'fixtures'/name) as source:
                 reference=source.convert('RGB')
             difference=ImageChops.difference(observed,reference)
