@@ -104,3 +104,35 @@ class FriendDrawBridgeTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             execute_friend_draw_candidate(self.operator, Mock(), self.receipt)
         execute.assert_not_called()
+
+    @patch('sanma_friend_discard_experiment.latch_friend_action_target')
+    @patch('sanma_friend_discard_experiment.send_discard_click')
+    def test_bridge_saves_exact_rejected_capture_and_stops(self, send, latch):
+        import time
+        from PIL import Image
+        self.operator.frames=Path(self.directory.name)
+        self.operator.verified_friend_300_started_at=time.monotonic()
+        changed=Path(self.directory.name)/'changed.png'
+        Image.new('RGB',(1920,1080),'white').save(changed)
+        page=Mock();page.screenshot.return_value=changed.read_bytes()
+        with self.assertRaisesRegex(ValueError,'recognition frame changed before click'):
+            execute_friend_draw_candidate(self.operator,page,self.receipt)
+        event=next(c for c in self.operator.log.call_args_list if c.args[0]=='sanma_friend_discard_preclick_rejected')
+        self.assertEqual(Path(event.kwargs['screenshot']).read_bytes(),changed.read_bytes())
+        self.assertEqual(event.kwargs['sha256'],hashlib.sha256(changed.read_bytes()).hexdigest())
+        self.assertEqual(event.kwargs['referenceSha256'],self.receipt['digest'])
+        send.assert_not_called()
+
+    @patch('sanma_friend_discard_experiment.latch_friend_action_target')
+    @patch('sanma_friend_discard_experiment.send_discard_click')
+    def test_bridge_evidence_write_failure_stops_before_click(self, send, latch):
+        import time
+        from PIL import Image
+        self.operator.frames=Path(self.directory.name)/'missing'
+        self.operator.verified_friend_300_started_at=time.monotonic()
+        changed=Path(self.directory.name)/'changed.png'
+        Image.new('RGB',(1920,1080),'white').save(changed)
+        page=Mock();page.screenshot.return_value=changed.read_bytes()
+        with self.assertRaises(FileNotFoundError):
+            execute_friend_draw_candidate(self.operator,page,self.receipt)
+        send.assert_not_called()
