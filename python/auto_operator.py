@@ -8796,6 +8796,10 @@ class PythonAutoOperator:
                                 return
                         action = "kita"
                         result = self.execute_sanma_friend_kita_candidate(page, receipt)
+                    elif len(actions) == 1 and isinstance(actions[0], dict) and actions[0].get("action") == "riichi":
+                        from sanma_friend_riichi_experiment import execute_friend_riichi
+                        action = "riichi"
+                        result = execute_friend_riichi(self, page, receipt)
                     elif actions and all(isinstance(item, dict) and item.get("action") in {"pon", "kan", "riichi"} for item in actions):
                         from sanma_friend_pass_experiment import execute_friend_pon_pass
                         result = execute_friend_pon_pass(self, page, receipt)

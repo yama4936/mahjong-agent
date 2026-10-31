@@ -1,0 +1,356 @@
+{
+  "status": "blocked",
+  "scope": "sanma_self_turn_observation",
+  "operationAuthorized": false,
+  "digest": "f5037c8cad03062be3bc008f1cda27405db04b3026549a6e2ca39c669dd3d9fc",
+  "screenshot": "frame.png",
+  "priority": {
+    "status": "blocked",
+    "reasons": [
+      "complete independent review missing",
+      "hand recognition unconfirmed",
+      "public recognition failed",
+      "visible riichi button needs separate handling",
+      "possible riichi button in slot 1 needs separate handling",
+      "possible skip button in slot 2 needs separate handling"
+    ],
+    "operationAuthorized": false
+  },
+  "evaluation": {
+    "status": "blocked",
+    "reasons": [
+      "complete independent review missing",
+      "hand recognition unconfirmed",
+      "public recognition failed",
+      "visible riichi button needs separate handling",
+      "possible riichi button in slot 1 needs separate handling",
+      "possible skip button in slot 2 needs separate handling"
+    ],
+    "operationAuthorized": false
+  },
+  "candidates": {
+    "status": "hypotheses",
+    "candidates": [
+      {
+        "action": "riichi",
+        "slot": 1,
+        "handSupport": "not_checked"
+      }
+    ],
+    "conflicts": [],
+    "missing": [
+      "game rules and OCR seat unverified",
+      "action row incomplete",
+      "turn and riichi status unverified",
+      "public tiles and extracted north counts incomplete",
+      "physical action targets uncalibrated",
+      "own seat unavailable",
+      "hand recognition unavailable",
+      "sanma ron reference not independently verified"
+    ],
+    "operationAuthorized": false
+  },
+  "structuralPositions": {
+    "status": "blocked",
+    "digest": "f5037c8cad03062be3bc008f1cda27405db04b3026549a6e2ca39c669dd3d9fc",
+    "reason": "hand or geometry unavailable",
+    "candidates": [],
+    "operationAuthorized": false
+  },
+  "drawCandidate": {
+    "status": "unresolved",
+    "operationAuthorized": false,
+    "reason": "hand_or_geometry_unknown"
+  },
+  "sourceObservation": {
+    "scope": "offline_untrusted_sanma_auto_observation",
+    "digest": "f5037c8cad03062be3bc008f1cda27405db04b3026549a6e2ca39c669dd3d9fc",
+    "board": {
+      "verified": false,
+      "scope": "sanma_offline_image_candidate",
+      "reason": "incomplete_or_ambiguous_tokens",
+      "source": "/tmp/jantama-sanma-worker-3_07594n.png",
+      "tokens": [
+        {
+          "text": "東3局",
+          "confidence": 0.99984,
+          "x": 960.1666717529297,
+          "y": 404.5
+        },
+        {
+          "text": "35000",
+          "confidence": 0.99997,
+          "x": 1046.5,
+          "y": 418.58333587646484
+        },
+        {
+          "text": "余05",
+          "confidence": 0.99894,
+          "x": 959,
+          "y": 442.6666717529297
+        },
+        {
+          "text": "33000",
+          "confidence": 0.99997,
+          "x": 959.1666717529297,
+          "y": 481.8333282470703
+        },
+        {
+          "text": "南",
+          "confidence": 1,
+          "x": 824,
+          "y": 514.5
+        },
+        {
+          "text": "西",
+          "confidence": 0.99847,
+          "x": 1093.3333435058594,
+          "y": 513.6666717529297
+        },
+        {
+          "text": "1",
+          "confidence": 0.71532,
+          "x": 876,
+          "y": 423,
+          "source": "upright_left_score_crop",
+          "cropWidth": 412
+        },
+        {
+          "text": "1",
+          "confidence": 0.81959,
+          "x": 876,
+          "y": 423,
+          "source": "upright_left_score_crop",
+          "cropWidth": 328
+        },
+        {
+          "text": "35000",
+          "confidence": 0.99999,
+          "x": 958,
+          "y": 364,
+          "source": "upright_opposite_score_crop",
+          "cropWidth": 412
+        },
+        {
+          "text": "2",
+          "confidence": 0.99973,
+          "x": 132,
+          "y": 155
+        },
+        {
+          "text": "2",
+          "confidence": 0.99983,
+          "x": 268,
+          "y": 155
+        }
+      ]
+    },
+    "north": {
+      "status": "unknown",
+      "verified": false,
+      "complete": false,
+      "positions": {
+        "own": {
+          "verified": false,
+          "scope": "sanma_offline_own_north_visual_candidates",
+          "matches": [],
+          "complete": false,
+          "frame_sha256": "f5037c8cad03062be3bc008f1cda27405db04b3026549a6e2ca39c669dd3d9fc"
+        },
+        "opposite": {
+          "scope": "sanma_offline_opposite_north_visual_candidate",
+          "verified": false,
+          "complete": false,
+          "status": "unknown",
+          "candidate": {
+            "x": 535,
+            "y": 101,
+            "similarity": 0.9976822137832642,
+            "reference": "primary"
+          },
+          "frame_sha256": "f5037c8cad03062be3bc008f1cda27405db04b3026549a6e2ca39c669dd3d9fc"
+        },
+        "left": {
+          "scope": "sanma_offline_left_north_visual_candidate",
+          "status": "unknown",
+          "verified": false,
+          "complete": false,
+          "candidate": null,
+          "frame_sha256": "f5037c8cad03062be3bc008f1cda27405db04b3026549a6e2ca39c669dd3d9fc"
+        }
+      }
+    },
+    "candidates": {
+      "status": "hypotheses",
+      "candidates": [
+        {
+          "action": "riichi",
+          "slot": 1,
+          "handSupport": "not_checked"
+        }
+      ],
+      "conflicts": [],
+      "missing": [
+        "game rules and OCR seat unverified",
+        "action row incomplete",
+        "turn and riichi status unverified",
+        "public tiles and extracted north counts incomplete",
+        "physical action targets uncalibrated",
+        "own seat unavailable",
+        "hand recognition unavailable",
+        "sanma ron reference not independently verified"
+      ],
+      "operationAuthorized": false
+    },
+    "ownSeat": {
+      "status": "unknown",
+      "reason": "incomplete_or_ambiguous_tokens"
+    },
+    "report": {
+      "scope": "offline_untrusted_sanma_frame",
+      "digest": "f5037c8cad03062be3bc008f1cda27405db04b3026549a6e2ca39c669dd3d9fc",
+      "hand": {
+        "status": "unresolved",
+        "reason": "suspected false compact hand and raised-row recovery unavailable"
+      },
+      "handGeometry": {
+        "status": "unresolved",
+        "reason": "suspected false compact hand and raised-row recovery unavailable"
+      },
+      "publicTiles": {
+        "status": "unresolved",
+        "reason": "own seat unknown: opponent mapping unavailable"
+      },
+      "button": {
+        "status": "candidate",
+        "value": {
+          "status": "matched",
+          "action": "riichi",
+          "confidence": 1,
+          "margin": 0.15660317946623092
+        }
+      },
+      "buttonRow": {
+        "status": "candidate",
+        "value": {
+          "scope": "offline_untrusted_sanma_button_row",
+          "slots": [
+            {
+              "status": "empty_candidate",
+              "slot": 0,
+              "confidence": 0.9999029820261438
+            },
+            {
+              "status": "candidate",
+              "action": "riichi",
+              "slot": 1,
+              "confidence": 1
+            },
+            {
+              "status": "candidate",
+              "action": "skip",
+              "slot": 2,
+              "confidence": 0.9999880855119826
+            }
+          ],
+          "complete": false,
+          "operationAuthorized": false
+        }
+      },
+      "ownMelds": {
+        "status": "candidate",
+        "value": {
+          "status": "unknown",
+          "complete": false,
+          "hypotheses": [],
+          "reason": "hand_extent_unknown"
+        }
+      },
+      "shape": {
+        "status": "unresolved",
+        "reason": "visible tile completeness unavailable"
+      },
+      "decision": {
+        "status": "blocked",
+        "reasons": [
+          "hand recognition unverified",
+          "public observations incomplete",
+          "action row incomplete",
+          "turn, meld and riichi status unverified",
+          "possible riichi in button slot 1",
+          "possible skip in button slot 2",
+          "own melds unknown: hand_extent_unknown"
+        ]
+      },
+      "operationAuthorized": false
+    },
+    "operationAuthorized": false,
+    "assembly": {
+      "scope": "offline_untrusted_sanma_evaluation_assembly",
+      "status": "blocked",
+      "digest": "f5037c8cad03062be3bc008f1cda27405db04b3026549a6e2ca39c669dd3d9fc",
+      "partial": {
+        "actionCandidates": [
+          {
+            "action": "riichi",
+            "slot": 1,
+            "handSupport": "not_checked"
+          }
+        ]
+      },
+      "missing": [
+        "rules and seat not verified",
+        "hand and draw not verified",
+        "turn and riichi status unknown",
+        "action list incomplete",
+        "rivers and melds incomplete",
+        "all three extracted north counts unknown"
+      ],
+      "evaluation": {
+        "status": "blocked",
+        "reasons": [
+          "complete independent review missing",
+          "hand recognition unconfirmed",
+          "public recognition failed",
+          "visible riichi button needs separate handling",
+          "possible riichi button in slot 1 needs separate handling",
+          "possible skip button in slot 2 needs separate handling"
+        ],
+        "operationAuthorized": false
+      },
+      "priority": {
+        "status": "blocked",
+        "reasons": [
+          "complete independent review missing",
+          "hand recognition unconfirmed",
+          "public recognition failed",
+          "visible riichi button needs separate handling",
+          "possible riichi button in slot 1 needs separate handling",
+          "possible skip button in slot 2 needs separate handling"
+        ],
+        "operationAuthorized": false
+      },
+      "operationAuthorized": false
+    },
+    "structuralPositions": {
+      "status": "blocked",
+      "digest": "f5037c8cad03062be3bc008f1cda27405db04b3026549a6e2ca39c669dd3d9fc",
+      "reason": "hand or geometry unavailable",
+      "candidates": [],
+      "operationAuthorized": false
+    }
+  },
+  "freshness": {
+    "status": "identical_pixels_candidate",
+    "operationAuthorized": false,
+    "elapsedMs": 2944,
+    "regionsChanged": {
+      "hand": false,
+      "actions": false,
+      "fullFrame": false
+    },
+    "clockChanged": false,
+    "digest": "f5037c8cad03062be3bc008f1cda27405db04b3026549a6e2ca39c669dd3d9fc",
+    "reason": "visible pixel stability does not verify turn, state, or action; clock area unobserved"
+  }
+}

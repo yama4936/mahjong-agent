@@ -8,7 +8,7 @@ from sanma_friend_freshness import friend_action_started_at, friend_frame_stable
 from screen_state import classify_screen
 
 
-def execute_friend_pon_pass(operator, page, receipt):
+def execute_friend_pon_pass(operator, page, receipt, *, declare_riichi=False):
     args = operator.args
     if (getattr(args, 'rules', None) != 'sanma' or getattr(args, 'mode', None) != 'force-auto'
             or getattr(args, 'action_deadline_ms', None) != 300000
@@ -47,6 +47,8 @@ def execute_friend_pon_pass(operator, page, receipt):
     candidates = (receipt.get('candidates') or {}).get('candidates')
     if not isinstance(candidates,list) or sorted(item.get('action') for item in candidates if isinstance(item,dict)) != sorted(options):
         raise RuntimeError('recognized options differ from candidate actions')
+    if declare_riichi and options != ['riichi']:
+        raise RuntimeError('riichi declaration requires a unique riichi prompt')
     baseline = Path(receipt['screenshot']).read_bytes()
     if hashlib.sha256(baseline).hexdigest() != receipt.get('digest'):
         raise RuntimeError('baseline changed')
@@ -59,7 +61,9 @@ def execute_friend_pon_pass(operator, page, receipt):
     if operator.verified_friend_300_active is not True or not 0 <= time.monotonic() - started < 300:
         raise RuntimeError('friend session or timing expired')
     latch_friend_action_target(operator,baseline,'pass')
-    operator.log('sanma_friend_candidate_click', action='pass_optional', options=options, screenshot=receipt['screenshot'],
-                 digest=receipt['digest'], clickPoint={'x':1300,'y':830}, confirmed=False)
-    page.mouse.click(1300,830)
-    return {'clicked':True,'action':'pass_optional','confirmation':'unknown','stopped':True}
+    action = 'riichi_declaration' if declare_riichi else 'pass_optional'
+    point = {'x':1010,'y':830} if declare_riichi else {'x':1300,'y':830}
+    operator.log('sanma_friend_candidate_click', action=action, options=options, screenshot=receipt['screenshot'],
+                 digest=receipt['digest'], clickPoint=point, confirmed=False)
+    page.mouse.click(point['x'],point['y'])
+    return {'clicked':True,'action':action,'confirmation':'unknown','stopped':True}
