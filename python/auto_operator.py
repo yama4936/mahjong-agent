@@ -1838,6 +1838,33 @@ def local_discard_allowed(args: argparse.Namespace, evaluation: dict[str, Any]) 
     )
 
 
+def experimental_kita_glyph_stability(before: bytes, after: bytes, report: dict[str, Any]) -> bool:
+    """Lighting-tolerant visual hypothesis, only for the reviewed friend kita prompt.
+
+    This does not prove state, turn, colors, or content concealed by overlays.
+    """
+    try:
+        hand = report['hand']; geometry = report['handGeometry']; row = report['buttonRow']
+        hv = hand['value']; gv = geometry['value']; buttons = row['value']['slots']
+        if (hand['status'] != 'candidate' or geometry['status'] != 'candidate' or row['status'] != 'candidate'
+                or len(hv['tiles']) != 14 or 'N' not in hv['tiles'] or len(buttons) != 3
+                or buttons[0].get('status') != 'empty_candidate'
+                or buttons[1].get('status') != 'candidate' or buttons[1].get('action') != 'kita'
+                or buttons[2].get('status') != 'candidate' or buttons[2].get('action') != 'skip'):
+            return False
+        layout = {'handSlots':gv['handSlots'],'drawSlot':gv['drawSlot']}
+        if len(layout['handSlots']) != 13 or closed_hand_face_mismatches(before,after,layout,.5):
+            return False
+        boxes = [{'x':600,'y':785,'width':245,'height':90}, {'x':890,'y':785,'width':245,'height':90},
+                 {'x':1180,'y':785,'width':245,'height':90}]
+        if any(tile_face_structure_delta(crop_screenshot(before,box),crop_screenshot(after,box)) != 0 for box in boxes):
+            return False
+        center={'x':905,'y':375,'width':105,'height':90}
+        return tile_face_structure_delta(crop_screenshot(before,center),crop_screenshot(after,center)) <= .5
+    except (KeyError,TypeError,ValueError,OSError,IndexError):
+        return False
+
+
 def sanma_draw_observation_candidate(observation: dict[str, Any]) -> dict[str, Any]:
     """Bind an unverified last hand tile to its proposed draw rectangle.
 
@@ -3910,14 +3937,17 @@ class PythonAutoOperator:
                 raise ValueError("fresh screenshot unavailable")
             changes = friend_frame_changes(image, latest)
             clock_changed = changes.pop('clock')
+            kita_glyph_candidate = (changes['fullFrame'] and experimental_sanma_friend_allowed(getattr(self, "args", None))
+                                    and experimental_kita_glyph_stability(image, latest, result.get('report') or {}))
             latest_path = self.frames / f"{utc_stamp()}.{uuid.uuid4().hex}.sanma-freshness.png"
             latest_path.write_bytes(latest)
-            freshness = {"status": "changed" if changes['fullFrame'] else
+            freshness = {"status": "stable_kita_glyph_candidate" if kita_glyph_candidate else "changed" if changes['fullFrame'] else
                          "stable_except_clock_candidate" if clock_changed else "identical_pixels_candidate",
                          "operationAuthorized": False, "elapsedMs": round((time.monotonic() - capture_started) * 1000),
                          "regionsChanged": changes, "clockChanged": clock_changed, "digest": hashlib.sha256(latest).hexdigest(),
                          "screenshot": str(latest_path),
-                         "reason": "visible pixel stability does not verify turn, state, or action; clock area unobserved"}
+                         "reason": ("glyph structure is a lighting-tolerant hypothesis; colors, concealed content and turn are unverified"
+                                    if kita_glyph_candidate else "visible pixel stability does not verify turn, state, or action; clock area unobserved")}
         except Exception as error:
             freshness = {"status": "unknown", "operationAuthorized": False,
                          "reason": f"freshness observation failed: {error}"}
@@ -4126,7 +4156,7 @@ class PythonAutoOperator:
         if (not isinstance(source, dict) or receipt.get("scope") != "sanma_self_turn_observation"
                 or receipt.get("status") != "blocked" or receipt.get("operationAuthorized") is not False
                 or source.get("digest") != receipt.get("digest") or source.get("operationAuthorized") is not False
-                or not isinstance(freshness, dict) or freshness.get("status") not in ("identical_pixels_candidate", "stable_except_clock_candidate")
+                or not isinstance(freshness, dict) or freshness.get("status") not in ("identical_pixels_candidate", "stable_except_clock_candidate", "stable_kita_glyph_candidate")
                 or freshness.get("operationAuthorized") is not False
                 or not isinstance(freshness.get("elapsedMs"), (int, float))
                 or isinstance(freshness.get("elapsedMs"), bool) or not 0 <= freshness["elapsedMs"] <= 20000):
@@ -4156,7 +4186,9 @@ class PythonAutoOperator:
             fresh = page.screenshot(animations="disabled")
             if hashlib.sha256(baseline).hexdigest() != receipt["digest"]:
                 raise ValueError("baseline changed")
-            if not friend_frame_stable(baseline, fresh):
+            if (not friend_frame_stable(baseline, fresh)
+                    and not (freshness.get("status") == "stable_kita_glyph_candidate"
+                             and experimental_kita_glyph_stability(baseline, fresh, report))):
                 raise ValueError("screen changed outside clock area")
             screen_state, confidence = classify_screen(fresh, self.screen_references)
             if screen_state != "match" or confidence < 0.95:
