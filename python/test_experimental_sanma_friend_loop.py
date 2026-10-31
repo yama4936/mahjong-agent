@@ -99,7 +99,36 @@ class ExperimentalSanmaFriendLoopTest(unittest.TestCase):
         with patch('sanma_friend_pass_experiment.execute_friend_pon_pass', return_value={'confirmation':'unknown'}) as skip:
             self.run_room()
         skip.assert_called_once_with(self.op, self.page, self.receipt)
-        self.assertTrue(any(call.kwargs.get('reason') == 'pass_requires_review' for call in self.op.log.call_args_list))
+        self.assertTrue(any(call.kwargs.get('reason') == 'pass_transition_requires_review' for call in self.op.log.call_args_list))
+
+    def test_result_is_recorded_then_round_advanced_and_match_stopped(self):
+        self.op.args.max_iterations = 3
+        self.op.verified_friend_300_active = True
+        self.op.advance_result_screen_once = Mock(return_value=True)
+        with patch('auto_operator.classify_screen', side_effect=[('round_result',1.0),('round_result',1.0),('match_result',1.0)]), \
+             patch('auto_operator.friend_frame_stable', return_value=True):
+            self.op.run_experimental_sanma_friend(self.page)
+        self.op.advance_result_screen_once.assert_called_once_with(self.page,'round_result',1.0)
+        self.assertTrue(any(c.kwargs.get('reason')=='match_result_observed' for c in self.op.log.call_args_list))
+        self.assertEqual(sum(c.args[0]=='sanma_friend_result_observed' for c in self.op.log.call_args_list),2)
+
+    def test_result_changed_before_advance_stops_without_click(self):
+        self.op.args.max_iterations = 3
+        self.op.verified_friend_300_active = True
+        self.op.advance_result_screen_once = Mock()
+        with patch('auto_operator.classify_screen', side_effect=[('round_result',1.0),('match',1.0)]):
+            self.op.run_experimental_sanma_friend(self.page)
+        self.op.advance_result_screen_once.assert_not_called()
+        self.assertTrue(any(c.kwargs.get('reason')=='result_changed_before_advance' for c in self.op.log.call_args_list))
+
+    def test_pass_visible_change_reobserves_next_frame(self):
+        self.op.args.max_iterations = 2
+        self.receipt['candidates'] = {'candidates': [{'action':'pon'}]}
+        self.op.observe_sanma_friend_transition.return_value = {'status':'visual_change_unconfirmed','confirmed':False}
+        self.op.inspect_sanma_self_turn.side_effect = [self.receipt, {'candidates':{'candidates':[{'action':'kan'}]},'digest':'next'}]
+        with patch('sanma_friend_pass_experiment.execute_friend_pon_pass', return_value={'confirmation':'unknown'}):
+            self.run_room()
+        self.assertEqual(self.op.inspect_sanma_self_turn.call_count, 2)
 
     def test_no_prompt_routes_to_draw_adapter_and_stops(self):
         self.receipt['candidates'] = {'candidates': []}

@@ -8424,6 +8424,17 @@ class PythonAutoOperator:
                 if state != "match" or confidence < 0.95:
                     last = frame
                     continue
+                if action == "pass_pon":
+                    prompt_change = mean_pixel_delta(crop_screenshot(before, prompt), crop_screenshot(frame, prompt))
+                    if previous is not None and friend_frame_stable(previous, frame) and prompt_change >= 1.0:
+                        path = self.frames / f"{utc_stamp()}.{uuid.uuid4().hex}.sanma-friend-transition.png"
+                        path.write_bytes(frame)
+                        return {"status":"visual_change_unconfirmed", "action":action, "beforeDigest":digest,
+                                "afterDigest":hashlib.sha256(frame).hexdigest(), "screenshot":str(path),
+                                "promptDelta":prompt_change, "confirmed":False}
+                    previous = frame
+                    last = frame
+                    continue
                 hand_change = mean_pixel_delta(crop_screenshot(before, self.hand_clip), crop_screenshot(frame, self.hand_clip))
                 other_change = mean_pixel_delta(crop_screenshot(before, other), crop_screenshot(frame, other))
                 stable = previous is not None and all(
@@ -8457,6 +8468,7 @@ class PythonAutoOperator:
         unknown_streak = 0
         startup_unknown_polls = 0
         match_seen = False
+        result_latched = None
         def preserve(frame: bytes | None) -> str | None:
             if not isinstance(frame, bytes) or not frame:
                 return None
@@ -8480,6 +8492,9 @@ class PythonAutoOperator:
                 return
             if state == "match" and confidence >= 0.95:
                 match_seen = True
+                if result_latched is not None:
+                    self.result_screen_advanced = None
+                    result_latched = None
                 try:
                     receipt = self.inspect_sanma_self_turn(page)
                     candidates = receipt.get("candidates")
@@ -8507,8 +8522,12 @@ class PythonAutoOperator:
                         from sanma_friend_pass_experiment import execute_friend_pon_pass
                         result = execute_friend_pon_pass(self, page, receipt)
                         self.log("sanma_friend_action_unconfirmed", action="pass_pon", result=result, confirmed=False)
-                        self.log("sanma_friend_stopped", reason="pass_requires_review", screenshot=receipt.get("screenshot"))
-                        return
+                        transition = self.observe_sanma_friend_transition(page, receipt, "pass_pon")
+                        self.log("sanma_friend_transition", **transition)
+                        if transition.get("status") not in {"visual_change_unconfirmed", "terminal"}:
+                            self.log("sanma_friend_stopped", reason="pass_transition_requires_review", transition=transition)
+                            return
+                        continue
                     elif not actions:
                         # No draw may mean an opponent turn or unavailable
                         # recognition. Reobserve a bounded number of times.
@@ -8534,7 +8553,7 @@ class PythonAutoOperator:
                     self.log("sanma_friend_action_unconfirmed", action=action, result=result, confirmed=False)
                     transition = self.observe_sanma_friend_transition(page, receipt, action)
                     self.log("sanma_friend_transition", **transition)
-                    if transition.get("status") != "visual_change_unconfirmed":
+                    if transition.get("status") not in {"visual_change_unconfirmed", "terminal"}:
                         self.log("sanma_friend_stopped", reason="transition_requires_review", transition=transition)
                         return
                     # This is not confirmation. Start a new independent screen
@@ -8544,6 +8563,32 @@ class PythonAutoOperator:
                     self.log("sanma_friend_stopped", reason="observation_or_action_failed", error=str(error),
                              screenshot=preserve(last_frame), operationAuthorized=False)
                     return
+            if state in {"round_result", "match_result"}:
+                path = preserve(frame)
+                self.log("sanma_friend_result_observed", screenState=state, confidence=confidence,
+                         screenshot=path, confirmed=False)
+                if confidence < 0.95:
+                    self.log("sanma_friend_stopped", reason="uncertain_result", screenshot=path)
+                    return
+                if state == "match_result":
+                    self.log("sanma_friend_stopped", reason="match_result_observed", screenshot=path)
+                    return
+                if result_latched == state:
+                    self.log("sanma_friend_stopped", reason="round_result_not_advanced", screenshot=path)
+                    return
+                page.wait_for_timeout(500)
+                fresh = page.screenshot(animations="disabled")
+                next_state, next_confidence = classify_screen(fresh, self.screen_references)
+                if (next_state != state or next_confidence < 0.95 or not friend_frame_stable(frame, fresh)
+                        or self.verified_friend_300_active is not True):
+                    self.log("sanma_friend_stopped", reason="result_changed_before_advance", screenshot=preserve(fresh))
+                    return
+                self.result_screen_advanced = None
+                self.advance_result_screen_once(page, state, confidence)
+                result_latched = state
+                self.log("sanma_friend_result_advance_unconfirmed", screenState=state, screenshot=path, confirmed=False)
+                page.wait_for_timeout(500)
+                continue
             if state == "unknown" and not match_seen and time.monotonic() - started < 30 and startup_unknown_polls < 20:
                 startup_unknown_polls += 1
                 self.log("sanma_friend_wait", reason="startup_screen_unknown", screenshot=preserve(frame),

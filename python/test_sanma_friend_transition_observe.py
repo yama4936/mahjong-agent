@@ -41,6 +41,21 @@ class SanmaFriendTransitionTest(unittest.TestCase):
         self.assertEqual(Path(result['screenshot']).read_bytes(),after)
         self.page.mouse.click.assert_not_called()
 
+    @unittest.skipUnless((OTHER/'27-turn.png').exists() and (OTHER/'28-pon.png').exists(), 'independent prompt images unavailable')
+    def test_disappearing_pon_prompt_is_only_unconfirmed_visual_change(self):
+        before=(OTHER/'27-turn.png').read_bytes()
+        after=(OTHER/'28-pon.png').read_bytes()
+        self.page.screenshot.return_value=after
+        with patch('auto_operator.classify_screen', return_value=('match',1.0)):
+            result=self.op.observe_sanma_friend_transition(self.page,self.receipt(before),'pass_pon')
+        self.assertEqual(result['status'],'visual_change_unconfirmed')
+        self.assertFalse(result['confirmed'])
+        # This real image pair is a pon, not a pass: the change proves no action outcome.
+        self.page.screenshot.return_value=before
+        with patch('auto_operator.classify_screen', return_value=('match',1.0)):
+            unchanged=self.op.observe_sanma_friend_transition(self.page,self.receipt(before),'pass_pon')
+        self.assertEqual(unchanged['status'],'unresolved')
+
     @unittest.skipUnless((MANUAL/'2026-10-30T16-07-32-642Z-before.png').exists(), 'discard images unavailable')
     def test_real_discard_and_unchanged_or_revoked_screen(self):
         before=(MANUAL/'2026-10-30T16-07-32-642Z-before.png').read_bytes()
