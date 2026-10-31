@@ -328,6 +328,17 @@ def closed_hand_face_mismatches(
         return [{"index": -1, "faceStructureDelta": None}]
     mismatches: list[dict[str, float | int | None]] = []
     try:
+        with Image.open(io.BytesIO(evaluated_full)) as first, Image.open(io.BytesIO(current_full)) as second:
+            first.load(); second.load()
+            return _closed_hand_face_mismatches_decoded(first, second, slots, threshold)
+    except Exception:
+        # An unreadable or incorrectly sized frame cannot prove identity.
+        return [{"index": -1, "faceStructureDelta": None}]
+
+
+def _closed_hand_face_mismatches_decoded(first, second, slots, threshold):
+    mismatches: list[dict[str, float | int | None]] = []
+    try:
         for index, slot in enumerate(slots):
             # Match stable_hand_comparison_region: omit border/shadow and the
             # bottom interaction effect, retaining only the tile glyph.
@@ -339,9 +350,9 @@ def closed_hand_face_mismatches(
             }
             if face["width"] <= 0 or face["height"] <= 0:
                 return [{"index": -1, "faceStructureDelta": None}]
-            delta = tile_face_structure_delta(
-                crop_screenshot(evaluated_full, face), crop_screenshot(current_full, face),
-            )
+            box = (int(face['x']), int(face['y']), int(face['x'] + face['width']), int(face['y'] + face['height']))
+            masks = [image.crop(box).convert('L').point(lambda v: 255 if v < 120 else 0) for image in (first, second)]
+            delta = ImageStat.Stat(ImageChops.difference(*masks)).mean[0] / 255 * 100
             if delta > threshold:
                 mismatches.append({"index": index, "faceStructureDelta": round(delta, 3)})
     except Exception:
