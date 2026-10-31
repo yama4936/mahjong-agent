@@ -8549,6 +8549,7 @@ class PythonAutoOperator:
         last_frame = None
         attempted_frames: set[str] = set()
         last_unconfirmed_action: str | None = None
+        last_kita_receipt = None
         unknown_streak = 0
         unknown_since = None
         changed_streak = 0
@@ -8632,10 +8633,12 @@ class PythonAutoOperator:
                         result = self.execute_sanma_friend_tsumo_candidate(page, receipt)
                     elif any(isinstance(item, dict) and item.get("action") == "kita" for item in actions):
                         if last_unconfirmed_action == "kita":
-                            self.log("sanma_friend_stopped", reason="previous_kita_unconfirmed",
-                                     screenshot=receipt.get("screenshot"), digest=frame_digest,
-                                     previousActionConfirmed=False)
-                            return
+                            from sanma_friend_kita_rearm import rearm_friend_kita_candidate
+                            if not rearm_friend_kita_candidate(self, last_kita_receipt, receipt):
+                                self.log("sanma_friend_stopped", reason="previous_kita_unconfirmed",
+                                         screenshot=receipt.get("screenshot"), digest=frame_digest,
+                                         previousActionConfirmed=False)
+                                return
                         action = "kita"
                         result = self.execute_sanma_friend_kita_candidate(page, receipt)
                     elif actions and all(isinstance(item, dict) and item.get("action") in {"pon", "kan", "riichi"} for item in actions):
@@ -8675,6 +8678,7 @@ class PythonAutoOperator:
                         return
                     attempted_frames.add(frame_digest)
                     last_unconfirmed_action = action
+                    last_kita_receipt = receipt if action == "kita" else None
                     unknown_streak = 0
                     unknown_since = None
                     self.log("sanma_friend_action_unconfirmed", action=action, result=result, confirmed=False)

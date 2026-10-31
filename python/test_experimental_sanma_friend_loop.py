@@ -232,6 +232,17 @@ class ExperimentalSanmaFriendLoopTest(unittest.TestCase):
         self.op.execute_sanma_friend_kita_candidate.assert_called_once()
         self.assertTrue(any(call.kwargs.get('reason')=='previous_kita_unconfirmed' for call in self.op.log.call_args_list))
 
+    def test_second_kita_requires_explicit_rearm_candidate(self):
+        self.op.args.max_iterations = 2
+        self.op.observe_sanma_friend_transition.return_value = {'status':'visual_change_unconfirmed','confirmed':False}
+        self.receipt['candidates'] = {'candidates':[{'action':'kita'}]}
+        next_receipt = {'candidates':{'candidates':[{'action':'kita'}]},'digest':'next','screenshot':'next.png'}
+        self.op.inspect_sanma_self_turn.side_effect = [self.receipt,next_receipt]
+        with patch('sanma_friend_kita_rearm.rearm_friend_kita_candidate',return_value=True) as rearm:
+            self.run_room()
+        rearm.assert_called_once_with(self.op,self.receipt,next_receipt)
+        self.assertEqual(self.op.execute_sanma_friend_kita_candidate.call_count,2)
+
     def test_real_changed_kita_observation_is_reobserved_before_input(self):
         directory=Path('/home/yama1/.codex/sanma-run-d0ff500-20261031/frames')
         original=next(directory.glob('*dcb907c754fe49edb5e5d8a4e2f4ab45.sanma-self-turn.png'),None)

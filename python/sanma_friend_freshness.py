@@ -29,8 +29,8 @@ def friend_frame_stable(before: bytes, after: bytes) -> bool:
     return not friend_frame_changes(before, after)['fullFrame']
 
 
-def latch_friend_action_target(operator, frame: bytes, action: str) -> str:
-    """Suppress repeated input on the same visible target, without claiming success."""
+def friend_action_target_key(frame: bytes, action: str) -> str:
+    """Return the fingerprint of the visible action target."""
     if action not in ("kita", "tsumo", "ron", "discard", "pass"):
         raise ValueError("unknown friend action")
     with Image.open(io.BytesIO(frame)) as image:
@@ -42,6 +42,12 @@ def latch_friend_action_target(operator, frame: bytes, action: str) -> str:
         if action == "discard":
             digest.update(image.crop((180, 870, 1650, 1080)).tobytes())
         key = digest.hexdigest()
+    return key
+
+
+def latch_friend_action_target(operator, frame: bytes, action: str) -> str:
+    """Suppress repeated input on the same visible target, without claiming success."""
+    key = friend_action_target_key(frame, action)
     attempted = getattr(operator, "_sanma_friend_attempted_targets", None)
     if not isinstance(attempted, set):
         attempted = set()
