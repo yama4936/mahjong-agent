@@ -27,6 +27,42 @@ class TestFriendDrawLighting(unittest.TestCase):
                 out = io.BytesIO(); image.save(out,format='PNG')
                 self.assertFalse(experimental_draw_glyph_stability(self.a,out.getvalue(),self.report))
 
+    def test_changes_in_action_gaps_and_hand_margins_are_rejected(self):
+        for rect in ((850,800,880,850),(1600,900,1640,940)):
+            image=Image.open(io.BytesIO(self.b)).convert('RGB')
+            ImageDraw.Draw(image).rectangle(rect,fill='white')
+            out=io.BytesIO();image.save(out,format='PNG')
+            with self.subTest(rect=rect):
+                self.assertFalse(experimental_draw_glyph_stability(self.a,out.getvalue(),self.report))
+
+    def test_reject_actual_tsumo_and_ron_buttons(self):
+        for name in ('tsumo','ron'):
+            image=Image.open(io.BytesIO(self.b)).convert('RGB')
+            if name == 'ron':
+                replacement=Image.open('test/fixtures/ron-button-rows/ron2.png').convert('RGB').crop((290,0,535,90))
+            else:
+                replacement=Image.open('test/fixtures/sanma-buttons/tsumo.png').convert('RGB').resize((245,90))
+            image.paste(replacement,(890,785));out=io.BytesIO();image.save(out,format='PNG')
+            with self.subTest(name=name):self.assertFalse(experimental_draw_glyph_stability(self.a,out.getvalue(),self.report))
+
+    def test_reject_red_green_swap_in_hand(self):
+        image=Image.open(io.BytesIO(self.b)).convert('RGB');changed=0
+        for rect in self.report['handGeometry']['value']['handSlots']:
+            for y in range(rect['y'],rect['y']+rect['height']):
+                for x in range(rect['x'],rect['x']+rect['width']):
+                    r,g,b=image.getpixel((x,y))
+                    if r-g>35 and r-b>35:
+                        image.putpixel((x,y),(g,r,b));changed+=1
+        self.assertGreater(changed,20)
+        out=io.BytesIO();image.save(out,format='PNG')
+        self.assertFalse(experimental_draw_glyph_stability(self.a,out.getvalue(),self.report))
+
+    def test_clock_pixels_remain_unobserved(self):
+        image=Image.open(io.BytesIO(self.b)).convert('RGB')
+        ImageDraw.Draw(image).rectangle((1450,775,1600,850),fill='red')
+        out=io.BytesIO();image.save(out,format='PNG')
+        self.assertTrue(experimental_draw_glyph_stability(self.a,out.getvalue(),self.report))
+
     def test_reject_unknown_prompt_and_turn(self):
         for kind in ('prompt','turn'):
             report = copy.deepcopy(self.report)

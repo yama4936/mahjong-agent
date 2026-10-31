@@ -1940,11 +1940,17 @@ def experimental_draw_glyph_stability(before: bytes, after: bytes, report: dict[
                 if max(ImageStat.Stat(delta).mean) > 1: return False
             diff = ImageChops.difference(*(im.convert('L').point(lambda v: 255 if v < 120 else 0) for im in (a,b)))
             # The illuminated self-turn indicator flickers independently of the board.
-            for rect in ((180,865,1650,1080),(600,785,1425,875),(1425,755,1650,870),(920,510,992,516)):
+            for rect in ((1425,755,1650,870),(920,510,992,516)):
                 diff.paste(0, rect)
+            # Mask only actual hand and action rectangles already compared.
+            # Gaps between buttons and beside the hand remain observable.
+            for box in layout['handSlots'] + [layout['drawSlot']] + boxes:
+                x,y,w,h=(int(box[k]) for k in ('x','y','width','height'))
+                if x < 0 or y < 0 or w <= 0 or h <= 0 or x+w > 1920 or y+h > 1080:return False
+                diff.paste(0,(x,y,x+w,y+h))
             for y in range(0,1080,32):
                 for x in range(0,1920,32):
-                    if diff.crop((x,y,min(x+32,1920),min(y+32,1080))).histogram()[255] > 12: return False
+                    if diff.crop((x,y,min(x+32,1920),min(y+32,1080))).histogram()[255] > 14: return False
         center={'x':905,'y':375,'width':105,'height':90}
         return tile_face_structure_delta(crop_screenshot(before,center),crop_screenshot(after,center)) <= .5
     except (KeyError,TypeError,ValueError,OSError,IndexError):
