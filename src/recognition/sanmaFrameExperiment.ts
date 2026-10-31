@@ -39,7 +39,8 @@ export async function inspectSanmaFrame(input: {
     let proposal;
     try { proposal = await proposeLiveHandLayout(frame); }
     catch (error) {
-      const recovered = await recoverSanmaRaisedClosedDraw(frame,input.layout);
+      const recovered = await recoverSanmaRaisedClosedDraw(frame,input.layout)
+        ?? await recoverSanmaRaisedClosedHand(frame,input.layout);
       if (!recovered) throw error;
       proposal = recovered;
       unverifiedClosedRecovery = true;
