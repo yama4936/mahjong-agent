@@ -131,6 +131,16 @@ process.stdout.write(JSON.stringify(report));
             self.operator.execute_sanma_friend_kita_candidate(self.page, self.receipt)
         self.page.mouse.click.assert_called_once()
 
+    def test_preclick_exception_type_from_click_is_uncertain_and_never_retryable(self):
+        from auto_operator import SanmaKitaPreclickChanged
+        self.page.mouse.click.side_effect = SanmaKitaPreclickChanged('input acknowledgement lost')
+        with self.assertRaisesRegex(RuntimeError, 'click attempted; outcome unknown') as caught:
+            self.operator.execute_sanma_friend_kita_candidate(self.page, self.receipt)
+        self.assertNotIsInstance(caught.exception, SanmaKitaPreclickChanged)
+        with self.assertRaisesRegex(RuntimeError, 'already attempted'):
+            self.operator.execute_sanma_friend_kita_candidate(self.page, self.receipt)
+        self.page.mouse.click.assert_called_once()
+
     def test_clock_change_only_does_not_prevent_real_prompt_click(self):
         with Image.open(io.BytesIO(self.frame)) as source:
             changed = source.convert('RGB')

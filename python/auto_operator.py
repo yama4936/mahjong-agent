@@ -4413,7 +4413,10 @@ class PythonAutoOperator:
         attempted.add(receipt["digest"])
         self._sanma_friend_attempted_frames = attempted
         latch_friend_action_target(self, baseline, "kita")
-        page.mouse.click(point["x"], point["y"])
+        try:
+            page.mouse.click(point["x"], point["y"])
+        except Exception as error:
+            raise RuntimeError(f"sanma kita click attempted; outcome unknown: {error}") from error
         try:
             page.wait_for_timeout(200)
             after = page.screenshot(animations="disabled")
@@ -8913,6 +8916,7 @@ class PythonAutoOperator:
                                      screenshot=receipt.get("screenshot"), digest=frame_digest,
                                      streak=kita_preclick_rejections, clicked=False, error=str(error))
                             if (kita_preclick_rejections >= 3 or unconfirmed_input_seen
+                                    or frame_digest in getattr(self, "_sanma_friend_attempted_frames", set())
                                     or self.verified_friend_300_active is not True
                                     or not 0 <= time.monotonic() - action_observed_at < 300):
                                 self.log("sanma_friend_stopped", reason="kita_preclick_reobserve_limit",

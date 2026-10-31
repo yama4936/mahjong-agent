@@ -176,6 +176,18 @@ class ExperimentalSanmaFriendLoopTest(unittest.TestCase):
         self.op.execute_sanma_friend_kita_candidate.assert_called_once()
         self.assertTrue(any(c.kwargs.get('reason')=='unsupported_or_unknown_action' for c in self.op.log.call_args_list))
 
+    def test_preclick_exception_after_attempt_latch_never_retries(self):
+        from auto_operator import SanmaKitaPreclickChanged
+        self.op.args.max_iterations = 0
+        self.receipt['candidates'] = {'candidates':[{'action':'kita'}]}
+        def attempted_then_raises(page, receipt):
+            self.op._sanma_friend_attempted_frames = {receipt['digest']}
+            raise SanmaKitaPreclickChanged('unexpected exception after input attempt')
+        self.op.execute_sanma_friend_kita_candidate.side_effect = attempted_then_raises
+        self.run_room()
+        self.op.execute_sanma_friend_kita_candidate.assert_called_once()
+        self.assertTrue(any(c.kwargs.get('reason')=='kita_preclick_reobserve_limit' for c in self.op.log.call_args_list))
+
     def test_kita_other_failure_is_never_retried(self):
         self.op.args.max_iterations = 0
         self.receipt['candidates'] = {'candidates': [{'action':'kita'}]}
