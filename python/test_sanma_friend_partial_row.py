@@ -1,7 +1,7 @@
 import io
 import unittest
 from pathlib import Path
-from PIL import Image
+from PIL import Image, ImageDraw
 from sanma_friend_discard_experiment import friend_visible_row_with_north_overlap
 
 ROOT=Path('/home/yama1/.codex/sanma-run-d0ff500-20261031')
@@ -20,6 +20,15 @@ class PartialRowTests(unittest.TestCase):
         image=Image.open(io.BytesIO(frame)).convert('RGB');image.paste((0,0,0),(1322,765,1390,850))
         out=io.BytesIO();image.save(out,format='PNG')
         self.assertFalse(friend_visible_row_with_north_overlap(out.getvalue(),SLOTS))
+
+    def test_action_marks_on_any_visible_area_rejected(self):
+        frame=(ROOT/'manual-03-before.png').read_bytes()
+        for box in ((1315,855,1321,864), (1391,855,1424,864), (1405,785,1424,800)):
+            with self.subTest(box=box):
+                image=Image.open(io.BytesIO(frame)).convert('RGB')
+                ImageDraw.Draw(image).rectangle(box,fill=(220,20,20))
+                out=io.BytesIO();image.save(out,format='PNG')
+                self.assertFalse(friend_visible_row_with_north_overlap(out.getvalue(),SLOTS))
 
     def test_bridge_uses_experimental_candidate_and_logs_risk(self):
         import hashlib, tempfile

@@ -76,6 +76,13 @@ def friend_visible_row_with_north_overlap(frame, row_slots):
             blank = source.convert("RGB").crop((580,0,715,90))
         with Image.open(Path(__file__).parent / "fixtures" / "sanma-friend-two-north-overlap.png") as source:
             north = source.convert("RGB")
+        with Image.open(Path(__file__).parent / "fixtures" / "sanma-friend-covered-slot.png") as source:
+            covered_slot = source.convert("RGB")
+        difference = ImageChops.difference(image.crop((1180,785,1425,875)), covered_slot)
+        # Every visible pixel of the slot is checked, including the narrow
+        # strip between the north and the clock. Strict changes fail closed.
+        if max(difference.getextrema()[channel][1] for channel in range(3)) > 30:
+            return False
         def similarity(a,b):
             return 1 - sum(ImageStat.Stat(ImageChops.difference(a,b)).mean) / 765
         return (similarity(image.crop((1180,785,1315,875)),blank) >= .995
