@@ -1,7 +1,9 @@
 """Select a review candidate from chronological room screenshots, without input.
 
-Selection does not verify CPU slots or authorize a start. The chosen original
-image must still be reviewed, and the normal fresh-frame start check applies.
+Provide separate captures in chronological order. This tool cannot establish
+that frames were captured independently or in the stated order. Selection does
+not verify CPU slots or authorize a start. The chosen original image must still
+be reviewed, and the normal fresh-frame start check applies.
 """
 import argparse
 import hashlib
@@ -18,8 +20,8 @@ def select_preflight_candidate(frames: list[bytes], *, sanma: bool) -> tuple[int
     must be distinct from the candidate, and adjacent in the capture order.
     This only ranks evidence; it does not establish the room's settings.
     """
-    if len(frames) < 3 or len(frames) > 32:
-        raise ValueError('provide 3 to 32 chronological room frames')
+    if len(frames) < 3 or len(frames) > 8:
+        raise ValueError('provide 3 to 8 room frames in capture order')
     scores = []
     for i, candidate in enumerate(frames):
         matches = [j for j, frame in enumerate(frames)
@@ -35,7 +37,7 @@ def select_preflight_candidate(frames: list[bytes], *, sanma: bool) -> tuple[int
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--sanma', action='store_true')
-    parser.add_argument('frames', nargs='+', type=Path, help='screenshots in capture order')
+    parser.add_argument('frames', nargs='+', type=Path, help='3 to 8 separate screenshots in capture order; independence and order are not verified')
     args = parser.parse_args()
     frames = [path.read_bytes() for path in args.frames]
     index, matches = select_preflight_candidate(frames, sanma=args.sanma)

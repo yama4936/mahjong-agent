@@ -23,6 +23,20 @@ class SelectFriendPreflightTest(unittest.TestCase):
             with self.assertRaises(ValueError): select_preflight_candidate(frames, sanma=True)
         with self.assertRaises(ValueError): select_preflight_candidate([b'one', b'two'], sanma=True)
 
+    def test_more_than_eight_frames_is_rejected_without_comparison(self):
+        with patch('select_friend_preflight.verified_friend_room') as compare:
+            with self.assertRaisesRegex(ValueError, '3 to 8'):
+                select_preflight_candidate([b'frame'] * 9, sanma=True)
+        compare.assert_not_called()
+
+    def test_help_states_order_and_independence_limits(self):
+        import subprocess
+        import sys
+        output = subprocess.check_output([sys.executable, 'python/select_friend_preflight.py', '--help'], text=True)
+        self.assertIn('chronological order', output)
+        self.assertIn('independently', output)
+        self.assertIn('3 to 8', output)
+
     def test_real_room_burst_selects_candidate_with_consecutive_matches(self):
         directory = Path('/home/yama1/.codex/sanma-run-ba2a797-20261031/retry/frames')
         paths = sorted(directory.glob('*friend-start*'))[:8]
