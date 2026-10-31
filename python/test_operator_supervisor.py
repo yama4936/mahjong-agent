@@ -185,6 +185,38 @@ class SupervisorTest(unittest.TestCase):
         self.supervisor=self.make_supervisor();self.supervisor.tick();self.now+=20;self.supervisor.tick()
         self.assertTrue(self.supervisor.held);self.assertEqual(self.launches,[])
 
+    def test_mixed_launchers_hold_regardless_of_order_or_prior_operator(self):
+        import itertools
+        ranked={'pid':600,'args':['node','scripts/run-operator.mjs','force-auto','--ranked-loop']}
+        friend={'pid':654,'args':['node','scripts/run-operator.mjs','force-auto','--rules=sanma']}
+        unknown={'pid':655,'args':['node','scripts/run-operator.mjs','force-auto']}
+        for prior in (False,True):
+            for bad in (friend,unknown):
+                for order in itertools.permutations((ranked,bad)):
+                    with self.subTest(prior=prior,bad=bad['pid'],order=[x['pid'] for x in order]):
+                        self.supervisor=self.make_supervisor()
+                        if prior:self.adopt()
+                        self.state['operator']=[];self.state['launcher']=list(order)
+                        self.supervisor.tick()
+                        self.assertTrue(self.supervisor.held)
+                        self.assertEqual(json.loads(self.supervisor.hold_file.read_text())['launcherPid'],bad['pid'])
+                        self.state['launcher']=[];self.supervisor=self.make_supervisor()
+                        self.supervisor.tick();self.now+=20;self.supervisor.tick()
+                        self.assertTrue(self.supervisor.held);self.assertEqual(self.launches,[])
+                        self.supervisor.hold_file.unlink();self.supervisor.state_file.unlink(missing_ok=True)
+
+    def test_only_ranked_launchers_are_not_held(self):
+        for prior in (False,True):
+            with self.subTest(prior=prior):
+                self.supervisor=self.make_supervisor()
+                if prior:self.adopt()
+                self.state['operator']=[]
+                self.state['launcher']=[{'pid':600,'args':['node','scripts/run-operator.mjs','force-auto','--ranked-loop']},
+                                        {'pid':601,'args':['node','scripts/run-operator.mjs','force-auto','--ranked-loop']}]
+                self.supervisor.tick()
+                self.assertFalse(self.supervisor.held);self.assertEqual(self.launches,[])
+                self.state['launcher']=[];self.supervisor.state_file.unlink(missing_ok=True)
+
     def test_non_ranked_launcher_in_multi_launcher_set_is_held(self):
         self.adopt();self.state['operator']=[]
         self.state['launcher']=[{'pid':600,'args':['node','scripts/run-operator.mjs','force-auto','--ranked-loop']},
