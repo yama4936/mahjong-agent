@@ -1841,12 +1841,17 @@ def local_discard_allowed(args: argparse.Namespace, evaluation: dict[str, Any]) 
 def experimental_friend_score_transfer_candidate(frame: bytes) -> bool:
     """Recognize one reviewed score-transfer layout as a no-input wait candidate."""
     try:
-        with Image.open(io.BytesIO(frame)) as image, Image.open(Path(__file__).parent/'fixtures'/'sanma-score-transfer-edge.png') as ref:
-            if image.size != (1920,1080) or ref.size != (65,225): return False
-            image=image.convert('RGB');ref=ref.convert('RGB')
+        with Image.open(io.BytesIO(frame)) as image:
+            if image.size != (1920,1080): return False
+            image=image.convert('RGB')
             boxes=((740,225,805,300),(1186,480,1251,555),(740,762,805,837))
-            return all(sum(ImageStat.Stat(ImageChops.difference(image.crop(box),ref.crop((0,i*75,65,(i+1)*75)))).mean)/3 <= 4.5
-                       for i,box in enumerate(boxes))
+            for name in ('sanma-score-transfer-edge.png', 'sanma-score-transfer-edge-6c-466.png', 'sanma-score-transfer-edge-6c-467.png'):
+                with Image.open(Path(__file__).parent/'fixtures'/name) as ref:
+                    if ref.size != (65,225): continue
+                    ref=ref.convert('RGB')
+                    if all(sum(ImageStat.Stat(ImageChops.difference(image.crop(box),ref.crop((0,i*75,65,(i+1)*75)))).mean)/3 <= 4.5
+                           for i,box in enumerate(boxes)): return True
+            return False
     except (OSError,ValueError):
         return False
 

@@ -62,3 +62,29 @@ class IndependentScoreTransferTests(unittest.TestCase):
    self.assertTrue(any(c.args[0]=='sanma_friend_score_transfer_candidate' and c.kwargs.get('confirmed') is False for c in op.log.call_args_list))
    self.assertTrue(any(c.args[0]=='sanma_friend_round_transition_reobserved' for c in op.log.call_args_list))
    page.mouse.click.assert_not_called()
+
+CONT=Path('/home/yama1/.codex/sanma-run-6c090e6-20261031/continuous')
+def continuous_frame(n):
+ return next(CONT.glob(f'frame-{n:06d}-*.png')).read_bytes()
+@unittest.skipUnless(CONT.exists(),'saved 6c friend transition unavailable')
+class ContinuousScoreTransferTests(unittest.TestCase):
+ def test_real_sequence_and_destroyed_panel(self):
+  refs=load_references(REFS)
+  self.assertEqual(classify_screen(continuous_frame(465),refs)[0],'round_result')
+  self.assertEqual(classify_screen(continuous_frame(467),refs)[0],'round_result')
+  self.assertEqual(classify_screen(continuous_frame(469),refs)[0],'match')
+  for n in (466,467):self.assertTrue(experimental_friend_score_transfer_candidate(continuous_frame(n)))
+  for n in (465,468,469):self.assertFalse(experimental_friend_score_transfer_candidate(continuous_frame(n)))
+  for n in (466,467):
+   im=Image.open(io.BytesIO(continuous_frame(n))).convert('RGB');ImageDraw.Draw(im).rectangle((1186,480,1251,555),fill='black');out=io.BytesIO();im.save(out,format='PNG')
+   self.assertFalse(experimental_friend_score_transfer_candidate(out.getvalue()))
+ def test_loop_reobserves_score_animation_without_click(self):
+  with tempfile.TemporaryDirectory() as d:
+   op=object.__new__(PythonAutoOperator);op.frames=Path(d);op.verified_friend_300_active=True;op.screen_references=load_references(REFS)
+   op.args=SimpleNamespace(rules='sanma',mode='force-auto',experimental_sanma_friend=True,action_deadline_ms=300000,ranked_loop=False,start_reviewed_friend_room='reviewed.png',max_iterations=4)
+   op.log=Mock();op.inspect_sanma_self_turn=Mock(return_value={'candidates':{'candidates':[]},'drawCandidate':{'status':'unresolved'},'digest':'fixture','screenshot':str(B)})
+   page=Mock();page.screenshot.side_effect=[continuous_frame(n) for n in (464,465,466,467,469)]
+   op.run_experimental_sanma_friend(page)
+   self.assertTrue(any(c.args[0]=='sanma_friend_score_transfer_candidate' and c.kwargs.get('confirmed') is False for c in op.log.call_args_list))
+   self.assertTrue(any(c.args[0]=='sanma_friend_round_transition_reobserved' for c in op.log.call_args_list))
+   page.mouse.click.assert_not_called()
