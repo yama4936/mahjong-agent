@@ -4,7 +4,7 @@ import math
 import time
 from pathlib import Path
 
-from sanma_friend_freshness import friend_frame_stable, latch_friend_action_target
+from sanma_friend_freshness import friend_action_started_at, friend_frame_stable, latch_friend_action_target
 from screen_state import classify_screen
 
 
@@ -16,7 +16,7 @@ def execute_friend_pon_pass(operator, page, receipt):
             or getattr(args, 'experimental_sanma_friend', None) is not True
             or getattr(operator, 'verified_friend_300_active', None) is not True):
         raise RuntimeError('verified experimental CPU friend session required')
-    started = getattr(operator, 'verified_friend_300_started_at', None)
+    started = friend_action_started_at(operator)
     if type(started) not in (int, float) or not math.isfinite(started) or not 0 <= time.monotonic() - started < 300:
         raise RuntimeError('friend session timing unknown or expired')
     source = receipt.get('sourceObservation') or {}

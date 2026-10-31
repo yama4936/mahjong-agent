@@ -50,3 +50,9 @@ def latch_friend_action_target(operator, frame: bytes, action: str) -> str:
         raise RuntimeError("sanma action target already attempted; outcome unknown")
     attempted.add(key)
     return key
+
+
+def friend_action_started_at(operator):
+    """Prefer first observation; older standalone callers use session anchor."""
+    observed = getattr(operator, "sanma_friend_action_observed_at", None)
+    return observed if type(observed) in (int, float) else getattr(operator, "verified_friend_300_started_at", None)

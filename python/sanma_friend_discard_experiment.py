@@ -12,7 +12,7 @@ import time
 from pathlib import Path
 
 from auto_operator import send_discard_click
-from sanma_friend_freshness import friend_frame_stable, latch_friend_action_target
+from sanma_friend_freshness import friend_action_started_at, friend_frame_stable, latch_friend_action_target
 
 
 def experimental_white_hand_candidate(frame, hand, geometry):
@@ -115,7 +115,7 @@ def execute_friend_draw_candidate(operator, page, receipt):
     latch_friend_action_target(operator, baseline, "discard")
     return execute_friend_discard(page, session=session, observation=observation, plan=plan,
                                   layout=operator.layout, log=record,
-                                  turn_started_monotonic=getattr(operator, "verified_friend_300_started_at", None),
+                                  turn_started_monotonic=friend_action_started_at(operator),
                                   session_check=lambda: getattr(operator, "verified_friend_300_active", False) is True)
 
 

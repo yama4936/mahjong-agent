@@ -44,3 +44,17 @@ class FriendPassTests(unittest.TestCase):
             with self.subTest(case=case),self.assertRaises((ValueError,RuntimeError,OSError)):
                 execute_friend_pon_pass(self.op,self.page,self.receipt)
             self.page.mouse.click.assert_not_called()
+
+    def test_observed_action_clock_survives_old_session_and_expires(self):
+        self.op.verified_friend_300_started_at = 100.0
+        self.op.sanma_friend_action_observed_at = 450.0
+        with patch('sanma_friend_pass_experiment.time.monotonic', return_value=500.0):
+            result = execute_friend_pon_pass(self.op, self.page, self.receipt)
+        self.assertFalse(result['confirmation'] == 'confirmed')
+        self.setUp()
+        self.op.verified_friend_300_started_at = 100.0
+        self.op.sanma_friend_action_observed_at = 450.0
+        with patch('sanma_friend_pass_experiment.time.monotonic', return_value=750.0):
+            with self.assertRaisesRegex(RuntimeError, 'expired'):
+                execute_friend_pon_pass(self.op, self.page, self.receipt)
+        self.page.mouse.click.assert_not_called()

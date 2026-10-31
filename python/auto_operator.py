@@ -38,7 +38,7 @@ from analysis_recorder import AnalysisRecorder
 from startup_turn_guard import StartupTurnGuard
 from friend_start import await_reviewed_friend_room, reviewed_friend_clock_is_300_plus_zero
 from sanma_friend_navigation import inspect_sanma_friend_start
-from sanma_friend_freshness import friend_frame_changes, friend_frame_stable, latch_friend_action_target
+from sanma_friend_freshness import friend_action_started_at, friend_frame_changes, friend_frame_stable, latch_friend_action_target
 from screencast_diagnostic import ScreencastDiagnostic
 
 
@@ -3951,7 +3951,7 @@ class PythonAutoOperator:
             raise RuntimeError("experimental sanma tsumo requires verified 300+0 friend session")
         # The real turn onset is not yet observable. The room-start instant
         # predates every turn, so it is conservative until a turn clock is proven.
-        started_at = getattr(self, "verified_friend_300_started_at", None)
+        started_at = friend_action_started_at(self)
         if (type(started_at) not in (int, float) or not isfinite(started_at)
                 or not 0 <= time.monotonic() - started_at < 300):
             raise RuntimeError("experimental sanma friend timing unknown or expired")
@@ -4033,7 +4033,7 @@ class PythonAutoOperator:
                 or getattr(args, "ranked_loop", False) or not getattr(args, "experimental_sanma_friend", False)
                 or getattr(self, "verified_friend_300_active", False) is not True):
             raise RuntimeError("experimental sanma kita requires verified 300+0 friend session")
-        started_at = getattr(self, "verified_friend_300_started_at", None)
+        started_at = friend_action_started_at(self)
         if (type(started_at) not in (int, float) or not isfinite(started_at)
                 or not 0 <= time.monotonic() - started_at < 300):
             raise RuntimeError("experimental sanma friend timing unknown or expired")
@@ -8469,13 +8469,14 @@ class PythonAutoOperator:
         startup_unknown_polls = 0
         match_seen = False
         result_latched = None
+        action_observed_at = None
         def preserve(frame: bytes | None) -> str | None:
             if not isinstance(frame, bytes) or not frame:
                 return None
             path = self.frames / f"{utc_stamp()}.{uuid.uuid4().hex}.sanma-friend-stop.png"
             path.write_bytes(frame)
             return str(path)
-        while time.monotonic() - started < 300:
+        while time.monotonic() - started < 3600:
             polls += 1
             if getattr(self.args, "max_iterations", 0) and polls > self.args.max_iterations:
                 break
@@ -8483,6 +8484,7 @@ class PythonAutoOperator:
                 self.log("sanma_friend_stopped", reason="friend_session_revoked", screenshot=preserve(last_frame))
                 return
             try:
+                observation_started = time.monotonic()
                 frame = page.screenshot(animations="disabled")
                 last_frame = frame
                 state, confidence = classify_screen(frame, self.screen_references)
@@ -8492,6 +8494,11 @@ class PythonAutoOperator:
                 return
             if state == "match" and confidence >= 0.95:
                 match_seen = True
+                if action_observed_at is None:
+                    action_observed_at = observation_started
+                    self.sanma_friend_action_observed_at = action_observed_at
+                    self.log("sanma_friend_action_clock_started", basis="first_visible_observation",
+                             turnStartVerified=False, actionDeadlineMs=300000)
                 if result_latched is not None:
                     self.result_screen_advanced = None
                     result_latched = None
@@ -8527,6 +8534,7 @@ class PythonAutoOperator:
                         if transition.get("status") not in {"visual_change_unconfirmed", "terminal"}:
                             self.log("sanma_friend_stopped", reason="pass_transition_requires_review", transition=transition)
                             return
+                        action_observed_at = None
                         continue
                     elif not actions:
                         # No draw may mean an opponent turn or unavailable
@@ -8556,6 +8564,7 @@ class PythonAutoOperator:
                     if transition.get("status") not in {"visual_change_unconfirmed", "terminal"}:
                         self.log("sanma_friend_stopped", reason="transition_requires_review", transition=transition)
                         return
+                    action_observed_at = None
                     # This is not confirmation. Start a new independent screen
                     # observation; unchanged or reused frames cannot click.
                     continue
@@ -8586,6 +8595,7 @@ class PythonAutoOperator:
                 self.result_screen_advanced = None
                 self.advance_result_screen_once(page, state, confidence)
                 result_latched = state
+                action_observed_at = None
                 self.log("sanma_friend_result_advance_unconfirmed", screenState=state, screenshot=path, confirmed=False)
                 page.wait_for_timeout(500)
                 continue

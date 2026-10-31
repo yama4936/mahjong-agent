@@ -130,6 +130,22 @@ class ExperimentalSanmaFriendLoopTest(unittest.TestCase):
             self.run_room()
         self.assertEqual(self.op.inspect_sanma_self_turn.call_count, 2)
 
+    def test_waiting_for_turn_preserves_first_observation_clock(self):
+        self.op.args.max_iterations = 2
+        self.op.verified_friend_300_active = True
+        self.receipt['candidates'] = {'candidates': []}
+        observed = []
+        def inspect(_page):
+            observed.append(self.op.sanma_friend_action_observed_at)
+            return self.receipt
+        self.op.inspect_sanma_self_turn.side_effect = inspect
+        clock = iter([100.0, 101.0, 102.0, 110.0, 111.0, 112.0])
+        with patch('auto_operator.time.monotonic', side_effect=lambda: next(clock)), \
+             patch('auto_operator.classify_screen', return_value=('match', 1.0)):
+            self.op.run_experimental_sanma_friend(self.page)
+        self.assertEqual(observed, [102.0, 102.0])
+        self.assertEqual(sum(c.args[0]=='sanma_friend_action_clock_started' for c in self.op.log.call_args_list),1)
+
     def test_no_prompt_routes_to_draw_adapter_and_stops(self):
         self.receipt['candidates'] = {'candidates': []}
         self.receipt['drawCandidate'] = {'status':'candidate'}
