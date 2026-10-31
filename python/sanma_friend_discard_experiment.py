@@ -6,6 +6,9 @@ certified. A successful click receipt does not prove a discard reached the river
 import hashlib
 import io
 
+from PIL import Image, ImageChops, ImageStat
+import io
+
 from PIL import Image
 import math
 import time
@@ -58,6 +61,29 @@ def experimental_white_hand_candidate(frame, hand, geometry):
         return None
 
 
+def friend_visible_row_with_north_overlap(frame, row_slots):
+    """Unverified friend-only blank-left hypothesis; hidden pixels remain unknown."""
+    if (not isinstance(row_slots, list) or len(row_slots) != 3
+            or any(not isinstance(slot, dict) for slot in row_slots)
+            or any(slot.get("status") != "empty_candidate" for slot in row_slots[:2])
+            or row_slots[2].get("status") != "unresolved"):
+        return False
+    try:
+        with Image.open(io.BytesIO(frame)) as source:
+            if source.size != (1920, 1080): return False
+            image = source.convert("RGB")
+        with Image.open("test/fixtures/sanma-button-rows/empty.png") as source:
+            blank = source.convert("RGB").crop((580,0,715,90))
+        with Image.open(Path(__file__).parent / "fixtures" / "sanma-friend-two-north-overlap.png") as source:
+            north = source.convert("RGB")
+        def similarity(a,b):
+            return 1 - sum(ImageStat.Stat(ImageChops.difference(a,b)).mean) / 765
+        return (similarity(image.crop((1180,785,1315,875)),blank) >= .995
+                and similarity(image.crop((1322,765,1390,850)),north) >= .98)
+    except (OSError, ValueError):
+        return False
+
+
 def execute_friend_draw_candidate(operator, page, receipt):
     """Experimental draw-only bridge from the resident observation to input.
 
@@ -92,9 +118,10 @@ def execute_friend_draw_candidate(operator, page, receipt):
     if hashlib.sha256(baseline).hexdigest() != receipt.get("digest"):
         raise ValueError("recognition frame changed on disk")
     white_candidates = None if hand_value.get("safe") is True else experimental_white_hand_candidate(baseline, hand_value, geo_value)
+    partial_row = friend_visible_row_with_north_overlap(baseline, row_slots)
     if ((hand_value.get("safe") is not True and white_candidates is None) or hand_value.get("turnReady") is not True
             or not isinstance(row_slots, list) or len(row_slots) != 3
-            or any(slot.get("status") != "empty_candidate" for slot in row_slots)
+            or (not partial_row and any(slot.get("status") != "empty_candidate" for slot in row_slots))
             or not isinstance(tiles, list) or len(tiles) != 14 or not isinstance(points, list) or len(tiles) != len(points)
             or draw.get("index") != len(tiles) - 1 or draw.get("tile") != tiles[-1]
             or draw.get("point") != points[-1]):
@@ -102,6 +129,9 @@ def execute_friend_draw_candidate(operator, page, receipt):
     slots = [{"tile": tile, **point} for tile, point in zip(tiles, points)]
     plan = {"scope": "offline_untrusted_sanma_discard_plan", "operationAuthorized": False,
             "tile": draw["tile"], "clickIndex": draw["index"], "clickPoint": draw["point"]}
+    if partial_row:
+        operator.log("sanma_friend_partial_row_candidate", digest=receipt["digest"], confirmed=False,
+                     risk="north obscures slot 2; hidden action and turn remain unverified")
     if white_candidates is not None:
         operator.log("sanma_friend_white_candidate", indices=white_candidates, confirmed=False,
                      risk="unloaded tile faces may appear identical", digest=receipt["digest"])
