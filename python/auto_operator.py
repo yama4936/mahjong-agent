@@ -4020,6 +4020,90 @@ class PythonAutoOperator:
             return {"clicked": True, "action": "tsumo", "confirmation": "unknown", "stopped": True,
                     "before": str(before_path), "reason": str(error)}
 
+    def execute_sanma_friend_ron_candidate(self, page: Page, receipt: dict[str, Any]) -> dict[str, Any]:
+        """One experimental friend-only ron click, then stop for review.
+
+        The input is a candidate, not a game-state certificate. This entry
+        point is not enabled by the CLI or playing loop. It never retries a
+        click and never claims success from a button disappearing.
+        """
+        args = getattr(self, "args", None)
+        if (getattr(args, "rules", None) != "sanma" or getattr(args, "mode", None) != "force-auto"
+                or getattr(args, "action_deadline_ms", None) != 300000
+                or getattr(args, "ranked_loop", False) or not getattr(args, "experimental_sanma_friend", False)
+                or getattr(self, "verified_friend_300_active", False) is not True):
+            raise RuntimeError("experimental sanma ron requires verified 300+0 friend session")
+        # The real turn onset is not yet observable. The room-start instant
+        # predates every turn, so it is conservative until a turn clock is proven.
+        started_at = friend_action_started_at(self)
+        if (type(started_at) not in (int, float) or not isfinite(started_at)
+                or not 0 <= time.monotonic() - started_at < 300):
+            raise RuntimeError("experimental sanma friend timing unknown or expired")
+        source = receipt.get("sourceObservation") if isinstance(receipt, dict) else None
+        freshness = receipt.get("freshness") if isinstance(receipt, dict) else None
+        if (not isinstance(source, dict) or receipt.get("scope") != "sanma_self_turn_observation"
+                or receipt.get("status") != "blocked" or receipt.get("operationAuthorized") is not False
+                or source.get("digest") != receipt.get("digest") or source.get("operationAuthorized") is not False
+                or not isinstance(freshness, dict) or freshness.get("status") not in ("identical_pixels_candidate", "stable_except_clock_candidate")
+                or freshness.get("operationAuthorized") is not False
+                or not isinstance(freshness.get("elapsedMs"), (int, float))
+                or isinstance(freshness.get("elapsedMs"), bool) or not 0 <= freshness["elapsedMs"] <= 20000):
+            raise RuntimeError("sanma observation is incomplete or stale")
+        report = source.get("report")
+        row = report.get("buttonRow") if isinstance(report, dict) else None
+        slots = row.get("value", {}).get("slots") if isinstance(row, dict) and isinstance(row.get("value"), dict) else None
+        if (not isinstance(report, dict) or report.get("digest") != receipt.get("digest")
+                or not isinstance(row, dict) or row.get("status") != "candidate"
+                or not isinstance(slots, list) or len(slots) != 3
+                or any(not isinstance(slot, dict) or type(slot.get("slot")) is not int or slot.get("slot") != i for i, slot in enumerate(slots))
+                or slots[0].get("status") != "empty_candidate"
+                or slots[1].get("status") != "candidate" or slots[1].get("action") != "ron"
+                or type(slots[1].get("confidence")) not in (float, int)
+                or not 0.99 <= slots[1]["confidence"] <= 1
+                or slots[2].get("status") != "candidate" or slots[2].get("action") != "skip"):
+            raise RuntimeError("sanma ron prompt is unknown or ambiguous")
+        try:
+            baseline = Path(receipt["screenshot"]).read_bytes()
+            fresh = page.screenshot(animations="disabled")
+            if hashlib.sha256(baseline).hexdigest() != receipt["digest"]:
+                raise ValueError("baseline changed")
+            if not friend_frame_stable(baseline, fresh):
+                raise ValueError("screen changed outside clock area")
+            screen_state, confidence = classify_screen(fresh, self.screen_references)
+            if screen_state != "match" or confidence < 0.95:
+                raise ValueError("game screen not recognized")
+        except Exception as error:
+            raise RuntimeError(f"sanma ron pre-click check failed: {error}") from error
+        if self.verified_friend_300_active is not True or not 0 <= time.monotonic() - started_at < 300:
+            raise RuntimeError("experimental sanma friend session or timing expired")
+        attempted = getattr(self, "_sanma_friend_attempted_frames", set())
+        if receipt["digest"] in attempted:
+            raise RuntimeError("sanma frame already attempted; fresh observation required")
+        # Latch before input: even a transport failure might have delivered it.
+        attempted.add(receipt["digest"])
+        self._sanma_friend_attempted_frames = attempted
+        before_path = self.frames / f"{utc_stamp()}.{uuid.uuid4().hex}.sanma-ron-before.png"
+        before_path.write_bytes(fresh)
+        point = {"x": 1012.5, "y": 830.0}
+        self.log("sanma_friend_candidate_click", action="ron", screenshot=str(before_path),
+                 digest=receipt["digest"], clickPoint=point, candidateConfidence=slots[1]["confidence"])
+        latch_friend_action_target(self, baseline, "ron")
+        page.mouse.click(point["x"], point["y"])
+        try:
+            page.wait_for_timeout(200)
+            after = page.screenshot(animations="disabled")
+            after_path = self.frames / f"{utc_stamp()}.{uuid.uuid4().hex}.sanma-ron-after.png"
+            after_path.write_bytes(after)
+            state, confidence = classify_screen(after, self.screen_references)
+            self.log("sanma_friend_candidate_stopped", action="ron", screenshot=str(after_path),
+                     screenState=state, confidence=confidence, confirmed=False)
+            return {"clicked": True, "action": "ron", "confirmation": "unknown", "stopped": True,
+                    "before": str(before_path), "after": str(after_path)}
+        except Exception as error:
+            self.log("sanma_friend_candidate_stopped", action="ron", reason=str(error), confirmed=False)
+            return {"clicked": True, "action": "ron", "confirmation": "unknown", "stopped": True,
+                    "before": str(before_path), "reason": str(error)}
+
     def execute_sanma_friend_kita_candidate(self, page: Page, receipt: dict[str, Any]) -> dict[str, Any]:
         """One experimental friend-only kita click, then stop for review.
 
@@ -8418,7 +8502,7 @@ class PythonAutoOperator:
                     path.write_bytes(frame)
                     return {"status":"terminal", "screenState":state, "confidence":confidence,
                             "screenshot":str(path), "confirmed":False}
-                if action == "tsumo":
+                if action in {"tsumo", "ron"}:
                     last = frame
                     continue
                 if state != "match" or confidence < 0.95:
@@ -8514,7 +8598,10 @@ class PythonAutoOperator:
                     if not isinstance(frame_digest, str) or frame_digest in attempted_frames:
                         self.log("sanma_friend_stopped", reason="frame_already_attempted_or_unknown", screenshot=receipt.get("screenshot"))
                         return
-                    if any(isinstance(item, dict) and item.get("action") == "tsumo" for item in actions):
+                    if any(isinstance(item, dict) and item.get("action") == "ron" for item in actions):
+                        action = "ron"
+                        result = self.execute_sanma_friend_ron_candidate(page, receipt)
+                    elif any(isinstance(item, dict) and item.get("action") == "tsumo" for item in actions):
                         action = "tsumo"
                         result = self.execute_sanma_friend_tsumo_candidate(page, receipt)
                     elif any(isinstance(item, dict) and item.get("action") == "kita" for item in actions):

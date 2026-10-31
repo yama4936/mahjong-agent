@@ -42,6 +42,14 @@ class ExperimentalSanmaFriendLoopTest(unittest.TestCase):
         self.assertTrue(self.op.verified_friend_300_active)
         self.assertTrue(any(call.args[0]=='sanma_friend_stopped' for call in self.op.log.call_args_list))
 
+    def test_ron_takes_priority_over_other_candidates(self):
+        self.op.execute_sanma_friend_ron_candidate = Mock(return_value={'confirmation':'unknown'})
+        self.receipt['candidates'] = {'candidates':[{'action':'pon'}, {'action':'ron'}]}
+        self.run_room()
+        self.op.execute_sanma_friend_ron_candidate.assert_called_once_with(self.page,self.receipt)
+        self.op.execute_sanma_friend_tsumo_candidate.assert_not_called()
+        self.assertTrue(any(call.kwargs.get('reason') == 'transition_requires_review' for call in self.op.log.call_args_list))
+
     def test_unsupported_or_unknown_action_stops_without_play_click(self):
         self.receipt['candidates'] = {'candidates': [{'action':'kan'}]}
         self.run_room()
