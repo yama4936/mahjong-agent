@@ -85,6 +85,7 @@ class ExperimentalSanmaFriendLoopTest(unittest.TestCase):
         event=next(c for c in self.op.log.call_args_list if c.kwargs.get('reason')=='black_screen_unobservable')
         self.assertEqual(Path(event.kwargs['screenshot']).read_bytes(),image)
         self.assertEqual(event.kwargs['digest'],hashlib.sha256(image).hexdigest())
+        self.assertEqual(event.kwargs['blackDigest'],hashlib.sha256(image).hexdigest())
         self.assertEqual(event.kwargs['recoveryInputAttempts'],0)
         self.assertIsNone(event.kwargs['priorGameplayInputCount'])
         self.assertFalse(event.kwargs['currentLoopUnconfirmedInputObserved'])
@@ -141,7 +142,11 @@ class ExperimentalSanmaFriendLoopTest(unittest.TestCase):
         self.page.screenshot.side_effect=[b'black',b'login']
         with patch('auto_operator.classify_screen',side_effect=[('black_screen',1.0),('login',1.0)]):
             self.op.run_experimental_sanma_friend(self.page)
-        self.assertTrue(any(c.kwargs.get('reason')=='black_screen_recovered_unexpected_screen' for c in self.op.log.call_args_list))
+        import hashlib
+        event=next(c for c in self.op.log.call_args_list if c.kwargs.get('reason')=='black_screen_recovered_unexpected_screen')
+        self.assertEqual(Path(event.kwargs['screenshot']).read_bytes(),b'login')
+        self.assertEqual(event.kwargs['digest'],hashlib.sha256(b'login').hexdigest())
+        self.assertEqual(event.kwargs['blackDigest'],hashlib.sha256(b'black').hexdigest())
         self.op.inspect_sanma_self_turn.assert_not_called(); self.page.mouse.click.assert_not_called()
 
     def test_black_recovery_action_deadline_expires_without_input(self):

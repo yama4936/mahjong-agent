@@ -8913,7 +8913,8 @@ class PythonAutoOperator:
                     continue
                 self.log("sanma_friend_stopped", reason=reason,
                          screenState=state, confidence=confidence, screenshot=preserve(last_frame),
-                         digest=hashlib.sha256(frame).hexdigest(), recoveryInputAttempts=0,
+                         digest=hashlib.sha256(last_frame).hexdigest() if isinstance(last_frame, bytes) else None,
+                         blackDigest=hashlib.sha256(frame).hexdigest(), recoveryInputAttempts=0,
                          priorGameplayInputCount=None, currentLoopUnconfirmedInputObserved=unconfirmed_input_seen,
                          recovery="passive_only", operationAuthorized=False)
                 return
