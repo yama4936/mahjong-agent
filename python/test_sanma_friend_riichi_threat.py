@@ -1,4 +1,6 @@
 import hashlib
+import copy
+import json
 import tempfile
 import time
 import unittest
@@ -16,6 +18,18 @@ class SanmaFriendRiichiThreat(unittest.TestCase):
   for n in (1,10,14):self.assertEqual(friend_opponent_riichi_candidates((ROOT/f'manual-{n:02}-before.png').read_bytes()),[])
   for n in (15,16):self.assertEqual(friend_opponent_riichi_candidates((ROOT/f'manual-{n:02}-before.png').read_bytes()),['left'])
   for n in (17,18,19,20,21):self.assertEqual(friend_opponent_riichi_candidates((ROOT/f'manual-{n:02}-before.png').read_bytes()),['right','left'])
+ def test_opposite_stick_is_not_dropped(self):
+  frame=(ROOT/'manual-01-before.png').read_bytes()
+  with patch('board_metadata.recognize_riichi_sticks',return_value=['west']):
+   threats=friend_opponent_riichi_candidates(frame)
+  self.assertEqual(threats,['opposite'])
+  self.assertIsNone(friend_genbutsu_candidate({},'digest',threats,['1m'],[{'tile':'1m','confidence':1}]))
+
+ def test_opposite_stick_seen_in_independent_real_frame(self):
+  path=Path('/home/yama1/.codex/sanma-run-d0ff500-20261031/manual-14-before.png')
+  if not path.exists():self.skipTest('independent friend image unavailable')
+  self.assertIn('opposite',friend_opponent_riichi_candidates(path.read_bytes()))
+
  def test_red_dot_without_stick_is_not_positive(self):
   image=Image.open(ROOT/'manual-14-before.png').convert('RGB')
   ImageDraw.Draw(image).ellipse((1095,416,1105,426),fill=(220,0,0));out=io.BytesIO();image.save(out,format='PNG')
@@ -52,11 +66,15 @@ class SanmaFriendRiichiThreat(unittest.TestCase):
   self.assertIsNone(friend_genbutsu_candidate(source,digest,['left','right'],['9m'],matches))
   source['leftRiver']=river('left','9m');source['leftRiver']['candidates'][0]['x']=1150
   self.assertIsNone(friend_genbutsu_candidate(source,digest,['left','right'],['9m'],matches))
+  source['leftRiver']=river('left','0p');source['rightRiver']=river('right','5p')
+  self.assertIsNone(friend_genbutsu_candidate(source,digest,['left','right'],['0p'],[{'tile':'0p','confidence':.999}]))
+  source['leftRiver']=river('left','9m',2);source['rightRiver']=river('right','9m')
+  self.assertIsNone(friend_genbutsu_candidate(source,digest,['left','right'],['9m'],matches))
  def test_matching_candidates_reach_only_the_experimental_click_bridge(self):
   baseline=ROOT/'manual-21-before.png';digest=hashlib.sha256(baseline.read_bytes()).hexdigest()
-  points=[{'x':269+i*10,'y':996.5} for i in range(14)];tiles=['1m']*14
+  layout=json.loads(Path('config/layout-runtime.json').read_text());points=layout['clickPoints'];tiles=['1m']*14
   hand={'safe':True,'turnReady':True,'tiles':tiles,'matches':[{'tile':'1m','confidence':.999} for _ in tiles]}
-  report={'digest':digest,'hand':{'status':'candidate','value':hand},'handGeometry':{'status':'candidate','value':{'clickPoints':points}},
+  report={'digest':digest,'hand':{'status':'candidate','value':hand},'handGeometry':{'status':'candidate','value':{'clickPoints':points,'handSlots':layout['handSlots'],'drawSlot':layout['drawSlot']}},
           'buttonRow':{'status':'candidate','value':{'slots':[{'status':'empty_candidate'}]*3}}}
   source={'digest':digest,'report':report}
   for side,x in (('left',690),('right',1150)):
@@ -65,13 +83,22 @@ class SanmaFriendRiichiThreat(unittest.TestCase):
   receipt={'scope':'sanma_self_turn_observation','digest':digest,'screenshot':str(baseline),'sourceObservation':source,
            'drawCandidate':{'status':'candidate','digest':digest,'index':13,'tile':'1m','point':points[-1]},'freshness':{'status':'identical_pixels_candidate'}}
   op=Mock();op.args=SimpleNamespace(experimental_sanma_friend=True,rules='sanma',mode='force-auto',action_deadline_ms=300000,ranked_loop=False)
-  op.verified_friend_300_active=True;op.verified_friend_300_started_at=time.monotonic();op.sanma_friend_riichi_attempted=False;op.layout={'viewport':{}}
+  op.verified_friend_300_active=True;op.verified_friend_300_started_at=time.monotonic();op.sanma_friend_riichi_attempted=False;op.layout=layout
   page=Mock();page.screenshot.return_value=baseline.read_bytes()
   with patch('sanma_friend_discard_experiment.send_discard_click',return_value={}) as send:
    result=execute_friend_draw_candidate(op,page,receipt)
   self.assertEqual(result['tile'],'1m');self.assertEqual(result['clickIndex'],0)
   self.assertEqual(result['result'],'discard_not_verified');send.assert_called_once()
   page.mouse.click.assert_not_called()
+  # Agreement between recognition and configuration is insufficient when
+  # both point to a different physical tile.
+  bad=copy.deepcopy(receipt);bad_layout=copy.deepcopy(layout)
+  bad_layout['clickPoints'][0]=dict(bad_layout['clickPoints'][1])
+  bad['sourceObservation']['report']['handGeometry']['value']['clickPoints']=bad_layout['clickPoints']
+  op.layout=bad_layout;op._sanma_friend_attempted_targets=set()
+  with patch('sanma_friend_discard_experiment.send_discard_click') as send:
+   with self.assertRaisesRegex(ValueError,'safe discard unverified'):execute_friend_draw_candidate(op,page,bad)
+   send.assert_not_called()
  def test_no_detection_is_not_legal_or_safe_confirmation(self):
   # Positive-only result deliberately does not classify the opponents as safe.
   self.assertEqual(friend_opponent_riichi_candidates((ROOT/'manual-01-before.png').read_bytes()),[])

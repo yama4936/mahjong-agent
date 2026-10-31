@@ -27,7 +27,7 @@ def friend_opponent_riichi_candidates(frame):
     from board_metadata import recognize_riichi_sticks
     with Image.open(io.BytesIO(frame)) as image:
         detected = recognize_riichi_sticks(image, 'east')
-    return [side for seat, side in (('south', 'right'), ('north', 'left')) if seat in detected]
+    return [side for seat, side in (('south', 'right'), ('north', 'left'), ('west', 'opposite')) if seat in detected]
 
 
 def friend_genbutsu_candidate(source, digest, threats, tiles, matches):
@@ -44,13 +44,13 @@ def friend_genbutsu_candidate(source, digest, threats, tiles, matches):
         low, high = (500, 805) if side == 'left' else (1115, 1420)
         rivers[side] = {item['tile'] for item in river['candidates'] if isinstance(item, dict)
                         and isinstance(item.get('tile'), str) and item.get('verified') is False
-                        and type(item.get('confidence')) in (int, float) and item['confidence'] >= .99
+                        and type(item.get('confidence')) in (int, float) and .99 <= item['confidence'] <= 1
                         and type(item.get('x')) in (int, float) and low <= item['x'] < high
                         and type(item.get('y')) in (int, float) and 285 <= item['y'] < 560}
     if not isinstance(matches, list) or len(matches) != len(tiles): return None
     for index, (tile, match) in enumerate(zip(tiles, matches)):
         if (isinstance(match, dict) and match.get('tile') == tile
-                and type(match.get('confidence')) in (int, float) and match['confidence'] >= .99
+                and type(match.get('confidence')) in (int, float) and .99 <= match['confidence'] <= 1
                 and all(tile in rivers[side] for side in threats)):
             return {'tile': tile, 'index': index, 'opponents': threats, 'confirmed': False}
     return None
@@ -246,6 +246,15 @@ def execute_friend_draw_candidate(operator, page, receipt):
         raise ValueError("unsafe hand, uncertain prompt or draw mismatch")
     slots = [{"tile": tile, **point} for tile, point in zip(tiles, points)]
     defensive = friend_genbutsu_candidate(source, receipt['digest'], threats, tiles, hand_value.get('matches')) if threats else None
+    if defensive is not None and defensive['index'] != draw['index']:
+        from sanma_friend_shape_candidate import friend_hand_click_geometry
+        calibrated = operator.layout if isinstance(operator.layout,dict) else {}
+        hand_slots = [*geo_value.get('handSlots', []),geo_value.get('drawSlot')]
+        if (calibrated.get('handSlots') != geo_value.get('handSlots')
+                or calibrated.get('drawSlot') != geo_value.get('drawSlot')
+                or calibrated.get('clickPoints') != points
+                or not friend_hand_click_geometry(hand_slots,points)):
+            defensive = None
     if defensive is not None and getattr(operator, 'sanma_friend_riichi_attempted', False) is not False and defensive['index'] != draw['index']:
         defensive = None
     if threats:
