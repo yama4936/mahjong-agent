@@ -8708,6 +8708,7 @@ class PythonAutoOperator:
         result_latched = None
         action_observed_at = None
         round_end_started = None
+        self.sanma_friend_riichi_attempted = False
         def preserve(frame: bytes | None) -> str | None:
             if not isinstance(frame, bytes) or not frame:
                 return None
@@ -8735,6 +8736,7 @@ class PythonAutoOperator:
                     self.log("sanma_friend_round_transition_reobserved", screenState=state,
                              screenshot=preserve(frame), confirmed=False)
                     round_end_started = None
+                    self.sanma_friend_riichi_attempted = False
                     action_observed_at = None
                 match_seen = True
                 if action_observed_at is None:

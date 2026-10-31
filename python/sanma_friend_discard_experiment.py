@@ -188,12 +188,26 @@ def execute_friend_draw_candidate(operator, page, receipt):
             or draw.get("point") != points[-1]):
         raise ValueError("unsafe hand, uncertain prompt or draw mismatch")
     slots = [{"tile": tile, **point} for tile, point in zip(tiles, points)]
-    plan = {"scope": "offline_untrusted_sanma_discard_plan", "operationAuthorized": False,
-            "tile": draw["tile"], "clickIndex": draw["index"], "clickPoint": draw["point"]}
-    from sanma_friend_shape_candidate import friend_shape_candidate
+    from sanma_friend_shape_candidate import friend_shape_candidate, friend_non_riichi_hypothesis
     shape = friend_shape_candidate(receipt)
+    # CPU-friend experiment: visual rail and hand confidence are hypotheses,
+    # never an assertion that riichi status or turn are confirmed.
+    calibrated_points = operator.layout.get("clickPoints", []) if isinstance(operator.layout, dict) else []
+    calibrated_slots = ([*operator.layout.get("handSlots", []), operator.layout.get("drawSlot")]
+                        if isinstance(operator.layout, dict) else [])
+    shape_choice = (getattr(operator, "sanma_friend_riichi_attempted", False) is False
+                    and shape.get("status") == "candidate"
+                    and all(slot.get("status") == "empty_candidate" for slot in row_slots)
+                    and len(calibrated_points) == len(points) == len(calibrated_slots) == 14
+                    and calibrated_points == points
+                    and calibrated_slots == [*geo_value.get("handSlots", []), geo_value.get("drawSlot")]
+                    and friend_non_riichi_hypothesis(baseline, hand_value))
+    selected = shape if shape_choice else draw
+    plan = {"scope": "offline_untrusted_sanma_discard_plan", "operationAuthorized": False,
+            "tile": selected["tile"], "clickIndex": selected["index"], "clickPoint": selected["point"]}
     operator.log("sanma_friend_shape_candidate", candidate=shape,
-                 selectedAction="draw_only", reason="riichi status is unverified; hand discard cannot be authorized")
+                 selectedAction="shape_hypothesis" if shape_choice else "draw_only",
+                 reason="visible rail and hand are unverified; riichi, live tiles and turn remain unknown")
     if draw_only:
         operator.log("sanma_friend_draw_only_candidate", digest=receipt["digest"], confirmed=False,
                      risk="other hand labels, turn, legal actions and strategy remain unverified")

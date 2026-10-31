@@ -43,3 +43,25 @@ def friend_shape_candidate(receipt):
     except (KeyError,TypeError,ValueError,IndexError):
         return {'status':'unresolved','confirmed':False,'operationAuthorized':False,
                 'reason':'incomplete, inconsistent, or unverified shape evidence'}
+
+
+def friend_non_riichi_hypothesis(frame, hand):
+    """Friend-only visual hypothesis; the unobserved past remains unknown."""
+    import io
+    from pathlib import Path
+    from PIL import Image, ImageChops, ImageStat
+    try:
+        matches=hand['matches']; tiles=hand['tiles']; presence=hand['presenceFractions']
+        if (hand.get('turnReady') is not True or len(tiles)!=14 or len(matches)!=14 or len(presence)!=14
+                or any(m.get('tile')!=t or type(m.get('confidence')) not in (int,float)
+                       or type(m.get('runnerUpConfidence')) not in (int,float)
+                       or m['confidence']<.94 or m['confidence']-m['runnerUpConfidence']<.1
+                       for t,m in zip(tiles,matches))
+                or any(type(p) not in (int,float) or p<.74 for p in presence)):
+            return False
+        with Image.open(io.BytesIO(frame)) as source, Image.open(Path(__file__).parent/'fixtures/sanma-dd-no-riichi-rail.png') as reference:
+            if source.size!=(1920,1080) or reference.size!=(160,15):return False
+            diff=ImageChops.difference(source.convert('RGB').crop((875,516,1035,531)),reference.convert('RGB'))
+            if max(v[1] for v in diff.getextrema())>12 or max(ImageStat.Stat(diff).mean)>5:return False
+        return True
+    except (KeyError,TypeError,ValueError,OSError):return False

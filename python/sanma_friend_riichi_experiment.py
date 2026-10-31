@@ -43,6 +43,8 @@ def execute_friend_riichi(operator, page, receipt):
     This baseline declares whenever eligible and does not evaluate expected
     value, furiten, or defense. The subsequent result remains unverified.
     """
+    # Once attempted, suppress non-draw hand discards until a new round.
+    operator.sanma_friend_riichi_attempted = True
     execute_friend_pon_pass(operator,page,receipt,declare_riichi=True)
     page.wait_for_timeout(500)
     selection=page.screenshot(animations='disabled')
