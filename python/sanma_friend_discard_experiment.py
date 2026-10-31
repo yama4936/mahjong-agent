@@ -190,6 +190,10 @@ def execute_friend_draw_candidate(operator, page, receipt):
     slots = [{"tile": tile, **point} for tile, point in zip(tiles, points)]
     plan = {"scope": "offline_untrusted_sanma_discard_plan", "operationAuthorized": False,
             "tile": draw["tile"], "clickIndex": draw["index"], "clickPoint": draw["point"]}
+    from sanma_friend_shape_candidate import friend_shape_candidate
+    shape = friend_shape_candidate(receipt)
+    operator.log("sanma_friend_shape_candidate", candidate=shape,
+                 selectedAction="draw_only", reason="riichi status is unverified; hand discard cannot be authorized")
     if draw_only:
         operator.log("sanma_friend_draw_only_candidate", digest=receipt["digest"], confirmed=False,
                      risk="other hand labels, turn, legal actions and strategy remain unverified")

@@ -1,0 +1,2591 @@
+{
+  "status": "blocked",
+  "scope": "sanma_self_turn_observation",
+  "operationAuthorized": false,
+  "digest": "f5a365217f1253373b5e96a60bc50539d492ca07d8906a895c965d13f05788b4",
+  "screenshot": "frame.png",
+  "priority": {
+    "status": "blocked",
+    "reasons": [
+      "complete independent review missing",
+      "hand recognition unconfirmed",
+      "public recognition failed"
+    ],
+    "operationAuthorized": false
+  },
+  "evaluation": {
+    "status": "blocked",
+    "reasons": [
+      "complete independent review missing",
+      "hand recognition unconfirmed",
+      "public recognition failed"
+    ],
+    "operationAuthorized": false
+  },
+  "candidates": {
+    "status": "unresolved",
+    "candidates": [],
+    "conflicts": [],
+    "missing": [
+      "game rules and OCR seat unverified",
+      "action row incomplete",
+      "turn and riichi status unverified",
+      "public tiles and extracted north counts incomplete",
+      "physical action targets uncalibrated",
+      "own seat unavailable",
+      "hand labels below confidence threshold",
+      "sanma ron reference not independently verified"
+    ],
+    "operationAuthorized": false
+  },
+  "structuralPositions": {
+    "status": "blocked",
+    "digest": "f5a365217f1253373b5e96a60bc50539d492ca07d8906a895c965d13f05788b4",
+    "operationAuthorized": false,
+    "candidates": [
+      {
+        "tile": "1p",
+        "shanten": 3,
+        "form": "standard",
+        "improvingDraws": [
+          {
+            "tile": "1p",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "2p",
+            "maximumUnseen": 2
+          },
+          {
+            "tile": "3p",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "4p",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "5p",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "6p",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "7p",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "8p",
+            "maximumUnseen": 2
+          },
+          {
+            "tile": "9p",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "1s",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "2s",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "3s",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "4s",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "5s",
+            "maximumUnseen": 2
+          },
+          {
+            "tile": "6s",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "7s",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "8s",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "9s",
+            "maximumUnseen": 3
+          }
+        ],
+        "maximumUnseenTotal": 58,
+        "positions": [
+          {
+            "index": 0,
+            "rect": {
+              "x": 223,
+              "y": 921,
+              "width": 92,
+              "height": 151
+            },
+            "point": {
+              "x": 269,
+              "y": 996.5
+            }
+          }
+        ]
+      },
+      {
+        "tile": "2p",
+        "shanten": 2,
+        "form": "standard",
+        "improvingDraws": [
+          {
+            "tile": "5p",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "6p",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "7p",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "8p",
+            "maximumUnseen": 2
+          },
+          {
+            "tile": "9p",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "1s",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "2s",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "3s",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "4s",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "5s",
+            "maximumUnseen": 2
+          },
+          {
+            "tile": "6s",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "7s",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "8s",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "9s",
+            "maximumUnseen": 3
+          }
+        ],
+        "maximumUnseenTotal": 46,
+        "positions": [
+          {
+            "index": 1,
+            "rect": {
+              "x": 317,
+              "y": 921,
+              "width": 93,
+              "height": 151
+            },
+            "point": {
+              "x": 363.5,
+              "y": 996.5
+            }
+          },
+          {
+            "index": 2,
+            "rect": {
+              "x": 412,
+              "y": 921,
+              "width": 93,
+              "height": 151
+            },
+            "point": {
+              "x": 458.5,
+              "y": 996.5
+            }
+          }
+        ]
+      },
+      {
+        "tile": "3p",
+        "shanten": 3,
+        "form": "standard",
+        "improvingDraws": [
+          {
+            "tile": "1p",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "2p",
+            "maximumUnseen": 2
+          },
+          {
+            "tile": "3p",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "4p",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "5p",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "6p",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "7p",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "8p",
+            "maximumUnseen": 2
+          },
+          {
+            "tile": "9p",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "1s",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "2s",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "3s",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "4s",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "5s",
+            "maximumUnseen": 2
+          },
+          {
+            "tile": "6s",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "7s",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "8s",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "9s",
+            "maximumUnseen": 3
+          }
+        ],
+        "maximumUnseenTotal": 58,
+        "positions": [
+          {
+            "index": 3,
+            "rect": {
+              "x": 507,
+              "y": 921,
+              "width": 93,
+              "height": 151
+            },
+            "point": {
+              "x": 553.5,
+              "y": 996.5
+            }
+          }
+        ]
+      },
+      {
+        "tile": "8p",
+        "shanten": 2,
+        "form": "standard",
+        "improvingDraws": [
+          {
+            "tile": "1p",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "2p",
+            "maximumUnseen": 2
+          },
+          {
+            "tile": "3p",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "4p",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "6p",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "9p",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "1s",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "2s",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "3s",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "4s",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "5s",
+            "maximumUnseen": 2
+          },
+          {
+            "tile": "6s",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "7s",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "8s",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "9s",
+            "maximumUnseen": 3
+          }
+        ],
+        "maximumUnseenTotal": 49,
+        "positions": [
+          {
+            "index": 4,
+            "rect": {
+              "x": 602,
+              "y": 921,
+              "width": 92,
+              "height": 151
+            },
+            "point": {
+              "x": 648,
+              "y": 996.5
+            }
+          },
+          {
+            "index": 5,
+            "rect": {
+              "x": 697,
+              "y": 921,
+              "width": 92,
+              "height": 151
+            },
+            "point": {
+              "x": 743,
+              "y": 996.5
+            }
+          }
+        ]
+      },
+      {
+        "tile": "1s",
+        "shanten": 2,
+        "form": "standard",
+        "improvingDraws": [
+          {
+            "tile": "1p",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "2p",
+            "maximumUnseen": 2
+          },
+          {
+            "tile": "3p",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "4p",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "5p",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "6p",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "7p",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "8p",
+            "maximumUnseen": 2
+          },
+          {
+            "tile": "9p",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "5s",
+            "maximumUnseen": 2
+          },
+          {
+            "tile": "7s",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "8s",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "9s",
+            "maximumUnseen": 3
+          }
+        ],
+        "maximumUnseenTotal": 42,
+        "positions": [
+          {
+            "index": 6,
+            "rect": {
+              "x": 792,
+              "y": 921,
+              "width": 92,
+              "height": 151
+            },
+            "point": {
+              "x": 838,
+              "y": 996.5
+            }
+          }
+        ]
+      },
+      {
+        "tile": "2s",
+        "shanten": 3,
+        "form": "standard",
+        "improvingDraws": [
+          {
+            "tile": "1p",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "2p",
+            "maximumUnseen": 2
+          },
+          {
+            "tile": "3p",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "4p",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "5p",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "6p",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "7p",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "8p",
+            "maximumUnseen": 2
+          },
+          {
+            "tile": "9p",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "1s",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "2s",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "3s",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "4s",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "5s",
+            "maximumUnseen": 2
+          },
+          {
+            "tile": "6s",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "7s",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "8s",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "9s",
+            "maximumUnseen": 3
+          }
+        ],
+        "maximumUnseenTotal": 58,
+        "positions": [
+          {
+            "index": 7,
+            "rect": {
+              "x": 887,
+              "y": 921,
+              "width": 92,
+              "height": 151
+            },
+            "point": {
+              "x": 933,
+              "y": 996.5
+            }
+          }
+        ]
+      },
+      {
+        "tile": "3s",
+        "shanten": 3,
+        "form": "standard",
+        "improvingDraws": [
+          {
+            "tile": "1p",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "2p",
+            "maximumUnseen": 2
+          },
+          {
+            "tile": "3p",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "4p",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "5p",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "6p",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "7p",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "8p",
+            "maximumUnseen": 2
+          },
+          {
+            "tile": "9p",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "1s",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "2s",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "3s",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "4s",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "5s",
+            "maximumUnseen": 2
+          },
+          {
+            "tile": "6s",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "7s",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "8s",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "9s",
+            "maximumUnseen": 3
+          }
+        ],
+        "maximumUnseenTotal": 58,
+        "positions": [
+          {
+            "index": 8,
+            "rect": {
+              "x": 981,
+              "y": 921,
+              "width": 93,
+              "height": 151
+            },
+            "point": {
+              "x": 1027.5,
+              "y": 996.5
+            }
+          }
+        ]
+      },
+      {
+        "tile": "4s",
+        "shanten": 2,
+        "form": "standard",
+        "improvingDraws": [
+          {
+            "tile": "1p",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "2p",
+            "maximumUnseen": 2
+          },
+          {
+            "tile": "3p",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "4p",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "5p",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "6p",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "7p",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "8p",
+            "maximumUnseen": 2
+          },
+          {
+            "tile": "9p",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "5s",
+            "maximumUnseen": 2
+          },
+          {
+            "tile": "7s",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "8s",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "9s",
+            "maximumUnseen": 3
+          }
+        ],
+        "maximumUnseenTotal": 42,
+        "positions": [
+          {
+            "index": 9,
+            "rect": {
+              "x": 1076,
+              "y": 921,
+              "width": 93,
+              "height": 151
+            },
+            "point": {
+              "x": 1122.5,
+              "y": 996.5
+            }
+          }
+        ]
+      },
+      {
+        "tile": "5s",
+        "shanten": 2,
+        "form": "standard",
+        "improvingDraws": [
+          {
+            "tile": "1p",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "2p",
+            "maximumUnseen": 2
+          },
+          {
+            "tile": "3p",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "4p",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "5p",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "6p",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "7p",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "8p",
+            "maximumUnseen": 2
+          },
+          {
+            "tile": "9p",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "3s",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "6s",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "7s",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "8s",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "9s",
+            "maximumUnseen": 3
+          }
+        ],
+        "maximumUnseenTotal": 47,
+        "positions": [
+          {
+            "index": 10,
+            "rect": {
+              "x": 1171,
+              "y": 921,
+              "width": 93,
+              "height": 151
+            },
+            "point": {
+              "x": 1217.5,
+              "y": 996.5
+            }
+          },
+          {
+            "index": 11,
+            "rect": {
+              "x": 1266,
+              "y": 921,
+              "width": 93,
+              "height": 151
+            },
+            "point": {
+              "x": 1312.5,
+              "y": 996.5
+            }
+          }
+        ]
+      },
+      {
+        "tile": "9s",
+        "shanten": 2,
+        "form": "standard",
+        "improvingDraws": [
+          {
+            "tile": "1p",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "2p",
+            "maximumUnseen": 2
+          },
+          {
+            "tile": "3p",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "4p",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "5p",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "6p",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "7p",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "8p",
+            "maximumUnseen": 2
+          },
+          {
+            "tile": "9p",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "1s",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "2s",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "3s",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "4s",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "5s",
+            "maximumUnseen": 2
+          },
+          {
+            "tile": "6s",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "7s",
+            "maximumUnseen": 4
+          }
+        ],
+        "maximumUnseenTotal": 51,
+        "positions": [
+          {
+            "index": 12,
+            "rect": {
+              "x": 1361,
+              "y": 921,
+              "width": 92,
+              "height": 151
+            },
+            "point": {
+              "x": 1407,
+              "y": 996.5
+            }
+          }
+        ]
+      },
+      {
+        "tile": "7p",
+        "shanten": 2,
+        "form": "standard",
+        "improvingDraws": [
+          {
+            "tile": "1p",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "2p",
+            "maximumUnseen": 2
+          },
+          {
+            "tile": "3p",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "4p",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "8p",
+            "maximumUnseen": 2
+          },
+          {
+            "tile": "1s",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "2s",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "3s",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "4s",
+            "maximumUnseen": 3
+          },
+          {
+            "tile": "5s",
+            "maximumUnseen": 2
+          },
+          {
+            "tile": "6s",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "7s",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "8s",
+            "maximumUnseen": 4
+          },
+          {
+            "tile": "9s",
+            "maximumUnseen": 3
+          }
+        ],
+        "maximumUnseenTotal": 43,
+        "positions": [
+          {
+            "index": 13,
+            "rect": {
+              "x": 1486,
+              "y": 921,
+              "width": 92,
+              "height": 151
+            },
+            "point": {
+              "x": 1532,
+              "y": 996.5
+            }
+          }
+        ]
+      }
+    ],
+    "reason": "unverified hand, meld count, turn and action priority; visible tiles and danger unknown",
+    "assumptions": [
+      "recognized tile labels and candidate meld count are correct",
+      "draw totals are upper bounds from hand-only counts, not live or observed tile counts"
+    ],
+    "positionCalibrationRequired": true
+  },
+  "drawCandidate": {
+    "status": "candidate",
+    "scope": "unverified_sanma_physical_draw",
+    "verified": false,
+    "operationAuthorized": false,
+    "digest": "f5a365217f1253373b5e96a60bc50539d492ca07d8906a895c965d13f05788b4",
+    "index": 13,
+    "tile": "7p",
+    "rectangle": {
+      "x": 1486,
+      "y": 921,
+      "width": 92,
+      "height": 151
+    },
+    "point": {
+      "x": 1532,
+      "y": 996.5
+    },
+    "reasons": [
+      "hand and geometry are unverified",
+      "self turn, action priority, and riichi state are unknown"
+    ]
+  },
+  "sourceObservation": {
+    "scope": "offline_untrusted_sanma_auto_observation",
+    "digest": "f5a365217f1253373b5e96a60bc50539d492ca07d8906a895c965d13f05788b4",
+    "board": {
+      "verified": false,
+      "scope": "sanma_offline_image_candidate",
+      "reason": "incomplete_or_ambiguous_tokens",
+      "source": "/tmp/jantama-sanma-worker-b0yqgrx3.png",
+      "tokens": [
+        {
+          "text": "東1局",
+          "confidence": 0.99967,
+          "x": 960.3333282470703,
+          "y": 404.33333587646484
+        },
+        {
+          "text": "35000",
+          "confidence": 0.99998,
+          "x": 1046.5,
+          "y": 418.41666412353516
+        },
+        {
+          "text": "余23",
+          "confidence": 0.99678,
+          "x": 959.3333282470703,
+          "y": 442.6666717529297
+        },
+        {
+          "text": "35000",
+          "confidence": 0.99998,
+          "x": 959.25,
+          "y": 481.75
+        },
+        {
+          "text": "東",
+          "confidence": 0.99768,
+          "x": 826,
+          "y": 513.5
+        },
+        {
+          "text": "南",
+          "confidence": 1,
+          "x": 1094.6666564941406,
+          "y": 513.6666717529297
+        },
+        {
+          "text": "1",
+          "confidence": 0.57666,
+          "x": 876,
+          "y": 423,
+          "source": "upright_left_score_crop",
+          "cropWidth": 412
+        },
+        {
+          "text": "1",
+          "confidence": 0.67563,
+          "x": 876,
+          "y": 423,
+          "source": "upright_left_score_crop",
+          "cropWidth": 328
+        },
+        {
+          "text": "34000",
+          "confidence": 0.99999,
+          "x": 958,
+          "y": 364,
+          "source": "upright_opposite_score_crop",
+          "cropWidth": 412
+        },
+        {
+          "text": "1",
+          "confidence": 0.9995,
+          "x": 132,
+          "y": 155
+        },
+        {
+          "text": "0",
+          "confidence": 0.99968,
+          "x": 268,
+          "y": 155
+        }
+      ]
+    },
+    "north": {
+      "status": "unknown",
+      "verified": false,
+      "complete": false,
+      "positions": {
+        "own": {
+          "verified": false,
+          "scope": "sanma_offline_own_north_visual_candidates",
+          "matches": [],
+          "complete": false,
+          "frame_sha256": "f5a365217f1253373b5e96a60bc50539d492ca07d8906a895c965d13f05788b4"
+        },
+        "opposite": {
+          "scope": "sanma_offline_opposite_north_visual_candidate",
+          "verified": false,
+          "complete": false,
+          "status": "unknown",
+          "candidate": {
+            "x": 535,
+            "y": 101,
+            "similarity": 0.9978430867195129,
+            "reference": "primary"
+          },
+          "frame_sha256": "f5a365217f1253373b5e96a60bc50539d492ca07d8906a895c965d13f05788b4"
+        },
+        "left": {
+          "scope": "sanma_offline_left_north_visual_candidate",
+          "status": "unknown",
+          "verified": false,
+          "complete": false,
+          "candidate": null,
+          "frame_sha256": "f5a365217f1253373b5e96a60bc50539d492ca07d8906a895c965d13f05788b4"
+        }
+      }
+    },
+    "candidates": {
+      "status": "unresolved",
+      "candidates": [],
+      "conflicts": [],
+      "missing": [
+        "game rules and OCR seat unverified",
+        "action row incomplete",
+        "turn and riichi status unverified",
+        "public tiles and extracted north counts incomplete",
+        "physical action targets uncalibrated",
+        "own seat unavailable",
+        "hand labels below confidence threshold",
+        "sanma ron reference not independently verified"
+      ],
+      "operationAuthorized": false
+    },
+    "ownSeat": {
+      "status": "unknown",
+      "reason": "incomplete_or_ambiguous_tokens"
+    },
+    "report": {
+      "scope": "offline_untrusted_sanma_frame",
+      "digest": "f5a365217f1253373b5e96a60bc50539d492ca07d8906a895c965d13f05788b4",
+      "hand": {
+        "status": "candidate",
+        "value": {
+          "tiles": [
+            "1p",
+            "2p",
+            "2p",
+            "3p",
+            "8p",
+            "8p",
+            "1s",
+            "2s",
+            "3s",
+            "4s",
+            "5s",
+            "5s",
+            "9s",
+            "7p"
+          ],
+          "matches": [
+            {
+              "tile": "1p",
+              "confidence": 0.9893200766122758,
+              "runnerUpConfidence": 0.5892809764467734
+            },
+            {
+              "tile": "2p",
+              "confidence": 0.9861749050261858,
+              "runnerUpConfidence": 0.6324422999876834
+            },
+            {
+              "tile": "2p",
+              "confidence": 0.9791833247408156,
+              "runnerUpConfidence": 0.6368244138046251
+            },
+            {
+              "tile": "3p",
+              "confidence": 0.989906272390243,
+              "runnerUpConfidence": 0.6391750081819899
+            },
+            {
+              "tile": "8p",
+              "confidence": 0.9902340516912328,
+              "runnerUpConfidence": 0.7317840076817029
+            },
+            {
+              "tile": "8p",
+              "confidence": 0.992262819716818,
+              "runnerUpConfidence": 0.7308152430723477
+            },
+            {
+              "tile": "1s",
+              "confidence": 0.9907881880976391,
+              "runnerUpConfidence": 0.6137306041510696
+            },
+            {
+              "tile": "2s",
+              "confidence": 0.9937598858253379,
+              "runnerUpConfidence": 0.49547494797122515
+            },
+            {
+              "tile": "3s",
+              "confidence": 0.9461511704610798,
+              "runnerUpConfidence": 0.5518875923124738
+            },
+            {
+              "tile": "4s",
+              "confidence": 0.9598575528230893,
+              "runnerUpConfidence": 0.5398536751046585
+            },
+            {
+              "tile": "5s",
+              "confidence": 0.9942304721084106,
+              "runnerUpConfidence": 0.7206813669354611
+            },
+            {
+              "tile": "5s",
+              "confidence": 0.9917314426926385,
+              "runnerUpConfidence": 0.7158504248738041
+            },
+            {
+              "tile": "9s",
+              "confidence": 0.9889754227016033,
+              "runnerUpConfidence": 0.4740003069419927
+            },
+            {
+              "tile": "7p",
+              "confidence": 0.9961448304240915,
+              "runnerUpConfidence": 0.7225781157387904
+            }
+          ],
+          "confidence": 0.9461511704610798,
+          "ambiguityMargin": 0.25845004400952987,
+          "presenceFractions": [
+            0.8036999712064498,
+            0.8359324930570391,
+            0.8360749127679271,
+            0.8733888770205797,
+            0.7435214511949323,
+            0.7435934350705442,
+            0.8563921681543334,
+            0.930679527785776,
+            0.8869899594103824,
+            0.8615680410168768,
+            0.8255358541622161,
+            0.8218329416791283,
+            0.7985891160380075,
+            0.7800172761301468
+          ],
+          "safe": false,
+          "turnReady": true,
+          "slotClassificationSafe": false,
+          "candidateMelds": 0
+        }
+      },
+      "handGeometry": {
+        "status": "candidate",
+        "value": {
+          "viewport": {
+            "width": 1920,
+            "height": 1080
+          },
+          "handSlots": [
+            {
+              "x": 223,
+              "y": 921,
+              "width": 92,
+              "height": 151
+            },
+            {
+              "x": 317,
+              "y": 921,
+              "width": 93,
+              "height": 151
+            },
+            {
+              "x": 412,
+              "y": 921,
+              "width": 93,
+              "height": 151
+            },
+            {
+              "x": 507,
+              "y": 921,
+              "width": 93,
+              "height": 151
+            },
+            {
+              "x": 602,
+              "y": 921,
+              "width": 92,
+              "height": 151
+            },
+            {
+              "x": 697,
+              "y": 921,
+              "width": 92,
+              "height": 151
+            },
+            {
+              "x": 792,
+              "y": 921,
+              "width": 92,
+              "height": 151
+            },
+            {
+              "x": 887,
+              "y": 921,
+              "width": 92,
+              "height": 151
+            },
+            {
+              "x": 981,
+              "y": 921,
+              "width": 93,
+              "height": 151
+            },
+            {
+              "x": 1076,
+              "y": 921,
+              "width": 93,
+              "height": 151
+            },
+            {
+              "x": 1171,
+              "y": 921,
+              "width": 93,
+              "height": 151
+            },
+            {
+              "x": 1266,
+              "y": 921,
+              "width": 93,
+              "height": 151
+            },
+            {
+              "x": 1361,
+              "y": 921,
+              "width": 92,
+              "height": 151
+            }
+          ],
+          "drawSlot": {
+            "x": 1486,
+            "y": 921,
+            "width": 92,
+            "height": 151
+          },
+          "clickPoints": [
+            {
+              "x": 269,
+              "y": 996.5
+            },
+            {
+              "x": 363.5,
+              "y": 996.5
+            },
+            {
+              "x": 458.5,
+              "y": 996.5
+            },
+            {
+              "x": 553.5,
+              "y": 996.5
+            },
+            {
+              "x": 648,
+              "y": 996.5
+            },
+            {
+              "x": 743,
+              "y": 996.5
+            },
+            {
+              "x": 838,
+              "y": 996.5
+            },
+            {
+              "x": 933,
+              "y": 996.5
+            },
+            {
+              "x": 1027.5,
+              "y": 996.5
+            },
+            {
+              "x": 1122.5,
+              "y": 996.5
+            },
+            {
+              "x": 1217.5,
+              "y": 996.5
+            },
+            {
+              "x": 1312.5,
+              "y": 996.5
+            },
+            {
+              "x": 1407,
+              "y": 996.5
+            },
+            {
+              "x": 1532,
+              "y": 996.5
+            }
+          ],
+          "evidence": {
+            "detectedTiles": 14,
+            "luminanceThreshold": 120,
+            "medianWidth": 92.5,
+            "medianHeight": 151,
+            "medianGap": 2,
+            "drawGap": 33,
+            "rowBottomSpread": 0
+          },
+          "confidence": 0.99,
+          "requiresHoldoutValidation": true
+        }
+      },
+      "publicTiles": {
+        "status": "unresolved",
+        "reason": "own seat unknown: opponent mapping unavailable"
+      },
+      "button": {
+        "status": "candidate",
+        "value": {
+          "status": "unresolved",
+          "reason": "low_confidence",
+          "confidence": 0.8870217184095861,
+          "margin": 0.024898726851851904
+        }
+      },
+      "buttonRow": {
+        "status": "candidate",
+        "value": {
+          "scope": "offline_untrusted_sanma_button_row",
+          "slots": [
+            {
+              "status": "empty_candidate",
+              "slot": 0,
+              "confidence": 1
+            },
+            {
+              "status": "empty_candidate",
+              "slot": 1,
+              "confidence": 1
+            },
+            {
+              "status": "empty_candidate",
+              "slot": 2,
+              "confidence": 0.9996868191721133
+            }
+          ],
+          "complete": false,
+          "operationAuthorized": false
+        }
+      },
+      "ownMelds": {
+        "status": "candidate",
+        "value": {
+          "status": "unknown",
+          "complete": false,
+          "hypotheses": [],
+          "reason": "hand_extent_unknown"
+        }
+      },
+      "shape": {
+        "status": "unresolved",
+        "reason": "visible tile completeness unavailable"
+      },
+      "decision": {
+        "status": "blocked",
+        "reasons": [
+          "hand recognition unverified",
+          "public observations incomplete",
+          "action row incomplete",
+          "turn, meld and riichi status unverified",
+          "own melds unknown: hand_extent_unknown"
+        ]
+      },
+      "operationAuthorized": false
+    },
+    "operationAuthorized": false,
+    "assembly": {
+      "scope": "offline_untrusted_sanma_evaluation_assembly",
+      "status": "blocked",
+      "digest": "f5a365217f1253373b5e96a60bc50539d492ca07d8906a895c965d13f05788b4",
+      "partial": {
+        "orderedHand": [
+          "1p",
+          "2p",
+          "2p",
+          "3p",
+          "8p",
+          "8p",
+          "1s",
+          "2s",
+          "3s",
+          "4s",
+          "5s",
+          "5s",
+          "9s",
+          "7p"
+        ],
+        "handRecognizerAccepted": false
+      },
+      "missing": [
+        "rules and seat not verified",
+        "hand and draw not verified",
+        "turn and riichi status unknown",
+        "action list incomplete",
+        "rivers and melds incomplete",
+        "all three extracted north counts unknown"
+      ],
+      "evaluation": {
+        "status": "blocked",
+        "reasons": [
+          "complete independent review missing",
+          "hand recognition unconfirmed",
+          "public recognition failed"
+        ],
+        "operationAuthorized": false
+      },
+      "priority": {
+        "status": "blocked",
+        "reasons": [
+          "complete independent review missing",
+          "hand recognition unconfirmed",
+          "public recognition failed"
+        ],
+        "operationAuthorized": false
+      },
+      "operationAuthorized": false
+    },
+    "structuralPositions": {
+      "status": "blocked",
+      "digest": "f5a365217f1253373b5e96a60bc50539d492ca07d8906a895c965d13f05788b4",
+      "operationAuthorized": false,
+      "candidates": [
+        {
+          "tile": "1p",
+          "shanten": 3,
+          "form": "standard",
+          "improvingDraws": [
+            {
+              "tile": "1p",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "2p",
+              "maximumUnseen": 2
+            },
+            {
+              "tile": "3p",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "4p",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "5p",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "6p",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "7p",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "8p",
+              "maximumUnseen": 2
+            },
+            {
+              "tile": "9p",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "1s",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "2s",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "3s",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "4s",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "5s",
+              "maximumUnseen": 2
+            },
+            {
+              "tile": "6s",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "7s",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "8s",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "9s",
+              "maximumUnseen": 3
+            }
+          ],
+          "maximumUnseenTotal": 58,
+          "positions": [
+            {
+              "index": 0,
+              "rect": {
+                "x": 223,
+                "y": 921,
+                "width": 92,
+                "height": 151
+              },
+              "point": {
+                "x": 269,
+                "y": 996.5
+              }
+            }
+          ]
+        },
+        {
+          "tile": "2p",
+          "shanten": 2,
+          "form": "standard",
+          "improvingDraws": [
+            {
+              "tile": "5p",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "6p",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "7p",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "8p",
+              "maximumUnseen": 2
+            },
+            {
+              "tile": "9p",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "1s",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "2s",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "3s",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "4s",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "5s",
+              "maximumUnseen": 2
+            },
+            {
+              "tile": "6s",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "7s",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "8s",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "9s",
+              "maximumUnseen": 3
+            }
+          ],
+          "maximumUnseenTotal": 46,
+          "positions": [
+            {
+              "index": 1,
+              "rect": {
+                "x": 317,
+                "y": 921,
+                "width": 93,
+                "height": 151
+              },
+              "point": {
+                "x": 363.5,
+                "y": 996.5
+              }
+            },
+            {
+              "index": 2,
+              "rect": {
+                "x": 412,
+                "y": 921,
+                "width": 93,
+                "height": 151
+              },
+              "point": {
+                "x": 458.5,
+                "y": 996.5
+              }
+            }
+          ]
+        },
+        {
+          "tile": "3p",
+          "shanten": 3,
+          "form": "standard",
+          "improvingDraws": [
+            {
+              "tile": "1p",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "2p",
+              "maximumUnseen": 2
+            },
+            {
+              "tile": "3p",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "4p",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "5p",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "6p",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "7p",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "8p",
+              "maximumUnseen": 2
+            },
+            {
+              "tile": "9p",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "1s",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "2s",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "3s",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "4s",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "5s",
+              "maximumUnseen": 2
+            },
+            {
+              "tile": "6s",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "7s",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "8s",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "9s",
+              "maximumUnseen": 3
+            }
+          ],
+          "maximumUnseenTotal": 58,
+          "positions": [
+            {
+              "index": 3,
+              "rect": {
+                "x": 507,
+                "y": 921,
+                "width": 93,
+                "height": 151
+              },
+              "point": {
+                "x": 553.5,
+                "y": 996.5
+              }
+            }
+          ]
+        },
+        {
+          "tile": "8p",
+          "shanten": 2,
+          "form": "standard",
+          "improvingDraws": [
+            {
+              "tile": "1p",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "2p",
+              "maximumUnseen": 2
+            },
+            {
+              "tile": "3p",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "4p",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "6p",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "9p",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "1s",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "2s",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "3s",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "4s",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "5s",
+              "maximumUnseen": 2
+            },
+            {
+              "tile": "6s",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "7s",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "8s",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "9s",
+              "maximumUnseen": 3
+            }
+          ],
+          "maximumUnseenTotal": 49,
+          "positions": [
+            {
+              "index": 4,
+              "rect": {
+                "x": 602,
+                "y": 921,
+                "width": 92,
+                "height": 151
+              },
+              "point": {
+                "x": 648,
+                "y": 996.5
+              }
+            },
+            {
+              "index": 5,
+              "rect": {
+                "x": 697,
+                "y": 921,
+                "width": 92,
+                "height": 151
+              },
+              "point": {
+                "x": 743,
+                "y": 996.5
+              }
+            }
+          ]
+        },
+        {
+          "tile": "1s",
+          "shanten": 2,
+          "form": "standard",
+          "improvingDraws": [
+            {
+              "tile": "1p",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "2p",
+              "maximumUnseen": 2
+            },
+            {
+              "tile": "3p",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "4p",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "5p",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "6p",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "7p",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "8p",
+              "maximumUnseen": 2
+            },
+            {
+              "tile": "9p",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "5s",
+              "maximumUnseen": 2
+            },
+            {
+              "tile": "7s",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "8s",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "9s",
+              "maximumUnseen": 3
+            }
+          ],
+          "maximumUnseenTotal": 42,
+          "positions": [
+            {
+              "index": 6,
+              "rect": {
+                "x": 792,
+                "y": 921,
+                "width": 92,
+                "height": 151
+              },
+              "point": {
+                "x": 838,
+                "y": 996.5
+              }
+            }
+          ]
+        },
+        {
+          "tile": "2s",
+          "shanten": 3,
+          "form": "standard",
+          "improvingDraws": [
+            {
+              "tile": "1p",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "2p",
+              "maximumUnseen": 2
+            },
+            {
+              "tile": "3p",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "4p",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "5p",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "6p",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "7p",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "8p",
+              "maximumUnseen": 2
+            },
+            {
+              "tile": "9p",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "1s",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "2s",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "3s",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "4s",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "5s",
+              "maximumUnseen": 2
+            },
+            {
+              "tile": "6s",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "7s",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "8s",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "9s",
+              "maximumUnseen": 3
+            }
+          ],
+          "maximumUnseenTotal": 58,
+          "positions": [
+            {
+              "index": 7,
+              "rect": {
+                "x": 887,
+                "y": 921,
+                "width": 92,
+                "height": 151
+              },
+              "point": {
+                "x": 933,
+                "y": 996.5
+              }
+            }
+          ]
+        },
+        {
+          "tile": "3s",
+          "shanten": 3,
+          "form": "standard",
+          "improvingDraws": [
+            {
+              "tile": "1p",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "2p",
+              "maximumUnseen": 2
+            },
+            {
+              "tile": "3p",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "4p",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "5p",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "6p",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "7p",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "8p",
+              "maximumUnseen": 2
+            },
+            {
+              "tile": "9p",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "1s",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "2s",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "3s",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "4s",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "5s",
+              "maximumUnseen": 2
+            },
+            {
+              "tile": "6s",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "7s",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "8s",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "9s",
+              "maximumUnseen": 3
+            }
+          ],
+          "maximumUnseenTotal": 58,
+          "positions": [
+            {
+              "index": 8,
+              "rect": {
+                "x": 981,
+                "y": 921,
+                "width": 93,
+                "height": 151
+              },
+              "point": {
+                "x": 1027.5,
+                "y": 996.5
+              }
+            }
+          ]
+        },
+        {
+          "tile": "4s",
+          "shanten": 2,
+          "form": "standard",
+          "improvingDraws": [
+            {
+              "tile": "1p",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "2p",
+              "maximumUnseen": 2
+            },
+            {
+              "tile": "3p",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "4p",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "5p",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "6p",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "7p",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "8p",
+              "maximumUnseen": 2
+            },
+            {
+              "tile": "9p",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "5s",
+              "maximumUnseen": 2
+            },
+            {
+              "tile": "7s",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "8s",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "9s",
+              "maximumUnseen": 3
+            }
+          ],
+          "maximumUnseenTotal": 42,
+          "positions": [
+            {
+              "index": 9,
+              "rect": {
+                "x": 1076,
+                "y": 921,
+                "width": 93,
+                "height": 151
+              },
+              "point": {
+                "x": 1122.5,
+                "y": 996.5
+              }
+            }
+          ]
+        },
+        {
+          "tile": "5s",
+          "shanten": 2,
+          "form": "standard",
+          "improvingDraws": [
+            {
+              "tile": "1p",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "2p",
+              "maximumUnseen": 2
+            },
+            {
+              "tile": "3p",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "4p",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "5p",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "6p",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "7p",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "8p",
+              "maximumUnseen": 2
+            },
+            {
+              "tile": "9p",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "3s",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "6s",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "7s",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "8s",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "9s",
+              "maximumUnseen": 3
+            }
+          ],
+          "maximumUnseenTotal": 47,
+          "positions": [
+            {
+              "index": 10,
+              "rect": {
+                "x": 1171,
+                "y": 921,
+                "width": 93,
+                "height": 151
+              },
+              "point": {
+                "x": 1217.5,
+                "y": 996.5
+              }
+            },
+            {
+              "index": 11,
+              "rect": {
+                "x": 1266,
+                "y": 921,
+                "width": 93,
+                "height": 151
+              },
+              "point": {
+                "x": 1312.5,
+                "y": 996.5
+              }
+            }
+          ]
+        },
+        {
+          "tile": "9s",
+          "shanten": 2,
+          "form": "standard",
+          "improvingDraws": [
+            {
+              "tile": "1p",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "2p",
+              "maximumUnseen": 2
+            },
+            {
+              "tile": "3p",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "4p",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "5p",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "6p",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "7p",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "8p",
+              "maximumUnseen": 2
+            },
+            {
+              "tile": "9p",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "1s",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "2s",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "3s",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "4s",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "5s",
+              "maximumUnseen": 2
+            },
+            {
+              "tile": "6s",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "7s",
+              "maximumUnseen": 4
+            }
+          ],
+          "maximumUnseenTotal": 51,
+          "positions": [
+            {
+              "index": 12,
+              "rect": {
+                "x": 1361,
+                "y": 921,
+                "width": 92,
+                "height": 151
+              },
+              "point": {
+                "x": 1407,
+                "y": 996.5
+              }
+            }
+          ]
+        },
+        {
+          "tile": "7p",
+          "shanten": 2,
+          "form": "standard",
+          "improvingDraws": [
+            {
+              "tile": "1p",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "2p",
+              "maximumUnseen": 2
+            },
+            {
+              "tile": "3p",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "4p",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "8p",
+              "maximumUnseen": 2
+            },
+            {
+              "tile": "1s",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "2s",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "3s",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "4s",
+              "maximumUnseen": 3
+            },
+            {
+              "tile": "5s",
+              "maximumUnseen": 2
+            },
+            {
+              "tile": "6s",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "7s",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "8s",
+              "maximumUnseen": 4
+            },
+            {
+              "tile": "9s",
+              "maximumUnseen": 3
+            }
+          ],
+          "maximumUnseenTotal": 43,
+          "positions": [
+            {
+              "index": 13,
+              "rect": {
+                "x": 1486,
+                "y": 921,
+                "width": 92,
+                "height": 151
+              },
+              "point": {
+                "x": 1532,
+                "y": 996.5
+              }
+            }
+          ]
+        }
+      ],
+      "reason": "unverified hand, meld count, turn and action priority; visible tiles and danger unknown",
+      "assumptions": [
+        "recognized tile labels and candidate meld count are correct",
+        "draw totals are upper bounds from hand-only counts, not live or observed tile counts"
+      ],
+      "positionCalibrationRequired": true
+    }
+  },
+  "freshness": {
+    "status": "identical_pixels_candidate",
+    "operationAuthorized": false,
+    "elapsedMs": 3208,
+    "regionsChanged": {
+      "hand": false,
+      "actions": false,
+      "fullFrame": false
+    },
+    "clockChanged": false,
+    "digest": "f5a365217f1253373b5e96a60bc50539d492ca07d8906a895c965d13f05788b4",
+    "reason": "visible pixel stability does not verify turn, state, or action; clock area unobserved"
+  }
+}
