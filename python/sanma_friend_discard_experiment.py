@@ -240,14 +240,15 @@ def execute_friend_draw_candidate(operator, page, receipt):
     defensive = (friend_genbutsu_candidate(source, receipt['digest'], threats, tiles, hand_value.get('matches'))
                  if threats and isinstance(tiles, list) and isinstance(points, list) and len(points) == len(tiles) else None)
     if defensive is not None and defensive['index'] != draw.get('index'):
-        from sanma_friend_shape_candidate import friend_hand_click_geometry
+        from sanma_friend_shape_candidate import friend_hand_click_geometry, friend_clear_riichi_rail
         calibrated = operator.layout if isinstance(operator.layout,dict) else {}
         hand_slots = [*geo_value.get('handSlots', []),geo_value.get('drawSlot')]
         if (calibrated.get('handSlots') != geo_value.get('handSlots')
                 or calibrated.get('drawSlot') != geo_value.get('drawSlot')
                 or calibrated.get('clickPoints') != points
                 or not friend_hand_click_geometry(hand_slots,points)
-                or getattr(operator, 'sanma_friend_riichi_attempted', False) is not False):
+                or getattr(operator, 'sanma_friend_riichi_attempted', False) is not False
+                or not friend_clear_riichi_rail(baseline)):
             defensive = None
     if ((hand_value.get("safe") is not True and white_candidates is None and not draw_only and defensive is None) or hand_value.get("turnReady") is not True
             or not isinstance(row_slots, list) or len(row_slots) != 3

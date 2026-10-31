@@ -61,6 +61,19 @@ def friend_hand_click_geometry(slots, points):
     except (TypeError,KeyError,ValueError,IndexError):return False
 
 
+def friend_clear_riichi_rail(frame):
+    """Visible empty rail candidate; not proof of riichi status or history."""
+    import io
+    from pathlib import Path
+    from PIL import Image, ImageChops, ImageStat
+    try:
+        with Image.open(io.BytesIO(frame)) as source, Image.open(Path(__file__).parent/'fixtures/sanma-dd-no-riichi-rail.png') as reference:
+            if source.size!=(1920,1080) or reference.size!=(160,15):return False
+            diff=ImageChops.difference(source.convert('RGB').crop((875,516,1035,531)),reference.convert('RGB'))
+            return max(v[1] for v in diff.getextrema())<=12 and max(ImageStat.Stat(diff).mean)<=5
+    except (TypeError,ValueError,OSError):return False
+
+
 def friend_non_riichi_hypothesis(frame, hand):
     """Friend-only visual hypothesis; the unobserved past remains unknown."""
     import io
@@ -76,9 +89,5 @@ def friend_non_riichi_hypothesis(frame, hand):
                        for t,m in zip(tiles,matches))
                 or any(type(p) not in (int,float) or not math.isfinite(p) or p<.74 for p in presence)):
             return False
-        with Image.open(io.BytesIO(frame)) as source, Image.open(Path(__file__).parent/'fixtures/sanma-dd-no-riichi-rail.png') as reference:
-            if source.size!=(1920,1080) or reference.size!=(160,15):return False
-            diff=ImageChops.difference(source.convert('RGB').crop((875,516,1035,531)),reference.convert('RGB'))
-            if max(v[1] for v in diff.getextrema())>12 or max(ImageStat.Stat(diff).mean)>5:return False
-        return True
+        return friend_clear_riichi_rail(frame)
     except (KeyError,TypeError,ValueError,OSError):return False

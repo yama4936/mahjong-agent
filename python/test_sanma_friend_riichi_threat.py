@@ -133,7 +133,24 @@ class ResidentRiverCandidateTests(unittest.TestCase):
        action=execute_friend_draw_candidate(op,page,receipt)
       self.assertEqual((action['tile'],action['clickIndex']),('8p',4))
       self.assertEqual(action['result'],'discard_not_verified');send.assert_called_once()
+      # A previously declared riichi may be visible without this operator
+      # having attempted it. Keep all evidence bound to the modified frame.
       import copy
+      original=Image.open(io.BytesIO(page.screenshot.return_value)).convert('RGB')
+      rail=Image.open('/home/yama1/.codex/sanma-run-d0ff500-20261031/manual-48-after.png').convert('RGB')
+      original.paste(rail.crop((875,516,1035,531)),(875,516))
+      out=io.BytesIO();original.save(out,format='PNG');frame=out.getvalue()
+      bad=copy.deepcopy(receipt);digest=hashlib.sha256(frame).hexdigest()
+      path=Path(d)/'own-riichi.png';path.write_bytes(frame);bad['screenshot']=str(path);bad['digest']=digest
+      bad['drawCandidate']['digest']=digest;bad['sourceObservation']['digest']=digest
+      bad['sourceObservation']['report']['digest']=digest
+      for side in ('left','right'):
+       if isinstance(bad['sourceObservation'].get(side+'River'),dict):bad['sourceObservation'][side+'River']['frameSha256']=digest
+      op._sanma_friend_attempted_targets=set();page.screenshot.return_value=frame
+      with patch('sanma_friend_discard_experiment.send_discard_click') as send:
+       with self.assertRaisesRegex(ValueError,'unsafe hand'):execute_friend_draw_candidate(op,page,bad)
+       send.assert_not_called()
+      page.screenshot.return_value=(ROOT/f'manual-{number:02}-before.png').read_bytes()
       op._sanma_friend_attempted_targets=set()
       op.layout=copy.deepcopy(op.layout);op.layout['clickPoints'][4]['x']+=10
       with patch('sanma_friend_discard_experiment.send_discard_click') as send:
