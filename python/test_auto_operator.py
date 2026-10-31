@@ -5109,11 +5109,13 @@ class AwayDialogDetectionTest(unittest.TestCase):
             operator.evaluator_env = {}
             page = Mock()
             page.screenshot.return_value = b"image"
-            evaluation = {"decision": {"executable": True}, "recognition": {"tiles": ["1m"], "safe": True}}
+            evaluation = {"decision": {"executable": True, "selectedAction": {"action": "discard", "tile": "1m"}},
+                          "recognition": {"tiles": ["1m"], "safe": True}}
             for fresh in ({"safe": True, "tiles": ["2m"]}, {"safe": False, "tiles": ["1m"]}):
-                with patch("auto_operator.subprocess.run", return_value=argparse.Namespace(returncode=0, stdout=json.dumps(fresh))):
+                with patch("auto_operator.subprocess.run", return_value=argparse.Namespace(returncode=0, stdout=json.dumps(fresh))) as run:
                     with self.assertRaisesRegex(RuntimeError, "disagrees"):
                         operator.execute(page, evaluation)
+                run.assert_called_once()
                 page.mouse.click.assert_not_called()
 
     def test_force_auto_rejects_a_hand_that_changed_since_evaluation_without_rerecognition(self) -> None:
