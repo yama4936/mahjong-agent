@@ -1,0 +1,1701 @@
+{
+  "scope": "offline_untrusted_sanma_auto_observation",
+  "digest": "842459f74a7f356411e6c95af04c4d76d1a1145084831a4789b3a7be4d79d71f",
+  "report": {
+    "scope": "offline_untrusted_sanma_frame",
+    "digest": "842459f74a7f356411e6c95af04c4d76d1a1145084831a4789b3a7be4d79d71f",
+    "hand": {
+      "status": "candidate",
+      "value": {
+        "tiles": [
+          "9m",
+          "2p",
+          "6p",
+          "7p",
+          "7p",
+          "8p",
+          "9p",
+          "1s",
+          "4s",
+          "6s",
+          "8s",
+          "S",
+          "W",
+          "S"
+        ],
+        "matches": [
+          {
+            "tile": "9m",
+            "confidence": 0.9597271084397002,
+            "runnerUpConfidence": 0.7713226861191397
+          },
+          {
+            "tile": "2p",
+            "confidence": 0.9861749050261858,
+            "runnerUpConfidence": 0.6324422999876834
+          },
+          {
+            "tile": "6p",
+            "confidence": 0.9790152440292639,
+            "runnerUpConfidence": 0.7442020651395671
+          },
+          {
+            "tile": "7p",
+            "confidence": 0.9915720161676891,
+            "runnerUpConfidence": 0.7254479881825475
+          },
+          {
+            "tile": "7p",
+            "confidence": 0.9954930107108693,
+            "runnerUpConfidence": 0.7232581134370688
+          },
+          {
+            "tile": "8p",
+            "confidence": 0.992262819716818,
+            "runnerUpConfidence": 0.7308152430723477
+          },
+          {
+            "tile": "9p",
+            "confidence": 0.9758161398154522,
+            "runnerUpConfidence": 0.38458629369700714
+          },
+          {
+            "tile": "1s",
+            "confidence": 0.9906248822181252,
+            "runnerUpConfidence": 0.6138467326224544
+          },
+          {
+            "tile": "4s",
+            "confidence": 0.9707412996835901,
+            "runnerUpConfidence": 0.5419937837122967
+          },
+          {
+            "tile": "6s",
+            "confidence": 0.9657050203899158,
+            "runnerUpConfidence": 0.74474732284373
+          },
+          {
+            "tile": "8s",
+            "confidence": 0.9882595731805071,
+            "runnerUpConfidence": 0.6870800688451396
+          },
+          {
+            "tile": "S",
+            "confidence": 0.9990277191363953,
+            "runnerUpConfidence": 0.6134782369111921
+          },
+          {
+            "tile": "W",
+            "confidence": 0.9996560278370038,
+            "runnerUpConfidence": 0.5645458132237077
+          },
+          {
+            "tile": "S",
+            "confidence": 0.9917359974053978,
+            "runnerUpConfidence": 0.629294130317592
+          }
+        ],
+        "confidence": 0.9597271084397002,
+        "ambiguityMargin": 0.18840442232056054,
+        "presenceFractions": [
+          0.855024474517708,
+          0.8359324930570391,
+          0.7954852951648508,
+          0.7803175959552802,
+          0.7797293406276994,
+          0.7435934350705442,
+          0.745249064209617,
+          0.856608119781169,
+          0.8532364879299295,
+          0.7984761090934985,
+          0.8035320088300221,
+          0.8268888414156519,
+          0.8475381514540743,
+          0.8263748920241866
+        ],
+        "safe": false,
+        "turnReady": true,
+        "slotClassificationSafe": false,
+        "candidateMelds": 0
+      }
+    },
+    "handGeometry": {
+      "status": "candidate",
+      "value": {
+        "viewport": {
+          "width": 1920,
+          "height": 1080
+        },
+        "handSlots": [
+          {
+            "x": 223,
+            "y": 921,
+            "width": 92,
+            "height": 151
+          },
+          {
+            "x": 317,
+            "y": 921,
+            "width": 93,
+            "height": 151
+          },
+          {
+            "x": 412,
+            "y": 921,
+            "width": 93,
+            "height": 151
+          },
+          {
+            "x": 507,
+            "y": 921,
+            "width": 93,
+            "height": 151
+          },
+          {
+            "x": 602,
+            "y": 921,
+            "width": 92,
+            "height": 151
+          },
+          {
+            "x": 697,
+            "y": 921,
+            "width": 92,
+            "height": 151
+          },
+          {
+            "x": 792,
+            "y": 921,
+            "width": 92,
+            "height": 151
+          },
+          {
+            "x": 887,
+            "y": 921,
+            "width": 92,
+            "height": 151
+          },
+          {
+            "x": 981,
+            "y": 921,
+            "width": 93,
+            "height": 151
+          },
+          {
+            "x": 1076,
+            "y": 921,
+            "width": 93,
+            "height": 151
+          },
+          {
+            "x": 1171,
+            "y": 921,
+            "width": 93,
+            "height": 151
+          },
+          {
+            "x": 1266,
+            "y": 921,
+            "width": 93,
+            "height": 151
+          },
+          {
+            "x": 1361,
+            "y": 921,
+            "width": 92,
+            "height": 151
+          }
+        ],
+        "drawSlot": {
+          "x": 1486,
+          "y": 921,
+          "width": 92,
+          "height": 151
+        },
+        "clickPoints": [
+          {
+            "x": 269,
+            "y": 996.5
+          },
+          {
+            "x": 363.5,
+            "y": 996.5
+          },
+          {
+            "x": 458.5,
+            "y": 996.5
+          },
+          {
+            "x": 553.5,
+            "y": 996.5
+          },
+          {
+            "x": 648,
+            "y": 996.5
+          },
+          {
+            "x": 743,
+            "y": 996.5
+          },
+          {
+            "x": 838,
+            "y": 996.5
+          },
+          {
+            "x": 933,
+            "y": 996.5
+          },
+          {
+            "x": 1027.5,
+            "y": 996.5
+          },
+          {
+            "x": 1122.5,
+            "y": 996.5
+          },
+          {
+            "x": 1217.5,
+            "y": 996.5
+          },
+          {
+            "x": 1312.5,
+            "y": 996.5
+          },
+          {
+            "x": 1407,
+            "y": 996.5
+          },
+          {
+            "x": 1532,
+            "y": 996.5
+          }
+        ],
+        "evidence": {
+          "detectedTiles": 14,
+          "luminanceThreshold": 120,
+          "medianWidth": 92.5,
+          "medianHeight": 151,
+          "medianGap": 2,
+          "drawGap": 33,
+          "rowBottomSpread": 0
+        },
+        "confidence": 0.99,
+        "requiresHoldoutValidation": true
+      }
+    },
+    "buttonRow": {
+      "status": "candidate",
+      "value": {
+        "scope": "offline_untrusted_sanma_button_row",
+        "slots": [
+          {
+            "status": "empty_candidate",
+            "slot": 0,
+            "confidence": 0.9999157475490196
+          },
+          {
+            "status": "empty_candidate",
+            "slot": 1,
+            "confidence": 0.9999795751633986
+          },
+          {
+            "status": "unresolved",
+            "slot": 2,
+            "reason": "unknown, obscured, animated, or ambiguous slot"
+          }
+        ],
+        "complete": false,
+        "operationAuthorized": false
+      }
+    },
+    "operationAuthorized": false
+  },
+  "structuralPositions": {
+    "status": "blocked",
+    "digest": "842459f74a7f356411e6c95af04c4d76d1a1145084831a4789b3a7be4d79d71f",
+    "operationAuthorized": false,
+    "candidates": [
+      {
+        "tile": "9m",
+        "shanten": 3,
+        "form": "standard",
+        "improvingDraws": [
+          {
+            "tile": "1p",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "2p",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "3p",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "4p",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "5p",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "8p",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "1s",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "2s",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "3s",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "4s",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "5s",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "6s",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "7s",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "8s",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "9s",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "S",
+            "maximumUnseen": 2,
+            "maximumUnseenIfObservedTilesCorrect": 2
+          },
+          {
+            "tile": "W",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 2
+          }
+        ],
+        "maximumUnseenTotal": 59,
+        "maximumUnseenTotalIfObservedTilesCorrect": 57,
+        "positions": [
+          {
+            "index": 0,
+            "rect": {
+              "x": 223,
+              "y": 921,
+              "width": 92,
+              "height": 151
+            },
+            "point": {
+              "x": 269,
+              "y": 996.5
+            }
+          }
+        ]
+      },
+      {
+        "tile": "2p",
+        "shanten": 3,
+        "form": "standard",
+        "improvingDraws": [
+          {
+            "tile": "9m",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "5p",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "8p",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "1s",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "2s",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "3s",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "4s",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "5s",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "6s",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "7s",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "8s",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "9s",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "S",
+            "maximumUnseen": 2,
+            "maximumUnseenIfObservedTilesCorrect": 2
+          },
+          {
+            "tile": "W",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 2
+          }
+        ],
+        "maximumUnseenTotal": 47,
+        "maximumUnseenTotalIfObservedTilesCorrect": 46,
+        "positions": [
+          {
+            "index": 1,
+            "rect": {
+              "x": 317,
+              "y": 921,
+              "width": 93,
+              "height": 151
+            },
+            "point": {
+              "x": 363.5,
+              "y": 996.5
+            }
+          }
+        ]
+      },
+      {
+        "tile": "6p",
+        "shanten": 4,
+        "form": "standard",
+        "improvingDraws": [
+          {
+            "tile": "9m",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "1p",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "2p",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "3p",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "4p",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "5p",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "6p",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "7p",
+            "maximumUnseen": 2,
+            "maximumUnseenIfObservedTilesCorrect": 2
+          },
+          {
+            "tile": "8p",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "9p",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "1s",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "2s",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "3s",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "4s",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "5s",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "6s",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "7s",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "8s",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "9s",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "S",
+            "maximumUnseen": 2,
+            "maximumUnseenIfObservedTilesCorrect": 2
+          },
+          {
+            "tile": "W",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 2
+          }
+        ],
+        "maximumUnseenTotal": 70,
+        "maximumUnseenTotalIfObservedTilesCorrect": 68,
+        "positions": [
+          {
+            "index": 2,
+            "rect": {
+              "x": 412,
+              "y": 921,
+              "width": 93,
+              "height": 151
+            },
+            "point": {
+              "x": 458.5,
+              "y": 996.5
+            }
+          }
+        ]
+      },
+      {
+        "tile": "7p",
+        "shanten": 4,
+        "form": "standard",
+        "improvingDraws": [
+          {
+            "tile": "9m",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "1p",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "2p",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "3p",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "4p",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "5p",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "6p",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "7p",
+            "maximumUnseen": 2,
+            "maximumUnseenIfObservedTilesCorrect": 2
+          },
+          {
+            "tile": "8p",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "9p",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "1s",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "2s",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "3s",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "4s",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "5s",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "6s",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "7s",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "8s",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "9s",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "S",
+            "maximumUnseen": 2,
+            "maximumUnseenIfObservedTilesCorrect": 2
+          },
+          {
+            "tile": "W",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 2
+          }
+        ],
+        "maximumUnseenTotal": 70,
+        "maximumUnseenTotalIfObservedTilesCorrect": 68,
+        "positions": [
+          {
+            "index": 3,
+            "rect": {
+              "x": 507,
+              "y": 921,
+              "width": 93,
+              "height": 151
+            },
+            "point": {
+              "x": 553.5,
+              "y": 996.5
+            }
+          },
+          {
+            "index": 4,
+            "rect": {
+              "x": 602,
+              "y": 921,
+              "width": 92,
+              "height": 151
+            },
+            "point": {
+              "x": 648,
+              "y": 996.5
+            }
+          }
+        ]
+      },
+      {
+        "tile": "8p",
+        "shanten": 4,
+        "form": "standard",
+        "improvingDraws": [
+          {
+            "tile": "9m",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "1p",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "2p",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "3p",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "4p",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "5p",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "6p",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "8p",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "9p",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "1s",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "2s",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "3s",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "4s",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "5s",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "6s",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "7s",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "8s",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "9s",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "S",
+            "maximumUnseen": 2,
+            "maximumUnseenIfObservedTilesCorrect": 2
+          },
+          {
+            "tile": "W",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 2
+          }
+        ],
+        "maximumUnseenTotal": 68,
+        "maximumUnseenTotalIfObservedTilesCorrect": 66,
+        "positions": [
+          {
+            "index": 5,
+            "rect": {
+              "x": 697,
+              "y": 921,
+              "width": 92,
+              "height": 151
+            },
+            "point": {
+              "x": 743,
+              "y": 996.5
+            }
+          }
+        ]
+      },
+      {
+        "tile": "9p",
+        "shanten": 4,
+        "form": "standard",
+        "improvingDraws": [
+          {
+            "tile": "9m",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "1p",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "2p",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "3p",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "4p",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "5p",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "6p",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "7p",
+            "maximumUnseen": 2,
+            "maximumUnseenIfObservedTilesCorrect": 2
+          },
+          {
+            "tile": "8p",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "9p",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "1s",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "2s",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "3s",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "4s",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "5s",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "6s",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "7s",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "8s",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "9s",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "S",
+            "maximumUnseen": 2,
+            "maximumUnseenIfObservedTilesCorrect": 2
+          },
+          {
+            "tile": "W",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 2
+          }
+        ],
+        "maximumUnseenTotal": 70,
+        "maximumUnseenTotalIfObservedTilesCorrect": 68,
+        "positions": [
+          {
+            "index": 6,
+            "rect": {
+              "x": 792,
+              "y": 921,
+              "width": 92,
+              "height": 151
+            },
+            "point": {
+              "x": 838,
+              "y": 996.5
+            }
+          }
+        ]
+      },
+      {
+        "tile": "1s",
+        "shanten": 3,
+        "form": "standard",
+        "improvingDraws": [
+          {
+            "tile": "9m",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "1p",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "2p",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "3p",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "4p",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "5p",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "8p",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "2s",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "3s",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "4s",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "5s",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "6s",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "7s",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "8s",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "9s",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "S",
+            "maximumUnseen": 2,
+            "maximumUnseenIfObservedTilesCorrect": 2
+          },
+          {
+            "tile": "W",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 2
+          }
+        ],
+        "maximumUnseenTotal": 59,
+        "maximumUnseenTotalIfObservedTilesCorrect": 57,
+        "positions": [
+          {
+            "index": 7,
+            "rect": {
+              "x": 887,
+              "y": 921,
+              "width": 92,
+              "height": 151
+            },
+            "point": {
+              "x": 933,
+              "y": 996.5
+            }
+          }
+        ]
+      },
+      {
+        "tile": "4s",
+        "shanten": 3,
+        "form": "standard",
+        "improvingDraws": [
+          {
+            "tile": "9m",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "1p",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "2p",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "3p",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "4p",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "5p",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "8p",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "1s",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "2s",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "3s",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "7s",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "S",
+            "maximumUnseen": 2,
+            "maximumUnseenIfObservedTilesCorrect": 2
+          },
+          {
+            "tile": "W",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 2
+          }
+        ],
+        "maximumUnseenTotal": 45,
+        "maximumUnseenTotalIfObservedTilesCorrect": 43,
+        "positions": [
+          {
+            "index": 8,
+            "rect": {
+              "x": 981,
+              "y": 921,
+              "width": 93,
+              "height": 151
+            },
+            "point": {
+              "x": 1027.5,
+              "y": 996.5
+            }
+          }
+        ]
+      },
+      {
+        "tile": "6s",
+        "shanten": 4,
+        "form": "standard",
+        "improvingDraws": [
+          {
+            "tile": "9m",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "1p",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "2p",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "3p",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "4p",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "5p",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "6p",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "8p",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "9p",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "1s",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "2s",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "3s",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "4s",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "5s",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "6s",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "7s",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "8s",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "9s",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "S",
+            "maximumUnseen": 2,
+            "maximumUnseenIfObservedTilesCorrect": 2
+          },
+          {
+            "tile": "W",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 2
+          }
+        ],
+        "maximumUnseenTotal": 68,
+        "maximumUnseenTotalIfObservedTilesCorrect": 66,
+        "positions": [
+          {
+            "index": 9,
+            "rect": {
+              "x": 1076,
+              "y": 921,
+              "width": 93,
+              "height": 151
+            },
+            "point": {
+              "x": 1122.5,
+              "y": 996.5
+            }
+          }
+        ]
+      },
+      {
+        "tile": "8s",
+        "shanten": 3,
+        "form": "standard",
+        "improvingDraws": [
+          {
+            "tile": "9m",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "1p",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "2p",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "3p",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "4p",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "5p",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "8p",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "1s",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "2s",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "3s",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "5s",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "S",
+            "maximumUnseen": 2,
+            "maximumUnseenIfObservedTilesCorrect": 2
+          },
+          {
+            "tile": "W",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 2
+          }
+        ],
+        "maximumUnseenTotal": 45,
+        "maximumUnseenTotalIfObservedTilesCorrect": 43,
+        "positions": [
+          {
+            "index": 10,
+            "rect": {
+              "x": 1171,
+              "y": 921,
+              "width": 93,
+              "height": 151
+            },
+            "point": {
+              "x": 1217.5,
+              "y": 996.5
+            }
+          }
+        ]
+      },
+      {
+        "tile": "S",
+        "shanten": 4,
+        "form": "standard",
+        "improvingDraws": [
+          {
+            "tile": "9m",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "1p",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "2p",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "3p",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "4p",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "5p",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "8p",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "1s",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "2s",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "3s",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "4s",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "5s",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "6s",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "7s",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "8s",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "9s",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "S",
+            "maximumUnseen": 2,
+            "maximumUnseenIfObservedTilesCorrect": 2
+          },
+          {
+            "tile": "W",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 2
+          }
+        ],
+        "maximumUnseenTotal": 62,
+        "maximumUnseenTotalIfObservedTilesCorrect": 60,
+        "positions": [
+          {
+            "index": 11,
+            "rect": {
+              "x": 1266,
+              "y": 921,
+              "width": 93,
+              "height": 151
+            },
+            "point": {
+              "x": 1312.5,
+              "y": 996.5
+            }
+          },
+          {
+            "index": 13,
+            "rect": {
+              "x": 1486,
+              "y": 921,
+              "width": 92,
+              "height": 151
+            },
+            "point": {
+              "x": 1532,
+              "y": 996.5
+            }
+          }
+        ]
+      },
+      {
+        "tile": "W",
+        "shanten": 3,
+        "form": "standard",
+        "improvingDraws": [
+          {
+            "tile": "9m",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "1p",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "2p",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "3p",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "4p",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "5p",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "8p",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "1s",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "2s",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "3s",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "4s",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "5s",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "6s",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "7s",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "8s",
+            "maximumUnseen": 3,
+            "maximumUnseenIfObservedTilesCorrect": 3
+          },
+          {
+            "tile": "9s",
+            "maximumUnseen": 4,
+            "maximumUnseenIfObservedTilesCorrect": 4
+          },
+          {
+            "tile": "S",
+            "maximumUnseen": 2,
+            "maximumUnseenIfObservedTilesCorrect": 2
+          }
+        ],
+        "maximumUnseenTotal": 59,
+        "maximumUnseenTotalIfObservedTilesCorrect": 58,
+        "positions": [
+          {
+            "index": 12,
+            "rect": {
+              "x": 1361,
+              "y": 921,
+              "width": 92,
+              "height": 151
+            },
+            "point": {
+              "x": 1407,
+              "y": 996.5
+            }
+          }
+        ]
+      }
+    ],
+    "reason": "unverified hand, meld count, turn and action priority; visible tiles and danger unknown",
+    "assumptions": [
+      "recognized tile labels and candidate meld count are correct",
+      "draw totals are upper bounds from hand-only counts, not live or observed tile counts"
+    ],
+    "positionCalibrationRequired": true
+  },
+  "operationAuthorized": false
+}

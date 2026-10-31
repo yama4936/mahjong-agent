@@ -32,6 +32,49 @@ class PortableFullVisibleEmptyRowTest(unittest.TestCase):
             with self.subTest(right_only=path.name):
                 self.assertFalse(friend_visible_full_empty_row_candidate(out.getvalue(),SLOTS))
 
+    def test_redacted_fixture_produces_hand_discard_candidate_and_binds_hash(self):
+        fixture=Path('python/fixtures/sanma-full-empty-row')
+        image_path=fixture/'redacted-hand-row.png'
+        data=json.loads((fixture/'receipt.json').read_text())
+        digest=hashlib.sha256(image_path.read_bytes()).hexdigest()
+        self.assertEqual(data['digest'],digest)
+        self.assertEqual(data['report']['digest'],digest)
+        self.assertEqual(data['structuralPositions']['digest'],digest)
+        hand=data['report']['hand']['value'];geo=data['report']['handGeometry']['value']
+        receipt={'scope':'sanma_self_turn_observation','digest':digest,'screenshot':str(image_path),
+                 'sourceObservation':data,'structuralPositions':data['structuralPositions'],
+                 'drawCandidate':{'status':'candidate','digest':digest,'index':13,'tile':hand['tiles'][13],'point':geo['clickPoints'][13]},
+                 'freshness':{'status':'identical_pixels_candidate'}}
+        args=SimpleNamespace(experimental_sanma_friend=True,rules='sanma',mode='force-auto',action_deadline_ms=300000,ranked_loop=False)
+        layout=json.loads(Path('config/layout-runtime.json').read_text())
+        op=SimpleNamespace(args=args,verified_friend_300_active=True,layout=layout,sanma_friend_riichi_attempted=False,frames=fixture,log=Mock())
+        with patch('sanma_friend_discard_experiment.friend_opponent_riichi_candidates',return_value=[]), \
+             patch('sanma_friend_discard_experiment.execute_friend_discard',return_value={'confirmation':'unknown'}) as execute:
+            execute_friend_draw_candidate(op,Mock(),receipt)
+            plan=execute.call_args.kwargs['plan']
+            self.assertEqual((plan['tile'],plan['clickIndex']),('1s',7))
+            self.assertNotEqual(plan['clickIndex'],receipt['drawCandidate']['index'])
+            self.assertFalse(plan['operationAuthorized'])
+            receipt['sourceObservation']={**data,'digest':'0'*64}
+            with self.assertRaisesRegex(ValueError,'unavailable'):
+                execute_friend_draw_candidate(op,Mock(),receipt)
+            self.assertEqual(execute.call_count,1)
+            receipt['sourceObservation']=data
+            receipt['structuralPositions']={**data['structuralPositions'],'digest':'0'*64}
+            execute_friend_draw_candidate(op,Mock(),receipt)
+            # A mismatched structural receipt must never produce a shape hand-discard.
+            self.assertEqual(execute.call_args.kwargs['plan']['clickIndex'],13)
+
+    def test_redacted_fixture_obscured_buttons_rejected(self):
+        path=Path('python/fixtures/sanma-full-empty-row/redacted-hand-row.png')
+        for button in ('kita','riichi','pon-kan','tsumo'):
+            image=Image.open(path).convert('RGB');row=Image.open(f'test/fixtures/sanma-button-rows/{button}.png').convert('RGB')
+            image.paste(row,(600,785));out=io.BytesIO();image.save(out,format='PNG')
+            with self.subTest(button=button):self.assertFalse(friend_visible_full_empty_row_candidate(out.getvalue(),SLOTS))
+        image=Image.open(path).convert('RGB');ImageDraw.Draw(image).rectangle((1320,785,1424,874),fill='black')
+        out=io.BytesIO();image.save(out,format='PNG')
+        self.assertFalse(friend_visible_full_empty_row_candidate(out.getvalue(),SLOTS))
+
     def test_uncertain_left_slots_and_wrong_size_rejected(self):
         out=io.BytesIO();Image.new('RGB',(16,16)).save(out,format='PNG')
         self.assertFalse(friend_visible_full_empty_row_candidate(out.getvalue(),SLOTS))
