@@ -1,0 +1,9 @@
+# Friend-only north extraction: wall color guard
+
+The unverified lighting-tolerant north-extraction comparison also checks color in the fixed 1920×1080 rectangle (150,80)-(390,700), covering the left wall. It is an additional veto: the existing hand, action row, other regions and pre-click checks remain required. It is not a general wall observer and does not prove that tiles or state are unchanged.
+
+For each pixel the guard compares `(R-G, B-G)` before and after, taking the larger absolute difference. It rejects if the whole region's mean exceeds 1 or any 8×8 block's mean exceeds 24. These thresholds are provisional, derived from five pairs of the single 7e79853 recovery sequence and checked against the existing three saved friend-match lighting pairs; they are not calibrated across all boards or devices. False rejection is possible. Small or low-chroma color changes may pass, especially changes affecting only a few pixels within a block; lightness-only changes are left to the existing checks. Other wall positions are not covered by this additional guard.
+
+An artificial conversion of the left-wall area to equal-luminance gray, which previously passed the existing glyph check, is rejected. The saved cd82c23 manual-4 before/after pair with observed opponent-side change is also rejected. This does not establish detection of all tile movement or all color-only changes. The five recovery pairs pass this added color guard, but the existing full comparison still rejects them; this change does not authorize black-screen recovery or live inputs.
+
+The supplementary saved-image test uses local, untracked live captures and a local recognition receipt; it skips when they are absent and therefore does not constitute a portable fixture. On the current host the guard took 0.15–0.17 seconds warm and approximately 0.24 seconds on the first invocation, measured only on one saved pair.

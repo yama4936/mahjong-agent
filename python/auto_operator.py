@@ -1947,12 +1947,39 @@ def experimental_kita_felt_lighting(a, b, x, y):
     return similar>=4
 
 
+def experimental_kita_wall_color_stable(before: bytes, after: bytes) -> bool:
+    """Additional friend-only color guard; not proof of unchanged tiles.
+
+    Inspect the full left wall in 8-pixel blocks. Differences in R-G and B-G
+    remove common brightness shifts, but tiny or low-chroma changes may pass.
+    """
+    try:
+        import numpy as np
+        with Image.open(io.BytesIO(before)) as a, Image.open(io.BytesIO(after)) as b:
+            if a.size != (1920, 1080) or b.size != a.size:
+                return False
+            a = np.asarray(a.convert('RGB').crop((150, 80, 390, 700)), dtype=np.int16)
+            b = np.asarray(b.convert('RGB').crop((150, 80, 390, 700)), dtype=np.int16)
+        diff = np.max(np.abs((a - a[:, :, 1:2]) - (b - b[:, :, 1:2])), axis=2)
+        if float(diff.mean()) > 1.0:
+            return False
+        for y in range(0, diff.shape[0], 8):
+            for x in range(0, diff.shape[1], 8):
+                if float(diff[y:y + 8, x:x + 8].mean()) > 24.0:
+                    return False
+        return True
+    except (ImportError, ValueError, OSError, TypeError):
+        return False
+
+
 def experimental_kita_glyph_stability(before: bytes, after: bytes, report: dict[str, Any]) -> bool:
     """Lighting-tolerant visual hypothesis, only for the reviewed friend kita prompt.
 
     This does not prove state, turn, colors, or content concealed by overlays.
     """
     try:
+        if not experimental_kita_wall_color_stable(before, after):
+            return False
         hand = report['hand']; geometry = report['handGeometry']; row = report['buttonRow']
         hv = hand['value']; gv = geometry['value']; buttons = row['value']['slots']
         if (hand['status'] != 'candidate' or geometry['status'] != 'candidate' or row['status'] != 'candidate'
