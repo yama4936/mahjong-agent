@@ -184,6 +184,36 @@ class ExperimentalSanmaFriendLoopTest(unittest.TestCase):
         self.op.execute_sanma_friend_kita_candidate.assert_called_once()
         self.assertTrue(any(c.kwargs.get('reason')=='observation_or_action_failed' for c in self.op.log.call_args_list))
 
+    def test_pass_then_kita_preclick_change_stops_without_retry(self):
+        from auto_operator import SanmaKitaPreclickChanged
+        self.op.args.max_iterations = 0
+        self.receipt['candidates'] = {'candidates':[{'action':'pon'}]}
+        kita = dict(self.receipt, digest='new-kita', candidates={'candidates':[{'action':'kita'}]})
+        self.op.inspect_sanma_self_turn.side_effect = [self.receipt, kita]
+        self.op.observe_sanma_friend_transition.return_value = {'status':'visual_change_unconfirmed','confirmed':False}
+        self.op.execute_sanma_friend_kita_candidate.side_effect = SanmaKitaPreclickChanged('changed')
+        with patch('sanma_friend_pass_experiment.execute_friend_pon_pass', return_value={'confirmation':'unknown'}) as skip:
+            self.run_room()
+        skip.assert_called_once()
+        self.op.execute_sanma_friend_kita_candidate.assert_called_once()
+        self.assertTrue(any(c.kwargs.get('reason')=='kita_preclick_reobserve_limit' for c in self.op.log.call_args_list))
+
+    def test_consecutive_passes_keep_existing_transition_handling(self):
+        self.op.args.max_iterations = 3
+        self.receipt['candidates'] = {'candidates':[{'action':'pon'}]}
+        second = dict(self.receipt, digest='second-pass')
+        third = dict(self.receipt, digest='third-turn', candidates={'candidates':[{'action':'tsumo'}]})
+        self.op.inspect_sanma_self_turn.side_effect = [self.receipt, second, third]
+        self.op.observe_sanma_friend_transition.side_effect = [
+            {'status':'visual_change_unconfirmed','confirmed':False},
+            {'status':'visual_change_unconfirmed','confirmed':False},
+            {'status':'unresolved','confirmed':False}]
+        with patch('sanma_friend_pass_experiment.execute_friend_pon_pass', return_value={'confirmation':'unknown'}) as skip:
+            self.run_room()
+        self.assertEqual(skip.call_count, 2)
+        self.op.execute_sanma_friend_tsumo_candidate.assert_called_once()
+        self.assertTrue(any(c.kwargs.get('reason')=='transition_requires_review' for c in self.op.log.call_args_list))
+
     def test_pon_routes_to_pass_and_stops_unconfirmed(self):
         self.receipt['candidates'] = {'candidates': [{'action':'pon'}]}
         with patch('sanma_friend_pass_experiment.execute_friend_pon_pass', return_value={'confirmation':'unknown'}) as skip:

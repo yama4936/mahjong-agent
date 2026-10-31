@@ -8803,6 +8803,7 @@ class PythonAutoOperator:
         last_frame = None
         attempted_frames: set[str] = set()
         last_unconfirmed_action: str | None = None
+        unconfirmed_input_seen = False
         last_kita_receipt = None
         unknown_streak = 0
         unknown_since = None
@@ -8911,7 +8912,7 @@ class PythonAutoOperator:
                             self.log("sanma_friend_wait", reason="kita_preclick_reobserve",
                                      screenshot=receipt.get("screenshot"), digest=frame_digest,
                                      streak=kita_preclick_rejections, clicked=False, error=str(error))
-                            if (kita_preclick_rejections >= 3 or last_unconfirmed_action is not None
+                            if (kita_preclick_rejections >= 3 or unconfirmed_input_seen
                                     or self.verified_friend_300_active is not True
                                     or not 0 <= time.monotonic() - action_observed_at < 300):
                                 self.log("sanma_friend_stopped", reason="kita_preclick_reobserve_limit",
@@ -8926,6 +8927,7 @@ class PythonAutoOperator:
                     elif actions and all(isinstance(item, dict) and item.get("action") in {"pon", "kan", "riichi"} for item in actions):
                         from sanma_friend_pass_experiment import execute_friend_pon_pass
                         result = execute_friend_pon_pass(self, page, receipt)
+                        unconfirmed_input_seen = True
                         self.log("sanma_friend_action_unconfirmed", action="pass_optional", result=result, confirmed=False)
                         transition = self.observe_sanma_friend_transition(page, receipt, "pass_pon")
                         self.log("sanma_friend_transition", **transition)
@@ -8960,6 +8962,7 @@ class PythonAutoOperator:
                         return
                     kita_preclick_rejections = 0
                     attempted_frames.add(frame_digest)
+                    unconfirmed_input_seen = True
                     last_unconfirmed_action = action
                     last_kita_receipt = receipt if action == "kita" else None
                     unknown_streak = 0
