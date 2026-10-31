@@ -1,6 +1,7 @@
+import {recordsForRules} from './record-rules.mjs';
 export const jstDay=at=>new Date(at).toLocaleDateString('sv-SE',{timeZone:'Asia/Tokyo'});
 export function summarize(records,{category='ranked',from='',to=''}={}){
- const rows=records.filter(r=>r.status==='complete'&&r.category===category&&(!from||jstDay(r.at)>=from)&&(!to||jstDay(r.at)<=to)).sort((a,b)=>a.at.localeCompare(b.at));
+ const rows=recordsForRules(records,'yonma').filter(r=>r.operation!=='manual-assisted').filter(r=>r.status==='complete'&&r.category===category&&(!from||jstDay(r.at)>=from)&&(!to||jstDay(r.at)<=to)).sort((a,b)=>a.at.localeCompare(b.at));
  const known=rows.filter(r=>Number.isInteger(r.rank)&&r.rank>=1&&r.rank<=4);
  const ranks=[1,2,3,4].map(rank=>({label:`${rank}位`,value:known.filter(r=>r.rank===rank).length}));
  const daily=new Map(),roles=new Map();

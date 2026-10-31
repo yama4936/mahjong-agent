@@ -1,4 +1,5 @@
 import {watchResults} from './results-feed.js';
+import {recordsForRules} from './record-rules.mjs';
 const $=id=>document.getElementById(id),esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const names={ranked:'段位戦',friend:'友人戦・練習',unknown:'種別未確認'};
 const date=at=>new Date(at).toLocaleDateString('sv-SE',{timeZone:'Asia/Tokyo'});
@@ -19,7 +20,7 @@ $('download').onclick=()=>{
  const url=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'})),a=document.createElement('a');a.href=url;a.download='jantama-yaku-analysis.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
 };
 watchResults(data=>{
-  all=data.records.flatMap(r=>(r.winHistory||[]).map(w=>({...w,matchId:r.id,category:r.category}))).sort((a,b)=>b.at.localeCompare(a.at));
+  all=recordsForRules(data.records,'yonma').filter(r=>r.operation!=='manual-assisted').flatMap(r=>(r.winHistory||[]).map(w=>({...w,matchId:r.id,category:r.category}))).sort((a,b)=>b.at.localeCompare(a.at));
   const existing=new Set([...$('yaku').options].map(o=>o.value));
   for(const name of [...new Set(all.flatMap(w=>(w.yaku||[]).map(v=>v.name)))].sort()){
     if(existing.has(name)) continue;

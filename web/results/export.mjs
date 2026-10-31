@@ -6,7 +6,7 @@ import sharp from 'sharp';
 const root=path.resolve(process.argv[2]||'.');
 const here=path.dirname(new URL(import.meta.url).pathname), out=path.resolve(process.argv[3]||path.join(here,'dist'));
 fs.mkdirSync(path.join(out,'images'),{recursive:true});
-for(const f of ['index.html','app.js','style.css','analysis.html','analysis.js','charts.html','charts.js','charts.css','chart-data.mjs','how-it-works.html','how-it-works.css','live.html','live-view.js','live-view.css','shell.js','shell.css','results-feed.js'])fs.copyFileSync(path.join(here,'src',f),path.join(out,f));
+for(const f of ['index.html','sanma.html','record-rules.mjs','app.js','style.css','analysis.html','analysis.js','charts.html','charts.js','charts.css','chart-data.mjs','how-it-works.html','how-it-works.css','live.html','live-view.js','live-view.css','shell.js','shell.css','results-feed.js'])fs.copyFileSync(path.join(here,'src',f),path.join(out,f));
 fs.cpSync(path.join(here,'src/vendor'),path.join(out,'vendor'),{recursive:true});
 fs.cpSync(path.join(here,'src/tiles'),path.join(out,'tiles'),{recursive:true});
 function walk(dir,depth=0){return fs.readdirSync(dir,{withFileTypes:true}).flatMap(e=>e.isDirectory() ? (['frames','replays','node_modules','.git'].includes(e.name)||depth>4 ? []:walk(path.join(dir,e.name),depth+1)):[path.join(dir,e.name)]);}
@@ -19,11 +19,13 @@ const yakuReviews=JSON.parse(fs.readFileSync(path.join(here,'yaku-reviewed.json'
 const records=[],seen=new Set();let malformed=0,logs=0;
 async function asset(p){if(!p)return null;let local=path.join(root,'artifacts',p.split('/artifacts/')[1]||'');if(!fs.existsSync(local)||!fs.statSync(local).isFile())return null;const buf=fs.readFileSync(local),hash=crypto.createHash('sha256').update(buf).digest('hex');const name=hash.slice(0,24)+'.webp',target=path.join(out,'images',name);if(!fs.existsSync(target))await sharp(buf).resize({width:1280,withoutEnlargement:true}).webp({quality:78}).toFile(target);return {url:'images/'+name,hash};}
 for(const f of files.filter(f=>path.basename(f)==='python-operator.jsonl').sort()){
- logs++;const run=path.relative(root,path.dirname(f));let rounds=[],selfWins=new Map(),lastFinal=0,deadline=null,pendingWins=[],currentWin=null,roundName=null;
+ logs++;const run=path.relative(root,path.dirname(f));let rules=/sanma|3ma|三麻/.test(run)?'unknown':'yonma',rulesSource=rules==='unknown'?'unverified-run-name':'legacy-four-player-runner';let rounds=[],selfWins=new Map(),lastFinal=0,deadline=null,pendingWins=[],currentWin=null,roundName=null;
  for await(const line of readline.createInterface({input:fs.createReadStream(f),crlfDelay:Infinity})){
   let r;try{r=JSON.parse(line);}catch{malformed++;continue;}
   deadline??=r.actionDeadlineMs??r.evaluation?.actionTiming?.deadlineMs;
   const state=r.evaluation?.state;
+  const observedRules=r.rules??r.session?.rules??state?.rules;
+  if(['sanma','yonma'].includes(observedRules)){rules=observedRules;rulesSource='operator-log';}
   if(state?.round)roundName=state.round+' / '+(state.honba??0);
   const ex=r.execution;
   if(ex?.clicked && ['ron','tsumo'].includes(ex.action) && ['reaction_win','decision'].includes(r.event)){
@@ -51,8 +53,20 @@ for(const f of files.filter(f=>path.basename(f)==='python-operator.jsonl').sort(
    const {screenshot,...entry}=w;
    winHistory.push({...entry,image:img?.url??null,...(verified||{status:'not_reviewed',yaku:null,bonus:null,observedTotalHan:null,observedFu:null,points:null})});
   }
-  records.push({id:crypto.createHash('sha256').update(p).digest('hex').slice(0,16),at,run,category,status:'complete',rank:Number.isInteger(meta.rank)&&meta.rank>=1&&meta.rank<=4?meta.rank:null,points:Number.isFinite(meta.points)?meta.points:null,image:a?.url||null,rounds:roundRows,selfWins:[...selfWins.values()],winHistory,room:meta.room||null,setting:/300/.test(run)&&category==='friend'?'300+0':/5plus20|5-20/.test(run)&&category==='friend'?'5+20':'未確認',deadline:meta.deadline??deadline,commit:meta.commit||run.match(/-([0-9a-f]{7})-/)?.[1]||null,interrupted:meta.interrupted??null});rounds=[];selfWins.clear();pendingWins=[];currentWin=null;roundName=null;
+  records.push({id:crypto.createHash('sha256').update(p).digest('hex').slice(0,16),at,run,category,rules,rulesSource,operation:'automatic',status:'complete',rank:Number.isInteger(meta.rank)&&meta.rank>=1&&meta.rank<=(rules==='sanma'?3:4)?meta.rank:null,points:Number.isFinite(meta.points)?meta.points:null,image:a?.url||null,rounds:roundRows,selfWins:[...selfWins.values()],winHistory,room:meta.room||null,setting:/300/.test(run)&&category==='friend'?'300+0':/5plus20|5-20/.test(run)&&category==='friend'?'5+20':'未確認',deadline:meta.deadline??deadline,commit:meta.commit||run.match(/-([0-9a-f]{7})-/)?.[1]||null,interrupted:meta.interrupted??null});rounds=[];selfWins.clear();pendingWins=[];currentWin=null;roundName=null;
  }
+}
+// Reviewed manual collections have no operator outcome log. Require exact image evidence.
+for(const reviewed of JSON.parse(fs.readFileSync(path.join(here,'reviewed-matches.json')))){
+ const a=await asset('/'+reviewed.screenshot);
+ if(!a||a.hash!==reviewed.imageHash||seen.has(a.hash))continue;
+ if(!['sanma','yonma'].includes(reviewed.rules)||!['friend','ranked'].includes(reviewed.category)||
+    !Number.isFinite(Date.parse(reviewed.at))||!Number.isInteger(reviewed.rank)||
+    reviewed.rank<1||reviewed.rank>(reviewed.rules==='sanma'?3:4))throw Error('Invalid reviewed match');
+ seen.add(a.hash);
+ const {screenshot,imageHash,...entry}=reviewed;
+ records.push({...entry,id:crypto.createHash('sha256').update(screenshot).digest('hex').slice(0,16),
+  rulesSource:'reviewed-result-image',status:'complete',image:a.url,rounds:[],selfWins:[],winHistory:[],interrupted:null});
 }
 records.sort((a,b)=>String(b.at).localeCompare(String(a.at)));
 const data={generatedAt:new Date().toISOString(),logs,malformed,records};fs.writeFileSync(path.join(out,'data.json.tmp'),JSON.stringify(data));fs.renameSync(path.join(out,'data.json.tmp'),path.join(out,'data.json'));console.log(JSON.stringify({logs,malformed,records:records.length,completed:records.filter(r=>r.status==='complete').length,rankedKnown:records.filter(r=>r.category==='ranked'&&r.rank).length}));

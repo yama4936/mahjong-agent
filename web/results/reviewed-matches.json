@@ -1,0 +1,20 @@
+[
+  {
+    "rules": "sanma",
+    "category": "friend",
+    "operation": "manual-assisted",
+    "at": "2026-10-30T18:07:31.325Z",
+    "atSource": "同一SHA-256の連続画像 frame-002925 の capturedAt（UTC）",
+    "run": "artifacts/sanma-manual-e48c562-20261031",
+    "screenshot": "artifacts/sanma-manual-e48c562-20261031/final-result.png",
+    "imageHash": "61f00e16592474f3a1fe2547fe677986f2c9081f3a1cf4e249b18af5d1170422",
+    "rank": 1,
+    "points": 41500,
+    "room": "69669（CPU・簡単2人）",
+    "setting": "300+0",
+    "deadline": null,
+    "commit": "e48c562",
+    "note": "手動支援による画像収集。ゲーム側の自動進行・時間切れ等の原因は未確認。自動操作者の回帰試験・段位戦の勝率評価ではありません。",
+    "evidence": "VALIDATION-SANMA-MANUAL-20261031.md"
+  }
+]
