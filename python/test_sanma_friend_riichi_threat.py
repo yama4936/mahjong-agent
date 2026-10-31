@@ -18,6 +18,8 @@ class SanmaFriendRiichiThreat(unittest.TestCase):
   for n in (1,10,14):self.assertEqual(friend_opponent_riichi_candidates((ROOT/f'manual-{n:02}-before.png').read_bytes()),[])
   for n in (15,16):self.assertEqual(friend_opponent_riichi_candidates((ROOT/f'manual-{n:02}-before.png').read_bytes()),['left'])
   for n in (17,18,19,20,21):self.assertEqual(friend_opponent_riichi_candidates((ROOT/f'manual-{n:02}-before.png').read_bytes()),['right','left'])
+  opposite=Path('/home/yama1/.codex/sanma-run-dd7175d-20261031/manual-12-before.png')
+  if opposite.exists():self.assertIn('opposite',friend_opponent_riichi_candidates(opposite.read_bytes()))
  def test_opposite_stick_is_not_dropped(self):
   frame=(ROOT/'manual-01-before.png').read_bytes()
   with patch('board_metadata.recognize_riichi_sticks',return_value=['west']):

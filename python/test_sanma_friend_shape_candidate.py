@@ -61,7 +61,9 @@ class ShapeCandidateTests(unittest.TestCase):
    p=Path(d)/'before.png';p.write_bytes((ROOT/'manual-12-before.png').read_bytes());self.receipt['screenshot']=str(p)
    op=Mock();op.args=SimpleNamespace(experimental_sanma_friend=True,rules='sanma',mode='force-auto',action_deadline_ms=300000,ranked_loop=False)
    op.verified_friend_300_active=True;op.sanma_friend_riichi_attempted=False;op.verified_friend_300_started_at=time.monotonic();op.layout={"clickPoints":self.receipt["sourceObservation"]["report"]["handGeometry"]["value"]["clickPoints"],"handSlots":self.receipt["sourceObservation"]["report"]["handGeometry"]["value"]["handSlots"],"drawSlot":self.receipt["sourceObservation"]["report"]["handGeometry"]["value"]["drawSlot"]}
-   with patch('sanma_friend_discard_experiment.execute_friend_discard') as execute:
+   # This fixture has a visible opposite riichi stick. Isolate shape routing
+   # here; the actual threat is covered independently in the riichi tests.
+   with patch('sanma_friend_discard_experiment.friend_opponent_riichi_candidates',return_value=[]), patch('sanma_friend_discard_experiment.execute_friend_discard') as execute:
     execute_friend_draw_candidate(op,Mock(),self.receipt)
     self.assertEqual(execute.call_args.kwargs['plan']['tile'],'9s')
     event=next(c for c in op.log.call_args_list if c.args[0]=='sanma_friend_shape_candidate')
