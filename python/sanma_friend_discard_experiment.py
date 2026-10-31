@@ -30,6 +30,32 @@ def friend_opponent_riichi_candidates(frame):
     return [side for seat, side in (('south', 'right'), ('north', 'left')) if seat in detected]
 
 
+def friend_genbutsu_candidate(source, digest, threats, tiles, matches):
+    """Unverified matching labels in every observed threatening physical river."""
+    if not threats or any(side not in ('left', 'right') for side in threats): return None
+    rivers = {}
+    for side in threats:
+        river = source.get(side + 'River')
+        if (not isinstance(river, dict) or river.get('frameSha256') != digest
+                or river.get('scope') != f'offline_untrusted_sanma_{side}_river'
+                or river.get('verified') is not False or river.get('operationAuthorized') is not False
+                or not isinstance(river.get('candidates'), list)):
+            return None
+        low, high = (500, 805) if side == 'left' else (1115, 1420)
+        rivers[side] = {item['tile'] for item in river['candidates'] if isinstance(item, dict)
+                        and isinstance(item.get('tile'), str) and item.get('verified') is False
+                        and type(item.get('confidence')) in (int, float) and item['confidence'] >= .99
+                        and type(item.get('x')) in (int, float) and low <= item['x'] < high
+                        and type(item.get('y')) in (int, float) and 285 <= item['y'] < 560}
+    if not isinstance(matches, list) or len(matches) != len(tiles): return None
+    for index, (tile, match) in enumerate(zip(tiles, matches)):
+        if (isinstance(match, dict) and match.get('tile') == tile
+                and type(match.get('confidence')) in (int, float) and match['confidence'] >= .99
+                and all(tile in rivers[side] for side in threats)):
+            return {'tile': tile, 'index': index, 'opponents': threats, 'confirmed': False}
+    return None
+
+
 def experimental_white_hand_candidate(frame, hand, geometry):
     """Narrow visual hypothesis only; unloaded tile faces may look identical."""
     try:
@@ -207,11 +233,6 @@ def execute_friend_draw_candidate(operator, page, receipt):
     if hashlib.sha256(baseline).hexdigest() != receipt.get("digest"):
         raise ValueError("recognition frame changed on disk")
     threats = friend_opponent_riichi_candidates(baseline)
-    if threats:
-        operator.log('sanma_friend_opponent_riichi_candidate', opponents=threats,
-                     screenshot=receipt['screenshot'], digest=receipt['digest'], confirmed=False,
-                     reason='opponent river and safe tiles unverified', operationAuthorized=False)
-        raise ValueError('opponent riichi candidate; safe discard unverified')
     white_candidates = None if hand_value.get("safe") is True else experimental_white_hand_candidate(baseline, hand_value, geo_value)
     partial_row = (friend_visible_row_with_north_overlap(baseline, row_slots)
                    or friend_visible_empty_row_candidate(baseline, row_slots))
@@ -224,6 +245,16 @@ def execute_friend_draw_candidate(operator, page, receipt):
             or draw.get("point") != points[-1]):
         raise ValueError("unsafe hand, uncertain prompt or draw mismatch")
     slots = [{"tile": tile, **point} for tile, point in zip(tiles, points)]
+    defensive = friend_genbutsu_candidate(source, receipt['digest'], threats, tiles, hand_value.get('matches')) if threats else None
+    if defensive is not None and getattr(operator, 'sanma_friend_riichi_attempted', False) is not False and defensive['index'] != draw['index']:
+        defensive = None
+    if threats:
+        operator.log('sanma_friend_opponent_riichi_candidate', opponents=threats,
+                     screenshot=receipt['screenshot'], digest=receipt['digest'], confirmed=False,
+                     genbutsuCandidate=defensive,
+                     reason='river and hand labels are unverified; absent sticks do not rule out riichi', operationAuthorized=False)
+        if defensive is None:
+            raise ValueError('opponent riichi candidate; safe discard unverified')
     from sanma_friend_shape_candidate import friend_shape_candidate, friend_non_riichi_hypothesis, friend_hand_click_geometry
     shape = friend_shape_candidate(receipt)
     # CPU-friend experiment: visual rail and hand confidence are hypotheses,
@@ -239,11 +270,15 @@ def execute_friend_draw_candidate(operator, page, receipt):
                     and friend_hand_click_geometry(calibrated_slots, calibrated_points)
                     and calibrated_slots == [*geo_value.get("handSlots", []), geo_value.get("drawSlot")]
                     and friend_non_riichi_hypothesis(baseline, hand_value))
-    selected = shape if shape_choice else draw
+    if defensive is not None:
+        selected = {**defensive, 'point': points[defensive['index']]}
+        shape_choice = False
+    else:
+        selected = shape if shape_choice else draw
     plan = {"scope": "offline_untrusted_sanma_discard_plan", "operationAuthorized": False,
             "tile": selected["tile"], "clickIndex": selected["index"], "clickPoint": selected["point"]}
     operator.log("sanma_friend_shape_candidate", candidate=shape,
-                 selectedAction="shape_hypothesis" if shape_choice else "draw_only",
+                 selectedAction="genbutsu_candidate" if defensive is not None else "shape_hypothesis" if shape_choice else "draw_only",
                  reason="visible rail and hand are unverified; riichi, live tiles and turn remain unknown")
     if draw_only:
         operator.log("sanma_friend_draw_only_candidate", digest=receipt["digest"], confirmed=False,

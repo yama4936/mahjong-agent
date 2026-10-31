@@ -9,7 +9,7 @@ import type { ScreenLayout } from "./layout.js";
 import type { ExperimentalTemplates } from "./sanmaButtonExperiment.js";
 import { mapPublicOpponentPositions } from "./publicSeatMapping.js";
 import type { PublicVitClassifier } from "./publicTileRecognizer.js";
-import { inspectSanmaRightRiverCandidate } from "./sanmaRightRiverCandidate.js";
+import { inspectSanmaLeftRiverCandidate, inspectSanmaRightRiverCandidate } from "./sanmaRightRiverCandidate.js";
 
 const run = promisify(execFile);
 type NorthPosition = { verified: false; complete: false; frame_sha256?: string; [key: string]: unknown };
@@ -81,9 +81,12 @@ export async function observeSanmaFrameAutomatically(input: {
   const [{ board, north, ownSeat }, report] = await Promise.all([boardPromise, reportPromise]);
   if (report.digest !== digest) throw new Error("snapshot digest mismatch");
   let rightRiver: Awaited<ReturnType<typeof inspectSanmaRightRiverCandidate>> | undefined;
+  let leftRiver: Awaited<ReturnType<typeof inspectSanmaLeftRiverCandidate>> | undefined;
   if (board.reason === 'unsupported_right_opponent_layout' && board.layoutCandidate?.verified === false
       && JSON.stringify(board.layoutCandidate.opponents) === JSON.stringify(['left','right'])) {
     try { rightRiver = await inspectSanmaRightRiverCandidate(frame,input.layout,input.publicClassifier); }
+    catch { /* An unavailable visual branch remains absent, never an empty river. */ }
+    try { leftRiver = await inspectSanmaLeftRiverCandidate(frame,input.layout,input.publicClassifier); }
     catch { /* An unavailable visual branch remains absent, never an empty river. */ }
   }
   // The older diagnostic evaluates with an assumed empty visible-tile list.
@@ -96,6 +99,7 @@ export async function observeSanmaFrameAutomatically(input: {
   else candidates.missing.push("sanma ron reference not independently verified");
   return { scope: "offline_untrusted_sanma_auto_observation" as const, digest, board, north: { ...north, ...(bySeat ? { bySeat, mappingVerified: false as const } : {}) }, candidates,
     ...(rightRiver ? {rightRiver} : {}),
+    ...(leftRiver ? {leftRiver} : {}),
     ownSeat: ownSeat ? { status: "candidate" as const, value: ownSeat, verified: false as const }
       : { status: "unknown" as const, reason: board.reason ?? "seat unavailable" },
     report, operationAuthorized: false as const };
