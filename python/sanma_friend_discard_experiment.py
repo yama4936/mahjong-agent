@@ -12,6 +12,7 @@ import io
 from PIL import Image
 import math
 import time
+import uuid
 from pathlib import Path
 
 from auto_operator import send_discard_click
@@ -244,15 +245,24 @@ def execute_friend_draw_candidate(operator, page, receipt):
                "ranked": False, "cpuCount": 2, "roomVerified": True}
     def record(event):
         operator.log("sanma_friend_discard_experiment", **event)
+    def save_rejected_frame(frame):
+        path = operator.frames / f"{uuid.uuid4().hex}.sanma-discard-preclick-rejected.png"
+        path.write_bytes(frame)
+        operator.log("sanma_friend_discard_preclick_rejected", screenshot=str(path),
+                     sha256=hashlib.sha256(frame).hexdigest(),
+                     referenceScreenshot=receipt["screenshot"], referenceSha256=receipt["digest"],
+                     operationAuthorized=False)
     latch_friend_action_target(operator, baseline, "discard")
     return execute_friend_discard(page, session=session, observation=observation, plan=plan,
                                   layout=operator.layout, log=record,
                                   turn_started_monotonic=friend_action_started_at(operator),
-                                  session_check=lambda: getattr(operator, "verified_friend_300_active", False) is True)
+                                  session_check=lambda: getattr(operator, "verified_friend_300_active", False) is True,
+                                  save_rejected_frame=save_rejected_frame)
 
 
 def execute_friend_discard(page, *, session, observation, plan, layout, log,
-                           turn_started_monotonic, clock=time.monotonic, session_check=None):
+                           turn_started_monotonic, clock=time.monotonic, session_check=None,
+                           save_rejected_frame=None):
     """Map a supplied TS plan to the existing select/confirm routine.
 
     This experimental entry point depends on a caller that establishes the
@@ -293,6 +303,8 @@ def execute_friend_discard(page, *, session, observation, plan, layout, log,
                      or not (friend_frame_stable(reference, before)
                              or (observation.get("experimentalDrawReport") is not None
                                  and __import__("auto_operator").experimental_draw_glyph_stability(reference, before, observation["experimentalDrawReport"]))))):
+            if isinstance(before, bytes) and save_rejected_frame is not None:
+                save_rejected_frame(before)
             raise ValueError("recognition frame changed before click")
         def deadline():
             if session_check is not None and session_check() is not True:

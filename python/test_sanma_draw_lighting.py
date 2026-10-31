@@ -100,3 +100,32 @@ class TestFriendDrawLighting(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'frame changed'):
                 execute_friend_discard(page,**kwargs)
             send.assert_not_called()
+
+class TestRejectedPreclickEvidence(unittest.TestCase):
+    def test_real_stop_pair_rejected_frame_is_recorded_before_any_click(self):
+        import hashlib
+        from unittest.mock import Mock
+        from sanma_friend_discard_experiment import execute_friend_discard
+        folder = Path('/home/yama1/.codex/sanma-run-41b9fb3-20261031/frames')
+        if not folder.exists(): self.skipTest('recorded friend-match frames unavailable')
+        before = next(folder.glob('*09-02-57*sanma-self-turn.png')).read_bytes()
+        after = next(folder.glob('*09-03-08*sanma-friend-stop.png')).read_bytes()
+        report = json.loads((Path(__file__).parent/'fixtures/sanma-dd-normal-draw-report.json').read_text())
+        report['buttonRow']['value']['slots'][2]['status']='unresolved'
+        point={'x':1532,'y':996.5}
+        observation={'status':'candidate','phase':'self_turn','promptStatus':'none','handStatus':'candidate',
+                     'layoutStatus':'candidate','slots':[{'tile':'7p',**point}],
+                     'frameSha256':hashlib.sha256(before).hexdigest(),'referenceFrame':before,
+                     'experimentalDrawReport':report}
+        session={'mode':'cpu_friend','rules':'sanma','clock':'300+0','actionDeadlineMs':300000,
+                 'ranked':False,'cpuCount':2,'roomVerified':True}
+        plan={'scope':'offline_untrusted_sanma_discard_plan','operationAuthorized':False,
+              'tile':'7p','clickIndex':0,'clickPoint':point}
+        page=Mock();page.screenshot.return_value=after
+        evidence=Mock()
+        with self.assertRaisesRegex(ValueError,'recognition frame changed before click'):
+            execute_friend_discard(page,session=session,observation=observation,plan=plan,
+                layout={'viewport':{}},log=lambda event:None,turn_started_monotonic=100,clock=lambda:101,
+                save_rejected_frame=evidence)
+        evidence.assert_called_once_with(after)
+        page.mouse.click.assert_not_called()
