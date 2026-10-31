@@ -161,10 +161,12 @@ def execute_friend_draw_candidate(operator, page, receipt):
     freshness = receipt.get("freshness") or {}
     if (source.get("digest") != receipt.get("digest") or report.get("digest") != receipt.get("digest")
             or draw.get("digest") != receipt.get("digest") or draw.get("status") != "candidate"
-            or freshness.get("status") not in ("identical_pixels_candidate", "stable_except_clock_candidate")
+            or freshness.get("status") not in ("identical_pixels_candidate", "stable_except_clock_candidate", "stable_draw_glyph_candidate")
             or hand.get("status") != "candidate" or geometry.get("status") != "candidate"
             or row.get("status") != "candidate"):
         raise ValueError("turn, frame, hand or action row unavailable")
+    if freshness.get("status") == "stable_draw_glyph_candidate" and (type(freshness.get("elapsedMs")) not in (int, float) or not 0 <= freshness["elapsedMs"] <= 20000):
+        raise ValueError("draw lighting observation expired")
     hand_value, geo_value = hand.get("value") or {}, geometry.get("value") or {}
     row_slots = (row.get("value") or {}).get("slots")
     tiles, points = hand_value.get("tiles"), geo_value.get("clickPoints")
@@ -196,7 +198,8 @@ def execute_friend_draw_candidate(operator, page, receipt):
                      risk="unloaded tile faces may appear identical", digest=receipt["digest"])
     observation = {"status": "candidate", "phase": "self_turn", "promptStatus": "none",
                    "handStatus": "candidate", "layoutStatus": "candidate", "slots": slots,
-                   "frameSha256": receipt["digest"], "referenceFrame": baseline}
+                   "frameSha256": receipt["digest"], "referenceFrame": baseline,
+                   "experimentalDrawReport": report if freshness.get("status") == "stable_draw_glyph_candidate" else None}
     session = {"mode": "cpu_friend", "rules": "sanma", "clock": "300+0", "actionDeadlineMs": 300000,
                "ranked": False, "cpuCount": 2, "roomVerified": True}
     def record(event):
@@ -247,7 +250,9 @@ def execute_friend_discard(page, *, session, observation, plan, layout, log,
         if not isinstance(before, bytes) or (hashlib.sha256(before).hexdigest() != observation.get("frameSha256")
                 and (not isinstance(reference, bytes)
                      or hashlib.sha256(reference).hexdigest() != observation.get("frameSha256")
-                     or not friend_frame_stable(reference, before))):
+                     or not (friend_frame_stable(reference, before)
+                             or (observation.get("experimentalDrawReport") is not None
+                                 and __import__("auto_operator").experimental_draw_glyph_stability(reference, before, observation["experimentalDrawReport"]))))):
             raise ValueError("recognition frame changed before click")
         def deadline():
             if session_check is not None and session_check() is not True:

@@ -1913,6 +1913,44 @@ def experimental_kita_glyph_stability(before: bytes, after: bytes, report: dict[
         return False
 
 
+def experimental_draw_glyph_stability(before: bytes, after: bytes, report: dict[str, Any]) -> bool:
+    """Friend-only lighting hypothesis; does not establish turn or legal actions."""
+    try:
+        hand, geometry, row = (report[k] for k in ('hand', 'handGeometry', 'buttonRow'))
+        value, shape = hand['value'], geometry['value']
+        slots = row['value']['slots']
+        if (any(x['status'] != 'candidate' for x in (hand, geometry, row))
+                or value.get('turnReady') is not True or len(value['tiles']) != 14
+                or len(slots) != 3 or any(x.get('status') != 'empty_candidate' for x in slots)):
+            return False
+        layout = {'handSlots': shape['handSlots'], 'drawSlot': shape['drawSlot']}
+        if len(layout['handSlots']) != 13 or closed_hand_face_mismatches(before, after, layout, .5):
+            return False
+        boxes = [{'x':600,'y':785,'width':245,'height':90}, {'x':890,'y':785,'width':245,'height':90},
+                 {'x':1180,'y':785,'width':245,'height':90}]
+        if any(tile_face_structure_delta(crop_screenshot(before,b), crop_screenshot(after,b)) > .1 for b in boxes):
+            return False
+        if not experimental_kita_color_stable(before, after, layout['handSlots']+[layout['drawSlot']]+boxes):
+            return False
+        with Image.open(io.BytesIO(before)) as a, Image.open(io.BytesIO(after)) as b:
+            if a.size != (1920,1080) or b.size != a.size: return False
+            for box in boxes:
+                x,y,w,h = (box[k] for k in ('x','y','width','height'))
+                delta = ImageChops.difference(a.convert('RGB').crop((x,y,x+w,y+h)), b.convert('RGB').crop((x,y,x+w,y+h)))
+                if max(ImageStat.Stat(delta).mean) > 1: return False
+            diff = ImageChops.difference(*(im.convert('L').point(lambda v: 255 if v < 120 else 0) for im in (a,b)))
+            # The illuminated self-turn indicator flickers independently of the board.
+            for rect in ((180,865,1650,1080),(600,785,1425,875),(1425,755,1650,870),(920,510,992,516)):
+                diff.paste(0, rect)
+            for y in range(0,1080,32):
+                for x in range(0,1920,32):
+                    if diff.crop((x,y,min(x+32,1920),min(y+32,1080))).histogram()[255] > 12: return False
+        center={'x':905,'y':375,'width':105,'height':90}
+        return tile_face_structure_delta(crop_screenshot(before,center),crop_screenshot(after,center)) <= .5
+    except (KeyError,TypeError,ValueError,OSError,IndexError):
+        return False
+
+
 def sanma_draw_observation_candidate(observation: dict[str, Any]) -> dict[str, Any]:
     """Bind an unverified last hand tile to its proposed draw rectangle.
 
@@ -3987,15 +4025,18 @@ class PythonAutoOperator:
             clock_changed = changes.pop('clock')
             kita_glyph_candidate = (changes['fullFrame'] and experimental_sanma_friend_allowed(getattr(self, "args", None))
                                     and experimental_kita_glyph_stability(image, latest, result.get('report') or {}))
+            draw_glyph_candidate = (changes['fullFrame'] and not kita_glyph_candidate
+                                    and experimental_sanma_friend_allowed(getattr(self, "args", None))
+                                    and experimental_draw_glyph_stability(image, latest, result.get('report') or {}))
             latest_path = self.frames / f"{utc_stamp()}.{uuid.uuid4().hex}.sanma-freshness.png"
             latest_path.write_bytes(latest)
-            freshness = {"status": "stable_kita_glyph_candidate" if kita_glyph_candidate else "changed" if changes['fullFrame'] else
+            freshness = {"status": "stable_kita_glyph_candidate" if kita_glyph_candidate else "stable_draw_glyph_candidate" if draw_glyph_candidate else "changed" if changes['fullFrame'] else
                          "stable_except_clock_candidate" if clock_changed else "identical_pixels_candidate",
                          "operationAuthorized": False, "elapsedMs": round((time.monotonic() - capture_started) * 1000),
                          "regionsChanged": changes, "clockChanged": clock_changed, "digest": hashlib.sha256(latest).hexdigest(),
                          "screenshot": str(latest_path),
                          "reason": ("glyph structure is a lighting-tolerant hypothesis; colors, concealed content and turn are unverified"
-                                    if kita_glyph_candidate else "visible pixel stability does not verify turn, state, or action; clock area unobserved")}
+                                    if kita_glyph_candidate or draw_glyph_candidate else "visible pixel stability does not verify turn, state, or action; clock area unobserved")}
         except Exception as error:
             freshness = {"status": "unknown", "operationAuthorized": False,
                          "reason": f"freshness observation failed: {error}"}
