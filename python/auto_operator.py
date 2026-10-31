@@ -1885,7 +1885,7 @@ def experimental_kita_other_regions_stable(before: bytes, after: bytes, boxes: l
         if a.size != (1920,1080) or b.size != a.size:return False
         masks=[im.convert("L").point(lambda value: 255 if value<120 else 0) for im in (a,b)]
         diff=ImageChops.difference(*masks)
-        for rect in ((1425,755,1650,870),(907,497,1017,516)):
+        for rect in ((1425,755,1650,870),(907,497,1017,516),(899,502,904,507)):
             diff.paste(0,rect)
         for box in boxes:
             x,y,w,h=(int(box[k]) for k in ('x','y','width','height'))
@@ -1894,9 +1894,8 @@ def experimental_kita_other_regions_stable(before: bytes, after: bytes, boxes: l
         for y in range(0,1080,32):
             for x in range(0,1920,32):
                 crop=diff.crop((x,y,min(x+32,1920),min(y+32,1080)))
-                # Two fixed blocks contain small illumination flicker from the
-                # left wall and the edge of the self-turn lamp in reviewed frames.
-                limit = 20 if (x,y) in ((320,96),(896,480)) else 14
+                # Small illumination flicker on the left wall in reviewed frames.
+                limit = 20 if (x,y) == (320,96) else 14
                 if crop.histogram()[255] > limit:return False
         return True
 
