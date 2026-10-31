@@ -85,11 +85,30 @@ class ExperimentalSanmaFriendLoopTest(unittest.TestCase):
         event=next(c for c in self.op.log.call_args_list if c.kwargs.get('reason')=='black_screen_unobservable')
         self.assertEqual(Path(event.kwargs['screenshot']).read_bytes(),image)
         self.assertEqual(event.kwargs['digest'],hashlib.sha256(image).hexdigest())
-        self.assertEqual(event.kwargs['gameplayClicks'],0)
+        self.assertEqual(event.kwargs['recoveryInputAttempts'],0)
+        self.assertIsNone(event.kwargs['priorGameplayInputCount'])
+        self.assertFalse(event.kwargs['currentLoopUnconfirmedInputObserved'])
+        self.assertNotIn('gameplayClicks',event.kwargs)
         self.assertEqual(event.kwargs['recovery'],'not_attempted')
         self.assertFalse(event.kwargs['operationAuthorized'])
         self.page.reload.assert_not_called();self.page.mouse.click.assert_not_called()
         self.op.inspect_sanma_self_turn.assert_not_called()
+
+    def test_black_after_prior_unconfirmed_action_does_not_claim_zero_inputs(self):
+        frame=Path('/home/yama1/.codex/sanma-run-cd82c23-20261101/current9.png')
+        if not frame.exists(): self.skipTest('saved black friend frame unavailable')
+        self.op.verified_friend_300_active=True;self.op.args.max_iterations=0
+        self.page.screenshot.side_effect=[b'match',frame.read_bytes()]
+        self.op.observe_sanma_friend_transition.return_value={'status':'visual_change_unconfirmed','confirmed':False}
+        with patch('auto_operator.classify_screen',side_effect=[('match',1.0),('black_screen',1.0)]):
+            self.op.run_experimental_sanma_friend(self.page)
+        self.op.execute_sanma_friend_tsumo_candidate.assert_called_once()
+        event=next(c for c in self.op.log.call_args_list if c.kwargs.get('reason')=='black_screen_unobservable')
+        self.assertTrue(event.kwargs['currentLoopUnconfirmedInputObserved'])
+        self.assertIsNone(event.kwargs['priorGameplayInputCount'])
+        self.assertEqual(event.kwargs['recoveryInputAttempts'],0)
+        self.assertNotIn('gameplayClicks',event.kwargs)
+        self.page.reload.assert_not_called()
 
     def test_unknown_screen_still_stops_after_match_not_as_black(self):
         self.op.verified_friend_300_active=True

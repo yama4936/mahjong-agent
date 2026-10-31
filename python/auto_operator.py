@@ -8861,7 +8861,8 @@ class PythonAutoOperator:
             if state == "black_screen":
                 self.log("sanma_friend_stopped", reason="black_screen_unobservable",
                          screenState=state, confidence=confidence, screenshot=preserve(frame),
-                         digest=hashlib.sha256(frame).hexdigest(), gameplayClicks=0,
+                         digest=hashlib.sha256(frame).hexdigest(), recoveryInputAttempts=0,
+                         priorGameplayInputCount=None, currentLoopUnconfirmedInputObserved=unconfirmed_input_seen,
                          recovery="not_attempted", operationAuthorized=False)
                 return
             if state == "match" and confidence >= 0.95:
