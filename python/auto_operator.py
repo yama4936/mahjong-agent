@@ -1901,6 +1901,29 @@ def experimental_kita_other_regions_stable(before: bytes, after: bytes, boxes: l
         return True
 
 
+def experimental_kita_felt_lighting(a, b, x, y):
+    """Admit only locally coherent light changes on visibly blue felt."""
+    def blue(image, box):
+        return all(B-R > 40 and B-G > 30 and G-R > 10 and B < 220
+                   for R,G,B in image.crop(box).getdata())
+    box=(x,y,x+16,y+16)
+    if not blue(a,box) or not blue(b,box):return False
+    def signed(box):
+        old=ImageStat.Stat(a.crop(box)).mean;new=ImageStat.Stat(b.crop(box)).mean
+        return sum(v-u for u,v in zip(old,new))/3
+    value=signed(box)
+    if abs(value)<3:return False
+    similar=0
+    for dy in (-16,0,16):
+        for dx in (-16,0,16):
+            if dx==0 and dy==0:continue
+            near=(x+dx,y+dy,x+dx+16,y+dy+16)
+            if near[0]<0 or near[1]<0 or near[2]>1920 or near[3]>1080:continue
+            other=signed(near)
+            if other*value>0 and abs(other)>=3:similar+=1
+    return similar>=4
+
+
 def experimental_kita_glyph_stability(before: bytes, after: bytes, report: dict[str, Any]) -> bool:
     """Lighting-tolerant visual hypothesis, only for the reviewed friend kita prompt.
 
@@ -1938,6 +1961,7 @@ def experimental_kita_glyph_stability(before: bytes, after: bytes, report: dict[
         # Binary glyph masks can miss changes with the same luminance class.
         # Bound coherent RGB changes in the exposed gaps and own river.
         with Image.open(io.BytesIO(before)) as a, Image.open(io.BytesIO(after)) as b:
+            a,b=a.convert('RGB'),b.convert('RGB')
             for index,box in enumerate(protected[-6:]):
                 x,y,w,h=(box[k] for k in ('x','y','width','height'))
                 delta=ImageChops.difference(a.convert('RGB').crop((x,y,x+w,y+h)),b.convert('RGB').crop((x,y,x+w,y+h)))
@@ -1945,7 +1969,12 @@ def experimental_kita_glyph_stability(before: bytes, after: bytes, report: dict[
                     for xx in range(0,w,16):
                         # The opponent-side felt border has a small observed
                         # illumination shift in the saved positive pair.
-                        if max(ImageStat.Stat(delta.crop((xx,yy,min(xx+16,w),min(yy+16,h)))).mean) > (12 if index == 3 and xx < 64 and yy < 96 else 10 if index == 3 else 7 if index >= 4 else 6):return False
+                        value=max(ImageStat.Stat(delta.crop((xx,yy,min(xx+16,w),min(yy+16,h)))).mean)
+                        limit=10 if index == 3 else 7 if index >= 4 else 6
+                        if value > limit:
+                            if not (index == 3 and xx < 64 and yy < 96 and value <= 12
+                                    and experimental_kita_felt_lighting(a,b,x+xx,y+yy)):
+                                return False
         if not experimental_kita_other_regions_stable(before,after,layout['handSlots']+[layout['drawSlot']]+boxes):
             return False
         center={'x':905,'y':375,'width':105,'height':90}

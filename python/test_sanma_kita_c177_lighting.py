@@ -40,3 +40,12 @@ class KitaC177LightingTests(unittest.TestCase):
    image=Image.open(io.BytesIO(after)).convert('RGB');other=Image.open(source).convert('RGB')
    image.paste(other.crop(box),box[:2]);out=io.BytesIO();image.save(out,format='PNG')
    with self.subTest(box=box):self.assertFalse(experimental_kita_glyph_stability(before,out.getvalue(),self.report))
+ def test_isolated_low_contrast_blue_patch_is_not_lighting(self):
+  before,_=self.pairs[0]
+  for adjustment in (-11,11):
+   image=Image.open(io.BytesIO(before)).convert('RGB')
+   for y in range(256,272):
+    for x in range(600,616):
+     image.putpixel((x,y),tuple(max(0,min(255,v+adjustment)) for v in image.getpixel((x,y))))
+   out=io.BytesIO();image.save(out,format='PNG')
+   with self.subTest(adjustment=adjustment):self.assertFalse(experimental_kita_glyph_stability(before,out.getvalue(),self.report))
