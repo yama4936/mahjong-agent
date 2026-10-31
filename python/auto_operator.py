@@ -1867,18 +1867,22 @@ def experimental_kita_color_stable(before: bytes, after: bytes, boxes: list[dict
         return True
 
 
-def experimental_kita_other_regions_stable(before: bytes, after: bytes) -> bool:
-    """Bound spatial structural changes outside independently examined areas."""
+def experimental_kita_other_regions_stable(before: bytes, after: bytes, boxes: list[dict[str, Any]]) -> bool:
+    """Check uncovered regions, excluding only reviewed self-indicator pixels."""
     with Image.open(io.BytesIO(before)) as a, Image.open(io.BytesIO(after)) as b:
         if a.size != (1920,1080) or b.size != a.size:return False
         masks=[im.convert("L").point(lambda value: 255 if value<120 else 0) for im in (a,b)]
         diff=ImageChops.difference(*masks)
-        for rect in ((180,865,1650,1080),(600,785,1425,875),(1425,755,1650,870)):
+        for rect in ((1425,755,1650,870),(907,497,1017,516)):
             diff.paste(0,rect)
+        for box in boxes:
+            x,y,w,h=(int(box[k]) for k in ('x','y','width','height'))
+            if x<0 or y<0 or w<=0 or h<=0 or x+w>1920 or y+h>1080:return False
+            diff.paste(0,(x,y,x+w,y+h))
         for y in range(0,1080,32):
             for x in range(0,1920,32):
                 crop=diff.crop((x,y,min(x+32,1920),min(y+32,1080)))
-                if crop.histogram()[255] > 12:return False
+                if crop.histogram()[255] > 14:return False
         return True
 
 
@@ -1901,11 +1905,28 @@ def experimental_kita_glyph_stability(before: bytes, after: bytes, report: dict[
             return False
         boxes = [{'x':600,'y':785,'width':245,'height':90}, {'x':890,'y':785,'width':245,'height':90},
                  {'x':1180,'y':785,'width':245,'height':90}]
-        if any(tile_face_structure_delta(crop_screenshot(before,box),crop_screenshot(after,box)) != 0 for box in boxes):
+        if any(tile_face_structure_delta(crop_screenshot(before,box),crop_screenshot(after,box)) > .1 for box in boxes):
             return False
-        if not experimental_kita_color_stable(before,after,layout['handSlots']+[layout['drawSlot']]+boxes):
+        with Image.open(io.BytesIO(before)) as a, Image.open(io.BytesIO(after)) as b:
+            for box in boxes:
+                x,y,w,h=(box[k] for k in ('x','y','width','height'))
+                delta=ImageChops.difference(a.convert('RGB').crop((x,y,x+w,y+h)),b.convert('RGB').crop((x,y,x+w,y+h)))
+                if max(ImageStat.Stat(delta).mean)>1:return False
+        protected = layout['handSlots']+[layout['drawSlot']]+boxes+[
+            {'x':845,'y':785,'width':45,'height':90}, {'x':1135,'y':785,'width':45,'height':90},
+            {'x':740,'y':540,'width':420,'height':220}]
+        if not experimental_kita_color_stable(before,after,protected):
             return False
-        if not experimental_kita_other_regions_stable(before,after):
+        # Binary glyph masks can miss changes with the same luminance class.
+        # Bound coherent RGB changes in the exposed gaps and own river.
+        with Image.open(io.BytesIO(before)) as a, Image.open(io.BytesIO(after)) as b:
+            for box in protected[-3:]:
+                x,y,w,h=(box[k] for k in ('x','y','width','height'))
+                delta=ImageChops.difference(a.convert('RGB').crop((x,y,x+w,y+h)),b.convert('RGB').crop((x,y,x+w,y+h)))
+                for yy in range(0,h,16):
+                    for xx in range(0,w,16):
+                        if max(ImageStat.Stat(delta.crop((xx,yy,min(xx+16,w),min(yy+16,h)))).mean)>6:return False
+        if not experimental_kita_other_regions_stable(before,after,layout['handSlots']+[layout['drawSlot']]+boxes):
             return False
         center={'x':905,'y':375,'width':105,'height':90}
         return tile_face_structure_delta(crop_screenshot(before,center),crop_screenshot(after,center)) <= .5
@@ -4283,6 +4304,7 @@ class PythonAutoOperator:
             raise RuntimeError("sanma kita requires an observed north hand candidate")
         if receipt.get("digest") in getattr(self, "_sanma_friend_attempted_frames", set()):
             raise RuntimeError("sanma kita candidate already attempted")
+        fresh = None
         try:
             baseline = Path(receipt["screenshot"]).read_bytes()
             fresh = page.screenshot(animations="disabled")
@@ -4296,6 +4318,15 @@ class PythonAutoOperator:
             if screen_state != "match" or confidence < 0.95:
                 raise ValueError("game screen not recognized")
         except Exception as error:
+            if isinstance(fresh, bytes) and fresh:
+                try:
+                    rejected_path = self.frames / f"{utc_stamp()}.{uuid.uuid4().hex}.sanma-kita-rejected.png"
+                    rejected_path.write_bytes(fresh)
+                    self.log("sanma_friend_kita_preclick_rejected", screenshot=str(rejected_path),
+                             digest=hashlib.sha256(fresh).hexdigest(), baseline=receipt.get("screenshot"),
+                             reason=str(error), confirmed=False)
+                except Exception:
+                    pass  # Evidence failures must never permit a click.
             raise RuntimeError(f"sanma kita pre-click check failed: {error}") from error
         if self.verified_friend_300_active is not True or not 0 <= time.monotonic() - started_at < 300:
             raise RuntimeError("experimental sanma friend session or timing expired")

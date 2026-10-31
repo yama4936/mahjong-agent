@@ -94,6 +94,17 @@ process.stdout.write(JSON.stringify(report));
                     self.operator.execute_sanma_friend_kita_candidate(self.page, self.receipt)
                 self.page.mouse.click.assert_not_called()
 
+    def test_rejected_preclick_screenshot_is_saved_and_no_input(self):
+        self.page.screenshot.side_effect = None
+        self.page.screenshot.return_value = AFTER.read_bytes()
+        with self.assertRaisesRegex(RuntimeError, 'screen changed outside clock area'):
+            self.operator.execute_sanma_friend_kita_candidate(self.page,self.receipt)
+        event=next(call for call in self.operator.log.call_args_list if call.args[0]=='sanma_friend_kita_preclick_rejected')
+        self.assertEqual(Path(event.kwargs['screenshot']).read_bytes(), AFTER.read_bytes())
+        self.assertEqual(event.kwargs['digest'],hashlib.sha256(AFTER.read_bytes()).hexdigest())
+        self.assertEqual(event.kwargs['baseline'],str(self.path))
+        self.page.mouse.click.assert_not_called()
+
     def test_uncertain_click_error_does_not_allow_retry(self):
         self.page.mouse.click.side_effect = RuntimeError('input acknowledgement lost')
         with self.assertRaisesRegex(RuntimeError, 'acknowledgement lost'):
