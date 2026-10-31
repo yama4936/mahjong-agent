@@ -21,15 +21,19 @@ for (const tile of classes) {
     throw new Error(`Bootstrap base missing or invalid for ${tile}: ${file}`, {cause:error});
   }
 }
-const source = path.join(root, 'templates/client/4p__6c_friend.png');
-const target = path.join(destination, '4p__6c_friend.png');
+const templates = { '4p': '4p__6c_friend.png', '3s': '3s__e48_friend.png' };
+const selection = process.argv[3] ?? '4p';
+if (!Object.hasOwn(templates, selection)) throw new Error('Template must be 4p or 3s');
+const filename = templates[selection];
+const source = path.join(root, 'templates/client', filename);
+const target = path.join(destination, filename);
 let alreadyPresent = false;
 try {
   await copyFile(source, target, constants.COPYFILE_EXCL);
 } catch (error) {
   if (error?.code !== 'EEXIST') throw error;
   const [existing, expected] = await Promise.all([readFile(target), readFile(source)]);
-  if (!existing.equals(expected)) throw new Error('Existing 4p__6c_friend.png differs; preserved without changes');
+  if (!existing.equals(expected)) throw new Error(`Existing ${filename} differs; preserved without changes`);
   alreadyPresent = true;
 }
-console.log(JSON.stringify({ destination, installed: '4p__6c_friend.png', alreadyPresent, bootstrapBaseFilesChecked: 34, templateIdentityVerified: false, accuracyVerified: false, requiresOperatorRestart: true }));
+console.log(JSON.stringify({ destination, installed: filename, alreadyPresent, bootstrapBaseFilesChecked: 34, templateIdentityVerified: false, accuracyVerified: false, requiresOperatorRestart: true }));
