@@ -23,3 +23,9 @@ class Kita6cLightingTests(unittest.TestCase):
   row=self.rows[7];a=Path(row['screenshot']).read_bytes();b=Path(row['freshness']['screenshot']).read_bytes()
   image=Image.open(io.BytesIO(b)).convert('RGB');ImageDraw.Draw(image).rectangle((900,550,950,580),fill=(20,20,20));out=io.BytesIO();image.save(out,format='PNG')
   self.assertFalse(experimental_kita_glyph_stability(a,out.getvalue(),self.report))
+
+ def test_opponent_river_same_dark_class_is_rejected(self):
+  row=self.rows[7];a=Path(row['screenshot']).read_bytes();b=Path(row['freshness']['screenshot']).read_bytes()
+  for box in ((680,330,730,370),(1140,330,1190,370),(850,230,900,270)):
+   image=Image.open(io.BytesIO(b)).convert('RGB');ImageDraw.Draw(image).rectangle(box,fill=(0,0,0));out=io.BytesIO();image.save(out,format='PNG')
+   with self.subTest(box=box):self.assertFalse(experimental_kita_glyph_stability(a,out.getvalue(),self.report))
