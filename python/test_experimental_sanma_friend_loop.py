@@ -39,7 +39,9 @@ class ExperimentalSanmaFriendLoopTest(unittest.TestCase):
     def test_reviewed_room_start_routes_tsumo_and_stops(self):
         self.run_room()
         self.page.mouse.click.assert_called_once_with(1140,998)
-        self.page.mouse.move.assert_called_once_with(960,777.6)
+        self.page.mouse.move.assert_called_once_with(600,756)
+        self.assertLess(self.page.mouse.mock_calls.index(unittest.mock.call.click(1140,998)),
+                        self.page.mouse.mock_calls.index(unittest.mock.call.move(600,756)))
         self.op.execute_sanma_friend_tsumo_candidate.assert_called_once_with(self.page,self.receipt)
         self.assertTrue(self.op.verified_friend_300_active)
         self.assertTrue(any(call.args[0]=='sanma_friend_stopped' for call in self.op.log.call_args_list))
@@ -53,6 +55,8 @@ class ExperimentalSanmaFriendLoopTest(unittest.TestCase):
         self.assertFalse(self.op.verified_friend_300_active)
         self.assertTrue(any(c.args[0]=='sanma_friend_start_input_sent' for c in self.op.log.call_args_list))
         self.assertTrue(any(c.kwargs.get('reason')=='friend_pointer_retreat_failed' for c in self.op.log.call_args_list))
+        self.assertTrue(any(c.kwargs.get('startInputSent') is True and c.kwargs.get('error')=='move failed'
+                            for c in self.op.log.call_args_list))
 
     def test_saved_raised_hand_overlaps_start_pointer_not_retreat(self):
         from auto_operator import raised_closed_hand_slots, load_json
@@ -63,7 +67,11 @@ class ExperimentalSanmaFriendLoopTest(unittest.TestCase):
         tile=layout['handSlots'][9]
         self.assertTrue(tile['x'] <= 1140 < tile['x']+tile['width'])
         self.assertTrue(tile['y'] <= 998 < tile['y']+tile['height'])
-        self.assertLess(layout['viewport']['height']*.72, tile['y'])
+        retreat=(layout['viewport']['width']*.3125,layout['viewport']['height']*.7)
+        self.assertEqual(retreat,(600,756))
+        self.assertFalse(750 <= retreat[0] < 1160 and 535 <= retreat[1] < 760)  # own river
+        self.assertFalse(600 <= retreat[0] < 1425 and 785 <= retreat[1] < 875)  # action row
+        self.assertFalse(180 <= retreat[0] < 1650 and 865 <= retreat[1] < 1080)  # hand
 
     def test_ron_takes_priority_over_other_candidates(self):
         self.op.execute_sanma_friend_ron_candidate = Mock(return_value={'confirmation':'unknown'})
