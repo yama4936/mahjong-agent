@@ -27,3 +27,13 @@ class ClosedHandFastEquivalence(unittest.TestCase):
     self.assertEqual(closed_hand_face_mismatches(self.a,after,self.layout,threshold),original(self.a,after,self.layout,threshold))
  def test_unreadable_frames_fail_closed(self):
   self.assertEqual(closed_hand_face_mismatches(b'bad',self.b,self.layout,.5),[{'index':-1,'faceStructureDelta':None}])
+  self.assertEqual(closed_hand_face_mismatches(self.a,self.b[:len(self.b)//2],self.layout,.5),[{'index':-1,'faceStructureDelta':None}])
+ def test_cmyk_jpeg_and_integer_images_fail_closed(self):
+  for mode,fmt in (('CMYK','JPEG'),('I','PNG')):
+   image=Image.new(mode,(1920,1080));out=io.BytesIO();image.save(out,format=fmt);data=out.getvalue()
+   with self.subTest(mode=mode):
+    self.assertEqual(closed_hand_face_mismatches(data,data,self.layout,.5),[{'index':-1,'faceStructureDelta':None}])
+    self.assertEqual(closed_hand_face_mismatches(self.a,data,self.layout,.5),[{'index':-1,'faceStructureDelta':None}])
+ def test_rgb_jpeg_matches_old_png_roundtrip(self):
+  image=Image.open(io.BytesIO(self.a)).convert('RGB');out=io.BytesIO();image.save(out,format='JPEG');jpeg=out.getvalue()
+  self.assertEqual(closed_hand_face_mismatches(jpeg,self.b,self.layout,.5),original(jpeg,self.b,self.layout,.5))

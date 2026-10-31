@@ -330,6 +330,11 @@ def closed_hand_face_mismatches(
     try:
         with Image.open(io.BytesIO(evaluated_full)) as first, Image.open(io.BytesIO(current_full)) as second:
             first.load(); second.load()
+            # The former per-tile PNG round trip rejects CMYK and other
+            # unsupported modes; integer modes can also be changed by that
+            # round trip. Do not silently treat such images as comparable.
+            if first.mode not in ('1', 'L', 'LA', 'P', 'RGB', 'RGBA') or second.mode not in ('1', 'L', 'LA', 'P', 'RGB', 'RGBA'):
+                return [{"index": -1, "faceStructureDelta": None}]
             return _closed_hand_face_mismatches_decoded(first, second, slots, threshold)
     except Exception:
         # An unreadable or incorrectly sized frame cannot prove identity.
