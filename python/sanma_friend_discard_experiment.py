@@ -237,7 +237,19 @@ def execute_friend_draw_candidate(operator, page, receipt):
     partial_row = (friend_visible_row_with_north_overlap(baseline, row_slots)
                    or friend_visible_empty_row_candidate(baseline, row_slots))
     draw_only = hand_value.get("safe") is not True and white_candidates is None and experimental_draw_only_candidate(hand_value, geo_value, draw)
-    if ((hand_value.get("safe") is not True and white_candidates is None and not draw_only) or hand_value.get("turnReady") is not True
+    defensive = (friend_genbutsu_candidate(source, receipt['digest'], threats, tiles, hand_value.get('matches'))
+                 if threats and isinstance(tiles, list) and isinstance(points, list) and len(points) == len(tiles) else None)
+    if defensive is not None and defensive['index'] != draw.get('index'):
+        from sanma_friend_shape_candidate import friend_hand_click_geometry
+        calibrated = operator.layout if isinstance(operator.layout,dict) else {}
+        hand_slots = [*geo_value.get('handSlots', []),geo_value.get('drawSlot')]
+        if (calibrated.get('handSlots') != geo_value.get('handSlots')
+                or calibrated.get('drawSlot') != geo_value.get('drawSlot')
+                or calibrated.get('clickPoints') != points
+                or not friend_hand_click_geometry(hand_slots,points)
+                or getattr(operator, 'sanma_friend_riichi_attempted', False) is not False):
+            defensive = None
+    if ((hand_value.get("safe") is not True and white_candidates is None and not draw_only and defensive is None) or hand_value.get("turnReady") is not True
             or not isinstance(row_slots, list) or len(row_slots) != 3
             or (not partial_row and any(slot.get("status") != "empty_candidate" for slot in row_slots))
             or not isinstance(tiles, list) or len(tiles) != 14 or not isinstance(points, list) or len(tiles) != len(points)
@@ -245,18 +257,6 @@ def execute_friend_draw_candidate(operator, page, receipt):
             or draw.get("point") != points[-1]):
         raise ValueError("unsafe hand, uncertain prompt or draw mismatch")
     slots = [{"tile": tile, **point} for tile, point in zip(tiles, points)]
-    defensive = friend_genbutsu_candidate(source, receipt['digest'], threats, tiles, hand_value.get('matches')) if threats else None
-    if defensive is not None and defensive['index'] != draw['index']:
-        from sanma_friend_shape_candidate import friend_hand_click_geometry
-        calibrated = operator.layout if isinstance(operator.layout,dict) else {}
-        hand_slots = [*geo_value.get('handSlots', []),geo_value.get('drawSlot')]
-        if (calibrated.get('handSlots') != geo_value.get('handSlots')
-                or calibrated.get('drawSlot') != geo_value.get('drawSlot')
-                or calibrated.get('clickPoints') != points
-                or not friend_hand_click_geometry(hand_slots,points)):
-            defensive = None
-    if defensive is not None and getattr(operator, 'sanma_friend_riichi_attempted', False) is not False and defensive['index'] != draw['index']:
-        defensive = None
     if threats:
         operator.log('sanma_friend_opponent_riichi_candidate', opponents=threats,
                      screenshot=receipt['screenshot'], digest=receipt['digest'], confirmed=False,

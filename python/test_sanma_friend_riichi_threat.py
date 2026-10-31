@@ -115,13 +115,31 @@ class ResidentRiverCandidateTests(unittest.TestCase):
    self.assertTrue(json.loads(child.stdout.readline())['ready'])
    with tempfile.TemporaryDirectory(dir=Path(__file__).resolve().parent.parent) as d:
     op=object.__new__(PythonAutoOperator);op.recognition_request_id=0;op.recognition_server=child;op.frames=Path(d);op.log=Mock();page=Mock()
-    for number in (15,21,23):
+    for number in (15,21,23,42):
      page.screenshot.return_value=(ROOT/f'manual-{number:02}-before.png').read_bytes()
      receipt=op.inspect_sanma_self_turn(page);source=receipt['sourceObservation'];hand=source['report']['hand']['value']
      threats=friend_opponent_riichi_candidates(page.screenshot.return_value)
      result=friend_genbutsu_candidate(source,receipt['digest'],threats,hand['tiles'],hand['matches'])
      if number==15:
       self.assertEqual(result['tile'],'2p');self.assertFalse(hand['turnReady'])
+     elif number==42:
+      self.assertEqual((result['tile'],result['index']),('8p',4))
+      self.assertFalse(hand['safe']);self.assertLess(hand['matches'][-1]['confidence'],.98)
+      from auto_operator import load_json
+      op.args=SimpleNamespace(experimental_sanma_friend=True,rules='sanma',mode='force-auto',action_deadline_ms=300000,ranked_loop=False)
+      op.verified_friend_300_active=True;op.verified_friend_300_started_at=time.monotonic();op.sanma_friend_riichi_attempted=False
+      op.layout=load_json(Path('config/layout-runtime.json'))
+      with patch('sanma_friend_discard_experiment.send_discard_click',return_value={}) as send:
+       action=execute_friend_draw_candidate(op,page,receipt)
+      self.assertEqual((action['tile'],action['clickIndex']),('8p',4))
+      self.assertEqual(action['result'],'discard_not_verified');send.assert_called_once()
+      import copy
+      op._sanma_friend_attempted_targets=set()
+      op.layout=copy.deepcopy(op.layout);op.layout['clickPoints'][4]['x']+=10
+      with patch('sanma_friend_discard_experiment.send_discard_click') as send:
+       with self.assertRaisesRegex(ValueError,'unsafe hand'):
+        execute_friend_draw_candidate(op,page,receipt)
+       send.assert_not_called()
      else:
       self.assertIsNone(result)
       if number==23:
