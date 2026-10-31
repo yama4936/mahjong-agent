@@ -8858,6 +8858,12 @@ class PythonAutoOperator:
                 self.log("sanma_friend_stopped", reason="screen_observation_failed", error=str(error),
                          screenshot=preserve(last_frame))
                 return
+            if state == "black_screen":
+                self.log("sanma_friend_stopped", reason="black_screen_unobservable",
+                         screenState=state, confidence=confidence, screenshot=preserve(frame),
+                         digest=hashlib.sha256(frame).hexdigest(), gameplayClicks=0,
+                         recovery="not_attempted", operationAuthorized=False)
+                return
             if state == "match" and confidence >= 0.95:
                 if round_end_started is not None:
                     self.log("sanma_friend_round_transition_reobserved", screenState=state,

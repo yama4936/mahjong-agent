@@ -73,6 +73,35 @@ class ExperimentalSanmaFriendLoopTest(unittest.TestCase):
         self.assertFalse(600 <= retreat[0] < 1425 and 785 <= retreat[1] < 875)  # action row
         self.assertFalse(180 <= retreat[0] < 1650 and 865 <= retreat[1] < 1080)  # hand
 
+    def test_real_black_frame_stops_without_click_reload_or_recognition(self):
+        import hashlib
+        frame=Path('/home/yama1/.codex/sanma-run-cd82c23-20261101/current9.png')
+        if not frame.exists(): self.skipTest('saved black friend frame unavailable')
+        image=frame.read_bytes()
+        self.op.verified_friend_300_active=True
+        self.op.args.max_iterations=0
+        self.page.screenshot.return_value=image
+        self.op.run_experimental_sanma_friend(self.page)
+        event=next(c for c in self.op.log.call_args_list if c.kwargs.get('reason')=='black_screen_unobservable')
+        self.assertEqual(Path(event.kwargs['screenshot']).read_bytes(),image)
+        self.assertEqual(event.kwargs['digest'],hashlib.sha256(image).hexdigest())
+        self.assertEqual(event.kwargs['gameplayClicks'],0)
+        self.assertEqual(event.kwargs['recovery'],'not_attempted')
+        self.assertFalse(event.kwargs['operationAuthorized'])
+        self.page.reload.assert_not_called();self.page.mouse.click.assert_not_called()
+        self.op.inspect_sanma_self_turn.assert_not_called()
+
+    def test_unknown_screen_still_stops_after_match_not_as_black(self):
+        self.op.verified_friend_300_active=True
+        self.op.args.max_iterations=2
+        self.page.screenshot.side_effect=[b'match',b'unknown']
+        self.op.inspect_sanma_self_turn.return_value={'candidates':{'candidates':[]},'digest':'one','drawCandidate':{'status':'unresolved'}}
+        with patch('auto_operator.classify_screen',side_effect=[('match',1.0),('unknown',0.0)]):
+            self.op.run_experimental_sanma_friend(self.page)
+        self.assertTrue(any(c.kwargs.get('reason')=='unexpected_screen' for c in self.op.log.call_args_list))
+        self.assertFalse(any(c.kwargs.get('reason')=='black_screen_unobservable' for c in self.op.log.call_args_list))
+        self.page.reload.assert_not_called();self.page.mouse.click.assert_not_called()
+
     def test_ron_takes_priority_over_other_candidates(self):
         self.op.execute_sanma_friend_ron_candidate = Mock(return_value={'confirmation':'unknown'})
         self.receipt['candidates'] = {'candidates':[{'action':'pon'}, {'action':'ron'}]}
