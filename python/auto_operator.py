@@ -8859,11 +8859,63 @@ class PythonAutoOperator:
                          screenshot=preserve(last_frame))
                 return
             if state == "black_screen":
-                self.log("sanma_friend_stopped", reason="black_screen_unobservable",
-                         screenState=state, confidence=confidence, screenshot=preserve(frame),
+                black_started = time.monotonic()
+                self.log("sanma_friend_black_screen_observed", screenshot=preserve(frame),
+                         digest=hashlib.sha256(frame).hexdigest(), recoveryInputAttempts=0,
+                         currentLoopUnconfirmedInputObserved=unconfirmed_input_seen,
+                         operationAuthorized=False)
+                # A prior uncertain input could have completed while the display was
+                # black. Never use recovery as evidence that it is safe to repeat.
+                reason = "black_screen_unobservable"
+                recovered = False
+                if not unconfirmed_input_seen and last_unconfirmed_action is None:
+                    for attempt in range(48):
+                        if (time.monotonic() - black_started >= 240 or
+                            (action_observed_at is not None and
+                             (time.monotonic() - action_observed_at) * 1000 >= self.args.action_deadline_ms)):
+                            reason = "black_screen_deadline_expired"
+                            break
+                        try:
+                            page.wait_for_timeout(5000)
+                        except Exception as error:
+                            reason = "black_screen_observation_failed"
+                            self.log("sanma_friend_black_observation_failed", error=str(error))
+                            break
+                        if self.verified_friend_300_active is not True:
+                            reason = "friend_session_revoked"
+                            break
+                        if (time.monotonic() - black_started >= 240 or
+                            (action_observed_at is not None and
+                             (time.monotonic() - action_observed_at) * 1000 >= self.args.action_deadline_ms)):
+                            reason = "black_screen_deadline_expired"
+                            break
+                        try:
+                            candidate = page.screenshot(animations="disabled")
+                            candidate_state, candidate_confidence = classify_screen(candidate, self.screen_references)
+                        except Exception as error:
+                            reason = "black_screen_observation_failed"
+                            self.log("sanma_friend_black_observation_failed", error=str(error))
+                            break
+                        if candidate_state == "black_screen":
+                            continue
+                        if candidate_state != "match" or candidate_confidence < 0.95:
+                            last_frame = candidate
+                            reason = "black_screen_recovered_unexpected_screen"
+                            break
+                        self.log("sanma_friend_black_screen_recovered", screenshot=preserve(candidate),
+                                 digest=hashlib.sha256(candidate).hexdigest(), attempts=attempt + 1,
+                                 operationAuthorized=False, freshRecognitionRequired=True)
+                        recovered = True
+                        break
+                if recovered:
+                    # Discard the recovery frame and all pre-black observations;
+                    # the ordinary loop takes a new screenshot and recognizes it.
+                    continue
+                self.log("sanma_friend_stopped", reason=reason,
+                         screenState=state, confidence=confidence, screenshot=preserve(last_frame),
                          digest=hashlib.sha256(frame).hexdigest(), recoveryInputAttempts=0,
                          priorGameplayInputCount=None, currentLoopUnconfirmedInputObserved=unconfirmed_input_seen,
-                         recovery="not_attempted", operationAuthorized=False)
+                         recovery="passive_only", operationAuthorized=False)
                 return
             if state == "match" and confidence >= 0.95:
                 if round_end_started is not None:
