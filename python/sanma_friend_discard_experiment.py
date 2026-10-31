@@ -298,6 +298,7 @@ def execute_friend_draw_candidate(operator, page, receipt):
     plan = {"scope": "offline_untrusted_sanma_discard_plan", "operationAuthorized": False,
             "tile": selected["tile"], "clickIndex": selected["index"], "clickPoint": selected["point"]}
     operator.log("sanma_friend_shape_candidate", candidate=shape,
+                 selectedPlan=plan, sourceDigest=receipt['digest'],
                  selectedAction="genbutsu_candidate" if defensive is not None else "shape_hypothesis" if shape_choice else "draw_only",
                  reason="visible rail and hand are unverified; riichi, live tiles and turn remain unknown")
     if draw_only:

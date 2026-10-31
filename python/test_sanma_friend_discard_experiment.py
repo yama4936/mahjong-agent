@@ -134,6 +134,9 @@ class FriendDrawBridgeTests(unittest.TestCase):
         self.assertEqual(execute.call_args.kwargs["plan"]["clickPoint"], self.point)
         self.assertEqual(execute.call_args.kwargs["plan"]["tile"], "1m")
         self.assertEqual(execute.call_args.kwargs["turn_started_monotonic"], 100)
+        event = next(c for c in self.operator.log.call_args_list if c.args[0] == 'sanma_friend_shape_candidate')
+        self.assertEqual(event.kwargs['selectedPlan'], execute.call_args.kwargs['plan'])
+        self.assertEqual(event.kwargs['sourceDigest'], self.receipt['digest'])
 
     @patch("sanma_friend_discard_experiment.execute_friend_discard")
     def test_prompt_or_ranked_never_dispatches(self, execute):

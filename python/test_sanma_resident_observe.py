@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 from auto_operator import PythonAutoOperator
 
 
@@ -82,6 +82,60 @@ class ResidentObservationTests(unittest.TestCase):
         self.assertEqual(Path(receipt['screenshot']).read_bytes(), b'fake frame')
         page.mouse.click.assert_not_called()
         op.log.assert_called_once()
+
+    def test_full_observation_receipt_is_saved_and_hash_linked_to_log(self):
+        result = self.result()
+        result['report'].update({'hand': {'status':'candidate', 'value':{'tiles':['6s'],'matches':[{'tile':'6s','confidence':.99}]}},
+                                 'river': {'status':'unknown','complete':False},
+                                 'buttonRow': {'status':'unresolved'}})
+        result['candidates']={'status':'unresolved','candidates':[]}
+        op=self.operator({'id':1,'result':result});page=Mock();page.screenshot.return_value=b'fake frame'
+        receipt=op.inspect_sanma_self_turn(page)
+        event=op.log.call_args
+        saved=Path(event.kwargs['receiptPath']);data=saved.read_bytes()
+        self.assertEqual(saved.stat().st_mode & 0o077, 0)
+        self.assertEqual(hashlib.sha256(data).hexdigest(),event.kwargs['receiptSha256'])
+        self.assertEqual(event.kwargs['evidence']['receipt'], str(saved))
+        self.assertEqual(event.kwargs['evidence']['receiptSha256'], event.kwargs['receiptSha256'])
+        from analysis_recorder import AnalysisRecorder
+        recorder = AnalysisRecorder(Path(self.temp.name)/'analysis','test-run')
+        recorder.observe({'event':'sanma_self_turn_observed',**event.kwargs})
+        staged=json.loads(recorder.pending.read_text().splitlines()[0])
+        self.assertEqual(staged['evidence']['receipt'],str(saved))
+        self.assertEqual(staged['evidence']['frameSha256'],receipt['digest'])
+        self.assertEqual(json.loads(data),receipt)
+        self.assertEqual(event.kwargs['digest'],hashlib.sha256(Path(receipt['screenshot']).read_bytes()).hexdigest())
+        self.assertEqual(json.loads(data)['sourceObservation']['report']['river']['status'],'unknown')
+        self.assertFalse(json.loads(data)['operationAuthorized'])
+        page.mouse.click.assert_not_called()
+
+    def test_cd82_saved_frame_and_recognition_report_are_bound_in_receipt(self):
+        import glob
+        frames = glob.glob('/home/yama1/.codex/sanma-run-cd82c23-20261101/run/frames/*15-13-52*sanma-self-turn.png')
+        fixture = Path(__file__).parent/'fixtures'/'sanma-cd82-discard-report.json'
+        if not frames or not fixture.exists(): self.skipTest('cd82 saved frame or report unavailable')
+        image=Path(frames[0]).read_bytes(); digest=hashlib.sha256(image).hexdigest()
+        report=json.loads(fixture.read_text()); report['digest']=digest
+        result=self.result();result.update(digest=digest,report=report)
+        result['structuralPositions']['digest']=digest
+        op=self.operator({'id':1,'result':result});page=Mock();page.screenshot.return_value=image
+        receipt=op.inspect_sanma_self_turn(page)
+        event=op.log.call_args
+        saved=json.loads(Path(event.kwargs['receiptPath']).read_text())
+        self.assertEqual(saved['digest'],digest)
+        self.assertEqual(saved['sourceObservation']['report']['hand']['value']['tiles'][-1],'S')
+        self.assertEqual(saved['sourceObservation']['report']['buttonRow']['value']['slots'][2]['status'],'unresolved')
+        self.assertFalse(saved['operationAuthorized'])
+        self.assertEqual(Path(receipt['screenshot']).read_bytes(),image)
+        page.mouse.click.assert_not_called()
+
+    def test_evidence_save_failure_blocks_before_action(self):
+        op=self.operator({'id':1,'result':self.result()});page=Mock();page.screenshot.return_value=b'fake frame'
+        with patch('auto_operator.os.open',side_effect=OSError('disk unavailable')):
+            with self.assertRaisesRegex(RuntimeError,'evidence could not be recorded'):
+                op.inspect_sanma_self_turn(page)
+        self.assertTrue(any(c.args[0]=='sanma_friend_observation_record_failed' for c in op.log.call_args_list))
+        page.mouse.click.assert_not_called()
 
     def test_invalid_structural_positions_never_authorize_click(self):
         for candidate in ({'status': 'blocked', 'operationAuthorized': True, 'digest': self.digest, 'candidates': []},

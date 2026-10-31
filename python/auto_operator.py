@@ -4157,7 +4157,23 @@ class PythonAutoOperator:
                    "candidates": result.get("candidates"), "structuralPositions": structural,
                    "drawCandidate": sanma_draw_observation_candidate(result),
                    "sourceObservation": result, "freshness": freshness}
+        # Persist the exact untrusted result before any playing decision so the
+        # frame, OCR/tiles, candidates and unknown fields remain auditable.
+        receipt_path = path.with_suffix('.receipt.json')
+        try:
+            encoded = (json.dumps(receipt, ensure_ascii=False, allow_nan=False, separators=(',', ':')) + '\n').encode('utf-8')
+            fd = os.open(receipt_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, 'wb') as stream:
+                stream.write(encoded)
+        except Exception as error:
+            self.log("sanma_friend_observation_record_failed", screenshot=str(path), digest=receipt["digest"],
+                     error=f"{type(error).__name__}: {error}", operationAuthorized=False)
+            raise RuntimeError("sanma observation evidence could not be recorded") from error
+        receipt_sha256 = hashlib.sha256(encoded).hexdigest()
         self.log("sanma_self_turn_observed", digest=receipt["digest"], screenshot=str(path),
+                 receiptPath=str(receipt_path), receiptSha256=receipt_sha256,
+                 evidence={"screenshot":str(path), "frameSha256":receipt["digest"],
+                           "receipt":str(receipt_path), "receiptSha256":receipt_sha256},
                  priority=receipt["priority"], evaluation=receipt["evaluation"], freshness=freshness)
         return receipt
 
