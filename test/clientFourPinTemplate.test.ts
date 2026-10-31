@@ -5,6 +5,7 @@ import { existsSync } from 'node:fs';
 import { mkdtemp, readFile, readdir, rm, symlink, copyFile } from 'node:fs/promises';
 import path from 'node:path';
 import { classifyTile, loadTemplates, matchTile } from '../src/recognition/templateMatcher.js';
+import { proposeLiveHandLayout } from '../src/recognition/handLayoutProposal.js';
 
 const base = 'templates/bootstrap';
 const fixture = 'templates/client/4p__6c_friend.png';
@@ -38,6 +39,25 @@ test('four-pin candidate improves independent crop without new high-confidence h
       const next = await classifyTile(img, proposed, options);
       // Existing false positives are not hidden by this incremental check.
       assert.equal(next.tile !== expected && threshold(next) && !(old.tile !== expected && threshold(old)), false, file);
+    }
+    // Two four-player captures with manually reviewed expected tile labels.
+    // Neither frame contains 4p, and cross-game independence is not proven.
+    const fourPlayer = [
+      ['hand-seven-sou-control-a-20261021.jpg', ['6m','6m','7m','7m','1p','2p','2p','2p','4s','5s','7s','8s','S','N']],
+      ['hand-nine-sou-before-glare-20261021.jpg', ['1m','1m','2m','2m','0m','5m','7m','8p','8p','2s','5s','6s','9s','S']],
+    ] as const;
+    for (const [name, expected] of fourPlayer) {
+      const imagePath = path.join('test/fixtures', name);
+      const geometry = await proposeLiveHandLayout(imagePath);
+      const rectangles = [...geometry.handSlots, geometry.drawSlot];
+      assert.equal(rectangles.length, 14);
+      for (let i = 0; i < rectangles.length; i++) {
+        const old = await matchTile(imagePath, rectangles[i]!, original, options);
+        const next = await matchTile(imagePath, rectangles[i]!, proposed, options);
+        assert.equal(old.tile, expected[i], `${name} baseline ${i}`);
+        assert.equal(next.tile, expected[i], `${name} with candidate ${i}`);
+        assert.deepEqual(next, old, `${name} changed result ${i}`);
+      }
     }
     const image = 'test/fixtures/fourpin-review/hand-independent-heldout.png';
     const xs = [223,318,413,508,603,698,792,887,982,1077,1172];
