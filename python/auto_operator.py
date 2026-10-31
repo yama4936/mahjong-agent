@@ -50,6 +50,10 @@ class RetryableSafetyAbort(RuntimeError):
     """A stale pre-click observation that is safe to reevaluate."""
 
 
+class SanmaKitaPreclickChanged(RetryableSafetyAbort):
+    """A kita screenshot changed before any input was attempted."""
+
+
 class ReactionWinPromptChangedAbort(RetryableSafetyAbort):
     """A streamed win candidate vanished or became ambiguous before input."""
 
@@ -4381,7 +4385,7 @@ class PythonAutoOperator:
             if (not friend_frame_stable(baseline, fresh)
                     and not (freshness.get("status") == "stable_kita_glyph_candidate"
                              and experimental_kita_glyph_stability(baseline, fresh, report))):
-                raise ValueError("screen changed outside clock area")
+                raise SanmaKitaPreclickChanged("screen changed outside clock area")
             screen_state, confidence = classify_screen(fresh, self.screen_references)
             if screen_state != "match" or confidence < 0.95:
                 raise ValueError("game screen not recognized")
@@ -4395,6 +4399,8 @@ class PythonAutoOperator:
                              reason=str(error), confirmed=False)
                 except Exception:
                     pass  # Evidence failures must never permit a click.
+            if isinstance(error, SanmaKitaPreclickChanged):
+                raise SanmaKitaPreclickChanged(f"sanma kita pre-click check failed: {error}") from error
             raise RuntimeError(f"sanma kita pre-click check failed: {error}") from error
         if self.verified_friend_300_active is not True or not 0 <= time.monotonic() - started_at < 300:
             raise RuntimeError("experimental sanma friend session or timing expired")
@@ -8802,6 +8808,7 @@ class PythonAutoOperator:
         unknown_since = None
         changed_streak = 0
         changed_since = None
+        kita_preclick_rejections = 0
         startup_unknown_polls = 0
         match_seen = False
         result_latched = None
@@ -8897,7 +8904,21 @@ class PythonAutoOperator:
                                          previousActionConfirmed=False)
                                 return
                         action = "kita"
-                        result = self.execute_sanma_friend_kita_candidate(page, receipt)
+                        try:
+                            result = self.execute_sanma_friend_kita_candidate(page, receipt)
+                        except SanmaKitaPreclickChanged as error:
+                            kita_preclick_rejections += 1
+                            self.log("sanma_friend_wait", reason="kita_preclick_reobserve",
+                                     screenshot=receipt.get("screenshot"), digest=frame_digest,
+                                     streak=kita_preclick_rejections, clicked=False, error=str(error))
+                            if (kita_preclick_rejections >= 3 or last_unconfirmed_action is not None
+                                    or self.verified_friend_300_active is not True
+                                    or not 0 <= time.monotonic() - action_observed_at < 300):
+                                self.log("sanma_friend_stopped", reason="kita_preclick_reobserve_limit",
+                                         streak=kita_preclick_rejections, clicked=False)
+                                return
+                            page.wait_for_timeout(500)
+                            continue
                     elif len(actions) == 1 and isinstance(actions[0], dict) and actions[0].get("action") == "riichi":
                         from sanma_friend_riichi_experiment import execute_friend_riichi
                         action = "riichi"
@@ -8937,6 +8958,7 @@ class PythonAutoOperator:
                         self.log("sanma_friend_stopped", reason="unsupported_or_unknown_action", screenshot=receipt.get("screenshot"),
                                  digest=frame_digest, candidates=candidates, operationAuthorized=False)
                         return
+                    kita_preclick_rejections = 0
                     attempted_frames.add(frame_digest)
                     last_unconfirmed_action = action
                     last_kita_receipt = receipt if action == "kita" else None

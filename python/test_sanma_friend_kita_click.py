@@ -105,6 +105,24 @@ process.stdout.write(JSON.stringify(report));
         self.assertEqual(event.kwargs['baseline'],str(self.path))
         self.page.mouse.click.assert_not_called()
 
+    def test_ba2_actual_preclick_rejection_is_distinct_and_does_not_click(self):
+        from auto_operator import SanmaKitaPreclickChanged
+        root=Path('/home/yama1/.codex/sanma-run-ba2a797-20261031/retry2/frames')
+        before=list(root.glob('*13-22-44*sanma-self-turn.png'))
+        after=list(root.glob('*sanma-kita-rejected.png'))
+        if not before or not after:self.skipTest('saved ba2 friend frames unavailable')
+        frame=before[0].read_bytes(); digest=hashlib.sha256(frame).hexdigest()
+        self.path.write_bytes(frame)
+        self.receipt['digest']=digest
+        self.receipt['sourceObservation']['digest']=digest
+        self.receipt['sourceObservation']['report']['digest']=digest
+        self.receipt['freshness']['status']='stable_kita_glyph_candidate'
+        self.page.screenshot.side_effect=None
+        self.page.screenshot.return_value=after[0].read_bytes()
+        with self.assertRaisesRegex(SanmaKitaPreclickChanged,'screen changed outside clock area'):
+            self.operator.execute_sanma_friend_kita_candidate(self.page,self.receipt)
+        self.page.mouse.click.assert_not_called()
+
     def test_uncertain_click_error_does_not_allow_retry(self):
         self.page.mouse.click.side_effect = RuntimeError('input acknowledgement lost')
         with self.assertRaisesRegex(RuntimeError, 'acknowledgement lost'):
