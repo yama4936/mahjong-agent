@@ -178,6 +178,36 @@ def friend_visible_empty_row_candidate(frame, row_slots):
         return False
 
 
+def friend_visible_full_empty_row_candidate(frame, row_slots):
+    """Friend-only visible-empty hypothesis, requiring an unobscured full row.
+
+    A pixel match cannot establish hidden state or riichi status. Only the
+    reviewed blank-slot reference is accepted, not north-overlap references.
+    """
+    if (not isinstance(row_slots, list) or len(row_slots) != 3
+            or any(not isinstance(slot, dict) or slot.get('status') != 'empty_candidate' for slot in row_slots[:2])
+            or not isinstance(row_slots[2], dict) or row_slots[2].get('status') != 'unresolved'):
+        return False
+    try:
+        with Image.open(io.BytesIO(frame)) as source:
+            if source.size != (1920, 1080):
+                return False
+            image = source.convert('RGB')
+        if not friend_empty_first_two_pixels(image):
+            return False
+        with Image.open(Path(__file__).parent / 'fixtures' / 'sanma-friend-empty-slot-6c.png') as source:
+            reference = source.convert('RGB')
+        if reference.size != (245, 90):
+            return False
+        delta = ImageChops.difference(image.crop((1180, 785, 1425, 875)), reference)
+        if max(channel[1] for channel in delta.getextrema()) > 30:
+            return False
+        return all(sum(ImageStat.Stat(delta.crop((x, y, min(x+16, 245), min(y+16, 90)))).mean) / 3 <= 3
+                   for y in range(0, 90, 16) for x in range(0, 245, 16))
+    except (OSError, ValueError, TypeError):
+        return False
+
+
 def experimental_draw_only_candidate(hand, geometry, draw):
     """Only the separated draw label is used; other labels remain uncertain."""
     try:
@@ -284,7 +314,8 @@ def execute_friend_draw_candidate(operator, page, receipt):
                         if isinstance(operator.layout, dict) else [])
     shape_choice = (getattr(operator, "sanma_friend_riichi_attempted", False) is False
                     and shape.get("status") == "candidate"
-                    and all(slot.get("status") == "empty_candidate" for slot in row_slots)
+                    and (all(slot.get("status") == "empty_candidate" for slot in row_slots)
+                         or friend_visible_full_empty_row_candidate(baseline, row_slots))
                     and len(calibrated_points) == len(points) == len(calibrated_slots) == 14
                     and calibrated_points == points
                     and friend_hand_click_geometry(calibrated_slots, calibrated_points)
