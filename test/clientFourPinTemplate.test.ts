@@ -21,11 +21,11 @@ test('four-pin candidate improves independent crop without new high-confidence h
     const allFiles = (await readdir(base)).filter(f => /\.(png|jpe?g|webp)$/i.test(f));
     const holdouts = allFiles.filter(f => /(?:holdout|capture|test)/i.test(f));
     assert.ok(holdouts.length >= 105);
-    for (const file of allFiles.filter(f => f !== '4p__6c_friend.png' && f !== '3s__e48_friend.png' && f !== '8s__fourplayer_friend.png')) await symlink(path.resolve(base, file), path.join(temporary, file));
+    for (const file of allFiles.filter(f => f !== '4p__6c_friend.png' && f !== '3s__e48_friend.png' && f !== '8s__fourplayer_friend.png' && f !== '9m__cd82_friend.png')) await symlink(path.resolve(base, file), path.join(temporary, file));
     await copyFile(fixture, path.join(temporary, '4p__6c_friend.png'));
     const options = {normalizeFace:true, rejectBlank:true};
     const train = (name:string) => !/(?:holdout|capture|test)/i.test(name);
-    const original = await loadTemplates(base, name => train(name) && name !== '4p__6c_friend.png' && name !== '3s__e48_friend.png' && name !== '8s__fourplayer_friend.png', options);
+    const original = await loadTemplates(base, name => train(name) && name !== '4p__6c_friend.png' && name !== '3s__e48_friend.png' && name !== '8s__fourplayer_friend.png' && name !== '9m__cd82_friend.png', options);
     const proposed = await loadTemplates(temporary, train, options);
     await copyFile('templates/client/3s__e48_friend.png', path.join(temporary, '3s__e48_friend.png'));
     const proposedThree = await loadTemplates(temporary, train, options);
