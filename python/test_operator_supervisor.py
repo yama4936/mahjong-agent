@@ -160,6 +160,40 @@ class SupervisorTest(unittest.TestCase):
         self.state['launcher']=[];self.supervisor.tick();self.now+=20;self.supervisor.tick()
         self.assertTrue(self.supervisor.held);self.assertEqual(self.launches,[])
 
+    def test_friend_launcher_after_ranked_operator_cannot_be_lost(self):
+        log=self.adopt()
+        log.write_text('')  # no terminal record for the older ranked process
+        self.state['operator']=[]
+        self.state['launcher']=[{'pid':654,'args':['node','scripts/run-operator.mjs',
+                                'force-auto','--rules=sanma','--experimental-sanma-friend']}]
+        self.supervisor.tick()
+        self.assertTrue(self.supervisor.held)
+        self.assertEqual(json.loads(self.supervisor.hold_file.read_text())['reason'],'non_ranked_launcher_observed')
+        self.assertEqual(self.launches,[])
+        self.state['launcher']=[]
+        self.supervisor=self.make_supervisor()  # hold survives supervisor restart
+        self.supervisor.tick();self.now+=20;self.supervisor.tick()
+        self.assertTrue(self.supervisor.held);self.assertEqual(self.launches,[])
+
+    def test_friend_launcher_seen_while_ranked_operator_alive_holds(self):
+        self.adopt()
+        self.state['launcher']=[{'pid':654,'args':['node','scripts/run-operator.mjs',
+                                'force-auto','--rules=sanma']}]
+        self.supervisor.tick()
+        self.assertTrue(self.supervisor.held);self.assertEqual(self.launches,[])
+        self.state['operator']=[];self.state['launcher']=[]
+        self.supervisor=self.make_supervisor();self.supervisor.tick();self.now+=20;self.supervisor.tick()
+        self.assertTrue(self.supervisor.held);self.assertEqual(self.launches,[])
+
+    def test_non_ranked_launcher_in_multi_launcher_set_is_held(self):
+        self.adopt();self.state['operator']=[]
+        self.state['launcher']=[{'pid':600,'args':['node','scripts/run-operator.mjs','force-auto','--ranked-loop']},
+                                {'pid':654,'args':['node','scripts/run-operator.mjs','force-auto','--rules=sanma']}]
+        self.supervisor.tick()
+        self.assertTrue(self.supervisor.held)
+        self.assertEqual(json.loads(self.supervisor.hold_file.read_text())['launcherPid'],654)
+        self.assertEqual(self.launches,[])
+
     def test_duplicate_operators_are_recorded_without_signalling_them(self):
         self.state["operator"] = [{"pid": 1}, {"pid": 2}]
         self.supervisor.tick()

@@ -209,6 +209,18 @@ class Supervisor:
         if len(state["operator"]) > 1:
             self.hold("multiple_operators", pids=[p["pid"] for p in state["operator"]])
             return
+        # Inspect launchers even while an operator is still present. A friend
+        # launcher and an older ranked operator may both disappear between
+        # scans; delaying this until no operator is present loses that evidence.
+        anchor_pid = self.last_operator if self.last_operator is not None else (
+            state["operator"][0]["pid"] if state["operator"] else None)
+        for launcher in state.get("launcher", []):
+            scope = ranked_scope(launcher.get("args", []))
+            if (anchor_pid is not None and launcher["pid"] != anchor_pid
+                    and scope != "ranked" and not self.held):
+                self.hold("non_ranked_launcher_observed", launcherPid=launcher["pid"],
+                          scope=scope, previousPid=anchor_pid,
+                          previousScope=self.last_operator_scope)
         if state["operator"]:
             operator = state["operator"][0]
             if operator["pid"] != self.last_operator:
