@@ -19,6 +19,17 @@ from auto_operator import send_discard_click
 from sanma_friend_freshness import friend_action_started_at, friend_frame_stable, latch_friend_action_target
 
 
+def friend_opponent_riichi_candidates(frame):
+    """Positive-only stick candidates in physical left/right HUD regions.
+
+    No stick is not proof that an opponent has not declared riichi.
+    """
+    from board_metadata import recognize_riichi_sticks
+    with Image.open(io.BytesIO(frame)) as image:
+        detected = recognize_riichi_sticks(image, 'east')
+    return [side for seat, side in (('south', 'right'), ('north', 'left')) if seat in detected]
+
+
 def experimental_white_hand_candidate(frame, hand, geometry):
     """Narrow visual hypothesis only; unloaded tile faces may look identical."""
     try:
@@ -195,6 +206,12 @@ def execute_friend_draw_candidate(operator, page, receipt):
     baseline = Path(receipt["screenshot"]).read_bytes()
     if hashlib.sha256(baseline).hexdigest() != receipt.get("digest"):
         raise ValueError("recognition frame changed on disk")
+    threats = friend_opponent_riichi_candidates(baseline)
+    if threats:
+        operator.log('sanma_friend_opponent_riichi_candidate', opponents=threats,
+                     screenshot=receipt['screenshot'], digest=receipt['digest'], confirmed=False,
+                     reason='opponent river and safe tiles unverified', operationAuthorized=False)
+        raise ValueError('opponent riichi candidate; safe discard unverified')
     white_candidates = None if hand_value.get("safe") is True else experimental_white_hand_candidate(baseline, hand_value, geo_value)
     partial_row = (friend_visible_row_with_north_overlap(baseline, row_slots)
                    or friend_visible_empty_row_candidate(baseline, row_slots))
