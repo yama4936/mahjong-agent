@@ -35,6 +35,17 @@ class MultiRiichiTests(unittest.TestCase):
    page=Mock();page.screenshot.return_value=self.frame
    with patch('sanma_friend_riichi_experiment.execute_friend_pon_pass'),patch('sanma_friend_riichi_experiment.send_discard_click',return_value={}) as discard:
     execute_friend_riichi(op,page,self.receipt);self.assertEqual(discard.call_args.args[7],7)
+ def test_changed_glyph_color_rejected_even_if_dark_mask_matches(self):
+  image=Image.open(io.BytesIO(self.frame)).convert('RGB');slot=self.layout['handSlots'][7];count=0
+  for y in range(slot['y']+10,slot['y']+slot['height']-38):
+   for x in range(slot['x']+10,slot['x']+slot['width']-10):
+    r,g,b=image.getpixel((x,y))
+    if g-r>20 and g-b>15 and round(.299*r+.587*g+.114*b)<120:
+     image.putpixel((x,y),(210,0,0));count+=1
+  self.assertGreater(count,100)
+  out=io.BytesIO();image.save(out,format='PNG')
+  self.assertIsNone(choose_riichi_selection(out.getvalue(),self.layout,self.receipt))
+
  def test_missing_low_confidence_inconsistent_or_moved_are_rejected(self):
   for case in ('missing','score','low_confidence','point','digest','face'):
    r=copy.deepcopy(self.receipt);frame=self.frame

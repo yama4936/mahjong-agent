@@ -4,7 +4,7 @@ import math
 import time
 from pathlib import Path
 from PIL import Image
-from auto_operator import crop_screenshot, clip_for_hand, riichi_selection_is_visible, send_discard_click, tile_face_structure_delta
+from auto_operator import crop_screenshot, clip_for_hand, riichi_selection_is_visible, send_discard_click, tile_face_structure_delta, experimental_kita_color_stable
 from sanma_friend_freshness import friend_frame_stable, friend_action_started_at
 from sanma_friend_pass_experiment import execute_friend_pon_pass
 
@@ -70,6 +70,7 @@ def choose_riichi_selection(frame, layout, receipt):
             slot=slots[index]
             face={'x':slot['x']+10,'y':slot['y']+10,'width':slot['width']-20,'height':slot['height']-38}
             if tile_face_structure_delta(crop_screenshot(baseline,face),crop_screenshot(frame,face))>.5:return None
+            if not experimental_kita_color_stable(baseline,frame,[face]):return None
             rows_for_tile=[r for r in rows if r['tile']==hand['tiles'][index]]
             if len(rows_for_tile)!=1 or rows_for_tile[0]['shanten']!=0:return None
             row=rows_for_tile[0]
