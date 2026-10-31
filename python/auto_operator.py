@@ -8551,6 +8551,8 @@ class PythonAutoOperator:
         last_unconfirmed_action: str | None = None
         unknown_streak = 0
         unknown_since = None
+        changed_streak = 0
+        changed_since = None
         startup_unknown_polls = 0
         match_seen = False
         result_latched = None
@@ -8595,6 +8597,26 @@ class PythonAutoOperator:
                         self.log("sanma_friend_stopped", reason="unsupported_or_unknown_action", screenshot=receipt.get("screenshot"),
                                  digest=receipt.get("digest"), candidates=candidates, operationAuthorized=False)
                         return
+                    freshness = receipt.get("freshness")
+                    if isinstance(freshness, dict) and freshness.get("status") == "changed":
+                        if changed_since is None:
+                            changed_since = time.monotonic()
+                        changed_streak += 1
+                        elapsed = time.monotonic() - changed_since
+                        self.log("sanma_friend_wait", reason="observation_changed_reobserve",
+                                 screenshot=receipt.get("screenshot"),
+                                 freshnessScreenshot=freshness.get("screenshot"),
+                                 digest=receipt.get("digest"), freshnessDigest=freshness.get("digest"),
+                                 changedRegions=freshness.get("regionsChanged"),
+                                 streak=changed_streak, elapsedSeconds=round(elapsed, 2))
+                        if changed_streak >= 120 or elapsed >= 120:
+                            self.log("sanma_friend_stopped", reason="observation_changed_timeout",
+                                     screenshot=freshness.get("screenshot"), streak=changed_streak)
+                            return
+                        page.wait_for_timeout(500)
+                        continue
+                    changed_streak = 0
+                    changed_since = None
                     frame_digest = receipt.get("digest")
                     if not isinstance(frame_digest, str) or frame_digest in attempted_frames:
                         self.log("sanma_friend_stopped", reason="frame_already_attempted_or_unknown", screenshot=receipt.get("screenshot"))

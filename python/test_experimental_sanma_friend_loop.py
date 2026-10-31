@@ -232,6 +232,33 @@ class ExperimentalSanmaFriendLoopTest(unittest.TestCase):
         self.op.execute_sanma_friend_kita_candidate.assert_called_once()
         self.assertTrue(any(call.kwargs.get('reason')=='previous_kita_unconfirmed' for call in self.op.log.call_args_list))
 
+    def test_real_changed_kita_observation_is_reobserved_before_input(self):
+        directory=Path('/home/yama1/.codex/sanma-run-d0ff500-20261031/frames')
+        original=next(directory.glob('*dcb907c754fe49edb5e5d8a4e2f4ab45.sanma-self-turn.png'),None)
+        changed=next(directory.glob('*91ba8301a2464ec1b3ee6db282cbe1d3.sanma-freshness.png'),None)
+        if original is None or changed is None:
+            self.skipTest('saved stale kita images unavailable')
+        from sanma_friend_freshness import friend_frame_changes
+        self.assertTrue(friend_frame_changes(original.read_bytes(),changed.read_bytes())['fullFrame'])
+        self.op.args.max_iterations = 2
+        first={'candidates':{'candidates':[{'action':'kita'}]},'digest':'first','screenshot':str(original),
+               'freshness':{'status':'changed','screenshot':str(changed),'digest':'changed','regionsChanged':{'hand':True}}}
+        second={'candidates':{'candidates':[{'action':'kita'}]},'digest':'new','screenshot':str(changed),
+                'freshness':{'status':'identical_pixels_candidate'}}
+        self.op.inspect_sanma_self_turn.side_effect = [first,second]
+        self.run_room()
+        self.op.execute_sanma_friend_kita_candidate.assert_called_once_with(self.page,second)
+        self.assertTrue(any(c.kwargs.get('reason')=='observation_changed_reobserve' for c in self.op.log.call_args_list))
+
+    def test_repeated_changed_observation_times_out_without_input(self):
+        self.op.args.max_iterations = 0
+        self.op.verified_friend_300_active = True
+        self.receipt['freshness'] = {'status':'changed'}
+        with patch('auto_operator.classify_screen', return_value=('match',1.0)):
+            self.op.run_experimental_sanma_friend(self.page)
+        self.op.execute_sanma_friend_tsumo_candidate.assert_not_called()
+        self.assertTrue(any(c.kwargs.get('reason')=='observation_changed_timeout' for c in self.op.log.call_args_list))
+
     def test_same_frame_after_unconfirmed_transition_never_repeats_click(self):
         self.op.args.max_iterations = 2
         self.op.observe_sanma_friend_transition.return_value = {'status':'visual_change_unconfirmed','confirmed':False}
