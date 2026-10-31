@@ -8914,6 +8914,15 @@ class PythonAutoOperator:
                     self.verified_friend_300_active = False
                     self.log("sanma_friend_stopped", reason="friend_start_click_failed", preflight=str(preflight_path))
                     raise
+                self.log("sanma_friend_start_input_sent", preflight=str(preflight_path), point={"x":1140,"y":998},
+                         actionDeadlineMs=300000, roomClock="300+0", scope="experimental_friend_only")
+                try:
+                    retreat_pointer_from_hand(page.mouse, self.layout['viewport'])
+                    self.log("sanma_friend_pointer_retreated", reason="after_friend_start")
+                except Exception:
+                    self.verified_friend_300_active = False
+                    self.log("sanma_friend_stopped", reason="friend_pointer_retreat_failed", preflight=str(preflight_path))
+                    raise
                 try:
                     commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=self.root,
                                             capture_output=True, text=True, check=True).stdout.strip()

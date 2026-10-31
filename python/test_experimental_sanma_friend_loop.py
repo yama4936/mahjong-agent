@@ -18,6 +18,7 @@ class ExperimentalSanmaFriendLoopTest(unittest.TestCase):
         self.op.args = SimpleNamespace(rules='sanma',mode='force-auto',experimental_sanma_friend=True,
             action_deadline_ms=300000,ranked_loop=False,start_reviewed_friend_room=str(self.preflight),max_iterations=1)
         self.op.frames = Path(self.temp.name)
+        self.op.layout = {'viewport': {'width':1920, 'height':1080}}
         self.op.screen_references = {}
         self.op.ensure_viewport = Mock()
         self.op.log = Mock()
@@ -38,9 +39,31 @@ class ExperimentalSanmaFriendLoopTest(unittest.TestCase):
     def test_reviewed_room_start_routes_tsumo_and_stops(self):
         self.run_room()
         self.page.mouse.click.assert_called_once_with(1140,998)
+        self.page.mouse.move.assert_called_once_with(960,777.6)
         self.op.execute_sanma_friend_tsumo_candidate.assert_called_once_with(self.page,self.receipt)
         self.assertTrue(self.op.verified_friend_300_active)
         self.assertTrue(any(call.args[0]=='sanma_friend_stopped' for call in self.op.log.call_args_list))
+
+    def test_pointer_retreat_failure_stops_after_start_without_gameplay(self):
+        self.page.mouse.move.side_effect=RuntimeError('move failed')
+        with self.assertRaisesRegex(RuntimeError,'move failed'):
+            self.run_room()
+        self.page.mouse.click.assert_called_once_with(1140,998)
+        self.op.execute_sanma_friend_tsumo_candidate.assert_not_called()
+        self.assertFalse(self.op.verified_friend_300_active)
+        self.assertTrue(any(c.args[0]=='sanma_friend_start_input_sent' for c in self.op.log.call_args_list))
+        self.assertTrue(any(c.kwargs.get('reason')=='friend_pointer_retreat_failed' for c in self.op.log.call_args_list))
+
+    def test_saved_raised_hand_overlaps_start_pointer_not_retreat(self):
+        from auto_operator import raised_closed_hand_slots, load_json
+        frame=Path('/home/yama1/.codex/sanma-run-dd7175d-20261031/frames/2026-10-31T04-13-17.419359+00-00.0518cdf52f3049c791cc148179c99254.sanma-self-turn.png')
+        if not frame.exists():self.skipTest('saved failed friend frame unavailable')
+        layout=load_json(Path('config/layout-runtime.json'))
+        self.assertEqual(raised_closed_hand_slots(frame.read_bytes(),layout),[9])
+        tile=layout['handSlots'][9]
+        self.assertTrue(tile['x'] <= 1140 < tile['x']+tile['width'])
+        self.assertTrue(tile['y'] <= 998 < tile['y']+tile['height'])
+        self.assertLess(layout['viewport']['height']*.72, tile['y'])
 
     def test_ron_takes_priority_over_other_candidates(self):
         self.op.execute_sanma_friend_ron_candidate = Mock(return_value={'confirmation':'unknown'})
