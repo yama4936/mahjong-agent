@@ -1845,7 +1845,7 @@ def experimental_friend_score_transfer_candidate(frame: bytes) -> bool:
             if image.size != (1920,1080) or ref.size != (65,225): return False
             image=image.convert('RGB');ref=ref.convert('RGB')
             boxes=((740,225,805,300),(1186,480,1251,555),(740,762,805,837))
-            return all(sum(ImageStat.Stat(ImageChops.difference(image.crop(box),ref.crop((0,i*75,65,(i+1)*75)))).mean)/3 <= 4
+            return all(sum(ImageStat.Stat(ImageChops.difference(image.crop(box),ref.crop((0,i*75,65,(i+1)*75)))).mean)/3 <= 4.5
                        for i,box in enumerate(boxes))
     except (OSError,ValueError):
         return False
@@ -8631,17 +8631,17 @@ class PythonAutoOperator:
             try:
                 frame = page.screenshot(animations="disabled")
                 state, confidence = classify_screen(frame, self.screen_references)
-                if state in {"round_result", "match_result"}:
-                    path = self.frames / f"{utc_stamp()}.{uuid.uuid4().hex}.sanma-friend-result.png"
-                    path.write_bytes(frame)
-                    return {"status":"terminal", "screenState":state, "confidence":confidence,
-                            "screenshot":str(path), "confirmed":False}
-                if state in {"away", "unknown", "lobby"} and experimental_friend_score_transfer_candidate(frame):
+                if state in {"away", "unknown", "lobby", "round_result"} and experimental_friend_score_transfer_candidate(frame):
                     path = self.frames / f"{utc_stamp()}.{uuid.uuid4().hex}.sanma-friend-score-transfer.png"
                     path.write_bytes(frame)
                     return {"status":"round_end_candidate", "screenState":state, "confidence":confidence,
                             "screenshot":str(path), "confirmed":False,
                             "reason":"visual score-transfer candidate; no result or score is verified"}
+                if state in {"round_result", "match_result"}:
+                    path = self.frames / f"{utc_stamp()}.{uuid.uuid4().hex}.sanma-friend-result.png"
+                    path.write_bytes(frame)
+                    return {"status":"terminal", "screenState":state, "confidence":confidence,
+                            "screenshot":str(path), "confirmed":False}
                 if state == "lobby":
                     path = self.frames / f"{utc_stamp()}.{uuid.uuid4().hex}.sanma-friend-round-candidate.png"
                     path.write_bytes(frame)
@@ -8852,12 +8852,13 @@ class PythonAutoOperator:
                     self.log("sanma_friend_stopped", reason="observation_or_action_failed", error=str(error),
                              screenshot=preserve(last_frame), operationAuthorized=False)
                     return
-            if (round_end_started is None and match_seen and state in {"away", "unknown", "lobby"}
+            if (round_end_started is None and match_seen and state in {"away", "unknown", "lobby", "round_result"}
                     and experimental_friend_score_transfer_candidate(frame)):
                 round_end_started = time.monotonic()
                 self.log("sanma_friend_score_transfer_candidate", screenState=state, confidence=confidence,
                          screenshot=preserve(frame), confirmed=False)
-            if round_end_started is not None and state in {"lobby", "unknown", "away"}:
+            if (round_end_started is not None and (state in {"lobby", "unknown", "away"}
+                    or (state == "round_result" and experimental_friend_score_transfer_candidate(frame)))):
                 elapsed = time.monotonic() - round_end_started
                 self.log("sanma_friend_wait", reason="round_end_unconfirmed", screenState=state,
                          screenshot=preserve(frame), elapsedSeconds=round(elapsed,2), confirmed=False)
@@ -8882,6 +8883,13 @@ class PythonAutoOperator:
                 page.wait_for_timeout(500)
                 fresh = page.screenshot(animations="disabled")
                 next_state, next_confidence = classify_screen(fresh, self.screen_references)
+                if (self.verified_friend_300_active is True and next_state in {"away", "unknown", "lobby", "round_result"}
+                        and experimental_friend_score_transfer_candidate(fresh)):
+                    round_end_started = time.monotonic()
+                    self.log("sanma_friend_score_transfer_candidate", screenState=next_state, confidence=next_confidence,
+                             screenshot=preserve(fresh), confirmed=False)
+                    page.wait_for_timeout(500)
+                    continue
                 if (next_state != state or next_confidence < 0.95 or not friend_frame_stable(frame, fresh)
                         or self.verified_friend_300_active is not True):
                     self.log("sanma_friend_stopped", reason="result_changed_before_advance", screenshot=preserve(fresh))
