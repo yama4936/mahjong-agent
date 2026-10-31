@@ -55,3 +55,10 @@ class KitaC177LightingTests(unittest.TestCase):
   ImageDraw.Draw(image).rectangle((924,482,927,485),fill='white')
   out=io.BytesIO();image.save(out,format='PNG')
   self.assertFalse(experimental_kita_glyph_stability(before,out.getvalue(),self.report))
+
+ def test_small_wall_change_outside_reviewed_seam_is_rejected(self):
+  before,_=self.pairs[0]
+  image=Image.open(io.BytesIO(before)).convert('RGB')
+  ImageDraw.Draw(image).rectangle((320,96,323,99),fill='white')
+  out=io.BytesIO();image.save(out,format='PNG')
+  self.assertFalse(experimental_kita_glyph_stability(before,out.getvalue(),self.report))

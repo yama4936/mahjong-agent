@@ -1894,9 +1894,13 @@ def experimental_kita_other_regions_stable(before: bytes, after: bytes, boxes: l
         for y in range(0,1080,32):
             for x in range(0,1920,32):
                 crop=diff.crop((x,y,min(x+32,1920),min(y+32,1080)))
-                # Small illumination flicker on the left wall in reviewed frames.
-                limit = 20 if (x,y) == (320,96) else 14
-                if crop.histogram()[255] > limit:return False
+                changed=crop.histogram()[255]
+                if changed > 14:
+                    # The reviewed extra threshold crossings follow a narrow
+                    # tile-back seam, not the rest of the 32x32 block.
+                    if (x,y) != (320,96) or changed > 20:return False
+                    crop.paste(0,(0,21,21,23))
+                    if crop.histogram()[255] > 14:return False
         return True
 
 
