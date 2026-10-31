@@ -304,7 +304,10 @@ def execute_friend_discard(page, *, session, observation, plan, layout, log,
                              or (observation.get("experimentalDrawReport") is not None
                                  and __import__("auto_operator").experimental_draw_glyph_stability(reference, before, observation["experimentalDrawReport"]))))):
             if isinstance(before, bytes) and save_rejected_frame is not None:
-                save_rejected_frame(before)
+                try:
+                    save_rejected_frame(before)
+                except Exception as error:
+                    event['evidenceSaveError'] = f'{type(error).__name__}: {error}'
             raise ValueError("recognition frame changed before click")
         def deadline():
             if session_check is not None and session_check() is not True:

@@ -133,6 +133,10 @@ class FriendDrawBridgeTests(unittest.TestCase):
         changed=Path(self.directory.name)/'changed.png'
         Image.new('RGB',(1920,1080),'white').save(changed)
         page=Mock();page.screenshot.return_value=changed.read_bytes()
-        with self.assertRaises(FileNotFoundError):
+        with self.assertRaisesRegex(ValueError,'recognition frame changed before click'):
             execute_friend_draw_candidate(self.operator,page,self.receipt)
+        event=next(c for c in self.operator.log.call_args_list
+                   if c.args[0]=='sanma_friend_discard_experiment' and c.kwargs.get('error'))
+        self.assertEqual(event.kwargs['error'],'recognition frame changed before click')
+        self.assertIn('FileNotFoundError',event.kwargs['evidenceSaveError'])
         send.assert_not_called()
