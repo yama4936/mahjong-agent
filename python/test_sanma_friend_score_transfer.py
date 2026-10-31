@@ -78,6 +78,12 @@ class ContinuousScoreTransferTests(unittest.TestCase):
   for n in (466,467):
    im=Image.open(io.BytesIO(continuous_frame(n))).convert('RGB');ImageDraw.Draw(im).rectangle((1186,480,1251,555),fill='black');out=io.BytesIO();im.save(out,format='PNG')
    self.assertFalse(experimental_friend_score_transfer_candidate(out.getvalue()))
+ def test_other_overlay_covering_inner_panel_is_not_score_transfer(self):
+  frame=continuous_frame(466)
+  for box in ((940,300,1010,330),(1390,555,1460,585),(940,840,1010,870)):
+   im=Image.open(io.BytesIO(frame)).convert('RGB');ImageDraw.Draw(im).rectangle(box,fill='black');out=io.BytesIO();im.save(out,format='PNG')
+   with self.subTest(box=box):self.assertFalse(experimental_friend_score_transfer_candidate(out.getvalue()))
+
  def test_loop_reobserves_score_animation_without_click(self):
   with tempfile.TemporaryDirectory() as d:
    op=object.__new__(PythonAutoOperator);op.frames=Path(d);op.verified_friend_300_active=True;op.screen_references=load_references(REFS)

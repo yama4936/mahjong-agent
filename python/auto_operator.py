@@ -1845,6 +1845,13 @@ def experimental_friend_score_transfer_candidate(frame: bytes) -> bool:
             if image.size != (1920,1080): return False
             image=image.convert('RGB')
             boxes=((740,225,805,300),(1186,480,1251,555),(740,762,805,837))
+            # Edge-only matching can survive when another screen covers the
+            # result content. Require the visible interior of all three panels.
+            with Image.open(Path(__file__).parent/'fixtures'/'sanma-score-panel-inner.png') as panel:
+                if panel.size != (70,30): return False
+                panel=panel.convert('RGB')
+                for box in ((940,300,1010,330),(1390,555,1460,585),(940,840,1010,870)):
+                    if sum(ImageStat.Stat(ImageChops.difference(image.crop(box),panel)).mean)/3 > 4.5:return False
             for name in ('sanma-score-transfer-edge.png', 'sanma-score-transfer-edge-6c-466.png', 'sanma-score-transfer-edge-6c-467.png'):
                 with Image.open(Path(__file__).parent/'fixtures'/name) as ref:
                     if ref.size != (65,225): continue
