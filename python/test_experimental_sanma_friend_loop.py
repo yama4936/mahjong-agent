@@ -112,30 +112,43 @@ class ExperimentalSanmaFriendLoopTest(unittest.TestCase):
         self.page.reload.assert_not_called()
 
     def test_black_recovery_requires_another_fresh_match_observation(self):
-        black=Path('/home/yama1/.codex/sanma-run-cd82c23-20261101/current9.png')
-        if not black.exists(): self.skipTest('saved black friend frame unavailable')
-        self.op.verified_friend_300_active=True; self.op.args.max_iterations=2
-        self.page.screenshot.side_effect=[black.read_bytes(), b'recovered', b'new observation']
-        with patch('auto_operator.classify_screen',side_effect=[('black_screen',1.0),('match',1.0),('match',1.0)]):
+        self.op.verified_friend_300_active=True; self.op.args.max_iterations=3
+        self.page.screenshot.side_effect=[b'match',b'black',b'recovered',b'new observation']
+        self.op.inspect_sanma_self_turn.return_value={'candidates':{'candidates':[]},'digest':'fresh','drawCandidate':{'status':'unresolved'}}
+        with patch('auto_operator.classify_screen',side_effect=[('match',1.0),('black_screen',1.0),('match',1.0),('match',1.0)]):
             self.op.run_experimental_sanma_friend(self.page)
-        self.assertEqual(self.page.screenshot.call_count,3)
-        self.op.inspect_sanma_self_turn.assert_called_once()
+        self.assertEqual(self.page.screenshot.call_count,4)
+        self.assertEqual(self.op.inspect_sanma_self_turn.call_count,2)
         self.assertTrue(any(c.args[0]=='sanma_friend_black_screen_recovered' and c.kwargs['freshRecognitionRequired'] for c in self.op.log.call_args_list))
         self.page.reload.assert_not_called(); self.page.mouse.click.assert_not_called()
 
-    def test_real_black_and_recovered_frames_reobserve_without_click(self):
+    def test_real_initial_black_recovery_with_unknown_deadline_stops(self):
         from screen_state import load_references
         black=Path('/home/yama1/.codex/sanma-run-cd82c23-20261101/current9.png')
         recovered=Path('/home/yama1/.codex/sanma-run-7e79853-20261101/monitor-5.png')
         if not black.exists() or not recovered.exists(): self.skipTest('captured frames unavailable')
         self.op.screen_references=load_references(Path('/home/yama1/projects/jantama-auto/artifacts/live'))
         self.op.verified_friend_300_active=True; self.op.args.max_iterations=2
-        self.page.screenshot.side_effect=[black.read_bytes(), recovered.read_bytes(), recovered.read_bytes()]
-        self.op.inspect_sanma_self_turn.return_value={'candidates':{'candidates':[]},'digest':'fresh','drawCandidate':{'status':'unresolved'}}
+        self.page.screenshot.side_effect=[black.read_bytes(), recovered.read_bytes()]
         self.op.run_experimental_sanma_friend(self.page)
-        self.op.inspect_sanma_self_turn.assert_called_once()
-        self.assertTrue(any(c.args[0]=='sanma_friend_black_screen_recovered' for c in self.op.log.call_args_list))
+        self.op.inspect_sanma_self_turn.assert_not_called()
+        self.assertTrue(any(c.kwargs.get('reason')=='black_screen_action_deadline_unknown' for c in self.op.log.call_args_list))
         self.page.mouse.click.assert_not_called(); self.page.reload.assert_not_called()
+
+    def test_recovery_capture_crossing_deadline_stops(self):
+        self.op.verified_friend_300_active=True; self.op.args.max_iterations=0
+        self.op.inspect_sanma_self_turn.return_value={'candidates':{'candidates':[]},'digest':'fresh','drawCandidate':{'status':'unresolved'}}
+        now=[0.0]; frames=iter([b'match', b'black', b'recovered'])
+        def screenshot(**kwargs):
+            frame=next(frames)
+            if frame==b'recovered': now[0]=301.0
+            return frame
+        self.page.screenshot.side_effect=screenshot
+        with patch('auto_operator.time.monotonic',side_effect=lambda: now[0]), \
+             patch('auto_operator.classify_screen',side_effect=[('match',1.0),('black_screen',1.0),('match',1.0)]):
+            self.op.run_experimental_sanma_friend(self.page)
+        self.assertTrue(any(c.kwargs.get('reason')=='black_screen_deadline_expired' for c in self.op.log.call_args_list))
+        self.op.inspect_sanma_self_turn.assert_called_once(); self.page.mouse.click.assert_not_called()
 
     def test_black_recovery_to_unexpected_screen_stops(self):
         self.op.verified_friend_300_active=True; self.op.args.max_iterations=0
