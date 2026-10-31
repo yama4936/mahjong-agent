@@ -84,6 +84,25 @@ def friend_visible_row_with_north_overlap(frame, row_slots):
         return False
 
 
+def experimental_draw_only_candidate(hand, geometry, draw):
+    """Only the separated draw label is used; other labels remain uncertain."""
+    try:
+        tiles, matches = hand["tiles"], hand["matches"]
+        ev = geometry["evidence"]
+        match = matches[-1]
+        return (hand.get("turnReady") is True and len(tiles) == len(matches) == 14
+                and geometry.get("confidence",0) >= .98 and ev.get("detectedTiles") == 14
+                and ev.get("rowBottomSpread",999) <= 2
+                and type(ev.get("drawGap")) in (int,float) and type(ev.get("medianGap")) in (int,float)
+                and ev["drawGap"] >= ev["medianGap"] + 10
+                and draw.get("index") == 13 and draw.get("tile") == tiles[-1]
+                and match.get("tile") == tiles[-1] and type(match.get("confidence")) in (int,float)
+                and type(match.get("runnerUpConfidence")) in (int,float)
+                and match["confidence"] >= .98 and match["confidence"] - match["runnerUpConfidence"] >= .1)
+    except (TypeError, KeyError, IndexError):
+        return False
+
+
 def execute_friend_draw_candidate(operator, page, receipt):
     """Experimental draw-only bridge from the resident observation to input.
 
@@ -119,7 +138,8 @@ def execute_friend_draw_candidate(operator, page, receipt):
         raise ValueError("recognition frame changed on disk")
     white_candidates = None if hand_value.get("safe") is True else experimental_white_hand_candidate(baseline, hand_value, geo_value)
     partial_row = friend_visible_row_with_north_overlap(baseline, row_slots)
-    if ((hand_value.get("safe") is not True and white_candidates is None) or hand_value.get("turnReady") is not True
+    draw_only = hand_value.get("safe") is not True and white_candidates is None and experimental_draw_only_candidate(hand_value, geo_value, draw)
+    if ((hand_value.get("safe") is not True and white_candidates is None and not draw_only) or hand_value.get("turnReady") is not True
             or not isinstance(row_slots, list) or len(row_slots) != 3
             or (not partial_row and any(slot.get("status") != "empty_candidate" for slot in row_slots))
             or not isinstance(tiles, list) or len(tiles) != 14 or not isinstance(points, list) or len(tiles) != len(points)
@@ -129,6 +149,9 @@ def execute_friend_draw_candidate(operator, page, receipt):
     slots = [{"tile": tile, **point} for tile, point in zip(tiles, points)]
     plan = {"scope": "offline_untrusted_sanma_discard_plan", "operationAuthorized": False,
             "tile": draw["tile"], "clickIndex": draw["index"], "clickPoint": draw["point"]}
+    if draw_only:
+        operator.log("sanma_friend_draw_only_candidate", digest=receipt["digest"], confirmed=False,
+                     risk="other hand labels, turn, legal actions and strategy remain unverified")
     if partial_row:
         operator.log("sanma_friend_partial_row_candidate", digest=receipt["digest"], confirmed=False,
                      risk="north obscures slot 2; hidden action and turn remain unverified")
