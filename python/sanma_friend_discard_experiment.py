@@ -104,7 +104,17 @@ def friend_visible_empty_row_candidate(frame, row_slots):
         with Image.open(Path(__file__).parent/'fixtures'/'sanma-friend-empty-slot-bf.png') as source:
             reference=source.convert('RGB')
         difference=ImageChops.difference(observed,reference)
-        return max(channel[1] for channel in difference.getextrema()) <= 30
+        if max(channel[1] for channel in difference.getextrema()) > 30:
+            return False
+        # A broad low-contrast change can evade an individual-pixel bound.
+        # Retain the known minor variation in saved frames while rejecting
+        # coherent changes within any small visible region.
+        for y in range(0,90,16):
+            for x in range(0,245,16):
+                block=difference.crop((x,y,min(x+16,245),min(y+16,90)))
+                if sum(ImageStat.Stat(block).mean)/3 > 3:
+                    return False
+        return True
     except (OSError,ValueError):
         return False
 
