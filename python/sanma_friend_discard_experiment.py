@@ -83,6 +83,11 @@ def friend_visible_row_with_north_overlap(frame, row_slots):
         # strip between the north and the clock. Strict changes fail closed.
         if max(difference.getextrema()[channel][1] for channel in range(3)) > 30:
             return False
+        # Apply the same local-change bound used by the other partial-row
+        # references; a weak but broad mark can pass a full-crop average.
+        if any(sum(ImageStat.Stat(difference.crop((x,y,min(x+16,245),min(y+16,90)))).mean)/3 > 3
+               for y in range(0,90,16) for x in range(0,245,16)):
+            return False
         def similarity(a,b):
             return 1 - sum(ImageStat.Stat(ImageChops.difference(a,b)).mean) / 765
         return (similarity(image.crop((1180,785,1315,875)),blank) >= .995

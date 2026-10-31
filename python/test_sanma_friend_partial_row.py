@@ -30,6 +30,15 @@ class PartialRowTests(unittest.TestCase):
                 out=io.BytesIO();image.save(out,format='PNG')
                 self.assertFalse(friend_visible_row_with_north_overlap(out.getvalue(),SLOTS))
 
+    def test_low_contrast_visible_mark_is_rejected(self):
+        frame=(ROOT/'manual-03-before.png').read_bytes()
+        image=Image.open(io.BytesIO(frame)).convert('RGB')
+        for y in range(801,817):
+            for x in range(1196,1212):
+                image.putpixel((x,y),tuple(min(255,c+20) for c in image.getpixel((x,y))))
+        out=io.BytesIO();image.save(out,format='PNG')
+        self.assertFalse(friend_visible_row_with_north_overlap(out.getvalue(),SLOTS))
+
     def test_bridge_uses_experimental_candidate_and_logs_risk(self):
         import hashlib, tempfile
         from types import SimpleNamespace
