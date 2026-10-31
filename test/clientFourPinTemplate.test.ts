@@ -10,6 +10,9 @@ import { proposeLiveHandLayout } from '../src/recognition/handLayoutProposal.js'
 const base = 'templates/bootstrap';
 const fixture = 'templates/client/4p__6c_friend.png';
 const hash = (data: Buffer) => createHash('sha256').update(data).digest('hex');
+// The source dataset has 34 labels and groups this visually reviewed red
+// five with ordinary 5m. Correct only this exact image, never other crops.
+const RED_FIVE_MAN_HOLDOUT_SHA = 'e0b4794a54e60432338668658032c552f18b5c7b94a9bc13fb0adf4e095b2854';
 const threshold = (x: {confidence:number;runnerUpConfidence:number}) => x.confidence >= .98 && x.confidence - x.runnerUpConfidence >= .1;
 
 test('four-pin candidate improves independent crop without new high-confidence holdout errors', {timeout: 120_000, skip: !existsSync(base)}, async () => {
@@ -54,12 +57,18 @@ test('four-pin candidate improves independent crop without new high-confidence h
     const after = await classifyTile(heldout, proposed, options);
     assert.equal(before.tile, '4p'); assert.ok(before.confidence < .98);
     assert.equal(after.tile, '4p'); assert.ok(threshold(after));
+    let reviewedRedFiveSeen = 0;
     for (const file of holdouts) {
       const img = await readFile(path.join(base, file));
       assert.notEqual(hash(sample), hash(img), `4p candidate overlaps ${file}`);
       assert.notEqual(hash(threeSample), hash(img), `3s candidate overlaps ${file}`);
       assert.notEqual(hash(eightSample), hash(img), `8s candidate overlaps ${file}`);
-      const expected = file.split('__')[0];
+      const isReviewedRedFive = hash(img) === RED_FIVE_MAN_HOLDOUT_SHA;
+      if (isReviewedRedFive) {
+        assert.equal(file, '5m__hf_holdout_037.png');
+        reviewedRedFiveSeen++;
+      }
+      const expected = isReviewedRedFive ? '0m' : file.split('__')[0];
       const old = await classifyTile(img, original, options);
       const next = await classifyTile(img, proposed, options);
       // Existing false positives are not hidden by this incremental check.
@@ -69,6 +78,7 @@ test('four-pin candidate improves independent crop without new high-confidence h
       const nextEight = await classifyTile(img, proposedEight, options);
       assert.equal(nextEight.tile !== expected && threshold(nextEight) && !(nextThree.tile !== expected && threshold(nextThree)), false, `8s ${file}`);
     }
+    assert.equal(reviewedRedFiveSeen, 1, 'reviewed red-five holdout missing or duplicated');
     // Two four-player captures with manually reviewed expected tile labels.
     // Neither frame contains 4p, and cross-game independence is not proven.
     const fourPlayer = [
