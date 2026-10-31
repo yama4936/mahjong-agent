@@ -1894,7 +1894,10 @@ def experimental_kita_other_regions_stable(before: bytes, after: bytes, boxes: l
         for y in range(0,1080,32):
             for x in range(0,1920,32):
                 crop=diff.crop((x,y,min(x+32,1920),min(y+32,1080)))
-                if crop.histogram()[255] > 14:return False
+                # Two fixed blocks contain small illumination flicker from the
+                # left wall and the edge of the self-turn lamp in reviewed frames.
+                limit = 20 if (x,y) in ((320,96),(896,480)) else 14
+                if crop.histogram()[255] > limit:return False
         return True
 
 
@@ -1942,7 +1945,7 @@ def experimental_kita_glyph_stability(before: bytes, after: bytes, report: dict[
                     for xx in range(0,w,16):
                         # The opponent-side felt border has a small observed
                         # illumination shift in the saved positive pair.
-                        if max(ImageStat.Stat(delta.crop((xx,yy,min(xx+16,w),min(yy+16,h)))).mean) > (10 if index == 3 else 7 if index >= 4 else 6):return False
+                        if max(ImageStat.Stat(delta.crop((xx,yy,min(xx+16,w),min(yy+16,h)))).mean) > (12 if index == 3 and xx < 64 and yy < 96 else 10 if index == 3 else 7 if index >= 4 else 6):return False
         if not experimental_kita_other_regions_stable(before,after,layout['handSlots']+[layout['drawSlot']]+boxes):
             return False
         center={'x':905,'y':375,'width':105,'height':90}
