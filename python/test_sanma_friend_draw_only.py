@@ -26,6 +26,20 @@ class DrawOnlyTests(unittest.TestCase):
             if case=='gap':geo['evidence']['drawGap']=geo['evidence']['medianGap']
             if case=='draw':draw['index']=12
             with self.subTest(case=case):self.assertFalse(experimental_draw_only_candidate(hand,geo,draw))
+    def test_out_of_range_nonfinite_and_boolean_scores_are_rejected(self):
+        for field in ('confidence','runnerUpConfidence'):
+            for value in (-1,2,float('nan'),float('inf'),float('-inf'),True):
+                hand=copy.deepcopy(self.hand);hand['matches'][-1][field]=value
+                with self.subTest(field=field,value=value):self.assertFalse(experimental_draw_only_candidate(hand,self.geo,self.draw))
+        for value in (-1,2,float('nan'),float('inf'),True):
+            geo=copy.deepcopy(self.geo);geo['confidence']=value
+            with self.subTest(geometry=value):self.assertFalse(experimental_draw_only_candidate(self.hand,geo,self.draw))
+        for field in ('drawGap','medianGap','rowBottomSpread'):
+            for value in (float('nan'),float('inf'),float('-inf'),True):
+                geo=copy.deepcopy(self.geo);geo['evidence'][field]=value
+                with self.subTest(field=field,value=value):self.assertFalse(experimental_draw_only_candidate(self.hand,geo,self.draw))
+        hand=copy.deepcopy(self.hand);hand['matches'][-1]['confidence']=1;hand['matches'][-1]['runnerUpConfidence']=0
+        self.assertTrue(experimental_draw_only_candidate(hand,self.geo,self.draw))
     def test_real_report_reaches_friend_draw_bridge_without_promoting_safe(self):
         import hashlib,tempfile
         from types import SimpleNamespace

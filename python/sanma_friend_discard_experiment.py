@@ -184,14 +184,20 @@ def experimental_draw_only_candidate(hand, geometry, draw):
         tiles, matches = hand["tiles"], hand["matches"]
         ev = geometry["evidence"]
         match = matches[-1]
+        geometry_confidence = geometry.get('confidence')
         return (hand.get("turnReady") is True and len(tiles) == len(matches) == 14
-                and geometry.get("confidence",0) >= .98 and ev.get("detectedTiles") == 14
-                and ev.get("rowBottomSpread",999) <= 2
+                and type(geometry_confidence) in (int,float) and math.isfinite(geometry_confidence)
+                and .98 <= geometry_confidence <= 1 and ev.get("detectedTiles") == 14
+                and type(ev.get('rowBottomSpread')) in (int,float) and math.isfinite(ev['rowBottomSpread'])
+                and 0 <= ev['rowBottomSpread'] <= 2
                 and type(ev.get("drawGap")) in (int,float) and type(ev.get("medianGap")) in (int,float)
+                and math.isfinite(ev['drawGap']) and math.isfinite(ev['medianGap'])
                 and ev["drawGap"] >= ev["medianGap"] + 10
                 and draw.get("index") == 13 and draw.get("tile") == tiles[-1]
                 and match.get("tile") == tiles[-1] and type(match.get("confidence")) in (int,float)
                 and type(match.get("runnerUpConfidence")) in (int,float)
+                and math.isfinite(match['confidence']) and math.isfinite(match['runnerUpConfidence'])
+                and 0 <= match['confidence'] <= 1 and 0 <= match['runnerUpConfidence'] <= 1
                 and match["confidence"] >= .98 and match["confidence"] - match["runnerUpConfidence"] >= .1)
     except (TypeError, KeyError, IndexError):
         return False
