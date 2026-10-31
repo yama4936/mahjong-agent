@@ -8813,6 +8813,7 @@ class PythonAutoOperator:
         changed_streak = 0
         changed_since = None
         kita_preclick_rejections = 0
+        discard_preclick_rejections = 0
         startup_unknown_polls = 0
         match_seen = False
         result_latched = None
@@ -8958,13 +8959,28 @@ class PythonAutoOperator:
                             page.wait_for_timeout(500)
                             continue
                         action = "discard"
-                        from sanma_friend_discard_experiment import execute_friend_draw_candidate
-                        result = execute_friend_draw_candidate(self, page, receipt)
+                        from sanma_friend_discard_experiment import execute_friend_draw_candidate, DiscardPreclickChanged
+                        try:
+                            result = execute_friend_draw_candidate(self, page, receipt)
+                        except DiscardPreclickChanged as error:
+                            discard_preclick_rejections += 1
+                            self.log("sanma_friend_wait", reason="discard_preclick_reobserve",
+                                     screenshot=receipt.get("screenshot"), digest=frame_digest,
+                                     streak=discard_preclick_rejections, clicked=False, error=str(error))
+                            if (discard_preclick_rejections >= 3 or unconfirmed_input_seen
+                                    or self.verified_friend_300_active is not True
+                                    or not 0 <= time.monotonic() - action_observed_at < 300):
+                                self.log("sanma_friend_stopped", reason="discard_preclick_reobserve_limit",
+                                         streak=discard_preclick_rejections, clicked=False)
+                                return
+                            page.wait_for_timeout(500)
+                            continue
                     else:
                         self.log("sanma_friend_stopped", reason="unsupported_or_unknown_action", screenshot=receipt.get("screenshot"),
                                  digest=frame_digest, candidates=candidates, operationAuthorized=False)
                         return
                     kita_preclick_rejections = 0
+                    discard_preclick_rejections = 0
                     attempted_frames.add(frame_digest)
                     unconfirmed_input_seen = True
                     last_unconfirmed_action = action

@@ -203,6 +203,10 @@ def experimental_draw_only_candidate(hand, geometry, draw):
         return False
 
 
+class DiscardPreclickChanged(ValueError):
+    """A comparison rejected the frame before any discard input."""
+
+
 def execute_friend_draw_candidate(operator, page, receipt):
     """Experimental draw-only bridge from the resident observation to input.
 
@@ -320,17 +324,17 @@ def execute_friend_draw_candidate(operator, page, receipt):
                      sha256=hashlib.sha256(frame).hexdigest(),
                      referenceScreenshot=receipt["screenshot"], referenceSha256=receipt["digest"],
                      operationAuthorized=False)
-    latch_friend_action_target(operator, baseline, "discard")
     return execute_friend_discard(page, session=session, observation=observation, plan=plan,
                                   layout=operator.layout, log=record,
                                   turn_started_monotonic=friend_action_started_at(operator),
                                   session_check=lambda: getattr(operator, "verified_friend_300_active", False) is True,
-                                  save_rejected_frame=save_rejected_frame)
+                                  save_rejected_frame=save_rejected_frame,
+                                  before_click=lambda: latch_friend_action_target(operator, baseline, "discard"))
 
 
 def execute_friend_discard(page, *, session, observation, plan, layout, log,
                            turn_started_monotonic, clock=time.monotonic, session_check=None,
-                           save_rejected_frame=None):
+                           save_rejected_frame=None, before_click=None):
     """Map a supplied TS plan to the existing select/confirm routine.
 
     This experimental entry point depends on a caller that establishes the
@@ -339,6 +343,7 @@ def execute_friend_discard(page, *, session, observation, plan, layout, log,
     """
     started = clock()
     event = {"kind": "sanma_friend_discard", "status": "blocked"}
+    precheck_rejected = False
     try:
         if (not isinstance(session, dict) or session.get("mode") != "cpu_friend"
                 or session.get("rules") != "sanma" or session.get("clock") != "300+0"
@@ -376,13 +381,18 @@ def execute_friend_discard(page, *, session, observation, plan, layout, log,
                     save_rejected_frame(before)
                 except Exception as error:
                     event['evidenceSaveError'] = f'{type(error).__name__}: {error}'
-            raise ValueError("recognition frame changed before click")
+            if event.get('evidenceSaveError'):
+                raise ValueError("recognition frame changed before click")
+            precheck_rejected = True
+            raise DiscardPreclickChanged("recognition frame changed before click")
         def deadline():
             if session_check is not None and session_check() is not True:
                 raise RuntimeError("friend session revoked")
             if not 0 <= clock() - turn_started_monotonic < 300:
                 raise RuntimeError("action deadline expired")
         deadline()
+        if before_click is not None:
+            before_click()
         event.update(status="attempted", tile=plan["tile"], clickIndex=index, clickPoint=point,
                      frameSha256=observation["frameSha256"])
         log(dict(event))
@@ -396,5 +406,10 @@ def execute_friend_discard(page, *, session, observation, plan, layout, log,
     except Exception as error:
         event.update(status="failed" if event["status"] == "attempted" else "blocked",
                      error=str(error), result="discard_not_verified")
-        log(dict(event))
+        try:
+            log(dict(event))
+        except Exception as log_error:
+            raise RuntimeError(f"discard failure could not be recorded; outcome unknown: {error}") from log_error
+        if isinstance(error, DiscardPreclickChanged) and not precheck_rejected:
+            raise RuntimeError(f"discard input or verification failed; outcome unknown: {error}") from error
         raise

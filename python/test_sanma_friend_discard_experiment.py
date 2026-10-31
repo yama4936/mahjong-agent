@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from sanma_friend_discard_experiment import execute_friend_discard, execute_friend_draw_candidate
+from sanma_friend_discard_experiment import execute_friend_discard, execute_friend_draw_candidate, DiscardPreclickChanged
 
 
 class FriendDiscardExperimentTests(unittest.TestCase):
@@ -51,6 +51,46 @@ class FriendDiscardExperimentTests(unittest.TestCase):
             with self.subTest(variant=variant), self.assertRaises(ValueError):
                 execute_friend_discard(self.page, **{**self.kwargs, **variant})
         send.assert_not_called()
+
+    @patch("sanma_friend_discard_experiment.send_discard_click")
+    def test_cd82_actual_frame_change_rejected_before_latch_or_click(self, send):
+        import glob, json
+        root = Path('/home/yama1/.codex/sanma-run-cd82c23-20261101/run/frames')
+        source = glob.glob(str(root / '*15-13-52*sanma-self-turn.png'))
+        rejected = glob.glob(str(root / '*sanma-discard-preclick-rejected.png'))
+        report_path = Path(__file__).parent/'fixtures'/'sanma-cd82-discard-report.json'
+        if not source or not rejected or not report_path.exists(): self.skipTest('saved frames or replay unavailable')
+        reference=Path(source[0]).read_bytes(); self.page.screenshot.return_value=Path(rejected[0]).read_bytes()
+        report=json.loads(report_path.read_text())
+        observation={**self.observation,'frameSha256':hashlib.sha256(reference).hexdigest(),
+                     'referenceFrame':reference,'experimentalDrawReport':report}
+        latch=Mock(); saved=Mock()
+        with self.assertRaises(DiscardPreclickChanged):
+            execute_friend_discard(self.page,**{**self.kwargs,'observation':observation,'before_click':latch,'save_rejected_frame':saved})
+        saved.assert_called_once_with(self.page.screenshot.return_value)
+        latch.assert_not_called();send.assert_not_called()
+
+    @patch("sanma_friend_discard_experiment.send_discard_click")
+    def test_latch_runs_only_after_matching_frame_and_before_input(self, send):
+        order=[]
+        send.side_effect=lambda *a,**k: order.append('click') or {}
+        execute_friend_discard(self.page,**{**self.kwargs,'before_click':lambda:order.append('latch')})
+        self.assertEqual(order,['latch','click'])
+
+    @patch("sanma_friend_discard_experiment.send_discard_click", side_effect=DiscardPreclickChanged('input uncertain'))
+    def test_preclick_exception_from_input_is_not_retryable(self, send):
+        with self.assertRaises(RuntimeError) as error:
+            execute_friend_discard(self.page,**self.kwargs)
+        self.assertNotIsInstance(error.exception, DiscardPreclickChanged)
+        self.assertEqual(self.logs[-1]['status'],'failed')
+
+    @patch("sanma_friend_discard_experiment.send_discard_click", side_effect=RuntimeError('input uncertain'))
+    def test_same_exception_from_failure_logger_does_not_trigger_retry(self, send):
+        logger=Mock(side_effect=[None,DiscardPreclickChanged('logger failure')])
+        with self.assertRaises(RuntimeError) as error:
+            execute_friend_discard(self.page,**{**self.kwargs,'log':logger})
+        self.assertNotIsInstance(error.exception,DiscardPreclickChanged)
+        send.assert_called_once()
 
     @patch("sanma_friend_discard_experiment.send_discard_click", side_effect=RuntimeError("selection uncertain"))
     def test_failed_selection_is_logged_and_propagated(self, send):
@@ -122,6 +162,7 @@ class FriendDrawBridgeTests(unittest.TestCase):
         self.assertEqual(event.kwargs['sha256'],hashlib.sha256(changed.read_bytes()).hexdigest())
         self.assertEqual(event.kwargs['referenceSha256'],self.receipt['digest'])
         send.assert_not_called()
+        latch.assert_not_called()
 
     @patch('sanma_friend_discard_experiment.latch_friend_action_target')
     @patch('sanma_friend_discard_experiment.send_discard_click')
@@ -133,8 +174,10 @@ class FriendDrawBridgeTests(unittest.TestCase):
         changed=Path(self.directory.name)/'changed.png'
         Image.new('RGB',(1920,1080),'white').save(changed)
         page=Mock();page.screenshot.return_value=changed.read_bytes()
-        with self.assertRaisesRegex(ValueError,'recognition frame changed before click'):
+        with self.assertRaisesRegex(ValueError,'recognition frame changed before click') as error:
             execute_friend_draw_candidate(self.operator,page,self.receipt)
+        self.assertNotIsInstance(error.exception, DiscardPreclickChanged)
+        latch.assert_not_called()
         event=next(c for c in self.operator.log.call_args_list
                    if c.args[0]=='sanma_friend_discard_experiment' and c.kwargs.get('error'))
         self.assertEqual(event.kwargs['error'],'recognition frame changed before click')

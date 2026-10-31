@@ -1,0 +1,306 @@
+{
+  "hand": {
+    "status": "candidate",
+    "value": {
+      "tiles": [
+        "9m",
+        "2p",
+        "6p",
+        "7p",
+        "7p",
+        "8p",
+        "9p",
+        "1s",
+        "4s",
+        "6s",
+        "8s",
+        "S",
+        "W",
+        "S"
+      ],
+      "matches": [
+        {
+          "tile": "9m",
+          "confidence": 0.9597271084397002,
+          "runnerUpConfidence": 0.7713226861191397
+        },
+        {
+          "tile": "2p",
+          "confidence": 0.9861749050261858,
+          "runnerUpConfidence": 0.6324422999876834
+        },
+        {
+          "tile": "6p",
+          "confidence": 0.9790152440292639,
+          "runnerUpConfidence": 0.7442020651395671
+        },
+        {
+          "tile": "7p",
+          "confidence": 0.9915720161676891,
+          "runnerUpConfidence": 0.7254479881825475
+        },
+        {
+          "tile": "7p",
+          "confidence": 0.9954930107108693,
+          "runnerUpConfidence": 0.7232581134370688
+        },
+        {
+          "tile": "8p",
+          "confidence": 0.992262819716818,
+          "runnerUpConfidence": 0.7308152430723477
+        },
+        {
+          "tile": "9p",
+          "confidence": 0.9758161398154522,
+          "runnerUpConfidence": 0.38458629369700714
+        },
+        {
+          "tile": "1s",
+          "confidence": 0.9906248822181252,
+          "runnerUpConfidence": 0.6138467326224544
+        },
+        {
+          "tile": "4s",
+          "confidence": 0.9707412996835901,
+          "runnerUpConfidence": 0.5419937837122967
+        },
+        {
+          "tile": "6s",
+          "confidence": 0.9657050203899158,
+          "runnerUpConfidence": 0.74474732284373
+        },
+        {
+          "tile": "8s",
+          "confidence": 0.9349439167459581,
+          "runnerUpConfidence": 0.6968479995940524
+        },
+        {
+          "tile": "S",
+          "confidence": 0.9990277191363953,
+          "runnerUpConfidence": 0.6134782369111921
+        },
+        {
+          "tile": "W",
+          "confidence": 0.9996560278370038,
+          "runnerUpConfidence": 0.5645458132237077
+        },
+        {
+          "tile": "S",
+          "confidence": 0.9917359974053978,
+          "runnerUpConfidence": 0.629294130317592
+        }
+      ],
+      "confidence": 0.9349439167459581,
+      "ambiguityMargin": 0.18840442232056054,
+      "presenceFractions": [
+        0.855024474517708,
+        0.8359324930570391,
+        0.7954852951648508,
+        0.7803175959552802,
+        0.7797293406276994,
+        0.7435934350705442,
+        0.745249064209617,
+        0.856608119781169,
+        0.8532364879299295,
+        0.7984761090934985,
+        0.8035320088300221,
+        0.8268888414156519,
+        0.8475381514540743,
+        0.8263748920241866
+      ],
+      "safe": false,
+      "turnReady": true,
+      "slotClassificationSafe": false,
+      "candidateMelds": 0
+    }
+  },
+  "handGeometry": {
+    "status": "candidate",
+    "value": {
+      "viewport": {
+        "width": 1920,
+        "height": 1080
+      },
+      "handSlots": [
+        {
+          "x": 223,
+          "y": 921,
+          "width": 92,
+          "height": 151
+        },
+        {
+          "x": 317,
+          "y": 921,
+          "width": 93,
+          "height": 151
+        },
+        {
+          "x": 412,
+          "y": 921,
+          "width": 93,
+          "height": 151
+        },
+        {
+          "x": 507,
+          "y": 921,
+          "width": 93,
+          "height": 151
+        },
+        {
+          "x": 602,
+          "y": 921,
+          "width": 92,
+          "height": 151
+        },
+        {
+          "x": 697,
+          "y": 921,
+          "width": 92,
+          "height": 151
+        },
+        {
+          "x": 792,
+          "y": 921,
+          "width": 92,
+          "height": 151
+        },
+        {
+          "x": 887,
+          "y": 921,
+          "width": 92,
+          "height": 151
+        },
+        {
+          "x": 981,
+          "y": 921,
+          "width": 93,
+          "height": 151
+        },
+        {
+          "x": 1076,
+          "y": 921,
+          "width": 93,
+          "height": 151
+        },
+        {
+          "x": 1171,
+          "y": 921,
+          "width": 93,
+          "height": 151
+        },
+        {
+          "x": 1266,
+          "y": 921,
+          "width": 93,
+          "height": 151
+        },
+        {
+          "x": 1361,
+          "y": 921,
+          "width": 92,
+          "height": 151
+        }
+      ],
+      "drawSlot": {
+        "x": 1486,
+        "y": 921,
+        "width": 92,
+        "height": 151
+      },
+      "clickPoints": [
+        {
+          "x": 269,
+          "y": 996.5
+        },
+        {
+          "x": 363.5,
+          "y": 996.5
+        },
+        {
+          "x": 458.5,
+          "y": 996.5
+        },
+        {
+          "x": 553.5,
+          "y": 996.5
+        },
+        {
+          "x": 648,
+          "y": 996.5
+        },
+        {
+          "x": 743,
+          "y": 996.5
+        },
+        {
+          "x": 838,
+          "y": 996.5
+        },
+        {
+          "x": 933,
+          "y": 996.5
+        },
+        {
+          "x": 1027.5,
+          "y": 996.5
+        },
+        {
+          "x": 1122.5,
+          "y": 996.5
+        },
+        {
+          "x": 1217.5,
+          "y": 996.5
+        },
+        {
+          "x": 1312.5,
+          "y": 996.5
+        },
+        {
+          "x": 1407,
+          "y": 996.5
+        },
+        {
+          "x": 1532,
+          "y": 996.5
+        }
+      ],
+      "evidence": {
+        "detectedTiles": 14,
+        "luminanceThreshold": 120,
+        "medianWidth": 92.5,
+        "medianHeight": 151,
+        "medianGap": 2,
+        "drawGap": 33,
+        "rowBottomSpread": 0
+      },
+      "confidence": 0.99,
+      "requiresHoldoutValidation": true
+    }
+  },
+  "buttonRow": {
+    "status": "candidate",
+    "value": {
+      "scope": "offline_untrusted_sanma_button_row",
+      "slots": [
+        {
+          "status": "empty_candidate",
+          "slot": 0,
+          "confidence": 1
+        },
+        {
+          "status": "empty_candidate",
+          "slot": 1,
+          "confidence": 0.9997327750544662
+        },
+        {
+          "status": "unresolved",
+          "slot": 2,
+          "reason": "unknown, obscured, animated, or ambiguous slot"
+        }
+      ],
+      "complete": false,
+      "operationAuthorized": false
+    }
+  }
+}
