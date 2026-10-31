@@ -91,6 +91,24 @@ def friend_visible_row_with_north_overlap(frame, row_slots):
         return False
 
 
+def friend_visible_empty_row_candidate(frame, row_slots):
+    """Unverified visible empty slot matching one reviewed CPU-friend capture."""
+    if (not isinstance(row_slots,list) or len(row_slots)!=3
+            or any(not isinstance(slot,dict) or slot.get('status')!='empty_candidate' for slot in row_slots[:2])
+            or not isinstance(row_slots[2],dict) or row_slots[2].get('status')!='unresolved'):
+        return False
+    try:
+        with Image.open(io.BytesIO(frame)) as source:
+            if source.size != (1920,1080): return False
+            observed=source.convert('RGB').crop((1180,785,1425,875))
+        with Image.open(Path(__file__).parent/'fixtures'/'sanma-friend-empty-slot-bf.png') as source:
+            reference=source.convert('RGB')
+        difference=ImageChops.difference(observed,reference)
+        return max(channel[1] for channel in difference.getextrema()) <= 30
+    except (OSError,ValueError):
+        return False
+
+
 def experimental_draw_only_candidate(hand, geometry, draw):
     """Only the separated draw label is used; other labels remain uncertain."""
     try:
@@ -144,7 +162,8 @@ def execute_friend_draw_candidate(operator, page, receipt):
     if hashlib.sha256(baseline).hexdigest() != receipt.get("digest"):
         raise ValueError("recognition frame changed on disk")
     white_candidates = None if hand_value.get("safe") is True else experimental_white_hand_candidate(baseline, hand_value, geo_value)
-    partial_row = friend_visible_row_with_north_overlap(baseline, row_slots)
+    partial_row = (friend_visible_row_with_north_overlap(baseline, row_slots)
+                   or friend_visible_empty_row_candidate(baseline, row_slots))
     draw_only = hand_value.get("safe") is not True and white_candidates is None and experimental_draw_only_candidate(hand_value, geo_value, draw)
     if ((hand_value.get("safe") is not True and white_candidates is None and not draw_only) or hand_value.get("turnReady") is not True
             or not isinstance(row_slots, list) or len(row_slots) != 3
@@ -161,7 +180,7 @@ def execute_friend_draw_candidate(operator, page, receipt):
                      risk="other hand labels, turn, legal actions and strategy remain unverified")
     if partial_row:
         operator.log("sanma_friend_partial_row_candidate", digest=receipt["digest"], confirmed=False,
-                     risk="north obscures slot 2; hidden action and turn remain unverified")
+                     risk="slot 2 is unresolved; hidden action and turn remain unverified")
     if white_candidates is not None:
         operator.log("sanma_friend_white_candidate", indices=white_candidates, confirmed=False,
                      risk="unloaded tile faces may appear identical", digest=receipt["digest"])
