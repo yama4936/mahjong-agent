@@ -47,11 +47,52 @@ class SupervisorTest(unittest.TestCase):
 
     def adopt(self):
         self.state["operator"] = [{"pid": 123, "args": ["python", "python/auto_operator.py",
-            "--artifacts=artifacts/game"]}]
+            "--artifacts=artifacts/game", "--mode=force-auto", "--ranked-loop"]}]
         self.supervisor.tick()
         log = self.root / "artifacts/game/operator-stdout.log"
         log.parent.mkdir(parents=True, exist_ok=True)
         return log
+
+    def test_friend_stop_and_friend_crash_hold_without_ranked_restart(self):
+        for event in ('sanma_friend_stopped', None):
+            with self.subTest(event=event):
+                self.state['operator']=[{'pid':123,'args':['python','python/auto_operator.py',
+                    '--artifacts=artifacts/game','--rules=sanma','--experimental-sanma-friend']}]
+                self.supervisor.tick()
+                log=self.supervisor.operator_log;log.parent.mkdir(parents=True,exist_ok=True)
+                log.write_text(json.dumps({'event':event,'reason':'black_screen_unobservable'})+'\n' if event else '')
+                self.state['operator']=[];self.supervisor.tick();self.now+=20;self.supervisor.tick()
+                self.assertTrue(self.supervisor.held);self.assertEqual(self.launches,[])
+                self.supervisor.hold_file.unlink();self.supervisor=self.make_supervisor()
+
+    def test_real_friend_stopped_log_is_terminal(self):
+        log=Path('/home/yama1/.codex/sanma-run-7e79853-20261101/operator.log')
+        if not log.exists():self.skipTest('recorded friend operator log unavailable')
+        terminal=terminal_event(log)
+        self.assertEqual(terminal['event'],'sanma_friend_stopped')
+        self.assertFalse(restart_allowed(terminal))
+
+    def test_scope_persisted_over_supervisor_restart(self):
+        self.state['operator']=[{'pid':123,'args':['python','python/auto_operator.py',
+            '--artifacts=artifacts/game','--rules','sanma','--experimental-sanma-friend']}]
+        self.supervisor.tick();self.state['operator']=[]
+        self.supervisor=self.make_supervisor();self.supervisor.tick()
+        self.assertTrue(self.supervisor.held);self.assertEqual(self.launches,[])
+
+    def test_old_state_without_scope_holds(self):
+        self.supervisor.state_file.parent.mkdir(parents=True,exist_ok=True)
+        self.supervisor.state_file.write_text(json.dumps({'pid':123,'log':None}))
+        self.supervisor=self.make_supervisor();self.supervisor.tick()
+        self.assertTrue(self.supervisor.held);self.assertEqual(self.launches,[])
+
+    def test_disabled_ranked_flag_is_not_ranked_scope(self):
+        from operator_supervisor import ranked_scope
+        self.assertEqual(ranked_scope(['--ranked-loop','--no-ranked-loop']), 'non_ranked_or_unknown')
+        self.assertEqual(ranked_scope(['--ranked-loop','--rules=sanma']), 'non_ranked_or_unknown')
+        self.assertEqual(ranked_scope(['--ranked-loop','--rules=yonma','--rules=sanma']), 'non_ranked_or_unknown')
+        self.assertEqual(ranked_scope(['--mode=observer','--ranked-loop']), 'non_ranked_or_unknown')
+        self.assertEqual(ranked_scope(['--mode=force-auto','--mode=observer','--ranked-loop']), 'non_ranked_or_unknown')
+        self.assertEqual(ranked_scope(['--mode=force-auto','--no-ranked-loop','--ranked-loop']), 'ranked')
 
     def test_live_operator_is_adopted_without_cdp_or_restart(self):
         self.supervisor.ready = lambda: self.fail("CDP must not be probed during live play")
@@ -111,6 +152,13 @@ class SupervisorTest(unittest.TestCase):
         self.now += 30
         self.supervisor.tick()
         self.assertEqual(self.launches, [])
+
+    def test_friend_launcher_disappears_before_child_adoption_holds(self):
+        self.state['launcher']=[{'pid':654,'args':['node','scripts/run-operator.mjs',
+                               'force-auto','--rules=sanma','--experimental-sanma-friend']}]
+        self.supervisor.tick()
+        self.state['launcher']=[];self.supervisor.tick();self.now+=20;self.supervisor.tick()
+        self.assertTrue(self.supervisor.held);self.assertEqual(self.launches,[])
 
     def test_duplicate_operators_are_recorded_without_signalling_them(self):
         self.state["operator"] = [{"pid": 1}, {"pid": 2}]
@@ -201,6 +249,7 @@ class SupervisorTest(unittest.TestCase):
             self.assertIn(child.pid, [p["pid"] for p in found["operator"]])
             self.assertIn(child.pid, [p["pid"] for p in processes(self.root / "elsewhere")["operator"]])
             self.assertNotIn(child.pid, [p["pid"] for p in processes(self.root / "elsewhere", port=9223)["operator"]])
+            self.assertNotIn(child.pid, [p["pid"] for p in processes(self.root, port=9223)["operator"]])
         finally:
             child.terminate()
             child.wait()

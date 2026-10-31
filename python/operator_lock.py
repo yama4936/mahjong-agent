@@ -5,7 +5,6 @@ import json
 import os
 from contextlib import contextmanager
 from pathlib import Path
-import tempfile
 from urllib.parse import urlsplit
 
 
@@ -25,12 +24,21 @@ def lock_path(cdp):
     # No repository path: frozen copies must compete for the same browser.
     user = str(os.getuid()) if hasattr(os, "getuid") else os.environ.get("USERNAME", "")
     digest = hashlib.sha256(json.dumps([user, endpoint_key(cdp)]).encode()).hexdigest()[:24]
-    return Path(tempfile.gettempdir()) / f"jantama-auto-cdp-{digest}.lock"
+    # TMPDIR can differ across independently launched operators. Resolve the
+    # Unix account home from the UID instead of environment variables, so all
+    # new processes for this user and endpoint contend on the same inode.
+    if os.name == "nt":
+        directory = Path.home() / ".cache" / "jantama-auto" / "locks"
+    else:
+        import pwd
+        directory = Path(pwd.getpwuid(os.getuid()).pw_dir) / ".cache" / "jantama-auto" / "locks"
+    return directory / f"cdp-{digest}.lock"
 
 
 @contextmanager
 def operator_lease(cdp):
     path = lock_path(cdp)
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     descriptor = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
     with os.fdopen(descriptor, "r+b") as handle:
         try:

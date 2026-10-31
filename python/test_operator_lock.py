@@ -28,6 +28,40 @@ class OperatorLockTest(unittest.TestCase):
             with operator_lease(f"http://127.0.0.1:{self.port % 65534 + 1}"):
                 pass  # A different browser endpoint remains independent.
 
+    def test_separate_processes_with_distinct_tmpdirs_share_endpoint_lock(self):
+        with tempfile.TemporaryDirectory() as first, tempfile.TemporaryDirectory() as second:
+            base={**os.environ,'PYTHONPATH':str(self.root/'python')}
+            child=subprocess.Popen([sys.executable,'-c',
+                "import sys,time;from operator_lock import operator_lease; "
+                "lease=operator_lease(sys.argv[1]);lease.__enter__();print('held',flush=True);time.sleep(30)",self.cdp],
+                cwd=self.root,env={**base,'TMPDIR':first,'HOME':first,'XDG_CACHE_HOME':first},stdout=subprocess.PIPE,text=True)
+            try:
+                self.assertEqual(child.stdout.readline().strip(),'held')
+                script=("import sys;from operator_lock import operator_lease,OperatorAlreadyRunning; "
+                        "lease=operator_lease(sys.argv[1]); "
+                        "\ntry: lease.__enter__()\nexcept OperatorAlreadyRunning: print('blocked')\n"
+                        "else: print('acquired');lease.__exit__(None,None,None)")
+                def probe(endpoint):
+                    return subprocess.run([sys.executable,'-c',script,endpoint],cwd=self.root,
+                        env={**base,'TMPDIR':second,'HOME':second,'XDG_CACHE_HOME':second},capture_output=True,text=True,check=True,timeout=10).stdout.strip()
+                self.assertEqual(probe(f'http://localhost:{self.port}'),'blocked')
+                self.assertEqual(probe(f'http://127.0.0.1:{self.port % 65534 + 1}'),'acquired')
+                child.kill();child.wait(timeout=5)
+                self.assertEqual(probe(self.cdp),'acquired')
+            finally:
+                if child.poll() is None:child.kill();child.wait(timeout=5)
+                child.stdout.close()
+
+    @unittest.skipIf(os.name == 'nt', 'Unix account home lookup')
+    def test_unusable_account_home_fails_closed(self):
+        import pwd
+        with tempfile.TemporaryDirectory() as directory:
+            blocked=Path(directory)/'not-a-directory';blocked.write_text('file')
+            with patch.object(pwd, 'getpwuid', return_value=SimpleNamespace(pw_dir=str(blocked))):
+                with self.assertRaises(OSError):
+                    with operator_lease(self.cdp):
+                        self.fail('must not proceed without shared lock')
+
     def test_direct_cli_rejects_before_reading_layout_or_connecting(self):
         with tempfile.TemporaryDirectory() as directory, operator_lease(self.cdp):
             artifacts = Path(directory) / "rejected"

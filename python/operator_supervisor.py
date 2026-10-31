@@ -32,6 +32,28 @@ def option(args, name):
     return None
 
 
+def ranked_scope(args):
+    """Only an explicitly enabled, non-sanma ranked loop may be relaunched."""
+    enabled = False
+    for arg in args:
+        if arg == "--ranked-loop":
+            enabled = True
+        elif arg == "--no-ranked-loop":
+            enabled = False
+    mentions_sanma = any(arg == "--rules=sanma" or (arg == "--rules" and i + 1 < len(args)
+                         and args[i + 1] == "sanma") for i, arg in enumerate(args))
+    modes = []
+    for i, arg in enumerate(args):
+        if arg.startswith("--mode="):
+            modes.append(arg.split("=", 1)[1])
+        elif arg == "--mode" and i + 1 < len(args):
+            modes.append(args[i + 1])
+        elif Path(arg).name == "run-operator.mjs" and i + 1 < len(args):
+            modes.append(args[i + 1])
+    force_auto = bool(modes) and all(mode == "force-auto" for mode in modes)
+    return "ranked" if enabled and force_auto and not mentions_sanma else "non_ranked_or_unknown"
+
+
 def cdp_endpoint(value):
     parsed = urllib.parse.urlsplit(value)
     host = parsed.hostname
@@ -60,7 +82,7 @@ def processes(root=ROOT, port=9222):
                 same_browser = False
                 if kind in {"operator", "launcher"} and any(Path(arg).name == Path(script).name for arg in args[1:]):
                     same_browser = cdp_endpoint(option(args, "--cdp") or "http://127.0.0.1:9222") == target
-                if exact or same_browser:
+                if (kind in {"operator", "launcher"} and same_browser) or (kind == "browser" and exact):
                     found[kind].append({"pid": int(entry.name), "args": args, "cwd": str(cwd)})
             if any(arg == f"--user-data-dir={profile}" for arg in args):
                 found["profile"].append({"pid": int(entry.name)})
@@ -97,7 +119,7 @@ def terminal_event(log):
         # Intentional exits include ranked navigation, login and dialog stops,
         # not just the original four stop names. Unknown future stop events
         # must also hold rather than silently becoming crash recovery.
-        if isinstance(event, str) and event.endswith("_stop"):
+        if isinstance(event, str) and event.endswith(("_stop", "_stopped")):
             # A browser-close error during cleanup cannot erase an earlier
             # intentional stop in this same operator run.
             if terminal is None or restart_allowed(terminal) or not restart_allowed(row):
@@ -128,6 +150,7 @@ class Supervisor:
         self.ready = ready or (lambda: cdp_ready(port))
         self.launch = launch or self.spawn
         self.last_operator = None
+        self.last_operator_scope = None
         self.operator_log = None
         self.next_start = 0
         self.attempts = {"browser": [], "operator": []}
@@ -139,6 +162,8 @@ class Supervisor:
             # while it was offline; never silently discard the previous log.
             previous = json.loads(self.state_file.read_text())
             self.last_operator = previous.get("pid")
+            # Old state lacks this field; unknown is intentionally not ranked.
+            self.last_operator_scope = previous.get("scope")
             if previous.get("log"):
                 self.operator_log = Path(previous["log"])
         self.held = self.hold_file.exists()
@@ -173,7 +198,7 @@ class Supervisor:
     def save_operator(self):
         self.state_file.parent.mkdir(parents=True, exist_ok=True)
         temporary = self.state_file.with_suffix(".tmp")
-        temporary.write_text(json.dumps({"pid": self.last_operator,
+        temporary.write_text(json.dumps({"pid": self.last_operator, "scope": self.last_operator_scope,
             "log": str(self.operator_log) if self.operator_log else None}) + "\n")
         temporary.replace(self.state_file)
 
@@ -188,6 +213,7 @@ class Supervisor:
             operator = state["operator"][0]
             if operator["pid"] != self.last_operator:
                 self.last_operator = operator["pid"]
+                self.last_operator_scope = ranked_scope(operator["args"])
                 directory = option(operator["args"], "--artifacts") or "artifacts/python-auto"
                 self.operator_log = self.root / directory / "operator-stdout.log"
                 # The structured operator log is also available for operators
@@ -201,14 +227,31 @@ class Supervisor:
             self.status("operator_alive", pid=self.last_operator)
             return  # Never judge a live game by a CDP timeout or log silence.
         if state.get("launcher"):
+            # A launcher can exit before the first operator process scan. Keep
+            # its scope so an adopted friend launcher cannot turn into ranked
+            # recovery merely because no child was observed.
+            if self.last_operator is None:
+                launcher = state["launcher"][0]
+                args = launcher.get("args", [])
+                self.last_operator = launcher["pid"]
+                self.last_operator_scope = ranked_scope(args)
+                directory = option(args, "--artifacts") or "artifacts/python-auto"
+                native = self.root / directory / "python-operator.jsonl"
+                self.operator_log = native if native.exists() else self.root / directory / "operator-stdout.log"
+                self.save_operator()
+                self.log("operator_launcher_adopted", pid=self.last_operator,
+                         scope=self.last_operator_scope, log=str(self.operator_log))
             self.status("operator_launcher_waiting", pids=[p["pid"] for p in state["launcher"]])
             return
         if self.last_operator is not None:
             terminal = terminal_event(self.operator_log)
             self.log("operator_exited", pid=self.last_operator, terminal=terminal)
             self.last_operator = None
-            if not restart_allowed(terminal):
+            if self.last_operator_scope != "ranked":
+                self.hold("operator_scope_not_ranked", scope=self.last_operator_scope, terminal=terminal)
+            elif not restart_allowed(terminal):
                 self.hold("operator_terminal_stop", terminal=terminal)
+            self.last_operator_scope = None
             self.save_operator()
             self.next_start = max(self.next_start, self.clock() + 10)
         if self.held:
@@ -256,6 +299,7 @@ class Supervisor:
         # Track even a launcher that exits before the next process scan, so
         # early safety-stop events cannot disappear without being inspected.
         self.last_operator = pid
+        self.last_operator_scope = "ranked"
         self.save_operator()
         self.log("operator_started", launcherPid=pid, artifacts=str(run), commit=commit)
         self.next_start = self.clock() + 10
