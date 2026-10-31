@@ -30,6 +30,12 @@ class PartialRowTests(unittest.TestCase):
                 out=io.BytesIO();image.save(out,format='PNG')
                 self.assertFalse(friend_visible_row_with_north_overlap(out.getvalue(),SLOTS))
 
+    def test_stale_empty_report_cannot_hide_tsumo_prompt(self):
+        frame=(ROOT/'manual-03-before.png').read_bytes();image=Image.open(io.BytesIO(frame)).convert('RGB')
+        button=Image.open('test/fixtures/sanma-buttons/tsumo.png').convert('RGB').resize((245,90))
+        image.paste(button,(890,785));out=io.BytesIO();image.save(out,format='PNG')
+        self.assertFalse(friend_visible_row_with_north_overlap(out.getvalue(),SLOTS))
+
     def test_low_contrast_visible_mark_is_rejected(self):
         frame=(ROOT/'manual-03-before.png').read_bytes()
         image=Image.open(io.BytesIO(frame)).convert('RGB')

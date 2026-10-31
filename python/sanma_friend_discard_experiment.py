@@ -61,6 +61,19 @@ def experimental_white_hand_candidate(frame, hand, geometry):
         return None
 
 
+def friend_empty_first_two_pixels(image):
+    """Independent visual check; still a partial, unverified observation."""
+    with Image.open('test/fixtures/sanma-button-rows/empty.png') as source:
+        empty=source.convert('RGB')
+    if empty.size != (825,90):return False
+    for x in (600,890):
+        difference=ImageChops.difference(image.crop((x,785,x+245,875)),empty.crop((x-600,0,x-600+245,90)))
+        if max(channel[1] for channel in difference.getextrema()) > 30:return False
+        if any(sum(ImageStat.Stat(difference.crop((xx,yy,min(xx+16,245),min(yy+16,90)))).mean)/3 > 3
+               for yy in range(0,90,16) for xx in range(0,245,16)):return False
+    return True
+
+
 def friend_visible_row_with_north_overlap(frame, row_slots):
     """Unverified friend-only blank-left hypothesis; hidden pixels remain unknown."""
     if (not isinstance(row_slots, list) or len(row_slots) != 3
@@ -72,6 +85,7 @@ def friend_visible_row_with_north_overlap(frame, row_slots):
         with Image.open(io.BytesIO(frame)) as source:
             if source.size != (1920, 1080): return False
             image = source.convert("RGB")
+        if not friend_empty_first_two_pixels(image):return False
         with Image.open("test/fixtures/sanma-button-rows/empty.png") as source:
             blank = source.convert("RGB").crop((580,0,715,90))
         with Image.open(Path(__file__).parent / "fixtures" / "sanma-friend-two-north-overlap.png") as source:
@@ -105,7 +119,11 @@ def friend_visible_empty_row_candidate(frame, row_slots):
     try:
         with Image.open(io.BytesIO(frame)) as source:
             if source.size != (1920,1080): return False
-            observed=source.convert('RGB').crop((1180,785,1425,875))
+            image=source.convert('RGB')
+            observed=image.crop((1180,785,1425,875))
+        # Recheck the reported-empty first two slots against pixels as well;
+        # a stale or incorrect row report must not conceal a visible prompt.
+        if not friend_empty_first_two_pixels(image):return False
         # Include an independently observed two-north/clock layout. It is a
         # visible-pixel hypothesis, not evidence about the obscured action.
         for name in ('sanma-friend-empty-slot-bf.png', 'sanma-friend-two-north-slot-dd.png', 'sanma-friend-empty-slot-6c.png'):
