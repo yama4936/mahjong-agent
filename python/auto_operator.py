@@ -8869,11 +8869,17 @@ class PythonAutoOperator:
                 # black. Never use recovery as evidence that it is safe to repeat.
                 reason = "black_screen_unobservable"
                 recovered = False
+                reviewed_start = getattr(self, "sanma_friend_reviewed_start_at", None)
+                start_is_usable = (type(reviewed_start) in (int, float) and isfinite(reviewed_start)
+                                   and 0 <= reviewed_start <= started)
+                # Prefer the earlier bound even if a match frame was seen
+                # later: that frame cannot prove when the turn began.
+                conservative_start = min(action_observed_at, reviewed_start) if action_observed_at is not None and start_is_usable else action_observed_at if action_observed_at is not None else reviewed_start if start_is_usable else None
                 if not unconfirmed_input_seen and last_unconfirmed_action is None:
                     for attempt in range(48):
                         if (time.monotonic() - black_started >= 240 or
-                            (action_observed_at is not None and
-                             (time.monotonic() - action_observed_at) * 1000 >= self.args.action_deadline_ms)):
+                            (conservative_start is not None and
+                             (time.monotonic() - conservative_start) * 1000 >= self.args.action_deadline_ms)):
                             reason = "black_screen_deadline_expired"
                             break
                         try:
@@ -8886,8 +8892,8 @@ class PythonAutoOperator:
                             reason = "friend_session_revoked"
                             break
                         if (time.monotonic() - black_started >= 240 or
-                            (action_observed_at is not None and
-                             (time.monotonic() - action_observed_at) * 1000 >= self.args.action_deadline_ms)):
+                            (conservative_start is not None and
+                             (time.monotonic() - conservative_start) * 1000 >= self.args.action_deadline_ms)):
                             reason = "black_screen_deadline_expired"
                             break
                         try:
@@ -8899,8 +8905,8 @@ class PythonAutoOperator:
                             break
                         last_frame = candidate
                         if (time.monotonic() - black_started >= 240 or
-                            (action_observed_at is not None and
-                             (time.monotonic() - action_observed_at) * 1000 >= self.args.action_deadline_ms)):
+                            (conservative_start is not None and
+                             (time.monotonic() - conservative_start) * 1000 >= self.args.action_deadline_ms)):
                             reason = "black_screen_deadline_expired"
                             break
                         if candidate_state == "black_screen":
@@ -8909,10 +8915,15 @@ class PythonAutoOperator:
                             last_frame = candidate
                             reason = "black_screen_recovered_unexpected_screen"
                             break
-                        if action_observed_at is None:
+                        if conservative_start is None:
                             reason = "black_screen_action_deadline_unknown"
                             break
-                        recovery_deadline_at = action_observed_at
+                        if action_observed_at != conservative_start:
+                            self.log("sanma_friend_action_clock_started", basis="reviewed_room_start_input",
+                                     turnStartVerified=False, actionDeadlineMs=300000)
+                        action_observed_at = conservative_start
+                        self.sanma_friend_action_observed_at = conservative_start
+                        recovery_deadline_at = conservative_start
                         self.log("sanma_friend_black_screen_recovered", screenshot=preserve(candidate),
                                  digest=hashlib.sha256(candidate).hexdigest(), attempts=attempt + 1,
                                  operationAuthorized=False, freshRecognitionRequired=True)
@@ -9167,6 +9178,7 @@ class PythonAutoOperator:
         startup_turn_guard = StartupTurnGuard()
         self.verified_friend_300_active = False
         self.verified_friend_300_match_seen = False
+        self.sanma_friend_reviewed_start_at = None
         reviewed_friend_start: bytes | None = None
         preflight_path = getattr(self.args, "start_reviewed_friend_room", None)
         if preflight_path:
@@ -9220,6 +9232,9 @@ class PythonAutoOperator:
                     self.verified_friend_300_active = False
                     self.log("sanma_friend_stopped", reason="friend_start_click_failed", preflight=str(preflight_path))
                     raise
+                # Bound only this process's freshly reviewed room start; a
+                # successful input still does not prove the match began.
+                self.sanma_friend_reviewed_start_at = started_at
                 self.log("sanma_friend_start_input_sent", preflight=str(preflight_path), point={"x":1140,"y":998},
                          actionDeadlineMs=300000, roomClock="300+0", scope="experimental_friend_only")
                 try:
