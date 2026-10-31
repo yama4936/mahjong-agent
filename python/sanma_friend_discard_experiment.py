@@ -236,7 +236,7 @@ def execute_friend_draw_candidate(operator, page, receipt):
     white_candidates = None if hand_value.get("safe") is True else experimental_white_hand_candidate(baseline, hand_value, geo_value)
     partial_row = (friend_visible_row_with_north_overlap(baseline, row_slots)
                    or friend_visible_empty_row_candidate(baseline, row_slots))
-    draw_only = hand_value.get("safe") is not True and white_candidates is None and experimental_draw_only_candidate(hand_value, geo_value, draw)
+    draw_only = hand_value.get("safe") is not True and experimental_draw_only_candidate(hand_value, geo_value, draw)
     defensive = (friend_genbutsu_candidate(source, receipt['digest'], threats, tiles, hand_value.get('matches'))
                  if threats and isinstance(tiles, list) and isinstance(points, list) and len(points) == len(tiles) else None)
     if defensive is not None and defensive['index'] != draw.get('index'):
@@ -250,7 +250,7 @@ def execute_friend_draw_candidate(operator, page, receipt):
                 or getattr(operator, 'sanma_friend_riichi_attempted', False) is not False
                 or not friend_clear_riichi_rail(baseline)):
             defensive = None
-    if ((hand_value.get("safe") is not True and white_candidates is None and not draw_only and defensive is None) or hand_value.get("turnReady") is not True
+    if ((hand_value.get("safe") is not True and not draw_only and defensive is None) or hand_value.get("turnReady") is not True
             or not isinstance(row_slots, list) or len(row_slots) != 3
             or (not partial_row and any(slot.get("status") != "empty_candidate" for slot in row_slots))
             or not isinstance(tiles, list) or len(tiles) != 14 or not isinstance(points, list) or len(tiles) != len(points)

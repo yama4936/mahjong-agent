@@ -60,3 +60,21 @@ class WhiteCandidateTests(unittest.TestCase):
             self.assertIn('unloaded',op.log.call_args.kwargs['risk'])
             op.args.ranked_loop = True
             with self.assertRaises(ValueError): execute_friend_draw_candidate(op,Mock(),receipt)
+
+    @patch("sanma_friend_discard_experiment.execute_friend_discard")
+    def test_white_hypothesis_does_not_waive_draw_confidence(self, execute):
+        hand=copy.deepcopy(self.hand)
+        hand['matches'][-1]['confidence']=.96;hand['matches'][-1]['runnerUpConfidence']=.94
+        self.assertIsNotNone(experimental_white_hand_candidate(self.frame,hand,self.geometry))
+        digest=hashlib.sha256(self.frame).hexdigest();op=Mock()
+        op.args=SimpleNamespace(experimental_sanma_friend=True,rules='sanma',mode='force-auto',action_deadline_ms=300000,ranked_loop=False)
+        op.verified_friend_300_active=True
+        with tempfile.TemporaryDirectory() as directory:
+            path=Path(directory)/'frame.png';path.write_bytes(self.frame);point=self.geometry['clickPoints'][-1]
+            report={'digest':digest,'hand':{'status':'candidate','value':hand},'handGeometry':{'status':'candidate','value':self.geometry},
+                    'buttonRow':{'status':'candidate','value':{'slots':[{'status':'empty_candidate'}]*3}}}
+            receipt={'scope':'sanma_self_turn_observation','digest':digest,'screenshot':str(path),'sourceObservation':{'digest':digest,'report':report},
+                     'freshness':{'status':'stable_except_clock_candidate'},'drawCandidate':{'status':'candidate','digest':digest,'index':13,'tile':hand['tiles'][-1],'point':point}}
+            with self.assertRaisesRegex(ValueError,'unsafe hand'):
+                execute_friend_draw_candidate(op,Mock(),receipt)
+            execute.assert_not_called()
