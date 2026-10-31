@@ -157,7 +157,9 @@ export function assembleSanmaEvaluation(input: {
   if (review?.state && typeof review.state === "object" && !Array.isArray(review.state)) {
     const state = review.state as Record<string, unknown>;
     const own = observation.north.positions?.own;
-    if (state.ownKitaCount === 0 && Array.isArray(own?.matches) && own.matches.length) northConflict = true;
+    const partialOwn = own?.partialObservation;
+    if (state.ownKitaCount === 0 && ((Array.isArray(own?.matches) && own.matches.length)
+        || (partialOwn && typeof partialOwn === 'object' && 'candidate' in partialOwn && partialOwn.candidate))) northConflict = true;
     const seats = observation.north.bySeat;
     if (seats && Array.isArray(state.opponents)) {
       for (const opponent of state.opponents) {

@@ -25,18 +25,22 @@ def recognize_sanma_board_candidate(image_path: Path, *, expected_total_points: 
 
 def observe_sanma_image(image_path: Path) -> dict:
     """Same unverified board and north observations as the CLI --with-north path."""
-    from sanma_kita_image_experiment import detect_own_north_candidates
+    from sanma_kita_image_experiment import detect_own_north_candidates, detect_own_partial_north_candidate
     from sanma_opposite_kita_experiment import opposite_north_candidate
     from sanma_left_kita_experiment import left_north_candidate
+    from sanma_right_kita_experiment import right_north_candidate
     board = recognize_sanma_board_candidate(image_path, expected_total_points=None, payment_phase=None)
     root = Path(__file__).resolve().parents[1] / 'test/fixtures'
     try:
         observations = {
-            'own': detect_own_north_candidates(image_path, root / 'sanma-public-experiment/own-north-face.png'),
+            'own': {**detect_own_north_candidates(image_path, root / 'sanma-public-experiment/own-north-face.png'),
+                'partialObservation': detect_own_partial_north_candidate(image_path, Path(__file__).parent / 'fixtures/sanma-own-north-partial-c177.png')},
             'opposite': opposite_north_candidate(image_path, root / 'sanma-opposite-kita/north-glyph-reference.png',
                 shadow_template_path=root / 'sanma-opposite-kita/north-glyph-shadow-reference.png'),
             'left': left_north_candidate(image_path, root / 'sanma-left-kita/left-north-reference.png',
                 glare_template_path=root / 'sanma-left-kita/left-north-glare-reference.png'),
+            'right': right_north_candidate(image_path, [Path(__file__).parent / f'fixtures/sanma-right-north-c177-{label}.png'
+                                                        for label in ('top', 'bottom')]),
         }
         result = {'status': 'unknown', 'verified': False, 'complete': False, 'positions': observations}
     except Exception as error:

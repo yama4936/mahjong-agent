@@ -13,7 +13,7 @@ import { inspectSanmaLeftRiverCandidate, inspectSanmaRightRiverCandidate } from 
 
 const run = promisify(execFile);
 type NorthPosition = { verified: false; complete: false; frame_sha256?: string; [key: string]: unknown };
-type NorthPositions = { own: NorthPosition; opposite: NorthPosition; left: NorthPosition };
+type NorthPositions = { own: NorthPosition; opposite: NorthPosition; left: NorthPosition; right?: NorthPosition };
 type NorthResult = { status: "unknown"; verified: false; complete: false; reason?: string; positions?: NorthPositions };
 
 /** Maps screen positions under an unverified seat candidate; never counts extracts. */
@@ -67,6 +67,13 @@ export async function observeSanmaFrameAutomatically(input: {
         if (value.verified !== false || value.complete !== false || (value.frame_sha256 !== undefined && value.frame_sha256 !== digest)) {
           throw new Error("north observation frame or status mismatch");
         }
+      }
+      const partial = data.north.positions?.own.partialObservation;
+      if (partial !== undefined && (!partial || typeof partial !== 'object'
+          || !('verified' in partial) || partial.verified !== false
+          || !('complete' in partial) || partial.complete !== false
+          || !('frame_sha256' in partial) || partial.frame_sha256 !== digest)) {
+        throw new Error("partial north observation frame or status mismatch");
       }
       north = data.north;
     } catch (error) { board = { verified: false, reason: `board observation failed: ${error instanceof Error ? error.message : String(error)}` }; }

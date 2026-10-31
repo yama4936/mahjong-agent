@@ -33,6 +33,25 @@ def detect_own_north_candidates(image_path: Path, template_path: Path) -> dict:
             'frame_sha256': sha256(Path(image_path).read_bytes()).hexdigest()}
 
 
+def detect_own_partial_north_candidate(image_path: Path, template_path: Path) -> dict:
+    """Unverified visible left part of the north/clock overlap, not a count."""
+    from PIL import Image, ImageChops, ImageStat
+    base = {'scope': 'sanma_offline_own_partial_north_visual_candidate',
+            'status': 'unknown', 'verified': False, 'complete': False}
+    try:
+        with Image.open(image_path) as image, Image.open(template_path) as reference:
+            if image.size != (1920, 1080) or reference.size != (35, 85):
+                return {**base, 'reason': 'uncalibrated_dimensions'}
+            visible = image.convert('RGB').crop((1390, 765, 1425, 850))
+            delta = ImageChops.difference(visible, reference.convert('RGB'))
+            score = 1 - sum(ImageStat.Stat(delta).mean) / 765
+        candidate = {'x': 1390, 'y': 765, 'similarity': score, 'verified': False} if score >= .995 else None
+        return {**base, 'candidate': candidate, 'frame_sha256': sha256(Path(image_path).read_bytes()).hexdigest(),
+                'reason': 'partially occluded visual candidate; hidden contents and count unknown'}
+    except (OSError, ValueError):
+        return {**base, 'reason': 'uncalibrated_or_unreadable_image'}
+
+
 def compare_own_north_candidate_frames(previous: dict, current: dict, *,
                                        previous_hand_id: str | None, current_hand_id: str | None,
                                        previous_index: int, current_index: int) -> dict:

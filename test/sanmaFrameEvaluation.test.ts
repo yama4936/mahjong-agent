@@ -100,6 +100,13 @@ test("assembly preserves unknowns and only evaluates with matching explicit revi
     assert.equal(conflict.evaluation?.status,"blocked");
     if (conflict.evaluation?.status === "blocked") assert.ok(conflict.evaluation.reasons.includes("reviewed zero north count conflicts with visual candidate"));
   }
+  const partialOwn = {...disputed,north:{...disputed.north,positions:{...disputed.north.positions,
+    own:{verified:false as const,complete:false as const,matches:[],partialObservation:{candidate:{x:1390,y:765},verified:false,complete:false}}}}};
+  const partialConflict = assembleSanmaEvaluation({frame,observation:partialOwn,review});
+  if ("evaluation" in partialConflict) {
+    assert.equal(partialConflict.evaluation?.status,"blocked");
+    if (partialConflict.evaluation?.status === "blocked") assert.ok(partialConflict.evaluation.reasons.includes("reviewed zero north count conflicts with visual candidate"));
+  }
   const badFrame = assembleSanmaEvaluation({frame:Buffer.from("other"),observation,review});
   assert.equal(badFrame.status,"blocked");
   assert.deepEqual("reasons" in badFrame && badFrame.reasons,["frame evidence digest mismatch"]);
