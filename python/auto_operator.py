@@ -1921,8 +1921,15 @@ def experimental_draw_glyph_stability(before: bytes, after: bytes, report: dict[
         slots = row['value']['slots']
         if (any(x['status'] != 'candidate' for x in (hand, geometry, row))
                 or value.get('turnReady') is not True or len(value['tiles']) != 14
-                or len(slots) != 3 or any(x.get('status') != 'empty_candidate' for x in slots)):
+                or len(slots) != 3):
             return False
+        if any(x.get('status') != 'empty_candidate' for x in slots):
+            # The concealed action is still unknown; only accept a previously
+            # reviewed partial-row candidate for both independent captures.
+            from sanma_friend_discard_experiment import friend_visible_row_with_north_overlap, friend_visible_empty_row_candidate
+            partial = lambda frame: (friend_visible_row_with_north_overlap(frame, slots)
+                                     or friend_visible_empty_row_candidate(frame, slots))
+            if not partial(before) or not partial(after): return False
         layout = {'handSlots': shape['handSlots'], 'drawSlot': shape['drawSlot']}
         if len(layout['handSlots']) != 13 or closed_hand_face_mismatches(before, after, layout, .5):
             return False

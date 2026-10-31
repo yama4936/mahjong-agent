@@ -101,20 +101,18 @@ def friend_visible_empty_row_candidate(frame, row_slots):
         with Image.open(io.BytesIO(frame)) as source:
             if source.size != (1920,1080): return False
             observed=source.convert('RGB').crop((1180,785,1425,875))
-        with Image.open(Path(__file__).parent/'fixtures'/'sanma-friend-empty-slot-bf.png') as source:
-            reference=source.convert('RGB')
-        difference=ImageChops.difference(observed,reference)
-        if max(channel[1] for channel in difference.getextrema()) > 30:
-            return False
-        # A broad low-contrast change can evade an individual-pixel bound.
-        # Retain the known minor variation in saved frames while rejecting
-        # coherent changes within any small visible region.
-        for y in range(0,90,16):
-            for x in range(0,245,16):
-                block=difference.crop((x,y,min(x+16,245),min(y+16,90)))
-                if sum(ImageStat.Stat(block).mean)/3 > 3:
-                    return False
-        return True
+        # Include an independently observed two-north/clock layout. It is a
+        # visible-pixel hypothesis, not evidence about the obscured action.
+        for name in ('sanma-friend-empty-slot-bf.png', 'sanma-friend-two-north-slot-dd.png'):
+            with Image.open(Path(__file__).parent/'fixtures'/name) as source:
+                reference=source.convert('RGB')
+            difference=ImageChops.difference(observed,reference)
+            if max(channel[1] for channel in difference.getextrema()) > 30:
+                continue
+            if all(sum(ImageStat.Stat(difference.crop((x,y,min(x+16,245),min(y+16,90)))).mean)/3 <= 3
+                   for y in range(0,90,16) for x in range(0,245,16)):
+                return True
+        return False
     except (OSError,ValueError):
         return False
 
