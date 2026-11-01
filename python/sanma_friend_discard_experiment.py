@@ -3,6 +3,7 @@
 Caller-provided recognition, room and timing claims are not independently
 certified. A successful click receipt does not prove a discard reached the river.
 """
+from contextlib import nullcontext
 import hashlib
 import io
 
@@ -120,7 +121,7 @@ def friend_visible_row_with_north_overlap(frame, row_slots):
             or row_slots[2].get("status") != "unresolved"):
         return False
     try:
-        with Image.open(io.BytesIO(frame)) as source:
+        with (nullcontext(frame) if isinstance(frame, Image.Image) else Image.open(io.BytesIO(frame))) as source:
             if source.size != (1920, 1080): return False
             image = source.convert("RGB")
         if not friend_empty_first_two_pixels(image):return False
@@ -155,7 +156,7 @@ def friend_visible_empty_row_candidate(frame, row_slots):
             or not isinstance(row_slots[2],dict) or row_slots[2].get('status')!='unresolved'):
         return False
     try:
-        with Image.open(io.BytesIO(frame)) as source:
+        with (nullcontext(frame) if isinstance(frame, Image.Image) else Image.open(io.BytesIO(frame))) as source:
             if source.size != (1920,1080): return False
             image=source.convert('RGB')
             observed=image.crop((1180,785,1425,875))

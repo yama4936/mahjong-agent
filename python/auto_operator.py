@@ -2050,6 +2050,16 @@ def _experimental_kita_glyph_stability_decoded(before: bytes, after: bytes, repo
 
 
 def experimental_draw_glyph_stability(before: bytes, after: bytes, report: dict[str, Any]) -> bool:
+    """Compare the same full images after decoding each once."""
+    try:
+        with Image.open(io.BytesIO(before)) as a, Image.open(io.BytesIO(after)) as b:
+            a.load(); b.load()
+            return _experimental_draw_glyph_stability_decoded(a, b, report)
+    except (KeyError, TypeError, ValueError, OSError, IndexError):
+        return False
+
+
+def _experimental_draw_glyph_stability_decoded(before: bytes, after: bytes, report: dict[str, Any]) -> bool:
     """Friend-only lighting hypothesis; does not establish turn or legal actions."""
     try:
         hand, geometry, row = (report[k] for k in ('hand', 'handGeometry', 'buttonRow'))
@@ -2075,7 +2085,7 @@ def experimental_draw_glyph_stability(before: bytes, after: bytes, report: dict[
             return False
         if not experimental_kita_color_stable(before, after, layout['handSlots']+[layout['drawSlot']]+boxes):
             return False
-        with Image.open(io.BytesIO(before)) as a, Image.open(io.BytesIO(after)) as b:
+        with _open_screenshot(before) as a, _open_screenshot(after) as b:
             if a.size != (1920,1080) or b.size != a.size: return False
             for box in boxes:
                 x,y,w,h = (box[k] for k in ('x','y','width','height'))
