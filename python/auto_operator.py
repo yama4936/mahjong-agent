@@ -10661,6 +10661,8 @@ def parse_args() -> argparse.Namespace:
          and explicit_args[index + 1] == "300000") for index, value in enumerate(explicit_args))
     if (args.rules == "sanma" or mentions_sanma) and not (experimental_sanma_friend_allowed(args) and explicit_deadline):
         parser.error("sanma automatic decisions and screen operation are not implemented; startup stopped")
+    if args.experimental_sanma_png_stream and not (experimental_sanma_friend_allowed(args) and explicit_deadline):
+        parser.error("experimental sanma PNG stream requires a reviewed 300+0 non-ranked force-auto friend room")
     if args.experimental_sanma_friend and not (experimental_sanma_friend_allowed(args) and explicit_deadline):
         parser.error("experimental sanma requires a reviewed 300+0 non-ranked force-auto friend room")
     if args.action_templates and not Path(args.action_templates).exists():

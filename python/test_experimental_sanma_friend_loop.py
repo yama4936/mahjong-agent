@@ -36,6 +36,41 @@ class ExperimentalSanmaFriendLoopTest(unittest.TestCase):
              patch('auto_operator.classify_screen',return_value=('match',1.0)):
             self.op.run(self.page)
 
+    def test_png_stream_bad_timestamp_stops_real_observation_without_gameplay(self):
+        self.op.verified_friend_300_active = True
+        self.op.args.experimental_sanma_png_stream = True
+        self.op.inspect_sanma_self_turn = PythonAutoOperator.inspect_sanma_self_turn.__get__(self.op)
+        self.op.observe_sanma_resident = Mock(return_value={})
+        session = Mock()
+        self.page.context.new_cdp_session.return_value = session
+        def wait(_):
+            callback = session.on.call_args.args[1]
+            callback({'metadata': {}, 'data': '', 'sessionId': 1})
+        self.page.wait_for_timeout.side_effect = wait
+        with patch('auto_operator.classify_screen', return_value=('match', 1.0)):
+            self.op.run_experimental_sanma_friend(self.page)
+        event = next(c for c in self.op.log.call_args_list if c.kwargs.get('reason') == 'observation_or_action_failed')
+        self.assertIn('PNG stream invalid', event.kwargs['error'])
+        self.assertFalse(event.kwargs['operationAuthorized'])
+        self.assertEqual(Path(event.kwargs['screenshot']).read_bytes(), b'match screenshot')
+        self.page.mouse.click.assert_not_called()
+        self.op.execute_sanma_friend_tsumo_candidate.assert_not_called()
+        self.op.execute_sanma_friend_kita_candidate.assert_not_called()
+        session.detach.assert_called_once()
+
+    def test_png_stream_option_without_friend_scope_is_rejected(self):
+        import sys
+        common = ['operator', '--layout', 'x', '--templates', 'x', '--state', 'x', '--experimental-sanma-png-stream']
+        valid = ['--rules', 'sanma', '--experimental-sanma-friend', '--mode', 'force-auto', '--action-deadline-ms', '300000', '--start-reviewed-friend-room', str(self.preflight)]
+        with patch.object(sys, 'argv', common + valid):
+            self.assertTrue(parse_args().experimental_sanma_png_stream)
+        for extra in ([], ['--ranked-loop'], ['--rules', 'sanma']):
+            with self.subTest(extra=extra), patch.object(sys, 'argv', common + extra):
+                with self.assertRaises(SystemExit): parse_args()
+        for bad in (valid + ['--ranked-loop'], valid[:-2], [x for x in valid if x != '--experimental-sanma-friend']):
+            with self.subTest(bad=bad), patch.object(sys, 'argv', common + bad):
+                with self.assertRaises(SystemExit): parse_args()
+
     def test_reviewed_room_start_routes_tsumo_and_stops(self):
         self.run_room()
         self.page.mouse.click.assert_called_once_with(1140,998)
