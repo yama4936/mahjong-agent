@@ -33,6 +33,7 @@ from playwright.sync_api import Browser, CDPSession, Page, sync_playwright
 from PIL import Image, ImageChops, ImageFilter, ImageStat
 from screen_state import _rgb_fraction, classify_screen, load_references
 from synchronous_capture import CaptureReceipt, capture_full_png
+from sanma_png_stream import SanmaPngStream
 from operator_lock import OperatorAlreadyRunning, endpoint_key, operator_lease
 from analysis_recorder import AnalysisRecorder
 from startup_turn_guard import StartupTurnGuard
@@ -4140,7 +4141,21 @@ class PythonAutoOperator:
             raise RuntimeError("sanma screenshot unavailable")
         path = self.frames / f"{utc_stamp()}.{uuid.uuid4().hex}.sanma-self-turn.png"
         path.write_bytes(image)
-        result = self.observe_sanma_resident(path)
+        stream = None
+        streamed_latest = None
+        if getattr(self.args, "experimental_sanma_png_stream", False):
+            if (not experimental_sanma_friend_allowed(self.args)
+                    or getattr(self, "verified_friend_300_active", False) is not True):
+                raise RuntimeError("PNG stream requires an active verified 300+0 sanma friend match")
+            stream = SanmaPngStream(page)
+            stream.start()
+        try:
+            result = self.observe_sanma_resident(path)
+            if stream is not None:
+                streamed_latest = stream.capture_after(time.time())
+        finally:
+            if stream is not None:
+                stream.close()
         assembly = result.get("assembly")
         if (not isinstance(assembly, dict) or assembly.get("operationAuthorized") is not False
                 or not isinstance(assembly.get("priority"), dict) or assembly["priority"].get("status") != "blocked"
@@ -4151,7 +4166,7 @@ class PythonAutoOperator:
         # prompt row. Identical pixels are only a weak candidate, not permission.
         freshness: dict[str, Any] = {"status": "unknown", "operationAuthorized": False}
         try:
-            latest = page.screenshot(animations="disabled")
+            latest = streamed_latest if stream is not None else page.screenshot(animations="disabled")
             if not isinstance(latest, bytes) or not latest:
                 raise ValueError("fresh screenshot unavailable")
             changes = friend_frame_changes(image, latest)
@@ -10572,6 +10587,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--cdp", default="http://127.0.0.1:9222")
     parser.add_argument("--rules", choices=("yonma", "sanma"), default="yonma",
                         help="game rules; sanma requires the experimental friend-only opt-in")
+    parser.add_argument("--experimental-sanma-png-stream", action="store_true",
+                        help="experimental friend-only PNG stream for post-recognition freshness")
     parser.add_argument("--experimental-sanma-friend", action="store_true",
                         help="friend-only experimental tsumo; stops on unsupported actions")
     parser.add_argument("--layout", required=True)
