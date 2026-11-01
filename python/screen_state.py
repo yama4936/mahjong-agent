@@ -387,6 +387,20 @@ def load_references(directory: Path) -> dict[str, tuple[ScreenState, Image.Image
     return references
 
 
+def is_blank_white_client_frame(screenshot: bytes | Path | str) -> bool:
+    """Detect a near-white native frame only as unobservable, never as a game state.
+
+    A tiny broken-image glyph may remain at the top-left.  This is not a
+    diagnosis of the underlying browser or game error.
+    """
+    try:
+        image = _open(screenshot)
+        return (image.size == (1920, 1080)
+                and _rgb_fraction(image, ((">", 249),) * 3) >= .9999)
+    except (OSError, ValueError, TypeError):
+        return False
+
+
 def classify_screen(
     screenshot: bytes | Path | str,
     references: dict[str, tuple[ScreenState, Image.Image]],

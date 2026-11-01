@@ -32,7 +32,7 @@ from typing import Any, Callable
 
 from playwright.sync_api import Browser, CDPSession, Page, sync_playwright
 from PIL import Image, ImageChops, ImageFilter, ImageStat
-from screen_state import _rgb_fraction, classify_screen, load_references
+from screen_state import _rgb_fraction, classify_screen, load_references, is_blank_white_client_frame
 from synchronous_capture import CaptureReceipt, capture_full_png
 from sanma_png_stream import SanmaPngStream
 from operator_lock import OperatorAlreadyRunning, endpoint_key, operator_lease
@@ -8952,6 +8952,13 @@ class PythonAutoOperator:
             except Exception as error:
                 self.log("sanma_friend_stopped", reason="screen_observation_failed", error=str(error),
                          screenshot=preserve(last_frame))
+                return
+            if is_blank_white_client_frame(frame):
+                self.log("sanma_friend_stopped", reason="white_screen_unobservable",
+                         screenState=state, confidence=confidence, screenshot=preserve(frame),
+                         digest=hashlib.sha256(frame).hexdigest(), operationAuthorized=False,
+                         recovery="manual_review_required", gameplayInputAttempts=0,
+                         currentLoopUnconfirmedInputObserved=unconfirmed_input_seen)
                 return
             if state == "black_screen":
                 black_started = time.monotonic()
