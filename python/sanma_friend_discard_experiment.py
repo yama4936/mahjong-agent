@@ -408,7 +408,8 @@ def execute_friend_discard(page, *, session, observation, plan, layout, log,
                      or hashlib.sha256(reference).hexdigest() != observation.get("frameSha256")
                      or not (friend_frame_stable(reference, before)
                              or (observation.get("experimentalDrawReport") is not None
-                                 and __import__("auto_operator").experimental_draw_glyph_stability(reference, before, observation["experimentalDrawReport"]))))):
+                                 and __import__("auto_operator").experimental_draw_glyph_stability(reference, before, observation["experimentalDrawReport"],
+                                     on_wall_error=lambda data: log({"kind":"sanma_wall_guard_error", **data})))))):
             if isinstance(before, bytes) and save_rejected_frame is not None:
                 try:
                     save_rejected_frame(before)

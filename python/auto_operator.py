@@ -1953,12 +1953,13 @@ def experimental_kita_felt_lighting(a, b, x, y):
     return similar>=4
 
 
-def experimental_kita_wall_color_stable(before: bytes, after: bytes) -> bool:
+def experimental_kita_wall_color_stable(before: bytes, after: bytes, *, on_error=None) -> bool:
     """Additional friend-only color guard; not proof of unchanged tiles.
 
     Inspect the full left wall in 8-pixel blocks. Differences in R-G and B-G
     remove common brightness shifts, but tiny or low-chroma changes may pass.
     """
+    np = None
     try:
         import numpy as np
         with _open_screenshot(before) as a, _open_screenshot(after) as b:
@@ -1974,27 +1975,36 @@ def experimental_kita_wall_color_stable(before: bytes, after: bytes) -> bool:
                 if float(diff[y:y + 8, x:x + 8].mean()) > 24.0:
                     return False
         return True
-    except (ImportError, ValueError, OSError, TypeError):
+    except (ImportError, ValueError, OSError, TypeError) as error:
+        if on_error is not None:
+            try:
+                import sys
+                on_error({'kind':'wall_guard_error', 'errorType':type(error).__name__,
+                          'error':str(error), 'pythonExecutable':sys.executable,
+                          'numpyVersion':getattr(np, '__version__', None),
+                          'numpyPath':getattr(np, '__file__', None), 'operationAuthorized':False})
+            except Exception:
+                pass  # Logging failures must never allow an action.
         return False
 
 
-def experimental_kita_glyph_stability(before: bytes, after: bytes, report: dict[str, Any]) -> bool:
+def experimental_kita_glyph_stability(before: bytes, after: bytes, report: dict[str, Any], *, on_wall_error=None) -> bool:
     """Decode each full frame once; preserve all existing candidate checks."""
     try:
         with Image.open(io.BytesIO(before)) as a, Image.open(io.BytesIO(after)) as b:
             a.load(); b.load()
-            return _experimental_kita_glyph_stability_decoded(a, b, report)
+            return _experimental_kita_glyph_stability_decoded(a, b, report, on_wall_error=on_wall_error)
     except (KeyError, TypeError, ValueError, OSError, IndexError):
         return False
 
 
-def _experimental_kita_glyph_stability_decoded(before: bytes, after: bytes, report: dict[str, Any]) -> bool:
+def _experimental_kita_glyph_stability_decoded(before: bytes, after: bytes, report: dict[str, Any], *, on_wall_error=None) -> bool:
     """Lighting-tolerant visual hypothesis, only for the reviewed friend kita prompt.
 
     This does not prove state, turn, colors, or content concealed by overlays.
     """
     try:
-        if not experimental_kita_wall_color_stable(before, after):
+        if not experimental_kita_wall_color_stable(before, after, on_error=on_wall_error):
             return False
         hand = report['hand']; geometry = report['handGeometry']; row = report['buttonRow']
         hv = hand['value']; gv = geometry['value']; buttons = row['value']['slots']
@@ -2049,17 +2059,17 @@ def _experimental_kita_glyph_stability_decoded(before: bytes, after: bytes, repo
         return False
 
 
-def experimental_draw_glyph_stability(before: bytes, after: bytes, report: dict[str, Any]) -> bool:
+def experimental_draw_glyph_stability(before: bytes, after: bytes, report: dict[str, Any], *, on_wall_error=None) -> bool:
     """Compare the same full images after decoding each once."""
     try:
         with Image.open(io.BytesIO(before)) as a, Image.open(io.BytesIO(after)) as b:
             a.load(); b.load()
-            return _experimental_draw_glyph_stability_decoded(a, b, report)
+            return _experimental_draw_glyph_stability_decoded(a, b, report, on_wall_error=on_wall_error)
     except (KeyError, TypeError, ValueError, OSError, IndexError):
         return False
 
 
-def _experimental_draw_glyph_stability_decoded(before: bytes, after: bytes, report: dict[str, Any]) -> bool:
+def _experimental_draw_glyph_stability_decoded(before: bytes, after: bytes, report: dict[str, Any], *, on_wall_error=None) -> bool:
     """Friend-only lighting hypothesis; does not establish turn or legal actions."""
     try:
         hand, geometry, row = (report[k] for k in ('hand', 'handGeometry', 'buttonRow'))
@@ -2078,7 +2088,7 @@ def _experimental_draw_glyph_stability_decoded(before: bytes, after: bytes, repo
             if not partial(before) or not partial(after): return False
         # The binary screen mask cannot detect same-luminance color changes
         # in the left tile backs. Use the existing conservative wall guard.
-        if not experimental_kita_wall_color_stable(before, after): return False
+        if not experimental_kita_wall_color_stable(before, after, on_error=on_wall_error): return False
         layout = {'handSlots': shape['handSlots'], 'drawSlot': shape['drawSlot']}
         if len(layout['handSlots']) != 13 or closed_hand_face_mismatches(before, after, layout, .5):
             return False
@@ -4208,10 +4218,12 @@ class PythonAutoOperator:
             changes = friend_frame_changes(image, latest)
             clock_changed = changes.pop('clock')
             kita_glyph_candidate = (changes['fullFrame'] and experimental_sanma_friend_allowed(getattr(self, "args", None))
-                                    and experimental_kita_glyph_stability(image, latest, result.get('report') or {}))
+                                    and experimental_kita_glyph_stability(image, latest, result.get('report') or {},
+                                                                            on_wall_error=lambda data: self.log('sanma_wall_guard_error', **data)))
             draw_glyph_candidate = (changes['fullFrame'] and not kita_glyph_candidate
                                     and experimental_sanma_friend_allowed(getattr(self, "args", None))
-                                    and experimental_draw_glyph_stability(image, latest, result.get('report') or {}))
+                                    and experimental_draw_glyph_stability(image, latest, result.get('report') or {},
+                                                                            on_wall_error=lambda data: self.log('sanma_wall_guard_error', **data)))
             latest_path = self.frames / f"{utc_stamp()}.{uuid.uuid4().hex}.sanma-freshness.png"
             latest_path.write_bytes(latest)
             freshness = {"status": "stable_kita_glyph_candidate" if kita_glyph_candidate else "stable_draw_glyph_candidate" if draw_glyph_candidate else "changed" if changes['fullFrame'] else
@@ -4478,7 +4490,8 @@ class PythonAutoOperator:
                 raise ValueError("baseline changed")
             if (not friend_frame_stable(baseline, fresh)
                     and not (freshness.get("status") == "stable_kita_glyph_candidate"
-                             and experimental_kita_glyph_stability(baseline, fresh, report))):
+                             and experimental_kita_glyph_stability(baseline, fresh, report,
+                                  on_wall_error=lambda data: self.log('sanma_wall_guard_error', **data)))):
                 raise SanmaKitaPreclickChanged("screen changed outside clock area")
             screen_state, confidence = classify_screen(fresh, self.screen_references)
             if screen_state != "match" or confidence < 0.95:
