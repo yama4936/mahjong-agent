@@ -2076,6 +2076,9 @@ def _experimental_draw_glyph_stability_decoded(before: bytes, after: bytes, repo
             partial = lambda frame: (friend_visible_row_with_north_overlap(frame, slots)
                                      or friend_visible_empty_row_candidate(frame, slots))
             if not partial(before) or not partial(after): return False
+        # The binary screen mask cannot detect same-luminance color changes
+        # in the left tile backs. Use the existing conservative wall guard.
+        if not experimental_kita_wall_color_stable(before, after): return False
         layout = {'handSlots': shape['handSlots'], 'drawSlot': shape['drawSlot']}
         if len(layout['handSlots']) != 13 or closed_hand_face_mismatches(before, after, layout, .5):
             return False

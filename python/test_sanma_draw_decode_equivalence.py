@@ -129,9 +129,10 @@ class DrawDecodeEquivalence(unittest.TestCase):
    if gray:crop=crop.convert('L').convert('RGB')
    im=Image.new('RGB',(1920,1080),(25,35,55));im.paste(crop,(150,80));out=io.BytesIO();im.save(out,format='PNG');return out.getvalue()
   self.assertFalse(self.check(frame('opponent-before.png'),frame('opponent-after.png'),self.report))
-  # Existing draw guard does not protect wall chroma; both versions accept
-  # this synthetic equal-luminance wall color change. This is a known gap.
-  self.assertTrue(self.check(frame('light-3.png'),frame('light-3.png',True),self.report))
+  # Intentional stricter guard: legacy accepted this wall-only color change.
+  original=frame('light-3.png');gray=frame('light-3.png',True)
+  self.assertTrue(legacy_draw_stability(original,gray,self.report))
+  self.assertFalse(experimental_draw_glyph_stability(original,gray,self.report))
  def test_equal_luminance_hand_color_change_is_rejected(self):
   slot=self.report['handGeometry']['value']['handSlots'][0]
   x,y=int(slot['x'])+10,int(slot['y'])+10
