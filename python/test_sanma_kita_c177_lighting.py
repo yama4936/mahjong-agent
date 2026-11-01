@@ -13,6 +13,21 @@ class KitaC177LightingTests(unittest.TestCase):
    a=next(ROOT.glob(f'*{before}*sanma-self-turn.png')).read_bytes()
    b=next(ROOT.glob(f'*{after}*sanma-freshness.png')).read_bytes()
    cls.pairs.append((a,b))
+ def test_full_frames_are_decoded_once_each(self):
+  from unittest.mock import patch
+  a,b=self.pairs[0];original=Image.open;full=[]
+  def tracked(*args,**kwargs):
+   image=original(*args,**kwargs)
+   if image.size==(1920,1080):full.append(image)
+   return image
+  with patch('auto_operator.Image.open',side_effect=tracked):
+   self.assertTrue(experimental_kita_glyph_stability(a,b,self.report))
+  self.assertEqual(len(full),2)
+ def test_invalid_or_truncated_images_fail_closed(self):
+  a,b=self.pairs[0]
+  for first,second in ((b'not an image',b),(a,b'bad'),(a[:1000],b),(a,b[:1000])):
+   with self.subTest(first=len(first),second=len(second)):
+    self.assertFalse(experimental_kita_glyph_stability(first,second,self.report))
  def test_two_real_pairs_are_lighting_candidates(self):
   for a,b in self.pairs:
    with self.subTest(a=a[:40]):self.assertTrue(experimental_kita_glyph_stability(a,b,self.report))

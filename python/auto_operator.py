@@ -7,6 +7,7 @@ touching the page.
 """
 
 from __future__ import annotations
+from contextlib import nullcontext
 
 import argparse
 import base64
@@ -333,7 +334,7 @@ def closed_hand_face_mismatches(
         return [{"index": -1, "faceStructureDelta": None}]
     mismatches: list[dict[str, float | int | None]] = []
     try:
-        with Image.open(io.BytesIO(evaluated_full)) as first, Image.open(io.BytesIO(current_full)) as second:
+        with _open_screenshot(evaluated_full) as first, _open_screenshot(current_full) as second:
             first.load(); second.load()
             # The former per-tile PNG round trip rejects CMYK and other
             # unsupported modes; integer modes can also be changed by that
@@ -420,9 +421,13 @@ def raised_closed_hand_slots(screenshot: bytes, layout: dict[str, Any]) -> list[
         return []
 
 
+def _open_screenshot(value):
+    return nullcontext(value) if isinstance(value, Image.Image) else Image.open(io.BytesIO(value))
+
+
 def crop_screenshot(screenshot: bytes, clip: dict[str, float]) -> bytes:
     """Crop a PNG in memory so one CDP capture can serve several checks."""
-    with Image.open(io.BytesIO(screenshot)) as image:
+    with _open_screenshot(screenshot) as image:
         cropped = image.crop((
             int(clip["x"]), int(clip["y"]),
             int(clip["x"] + clip["width"]), int(clip["y"] + clip["height"]),
@@ -1889,7 +1894,7 @@ def experimental_kita_color_stable(before: bytes, after: bytes, boxes: list[dict
     def kind(pixel):
         r, g, b = pixel
         return 1 if r-g > 35 and r-b > 35 else 2 if g-r > 20 and g-b > 15 else 0
-    with Image.open(io.BytesIO(before)) as a, Image.open(io.BytesIO(after)) as b:
+    with _open_screenshot(before) as a, _open_screenshot(after) as b:
         a,b=a.convert("RGB"),b.convert("RGB")
         if a.size != (1920,1080) or b.size != a.size: return False
         for box in boxes:
@@ -1902,7 +1907,7 @@ def experimental_kita_color_stable(before: bytes, after: bytes, boxes: list[dict
 
 def experimental_kita_other_regions_stable(before: bytes, after: bytes, boxes: list[dict[str, Any]]) -> bool:
     """Check uncovered regions, excluding only reviewed self-indicator pixels."""
-    with Image.open(io.BytesIO(before)) as a, Image.open(io.BytesIO(after)) as b:
+    with _open_screenshot(before) as a, _open_screenshot(after) as b:
         if a.size != (1920,1080) or b.size != a.size:return False
         masks=[im.convert("L").point(lambda value: 255 if value<120 else 0) for im in (a,b)]
         diff=ImageChops.difference(*masks)
@@ -1956,7 +1961,7 @@ def experimental_kita_wall_color_stable(before: bytes, after: bytes) -> bool:
     """
     try:
         import numpy as np
-        with Image.open(io.BytesIO(before)) as a, Image.open(io.BytesIO(after)) as b:
+        with _open_screenshot(before) as a, _open_screenshot(after) as b:
             if a.size != (1920, 1080) or b.size != a.size:
                 return False
             a = np.asarray(a.convert('RGB').crop((150, 80, 390, 700)), dtype=np.int16)
@@ -1974,6 +1979,16 @@ def experimental_kita_wall_color_stable(before: bytes, after: bytes) -> bool:
 
 
 def experimental_kita_glyph_stability(before: bytes, after: bytes, report: dict[str, Any]) -> bool:
+    """Decode each full frame once; preserve all existing candidate checks."""
+    try:
+        with Image.open(io.BytesIO(before)) as a, Image.open(io.BytesIO(after)) as b:
+            a.load(); b.load()
+            return _experimental_kita_glyph_stability_decoded(a, b, report)
+    except (KeyError, TypeError, ValueError, OSError, IndexError):
+        return False
+
+
+def _experimental_kita_glyph_stability_decoded(before: bytes, after: bytes, report: dict[str, Any]) -> bool:
     """Lighting-tolerant visual hypothesis, only for the reviewed friend kita prompt.
 
     This does not prove state, turn, colors, or content concealed by overlays.
@@ -1996,7 +2011,7 @@ def experimental_kita_glyph_stability(before: bytes, after: bytes, report: dict[
                  {'x':1180,'y':785,'width':245,'height':90}]
         if any(tile_face_structure_delta(crop_screenshot(before,box),crop_screenshot(after,box)) > .1 for box in boxes):
             return False
-        with Image.open(io.BytesIO(before)) as a, Image.open(io.BytesIO(after)) as b:
+        with _open_screenshot(before) as a, _open_screenshot(after) as b:
             for box in boxes:
                 x,y,w,h=(box[k] for k in ('x','y','width','height'))
                 delta=ImageChops.difference(a.convert('RGB').crop((x,y,x+w,y+h)),b.convert('RGB').crop((x,y,x+w,y+h)))
@@ -2011,7 +2026,7 @@ def experimental_kita_glyph_stability(before: bytes, after: bytes, report: dict[
             return False
         # Binary glyph masks can miss changes with the same luminance class.
         # Bound coherent RGB changes in the exposed gaps and own river.
-        with Image.open(io.BytesIO(before)) as a, Image.open(io.BytesIO(after)) as b:
+        with _open_screenshot(before) as a, _open_screenshot(after) as b:
             a,b=a.convert('RGB'),b.convert('RGB')
             for index,box in enumerate(protected[-6:]):
                 x,y,w,h=(box[k] for k in ('x','y','width','height'))
