@@ -88,3 +88,16 @@ test('client template install rejects malformed bootstrap base', async () => {
     assert.throws(() => execFileSync(process.execPath, ['scripts/install-client-templates.mjs', dir], {stdio:'pipe'}));
   } finally { await rm(dir, {recursive:true,force:true}); }
 });
+
+test('four-sou installation is idempotent and preserves conflicts', async () => {
+  const dir=await mkdtemp(path.join(process.cwd(),'.client-template-test-'));
+  try {
+    await seedBase(dir);
+    const run=()=>execFileSync(process.execPath,['scripts/install-client-templates.mjs',dir,'4s'],{encoding:'utf8',stdio:['ignore','pipe','pipe']});
+    assert.equal(JSON.parse(run()).installed,'4s__ff7_friend.png');
+    assert.equal(JSON.parse(run()).alreadyPresent,true);
+    const target=path.join(dir,'4s__ff7_friend.png');
+    await writeFile(target,'other content');assert.throws(run,/differs; preserved/);
+    assert.equal(await readFile(target,'utf8'),'other content');
+  } finally { await rm(dir,{recursive:true,force:true}); }
+});

@@ -21,9 +21,9 @@ for (const tile of classes) {
     throw new Error(`Bootstrap base missing or invalid for ${tile}: ${file}`, {cause:error});
   }
 }
-const templates = { '4p': '4p__6c_friend.png', '3s': '3s__e48_friend.png', '8s': '8s__fourplayer_friend.png', '9m': '9m__cd82_friend.png' };
+const templates = { '4p': '4p__6c_friend.png', '3s': '3s__e48_friend.png', '8s': '8s__fourplayer_friend.png', '9m': '9m__cd82_friend.png', '4s': '4s__ff7_friend.png' };
 const selection = process.argv[3] ?? '4p';
-if (!Object.hasOwn(templates, selection)) throw new Error('Template must be 4p, 3s, 8s or 9m');
+if (!Object.hasOwn(templates, selection)) throw new Error('Template must be 4p, 3s, 8s, 9m or 4s');
 const filename = templates[selection];
 const source = path.join(root, 'templates/client', filename);
 const target = path.join(destination, filename);
