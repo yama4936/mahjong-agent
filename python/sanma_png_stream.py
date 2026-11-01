@@ -48,17 +48,17 @@ class SanmaPngStream:
             self.last_timestamp = stamp
             self.latest = (stamp, frame)
         except Exception as exc:
-            self.error = str(exc)
+            self.error = f"{type(exc).__name__}: {exc}"
         finally:
             try:
                 self.session.send('Page.screencastFrameAck', {'sessionId':event['sessionId']})
             except Exception as exc:
-                self.error = str(exc)
+                self.error = f"{type(exc).__name__}: {exc}"
 
     def capture_after(self, wall_threshold):
         deadline = time.monotonic()+self.timeout
         while time.monotonic() < deadline:
-            if self.error:
+            if self.error is not None:
                 raise RuntimeError('PNG stream invalid: '+self.error)
             wall, mono = time.time(), time.monotonic()
             if abs((wall-self.last_wall)-(mono-self.last_mono)) > .1:

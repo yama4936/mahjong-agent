@@ -47,7 +47,8 @@ class ExperimentalSanmaFriendLoopTest(unittest.TestCase):
             callback = session.on.call_args.args[1]
             callback({'metadata': {}, 'data': '', 'sessionId': 1})
         self.page.wait_for_timeout.side_effect = wait
-        with patch('auto_operator.classify_screen', return_value=('match', 1.0)):
+        with patch('auto_operator.classify_screen', return_value=('match', 1.0)), \
+             patch('auto_operator.require_verified_png_stream_clock'):
             self.op.run_experimental_sanma_friend(self.page)
         event = next(c for c in self.op.log.call_args_list if c.kwargs.get('reason') == 'observation_or_action_failed')
         self.assertIn('PNG stream invalid', event.kwargs['error'])
@@ -58,11 +59,30 @@ class ExperimentalSanmaFriendLoopTest(unittest.TestCase):
         self.op.execute_sanma_friend_kita_candidate.assert_not_called()
         session.detach.assert_called_once()
 
+    def test_unverified_png_option_rejected_by_constructor_before_browser(self):
+        self.op.args.experimental_sanma_png_stream = True
+        with self.assertRaisesRegex(RuntimeError, 'clock synchronization is unverified'):
+            PythonAutoOperator(self.op.args)
+        self.page.mouse.click.assert_not_called()
+
+    def test_unverified_png_option_stops_loop_without_input(self):
+        self.op.verified_friend_300_active = True
+        self.op.args.experimental_sanma_png_stream = True
+        self.op.inspect_sanma_self_turn = PythonAutoOperator.inspect_sanma_self_turn.__get__(self.op)
+        with patch('auto_operator.classify_screen', return_value=('match', 1.0)):
+            self.op.run_experimental_sanma_friend(self.page)
+        event = next(c for c in self.op.log.call_args_list if c.kwargs.get('reason') == 'observation_or_action_failed')
+        self.assertIn('clock synchronization is unverified', event.kwargs['error'])
+        self.page.context.new_cdp_session.assert_not_called()
+        self.page.mouse.click.assert_not_called()
+
     def test_png_stream_option_without_friend_scope_is_rejected(self):
         import sys
         common = ['operator', '--layout', 'x', '--templates', 'x', '--state', 'x', '--experimental-sanma-png-stream']
         valid = ['--rules', 'sanma', '--experimental-sanma-friend', '--mode', 'force-auto', '--action-deadline-ms', '300000', '--start-reviewed-friend-room', str(self.preflight)]
         with patch.object(sys, 'argv', common + valid):
+            with self.assertRaises(SystemExit): parse_args()
+        with patch.object(sys, 'argv', common + valid), patch('auto_operator.require_verified_png_stream_clock'):
             self.assertTrue(parse_args().experimental_sanma_png_stream)
         for extra in ([], ['--ranked-loop'], ['--rules', 'sanma']):
             with self.subTest(extra=extra), patch.object(sys, 'argv', common + extra):

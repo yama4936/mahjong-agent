@@ -2645,6 +2645,11 @@ def merge_public_observations(
     }
 
 
+def require_verified_png_stream_clock() -> None:
+    """Do not start this experiment without a verified CDP clock bound."""
+    raise RuntimeError('PNG stream CDP timestamp clock synchronization is unverified')
+
+
 def experimental_sanma_friend_allowed(args: Any) -> bool:
     """Narrow opt-in: reviewed CPU friend room with an explicit long clock."""
     return (getattr(args, "rules", None) == "sanma"
@@ -2657,6 +2662,8 @@ def experimental_sanma_friend_allowed(args: Any) -> bool:
 
 class PythonAutoOperator:
     def __init__(self, args: argparse.Namespace) -> None:
+        if getattr(args, 'experimental_sanma_png_stream', False):
+            require_verified_png_stream_clock()
         # The CLI already rejects sanma before the lease and Playwright. A
         # direct constructor call must also stop before layout reads, child
         # recognizers, or browser access; the implementation is incomplete.
@@ -4147,6 +4154,7 @@ class PythonAutoOperator:
             if (not experimental_sanma_friend_allowed(self.args)
                     or getattr(self, "verified_friend_300_active", False) is not True):
                 raise RuntimeError("PNG stream requires an active verified 300+0 sanma friend match")
+            require_verified_png_stream_clock()
             stream = SanmaPngStream(page)
             stream.start()
         try:
@@ -10663,6 +10671,11 @@ def parse_args() -> argparse.Namespace:
         parser.error("sanma automatic decisions and screen operation are not implemented; startup stopped")
     if args.experimental_sanma_png_stream and not (experimental_sanma_friend_allowed(args) and explicit_deadline):
         parser.error("experimental sanma PNG stream requires a reviewed 300+0 non-ranked force-auto friend room")
+    if args.experimental_sanma_png_stream:
+        try:
+            require_verified_png_stream_clock()
+        except RuntimeError as error:
+            parser.error(str(error))
     if args.experimental_sanma_friend and not (experimental_sanma_friend_allowed(args) and explicit_deadline):
         parser.error("experimental sanma requires a reviewed 300+0 non-ranked force-auto friend room")
     if args.action_templates and not Path(args.action_templates).exists():

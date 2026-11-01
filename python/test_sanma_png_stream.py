@@ -45,5 +45,12 @@ class StreamTests(unittest.TestCase):
    return old(name,args)
   self.page.session.send=fail;self.stream._receive(frame(time.time()))
   with self.assertRaises(RuntimeError):self.stream.capture_after(0)
+ def test_ack_empty_exception_fails_closed(self):
+  old=self.page.session.send
+  def fail(name,args=None):
+   if name == 'Page.screencastFrameAck': raise RuntimeError('')
+   return old(name,args)
+  self.page.session.send=fail;self.stream._receive(frame(time.time()))
+  with self.assertRaises(RuntimeError): self.stream.capture_after(0)
  def test_close_stops_and_detaches(self):
   self.stream.close();self.assertIn('Page.stopScreencast',self.page.session.calls);self.assertIn('detach',self.page.session.calls)
