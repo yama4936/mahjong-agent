@@ -1979,10 +1979,9 @@ def experimental_kita_wall_color_stable(before: bytes, after: bytes, *, on_error
         if on_error is not None:
             try:
                 import sys
-                on_error({'kind':'wall_guard_error', 'errorType':type(error).__name__,
-                          'error':str(error), 'pythonExecutable':sys.executable,
-                          'numpyVersion':getattr(np, '__version__', None),
-                          'numpyPath':getattr(np, '__file__', None), 'operationAuthorized':False})
+                on_error({'errorType':type(error).__name__, 'pythonVersion':sys.version.split()[0],
+                          'numpyAvailable':np is not None,
+                          'numpyVersion':getattr(np, '__version__', None), 'operationAuthorized':False})
             except Exception:
                 pass  # Logging failures must never allow an action.
         return False
@@ -4217,21 +4216,25 @@ class PythonAutoOperator:
                 raise ValueError("fresh screenshot unavailable")
             changes = friend_frame_changes(image, latest)
             clock_changed = changes.pop('clock')
+            wall_errors = []
+            def record_wall_error(data):
+                wall_errors.append(data)  # Latch before attempting durable logging.
+                self.log('sanma_wall_guard_error', **data)
             kita_glyph_candidate = (changes['fullFrame'] and experimental_sanma_friend_allowed(getattr(self, "args", None))
                                     and experimental_kita_glyph_stability(image, latest, result.get('report') or {},
-                                                                            on_wall_error=lambda data: self.log('sanma_wall_guard_error', **data)))
-            draw_glyph_candidate = (changes['fullFrame'] and not kita_glyph_candidate
+                                                                            on_wall_error=record_wall_error))
+            draw_glyph_candidate = (changes['fullFrame'] and not kita_glyph_candidate and not wall_errors
                                     and experimental_sanma_friend_allowed(getattr(self, "args", None))
                                     and experimental_draw_glyph_stability(image, latest, result.get('report') or {},
-                                                                            on_wall_error=lambda data: self.log('sanma_wall_guard_error', **data)))
+                                                                            on_wall_error=record_wall_error))
             latest_path = self.frames / f"{utc_stamp()}.{uuid.uuid4().hex}.sanma-freshness.png"
             latest_path.write_bytes(latest)
-            freshness = {"status": "stable_kita_glyph_candidate" if kita_glyph_candidate else "stable_draw_glyph_candidate" if draw_glyph_candidate else "changed" if changes['fullFrame'] else
+            freshness = {"status": "unknown" if wall_errors else "stable_kita_glyph_candidate" if kita_glyph_candidate else "stable_draw_glyph_candidate" if draw_glyph_candidate else "changed" if changes['fullFrame'] else
                          "stable_except_clock_candidate" if clock_changed else "identical_pixels_candidate",
                          "operationAuthorized": False, "elapsedMs": round((time.monotonic() - capture_started) * 1000),
                          "regionsChanged": changes, "clockChanged": clock_changed, "digest": hashlib.sha256(latest).hexdigest(),
                          "screenshot": str(latest_path),
-                         "reason": ("glyph structure is a lighting-tolerant hypothesis; colors, concealed content and turn are unverified"
+                         "reason": ("wall guard execution failed" if wall_errors else "glyph structure is a lighting-tolerant hypothesis; colors, concealed content and turn are unverified"
                                     if kita_glyph_candidate or draw_glyph_candidate else "visible pixel stability does not verify turn, state, or action; clock area unobserved")}
         except Exception as error:
             freshness = {"status": "unknown", "operationAuthorized": False,
