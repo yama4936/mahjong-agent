@@ -9,7 +9,10 @@ from sanma_friend_discard_experiment import execute_friend_discard, execute_frie
 
 class FriendDiscardExperimentTests(unittest.TestCase):
     def setUp(self):
-        self.frame = b"frame"
+        import io
+        from PIL import Image
+        output=io.BytesIO();Image.new("RGB",(1920,1080),(20,30,60)).save(output,format="PNG")
+        self.frame = output.getvalue()
         self.page = Mock()
         self.page.screenshot.return_value = self.frame
         self.session = {"mode": "cpu_friend", "rules": "sanma", "clock": "300+0",
@@ -156,7 +159,7 @@ class FriendDrawBridgeTests(unittest.TestCase):
         self.operator.frames=Path(self.directory.name)
         self.operator.verified_friend_300_started_at=time.monotonic()
         changed=Path(self.directory.name)/'changed.png'
-        Image.new('RGB',(1920,1080),'white').save(changed)
+        Image.new('RGB',(1920,1080),(120,120,120)).save(changed)
         page=Mock();page.screenshot.return_value=changed.read_bytes()
         with self.assertRaisesRegex(ValueError,'recognition frame changed before click'):
             execute_friend_draw_candidate(self.operator,page,self.receipt)
@@ -175,7 +178,7 @@ class FriendDrawBridgeTests(unittest.TestCase):
         self.operator.frames=Path(self.directory.name)/'missing'
         self.operator.verified_friend_300_started_at=time.monotonic()
         changed=Path(self.directory.name)/'changed.png'
-        Image.new('RGB',(1920,1080),'white').save(changed)
+        Image.new('RGB',(1920,1080),(120,120,120)).save(changed)
         page=Mock();page.screenshot.return_value=changed.read_bytes()
         with self.assertRaisesRegex(ValueError,'recognition frame changed before click') as error:
             execute_friend_draw_candidate(self.operator,page,self.receipt)

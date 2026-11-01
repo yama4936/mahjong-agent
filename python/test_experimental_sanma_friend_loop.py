@@ -10,6 +10,14 @@ from auto_operator import PythonAutoOperator, experimental_sanma_friend_allowed,
 
 class ExperimentalSanmaFriendLoopTest(unittest.TestCase):
     def setUp(self):
+        # Older loop unit tests use symbolic byte strings instead of PNGs.
+        # Real-image invalid and white cases are covered by test_sanma_white_screen.
+        import auto_operator
+        actual_blank = auto_operator.is_blank_white_client_frame
+        actual_require = auto_operator.require_sanma_observable_frame
+        blank = patch('auto_operator.is_blank_white_client_frame', side_effect=lambda frame: actual_blank(frame) if isinstance(frame,bytes) and frame.startswith(b'\x89PNG') else False)
+        required = patch('auto_operator.require_sanma_observable_frame', side_effect=lambda frame: actual_require(frame) if isinstance(frame,bytes) and frame.startswith(b'\x89PNG') else None)
+        blank.start(); required.start(); self.addCleanup(blank.stop); self.addCleanup(required.stop)
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.preflight = Path(self.temp.name) / 'room.png'

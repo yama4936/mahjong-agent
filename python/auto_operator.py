@@ -32,7 +32,7 @@ from typing import Any, Callable
 
 from playwright.sync_api import Browser, CDPSession, Page, sync_playwright
 from PIL import Image, ImageChops, ImageFilter, ImageStat
-from screen_state import _rgb_fraction, classify_screen, load_references, is_blank_white_client_frame
+from screen_state import _rgb_fraction, classify_screen, load_references, is_blank_white_client_frame, require_sanma_observable_frame
 from synchronous_capture import CaptureReceipt, capture_full_png
 from sanma_png_stream import SanmaPngStream
 from operator_lock import OperatorAlreadyRunning, endpoint_key, operator_lease
@@ -4181,6 +4181,7 @@ class PythonAutoOperator:
         """
         capture_started = time.monotonic()
         image = page.screenshot(animations="disabled")
+        require_sanma_observable_frame(image)
         if not isinstance(image, bytes) or not image:
             raise RuntimeError("sanma screenshot unavailable")
         path = self.frames / f"{utc_stamp()}.{uuid.uuid4().hex}.sanma-self-turn.png"
@@ -4212,6 +4213,7 @@ class PythonAutoOperator:
         freshness: dict[str, Any] = {"status": "unknown", "operationAuthorized": False}
         try:
             latest = streamed_latest if stream is not None else page.screenshot(animations="disabled")
+            require_sanma_observable_frame(latest)
             if not isinstance(latest, bytes) or not latest:
                 raise ValueError("fresh screenshot unavailable")
             changes = friend_frame_changes(image, latest)
@@ -4315,6 +4317,7 @@ class PythonAutoOperator:
         try:
             baseline = Path(receipt["screenshot"]).read_bytes()
             fresh = page.screenshot(animations="disabled")
+            require_sanma_observable_frame(fresh)
             if hashlib.sha256(baseline).hexdigest() != receipt["digest"]:
                 raise ValueError("baseline changed")
             if not friend_frame_stable(baseline, fresh):
@@ -4399,6 +4402,7 @@ class PythonAutoOperator:
         try:
             baseline = Path(receipt["screenshot"]).read_bytes()
             fresh = page.screenshot(animations="disabled")
+            require_sanma_observable_frame(fresh)
             if hashlib.sha256(baseline).hexdigest() != receipt["digest"]:
                 raise ValueError("baseline changed")
             if not friend_frame_stable(baseline, fresh):
@@ -4489,6 +4493,7 @@ class PythonAutoOperator:
         try:
             baseline = Path(receipt["screenshot"]).read_bytes()
             fresh = page.screenshot(animations="disabled")
+            require_sanma_observable_frame(fresh)
             if hashlib.sha256(baseline).hexdigest() != receipt["digest"]:
                 raise ValueError("baseline changed")
             if (not friend_frame_stable(baseline, fresh)
@@ -8949,11 +8954,12 @@ class PythonAutoOperator:
                 frame = page.screenshot(animations="disabled")
                 last_frame = frame
                 state, confidence = classify_screen(frame, self.screen_references)
+                white_candidate = is_blank_white_client_frame(frame)
             except Exception as error:
                 self.log("sanma_friend_stopped", reason="screen_observation_failed", error=str(error),
                          screenshot=preserve(last_frame))
                 return
-            if is_blank_white_client_frame(frame):
+            if white_candidate:
                 self.log("sanma_friend_stopped", reason="white_screen_unobservable",
                          screenState=state, confidence=confidence, screenshot=preserve(frame),
                          digest=hashlib.sha256(frame).hexdigest(), operationAuthorized=False,

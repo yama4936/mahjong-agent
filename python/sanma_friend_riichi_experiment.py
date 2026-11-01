@@ -7,6 +7,7 @@ from PIL import Image
 from auto_operator import crop_screenshot, clip_for_hand, riichi_selection_is_visible, send_discard_click, tile_face_structure_delta, experimental_kita_color_stable
 from sanma_friend_freshness import friend_frame_stable, friend_action_started_at
 from sanma_friend_pass_experiment import execute_friend_pon_pass
+from screen_state import require_sanma_observable_frame
 
 
 def riichi_bright_slots(frame, layout):
@@ -91,6 +92,7 @@ def execute_friend_riichi(operator, page, receipt):
     execute_friend_pon_pass(operator,page,receipt,declare_riichi=True)
     page.wait_for_timeout(500)
     selection=page.screenshot(animations='disabled')
+    require_sanma_observable_frame(selection)
     index=choose_riichi_selection(selection,operator.layout,receipt)
     path=operator.frames / f'riichi-selection-{time.time_ns()}.png';path.write_bytes(selection)
     bright=riichi_bright_slots(selection,operator.layout)
@@ -106,6 +108,7 @@ def execute_friend_riichi(operator, page, receipt):
     if index is None: raise RuntimeError('riichi selection is ambiguous or unsupported')
     page.wait_for_timeout(200)
     fresh=page.screenshot(animations='disabled')
+    require_sanma_observable_frame(fresh)
     if not friend_frame_stable(selection,fresh) or choose_riichi_selection(fresh,operator.layout,receipt)!=index:
         raise RuntimeError('riichi selection changed before discard')
     started=friend_action_started_at(operator)
@@ -113,7 +116,11 @@ def execute_friend_riichi(operator, page, receipt):
         if operator.verified_friend_300_active is not True or type(started) not in (float,int) or not 0<=time.monotonic()-started<300:
             raise RuntimeError('friend session revoked or action deadline expired')
     deadline();point=operator.layout['clickPoints'][index]
+    def checked_selection(_):
+        frame=page.screenshot(animations='disabled')
+        require_sanma_observable_frame(frame)
+        return frame
     result=send_discard_click(page.mouse,point,operator.layout['viewport'],page.wait_for_timeout,fresh,
-                              lambda _:page.screenshot(animations='disabled'),operator.layout,index,5,deadline)
+                              checked_selection,operator.layout,index,5,deadline)
     operator.log('sanma_friend_riichi_discard_attempted',index=index,point=point,selection=result,confirmed=False)
     return {'clicked':True,'action':'riichi_discard','confirmation':'unknown','stopped':True}

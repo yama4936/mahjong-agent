@@ -393,12 +393,16 @@ def is_blank_white_client_frame(screenshot: bytes | Path | str) -> bool:
     A tiny broken-image glyph may remain at the top-left.  This is not a
     diagnosis of the underlying browser or game error.
     """
-    try:
-        image = _open(screenshot)
-        return (image.size == (1920, 1080)
-                and _rgb_fraction(image, ((">", 249),) * 3) >= .9999)
-    except (OSError, ValueError, TypeError):
-        return False
+    image = _open(screenshot)
+    if image.size != (1920, 1080):
+        raise ValueError("unreviewed client frame dimensions")
+    return _rgb_fraction(image, ((">", 249),) * 3) >= .9999
+
+
+def require_sanma_observable_frame(screenshot: bytes | Path | str) -> None:
+    """Reject undecodable or blank client images before any friend input."""
+    if is_blank_white_client_frame(screenshot):
+        raise ValueError("blank white client frame")
 
 
 def classify_screen(

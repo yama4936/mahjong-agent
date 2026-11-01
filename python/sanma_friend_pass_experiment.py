@@ -5,7 +5,7 @@ import time
 from pathlib import Path
 
 from sanma_friend_freshness import friend_action_started_at, friend_frame_stable, latch_friend_action_target
-from screen_state import classify_screen
+from screen_state import classify_screen, require_sanma_observable_frame
 
 
 def execute_friend_pon_pass(operator, page, receipt, *, declare_riichi=False):
@@ -53,6 +53,7 @@ def execute_friend_pon_pass(operator, page, receipt, *, declare_riichi=False):
     if hashlib.sha256(baseline).hexdigest() != receipt.get('digest'):
         raise RuntimeError('baseline changed')
     fresh = page.screenshot(animations='disabled')
+    require_sanma_observable_frame(fresh)
     if not friend_frame_stable(baseline, fresh):
         raise RuntimeError('screen changed outside clock area')
     state, confidence = classify_screen(fresh, operator.screen_references)

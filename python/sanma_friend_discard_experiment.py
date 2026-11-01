@@ -17,6 +17,7 @@ import uuid
 from pathlib import Path
 
 from auto_operator import send_discard_click
+from screen_state import require_sanma_observable_frame
 from sanma_friend_freshness import friend_action_started_at, friend_frame_stable, latch_friend_action_target
 
 
@@ -402,6 +403,15 @@ def execute_friend_discard(page, *, session, observation, plan, layout, log,
                 or not 0 <= started - turn_started_monotonic < 300):
             raise ValueError("invalid or expired turn clock")
         before = page.screenshot(animations="disabled")
+        try:
+            require_sanma_observable_frame(before)
+        except Exception:
+            if isinstance(before, bytes) and save_rejected_frame is not None:
+                try:
+                    save_rejected_frame(before)
+                except Exception:
+                    pass  # Failed evidence never permits input.
+            raise
         reference = observation.get("referenceFrame")
         if not isinstance(before, bytes) or (hashlib.sha256(before).hexdigest() != observation.get("frameSha256")
                 and (not isinstance(reference, bytes)
@@ -430,9 +440,13 @@ def execute_friend_discard(page, *, session, observation, plan, layout, log,
         event.update(status="attempted", tile=plan["tile"], clickIndex=index, clickPoint=point,
                      frameSha256=observation["frameSha256"])
         log(dict(event))
+        def checked_selection(_):
+            frame = page.screenshot(animations="disabled")
+            require_sanma_observable_frame(frame)
+            return frame
         receipt = send_discard_click(page.mouse, point, layout["viewport"], page.wait_for_timeout,
                                      before,
-                                     lambda _: page.screenshot(animations="disabled"), layout, index, 5, deadline)
+                                     checked_selection, layout, index, 5, deadline)
         event.update(status="selection_confirmed", selectionReceipt=receipt,
                      result="discard_not_verified")
         log(dict(event))
