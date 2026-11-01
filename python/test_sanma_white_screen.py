@@ -88,7 +88,7 @@ class WhiteScreenFailureTests(unittest.TestCase):
   session={'mode':'cpu_friend','rules':'sanma','clock':'300+0','actionDeadlineMs':300000,'ranked':False,'cpuCount':2,'roomVerified':True};point={'x':200,'y':1000}
   observation={'status':'candidate','phase':'self_turn','promptStatus':'none','handStatus':'candidate','layoutStatus':'candidate','slots':[{'tile':'1m',**point}],'frameSha256':hashlib.sha256(self.frame).hexdigest()}
   plan={'scope':'offline_untrusted_sanma_discard_plan','operationAuthorized':False,'tile':'1m','clickIndex':0,'clickPoint':point};logs=[]
-  self.page.screenshot.side_effect=[self.frame,white_frame()]
+  self.page.screenshot.side_effect=[self.frame,white_frame()];saved=Mock()
   with patch('auto_operator.raised_tile_confirmation_point',return_value={'x':200,'y':950}) as raised:
-   with self.assertRaises(ValueError):execute_friend_discard(self.page,session=session,observation=observation,plan=plan,layout={'viewport':{'width':1920,'height':1080}},log=logs.append,turn_started_monotonic=100,clock=lambda:101)
-  self.page.mouse.click.assert_called_once_with(200,1000);raised.assert_not_called();self.assertEqual(logs[-1]['result'],'discard_not_verified')
+   with self.assertRaises(ValueError):execute_friend_discard(self.page,session=session,observation=observation,plan=plan,layout={'viewport':{'width':1920,'height':1080}},log=logs.append,turn_started_monotonic=100,clock=lambda:101,save_rejected_frame=saved)
+  saved.assert_called_once_with(white_frame());self.page.mouse.click.assert_called_once_with(200,1000);raised.assert_not_called();self.assertEqual(logs[-1]['result'],'discard_not_verified')

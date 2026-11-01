@@ -442,7 +442,15 @@ def execute_friend_discard(page, *, session, observation, plan, layout, log,
         log(dict(event))
         def checked_selection(_):
             frame = page.screenshot(animations="disabled")
-            require_sanma_observable_frame(frame)
+            try:
+                require_sanma_observable_frame(frame)
+            except Exception:
+                if isinstance(frame, bytes) and save_rejected_frame is not None:
+                    try:
+                        save_rejected_frame(frame)
+                    except Exception:
+                        pass  # The first input is still unresolved; never confirm.
+                raise
             return frame
         receipt = send_discard_click(page.mouse, point, layout["viewport"], page.wait_for_timeout,
                                      before,
