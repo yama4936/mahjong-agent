@@ -2,7 +2,7 @@
 import copy,io,json,unittest
 from pathlib import Path
 from typing import Any
-from PIL import Image,ImageChops,ImageStat
+from PIL import Image,ImageChops,ImageStat,ImageDraw
 from auto_operator import (experimental_draw_glyph_stability, closed_hand_face_mismatches,
     tile_face_structure_delta,crop_screenshot,experimental_kita_color_stable)
 
@@ -97,11 +97,47 @@ class DrawDecodeEquivalence(unittest.TestCase):
    report=copy.deepcopy(self.report);report['handGeometry']['value']['drawSlot']['x']=x
    result=self.check(a,a,report)
    if x in (-10,1900,1920):self.assertFalse(result)
+ def test_partial_button_rows_modes_and_visible_obstructions(self):
+  from sanma_friend_discard_experiment import friend_visible_row_with_north_overlap, friend_visible_empty_row_candidate
+  report=copy.deepcopy(self.report)
+  slots=[{'status':'empty_candidate','slot':0},{'status':'empty_candidate','slot':1},{'status':'unresolved','slot':2}]
+  report['buttonRow']['value']['slots']=slots
+  root=Path(__file__).parent/'fixtures/sanma-draw-partial-portable'
+  def encoded(image,mode='RGB'):
+   out=io.BytesIO();image.convert(mode).save(out,format='PNG');return out.getvalue()
+  for name,branch in (('north.png',friend_visible_row_with_north_overlap),('empty.png',friend_visible_empty_row_candidate)):
+   image=Image.new('RGB',(1920,1080));image.paste(Image.open(root/name),(600,765))
+   data=encoded(image)
+   with self.subTest(name=name):
+    self.assertTrue(branch(data,slots));self.assertTrue(self.check(data,data,report))
+   for mode in ('1','L','LA','P','RGB','RGBA'):
+    with self.subTest(name=name,mode=mode):
+     data=encoded(image,mode);self.check(data,data,report)
+   for box in ((900,800,1000,850),(1190,800,1210,820),(1405,785,1424,800)):
+    modified=image.copy();ImageDraw.Draw(modified).rectangle(box,fill=(220,20,20));bad=encoded(modified)
+    with self.subTest(name=name,box=box):
+     self.assertFalse(branch(bad,slots));self.assertFalse(self.check(encoded(image),bad,report))
+   image2=image.copy();button=Image.open('test/fixtures/sanma-buttons/tsumo.png').convert('RGB').resize((245,90));image2.paste(button,(890,785))
+   self.assertFalse(self.check(encoded(image),encoded(image2),report))
+ def test_partial_row_bad_images_fail_closed(self):
+  report=copy.deepcopy(self.report);report['buttonRow']['value']['slots']=[{'status':'empty_candidate'},{'status':'empty_candidate'},{'status':'unresolved'}]
+  for data in (b'',b'bad',self.image('RGB')[:1000]):self.assertFalse(self.check(data,data,report))
  def test_real_wall_motion_and_color_only_change(self):
   root=Path(__file__).parent/'fixtures/sanma-wall-color'
   def frame(name,gray=False):
    crop=Image.open(root/name).convert('RGB')
    if gray:crop=crop.convert('L').convert('RGB')
    im=Image.new('RGB',(1920,1080),(25,35,55));im.paste(crop,(150,80));out=io.BytesIO();im.save(out,format='PNG');return out.getvalue()
-  self.check(frame('opponent-before.png'),frame('opponent-after.png'),self.report)
-  self.check(frame('light-3.png'),frame('light-3.png',True),self.report)
+  self.assertFalse(self.check(frame('opponent-before.png'),frame('opponent-after.png'),self.report))
+  # Existing draw guard does not protect wall chroma; both versions accept
+  # this synthetic equal-luminance wall color change. This is a known gap.
+  self.assertTrue(self.check(frame('light-3.png'),frame('light-3.png',True),self.report))
+ def test_equal_luminance_hand_color_change_is_rejected(self):
+  slot=self.report['handGeometry']['value']['handSlots'][0]
+  x,y=int(slot['x'])+10,int(slot['y'])+10
+  first=Image.new('RGB',(1920,1080),(25,35,55));second=first.copy()
+  ImageDraw.Draw(first).rectangle((x,y,x+20,y+20),fill=(220,40,40))
+  ImageDraw.Draw(second).rectangle((x,y,x+20,y+20),fill=(40,132,40))
+  def png(image):
+   out=io.BytesIO();image.save(out,format='PNG');return out.getvalue()
+  self.assertFalse(self.check(png(first),png(second),self.report))
