@@ -1,3 +1,4 @@
+import sharp from 'sharp';
 import test from 'node:test';import assert from 'node:assert/strict';import {existsSync} from 'node:fs';import {readFile} from 'node:fs/promises';import {createHash} from 'node:crypto';
 import {layoutSchema} from '../src/recognition/layout.js';import {HybridTileRecognizer} from '../src/recognition/hybridTileRecognizer.js';import {inspectSanmaRightRiverCandidate} from '../src/recognition/sanmaRightRiverCandidate.js';import {observeSanmaFrameAutomatically} from '../src/recognition/sanmaAutoFrameObservation.js';import {EXPERIMENTAL_BUTTONS,type ExperimentalTemplates} from '../src/recognition/sanmaButtonExperiment.js';
 const root='/home/yama1/sanma-independent-20261031',available=existsSync(`${root}/32-turn.png`) && existsSync('.runtime/hybrid-vision/cvmaj-pretrained.tar') && existsSync('.runtime/hybrid-vision/automajsoul-best-model.pt');
@@ -21,4 +22,19 @@ test('independent friend frame retains right river physical candidates as unknow
   assert.equal(result.verified,false);assert.equal(result.operationAuthorized,false);
   assert.equal(result.frameSha256,createHash('sha256').update(frame).digest('hex'));
  } finally { await h.close(); }
+});
+
+// Portable, anonymized crops exercise geometry and unknown propagation only.
+// The stub does not validate tile classification.
+test('right river crop detects four physical candidates and an empty region without a model',async()=>{
+ const layout=layoutSchema.parse(JSON.parse(await readFile('config/layout-runtime.json','utf8')));
+ const classifier={async classifyTileImages(images:Buffer[]){return images.map(()=>({tile:'1s' as const,confidence:.99,runnerUpTile:'2s' as const,runnerUpConfidence:.001}))}};
+ for(const [name,expected] of [['empty.png',0],['four.png',4]] as const){
+  const crop=await readFile(`test/fixtures/sanma-right-river-portable/${name}`);
+  const frame=await sharp({create:{width:1920,height:1080,channels:3,background:'black'}}).composite([{input:crop,left:1115,top:285}]).png().toBuffer();
+  const result=await inspectSanmaRightRiverCandidate(frame,layout,classifier);
+  assert.equal(result.candidates.length,expected);
+  assert.equal(result.status,'unknown');assert.equal(result.complete,false);
+  assert.equal(result.verified,false);assert.equal(result.operationAuthorized,false);
+ }
 });
