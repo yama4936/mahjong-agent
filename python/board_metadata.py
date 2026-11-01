@@ -422,6 +422,13 @@ def parse_sanma_board_tokens(tokens: list[dict], *, expected_total_points: int |
             if entry:
                 observed_positions[position] = entry
         observation = {"verified": False, "complete": False, "positions": observed_positions}
+        # Retain directly observed center text as unverified diagnostics; the
+        # right-layout hypothesis does not establish seat, phase, or rules.
+        if round_text is not None:
+            observation["roundCandidate"] = f"{WINDS[round_text[0]]}_{round_text[1]}"
+        remaining = at(959, 443, r"余\d{1,2}")
+        if remaining is not None and int(remaining[1:]) <= 70:
+            observation["remainingTilesCandidate"] = int(remaining[1:])
         if (len(observed_positions) == 3
                 and all("wind" in item and "score" in item for item in observed_positions.values())
                 and len({item["wind"] for item in observed_positions.values()}) == 3):

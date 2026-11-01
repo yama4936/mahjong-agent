@@ -31,6 +31,8 @@ class SanmaBoardImageTests(unittest.TestCase):
         self.assertEqual(observation['positions'], {'own': {'wind': 'south', 'score': 35000},
             'left': {'wind': 'east', 'score': 35000}, 'right': {'wind': 'west', 'score': 35000}})
         self.assertEqual(observation['scoresByObservedWind'], {'south': 35000, 'east': 35000, 'west': 35000})
+        self.assertEqual(observation['roundCandidate'], 'east_1')
+        self.assertEqual(observation['remainingTilesCandidate'], 52)
         self.assertFalse(observation['verified'])
         self.assertFalse(observation['complete'])
 

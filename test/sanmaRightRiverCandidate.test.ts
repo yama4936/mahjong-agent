@@ -10,3 +10,15 @@ test('new right river yields unverified screen candidates, never a seat or compl
  const bad={async observe(){throw new Error('offline')}};const unknown=await observeSanmaFrameAutomatically({frame,layout,templates:'templates/bootstrap',buttonTemplates,publicClassifier:h,boardObserver:bad});assert.equal(unknown.rightRiver,undefined);assert.equal(unknown.operationAuthorized,false);
  }finally{await h.close()}
 });
+
+test('independent friend frame retains right river physical candidates as unknown', {skip:!available || !existsSync('/home/yama1/.codex/sanma-run-c177d5d-20261031/manual-47-before.png'),timeout:60000},async()=>{
+ const layout=layoutSchema.parse(JSON.parse(await readFile('config/layout-runtime.json','utf8'))), h=new HybridTileRecognizer();
+ try {
+  const frame=await readFile('/home/yama1/.codex/sanma-run-c177d5d-20261031/manual-47-before.png');
+  const result=await inspectSanmaRightRiverCandidate(frame,layout,h);
+  assert.deepEqual(result.candidates.map(x=>x.tile),['9m','1m','1s','P']);
+  assert.equal(result.status,'unknown');assert.equal(result.complete,false);
+  assert.equal(result.verified,false);assert.equal(result.operationAuthorized,false);
+  assert.equal(result.frameSha256,createHash('sha256').update(frame).digest('hex'));
+ } finally { await h.close(); }
+});

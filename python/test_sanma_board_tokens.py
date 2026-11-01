@@ -87,6 +87,24 @@ class SanmaBoardTokensTest(unittest.TestCase):
         zero = self.parse(tokens[:-1] + [token('0',1047,419)])['rightLayoutObservation']
         self.assertEqual(zero['positions']['right']['score'], 0)
 
+    def test_right_layout_center_candidates_require_unambiguous_tokens(self):
+        def token(text, x, y, confidence=.999):
+            return {'text':text, 'x':x, 'y':y, 'confidence':confidence}
+        basic = [token('南',824,514), token('35000',960,482), token('32000',876,423), token('38000',1047,419)]
+        result = self.parse(basic + [token('東1局',960,405),token('余52',959,443)])
+        observed = result['rightLayoutObservation']
+        self.assertEqual(observed['roundCandidate'], 'east_1')
+        self.assertEqual(observed['remainingTilesCandidate'], 52)
+        self.assertFalse(observed['verified']); self.assertFalse(observed['complete'])
+        self.assertNotIn('candidate', result)
+        for extra in ([], [token('余71',959,443)], [token('余52',959,443,.5)],
+                      [token('余52',959,443),token('余51',959,443)],
+                      [token('余52',1300,443)]):
+            with self.subTest(extra=extra):
+                self.assertNotIn('remainingTilesCandidate', self.parse(basic+extra)['rightLayoutObservation'])
+        ambiguous = basic + [token('東1局',960,405),token('東2局',960,405)]
+        self.assertNotIn('roundCandidate', self.parse(ambiguous)['rightLayoutObservation'])
+
     def test_alternate_right_score_layout_is_only_an_unverified_hypothesis(self):
         tokens = self.tokens('south')
         no_opposite = [t for t in tokens if not (abs(t['x'] - 958) <= 24 and abs(t['y'] - 364) <= 20)]
