@@ -1987,24 +1987,27 @@ def experimental_kita_wall_color_stable(before: bytes, after: bytes, *, on_error
         return False
 
 
-def experimental_kita_glyph_stability(before: bytes, after: bytes, report: dict[str, Any], *, on_wall_error=None) -> bool:
+def experimental_kita_glyph_stability(before: bytes, after: bytes, report: dict[str, Any], *, on_wall_error=None, diagnostic=None) -> bool:
     """Decode each full frame once; preserve all existing candidate checks."""
     try:
         with Image.open(io.BytesIO(before)) as a, Image.open(io.BytesIO(after)) as b:
             a.load(); b.load()
-            return _experimental_kita_glyph_stability_decoded(a, b, report, on_wall_error=on_wall_error)
-    except (KeyError, TypeError, ValueError, OSError, IndexError):
+            return _experimental_kita_glyph_stability_decoded(a, b, report, on_wall_error=on_wall_error, diagnostic=diagnostic)
+    except (KeyError, TypeError, ValueError, OSError, IndexError) as error:
+        if diagnostic is not None: diagnostic.update(outcome="exception", errorType=type(error).__name__)
         return False
 
 
-def _experimental_kita_glyph_stability_decoded(before: bytes, after: bytes, report: dict[str, Any], *, on_wall_error=None) -> bool:
+def _experimental_kita_glyph_stability_decoded(before: bytes, after: bytes, report: dict[str, Any], *, on_wall_error=None, diagnostic=None) -> bool:
     """Lighting-tolerant visual hypothesis, only for the reviewed friend kita prompt.
 
     This does not prove state, turn, colors, or content concealed by overlays.
     """
     try:
+        if diagnostic is not None: diagnostic.update(stage="wall_color")
         if not experimental_kita_wall_color_stable(before, after, on_error=on_wall_error):
             return False
+        if diagnostic is not None: diagnostic.update(stage='recognition_and_prompt')
         hand = report['hand']; geometry = report['handGeometry']; row = report['buttonRow']
         hv = hand['value']; gv = geometry['value']; buttons = row['value']['slots']
         if (hand['status'] != 'candidate' or geometry['status'] != 'candidate' or row['status'] != 'candidate'
@@ -2013,18 +2016,22 @@ def _experimental_kita_glyph_stability_decoded(before: bytes, after: bytes, repo
                 or buttons[1].get('status') != 'candidate' or buttons[1].get('action') != 'kita'
                 or buttons[2].get('status') != 'candidate' or buttons[2].get('action') != 'skip'):
             return False
+        if diagnostic is not None: diagnostic.update(stage='hand_faces')
         layout = {'handSlots':gv['handSlots'],'drawSlot':gv['drawSlot']}
         if len(layout['handSlots']) != 13 or closed_hand_face_mismatches(before,after,layout,.5):
             return False
+        if diagnostic is not None: diagnostic.update(stage='button_glyphs')
         boxes = [{'x':600,'y':785,'width':245,'height':90}, {'x':890,'y':785,'width':245,'height':90},
                  {'x':1180,'y':785,'width':245,'height':90}]
         if any(tile_face_structure_delta(crop_screenshot(before,box),crop_screenshot(after,box)) > .1 for box in boxes):
             return False
+        if diagnostic is not None: diagnostic.update(stage='button_rgb')
         with _open_screenshot(before) as a, _open_screenshot(after) as b:
             for box in boxes:
                 x,y,w,h=(box[k] for k in ('x','y','width','height'))
                 delta=ImageChops.difference(a.convert('RGB').crop((x,y,x+w,y+h)),b.convert('RGB').crop((x,y,x+w,y+h)))
                 if max(ImageStat.Stat(delta).mean)>1:return False
+        if diagnostic is not None: diagnostic.update(stage='protected_color')
         protected = layout['handSlots']+[layout['drawSlot']]+boxes+[
             {'x':845,'y':785,'width':45,'height':90}, {'x':1135,'y':785,'width':45,'height':90},
             {'x':740,'y':540,'width':420,'height':220},
@@ -2033,6 +2040,7 @@ def _experimental_kita_glyph_stability_decoded(before: bytes, after: bytes, repo
             {'x':800,'y':160,'width':320,'height':150}]
         if not experimental_kita_color_stable(before,after,protected):
             return False
+        if diagnostic is not None: diagnostic.update(stage='protected_rgb_blocks')
         # Binary glyph masks can miss changes with the same luminance class.
         # Bound coherent RGB changes in the exposed gaps and own river.
         with _open_screenshot(before) as a, _open_screenshot(after) as b:
@@ -2050,27 +2058,32 @@ def _experimental_kita_glyph_stability_decoded(before: bytes, after: bytes, repo
                             if not (index == 3 and xx < 64 and yy < 96 and value <= 12
                                     and experimental_kita_felt_lighting(a,b,x+xx,y+yy)):
                                 return False
+        if diagnostic is not None: diagnostic.update(stage='other_regions')
         if not experimental_kita_other_regions_stable(before,after,layout['handSlots']+[layout['drawSlot']]+boxes):
             return False
+        if diagnostic is not None: diagnostic.update(stage='center')
         center={'x':905,'y':375,'width':105,'height':90}
         return tile_face_structure_delta(crop_screenshot(before,center),crop_screenshot(after,center)) <= .5
-    except (KeyError,TypeError,ValueError,OSError,IndexError):
+    except (KeyError,TypeError,ValueError,OSError,IndexError) as error:
+        if diagnostic is not None: diagnostic.update(outcome="exception", errorType=type(error).__name__)
         return False
 
 
-def experimental_draw_glyph_stability(before: bytes, after: bytes, report: dict[str, Any], *, on_wall_error=None) -> bool:
+def experimental_draw_glyph_stability(before: bytes, after: bytes, report: dict[str, Any], *, on_wall_error=None, diagnostic=None) -> bool:
     """Compare the same full images after decoding each once."""
     try:
         with Image.open(io.BytesIO(before)) as a, Image.open(io.BytesIO(after)) as b:
             a.load(); b.load()
-            return _experimental_draw_glyph_stability_decoded(a, b, report, on_wall_error=on_wall_error)
-    except (KeyError, TypeError, ValueError, OSError, IndexError):
+            return _experimental_draw_glyph_stability_decoded(a, b, report, on_wall_error=on_wall_error, diagnostic=diagnostic)
+    except (KeyError, TypeError, ValueError, OSError, IndexError) as error:
+        if diagnostic is not None: diagnostic.update(outcome="exception", errorType=type(error).__name__)
         return False
 
 
-def _experimental_draw_glyph_stability_decoded(before: bytes, after: bytes, report: dict[str, Any], *, on_wall_error=None) -> bool:
+def _experimental_draw_glyph_stability_decoded(before: bytes, after: bytes, report: dict[str, Any], *, on_wall_error=None, diagnostic=None) -> bool:
     """Friend-only lighting hypothesis; does not establish turn or legal actions."""
     try:
+        if diagnostic is not None: diagnostic.update(stage='recognition_and_prompt')
         hand, geometry, row = (report[k] for k in ('hand', 'handGeometry', 'buttonRow'))
         value, shape = hand['value'], geometry['value']
         slots = row['value']['slots']
@@ -2078,6 +2091,7 @@ def _experimental_draw_glyph_stability_decoded(before: bytes, after: bytes, repo
                 or value.get('turnReady') is not True or len(value['tiles']) != 14
                 or len(slots) != 3):
             return False
+        if diagnostic is not None: diagnostic.update(stage='partial_prompt')
         if any(x.get('status') != 'empty_candidate' for x in slots):
             # The concealed action is still unknown; only accept a previously
             # reviewed partial-row candidate for both independent captures.
@@ -2085,24 +2099,30 @@ def _experimental_draw_glyph_stability_decoded(before: bytes, after: bytes, repo
             partial = lambda frame: (friend_visible_row_with_north_overlap(frame, slots)
                                      or friend_visible_empty_row_candidate(frame, slots))
             if not partial(before) or not partial(after): return False
+        if diagnostic is not None: diagnostic.update(stage='wall_color')
         # The binary screen mask cannot detect same-luminance color changes
         # in the left tile backs. Use the existing conservative wall guard.
         if not experimental_kita_wall_color_stable(before, after, on_error=on_wall_error): return False
+        if diagnostic is not None: diagnostic.update(stage='hand_faces')
         layout = {'handSlots': shape['handSlots'], 'drawSlot': shape['drawSlot']}
         if len(layout['handSlots']) != 13 or closed_hand_face_mismatches(before, after, layout, .5):
             return False
         boxes = [{'x':600,'y':785,'width':245,'height':90}, {'x':890,'y':785,'width':245,'height':90},
                  {'x':1180,'y':785,'width':245,'height':90}]
+        if diagnostic is not None: diagnostic.update(stage='button_glyphs')
         if any(tile_face_structure_delta(crop_screenshot(before,b), crop_screenshot(after,b)) > .1 for b in boxes):
             return False
+        if diagnostic is not None: diagnostic.update(stage='protected_color')
         if not experimental_kita_color_stable(before, after, layout['handSlots']+[layout['drawSlot']]+boxes):
             return False
+        if diagnostic is not None: diagnostic.update(stage='button_rgb')
         with _open_screenshot(before) as a, _open_screenshot(after) as b:
             if a.size != (1920,1080) or b.size != a.size: return False
             for box in boxes:
                 x,y,w,h = (box[k] for k in ('x','y','width','height'))
                 delta = ImageChops.difference(a.convert('RGB').crop((x,y,x+w,y+h)), b.convert('RGB').crop((x,y,x+w,y+h)))
                 if max(ImageStat.Stat(delta).mean) > 1: return False
+            if diagnostic is not None: diagnostic.update(stage='binary_frame')
             diff = ImageChops.difference(*(im.convert('L').point(lambda v: 255 if v < 120 else 0) for im in (a,b)))
             # The illuminated self-turn indicator flickers independently of the board.
             for rect in ((1425,755,1650,870),(920,510,992,516)):
@@ -2115,10 +2135,15 @@ def _experimental_draw_glyph_stability_decoded(before: bytes, after: bytes, repo
                 diff.paste(0,(x,y,x+w,y+h))
             for y in range(0,1080,32):
                 for x in range(0,1920,32):
-                    if diff.crop((x,y,min(x+32,1920),min(y+32,1080))).histogram()[255] > 14: return False
+                    changed = diff.crop((x,y,min(x+32,1920),min(y+32,1080))).histogram()[255]
+                    if changed > 14:
+                        if diagnostic is not None: diagnostic.update(blockX=x, blockY=y, changedPixels=changed, threshold=14)
+                        return False
+        if diagnostic is not None: diagnostic.update(stage='center')
         center={'x':905,'y':375,'width':105,'height':90}
         return tile_face_structure_delta(crop_screenshot(before,center),crop_screenshot(after,center)) <= .5
-    except (KeyError,TypeError,ValueError,OSError,IndexError):
+    except (KeyError,TypeError,ValueError,OSError,IndexError) as error:
+        if diagnostic is not None: diagnostic.update(outcome="exception", errorType=type(error).__name__)
         return False
 
 
@@ -4181,6 +4206,8 @@ class PythonAutoOperator:
         """
         capture_started = time.monotonic()
         image = page.screenshot(animations="disabled")
+        capture_finished = time.monotonic()
+        capture_ms = round((capture_finished - capture_started) * 1000)
         require_sanma_observable_frame(image)
         if not isinstance(image, bytes) or not image:
             raise RuntimeError("sanma screenshot unavailable")
@@ -4196,7 +4223,9 @@ class PythonAutoOperator:
             stream = SanmaPngStream(page)
             stream.start()
         try:
+            recognition_started = time.monotonic()
             result = self.observe_sanma_resident(path)
+            recognition_ms = round((time.monotonic() - recognition_started) * 1000)
             if stream is not None:
                 streamed_latest = stream.capture_after(time.time())
         finally:
@@ -4212,35 +4241,62 @@ class PythonAutoOperator:
         # prompt row. Identical pixels are only a weak candidate, not permission.
         freshness: dict[str, Any] = {"status": "unknown", "operationAuthorized": False}
         try:
+            latest_started = time.monotonic()
             latest = streamed_latest if stream is not None else page.screenshot(animations="disabled")
+            latest_finished = time.monotonic()
+            latest_capture_ms = round((latest_finished - latest_started) * 1000)
             require_sanma_observable_frame(latest)
             if not isinstance(latest, bytes) or not latest:
                 raise ValueError("fresh screenshot unavailable")
+            changes_started = time.monotonic()
             changes = friend_frame_changes(image, latest)
+            changes_ms = round((time.monotonic() - changes_started) * 1000)
             clock_changed = changes.pop('clock')
             wall_errors = []
             def record_wall_error(data):
                 wall_errors.append(data)  # Latch before attempting durable logging.
                 self.log('sanma_wall_guard_error', **data)
+            guard_diagnostics = {'kita': {'outcome':'not_run'}, 'draw': {'outcome':'not_run'}}
+            def timed_guard(name, guard):
+                details = guard_diagnostics[name] = {'stage':'decode'}
+                started = time.monotonic()
+                try:
+                    accepted = guard(image, latest, result.get('report') or {}, on_wall_error=record_wall_error, diagnostic=details)
+                    if wall_errors: details.update(outcome='wall_error', errorType=wall_errors[-1].get('errorType'))
+                    elif details.get('outcome') != 'exception': details['outcome'] = 'accepted' if accepted else 'rejected'
+                    return accepted
+                except Exception as error:
+                    details.update(outcome='exception', errorType=type(error).__name__)
+                    raise
+                finally:
+                    details['elapsedMs'] = round((time.monotonic() - started) * 1000)
             kita_glyph_candidate = (changes['fullFrame'] and experimental_sanma_friend_allowed(getattr(self, "args", None))
-                                    and experimental_kita_glyph_stability(image, latest, result.get('report') or {},
-                                                                            on_wall_error=record_wall_error))
+                                    and timed_guard('kita', experimental_kita_glyph_stability))
             draw_glyph_candidate = (changes['fullFrame'] and not kita_glyph_candidate and not wall_errors
                                     and experimental_sanma_friend_allowed(getattr(self, "args", None))
-                                    and experimental_draw_glyph_stability(image, latest, result.get('report') or {},
-                                                                            on_wall_error=record_wall_error))
+                                    and timed_guard('draw', experimental_draw_glyph_stability))
             latest_path = self.frames / f"{utc_stamp()}.{uuid.uuid4().hex}.sanma-freshness.png"
             latest_path.write_bytes(latest)
             freshness = {"status": "unknown" if wall_errors else "stable_kita_glyph_candidate" if kita_glyph_candidate else "stable_draw_glyph_candidate" if draw_glyph_candidate else "changed" if changes['fullFrame'] else
                          "stable_except_clock_candidate" if clock_changed else "identical_pixels_candidate",
                          "operationAuthorized": False, "elapsedMs": round((time.monotonic() - capture_started) * 1000),
                          "regionsChanged": changes, "clockChanged": clock_changed, "digest": hashlib.sha256(latest).hexdigest(),
+                         "timingMs": {"initialCapture": capture_ms, "recognition": recognition_ms,
+                                      "freshCapture": latest_capture_ms, "frameComparison": changes_ms,
+                                      "betweenCaptureReturns": round((latest_finished - capture_finished) * 1000)},
+                         "guards": guard_diagnostics,
                          "screenshot": str(latest_path),
                          "reason": ("wall guard execution failed" if wall_errors else "glyph structure is a lighting-tolerant hypothesis; colors, concealed content and turn are unverified"
                                     if kita_glyph_candidate or draw_glyph_candidate else "visible pixel stability does not verify turn, state, or action; clock area unobserved")}
         except Exception as error:
             freshness = {"status": "unknown", "operationAuthorized": False,
-                         "reason": f"freshness observation failed: {error}"}
+                         "reason": f"freshness observation failed: {error}",
+                         "errorType": type(error).__name__,
+                         "elapsedMs": round((time.monotonic() - capture_started) * 1000)}
+            if isinstance(locals().get('latest'), bytes):
+                freshness['digest'] = hashlib.sha256(latest).hexdigest()
+            if 'guard_diagnostics' in locals():
+                freshness['guards'] = guard_diagnostics
         structural = result.get("structuralPositions")
         if (not isinstance(structural, dict) or structural.get("status") != "blocked"
                 or structural.get("operationAuthorized") is not False
