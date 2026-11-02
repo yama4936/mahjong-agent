@@ -404,6 +404,22 @@ def parse_sanma_board_tokens(tokens: list[dict], *, expected_total_points: int |
     right = at(1047, 419, r"-?\d{3,6}")
     if right is None:
         right = at(1047, 419, r"0", 0.95)
+    if right is not None and numbers['opposite'] is not None and numbers['left'] is None:
+        # The saved right/opposite layout has no validated OCR for the
+        # opposite wind. Expose positions only, never infer seat ownership.
+        positions = {"opposite": {"score": int(numbers['opposite'])},
+                     "right": {"score": int(right)}}
+        if numbers['own'] is not None:
+            positions['own'] = {"score": int(numbers['own'])}
+        right_wind = at(1093, 514, "[東南西]")
+        if wind is not None and 'own' in positions:
+            positions['own']['wind'] = WINDS[wind]
+        if right_wind is not None:
+            positions['right']['wind'] = WINDS[right_wind]
+        return {**result, "reason": "unsupported_opposite_right_layout",
+                "layoutCandidate": {"opponents": ["opposite", "right"], "verified": False},
+                "positionObservation": {"verified": False, "complete": False,
+                                        "positions": positions}}
     if right is not None and numbers['opposite'] is None:
         # These three separately observed wind glyphs sit next to their own
         # score positions. Never derive the opponents' winds from own wind;
