@@ -1,4 +1,9 @@
-"""Redacted recorded-frame regression; never grants operation or proves freshness."""
+"""Recorded freshness rejection and saved candidate labels; not independent negative controls.
+
+The baseline live freshness is rejected before any hand, image, or button
+comparison. The later and kan labels are offline recognition snapshots, not
+live freshness receipts and not evidence of individual rearm rejection.
+"""
 import copy
 import hashlib
 import json
@@ -30,17 +35,17 @@ class RecordedNorthRegression(unittest.TestCase):
   return {'scope':'sanma_self_turn_observation','operationAuthorized':False,'screenshot':str(ROOT/(name+'.png')),'digest':digest,
           'freshness':copy.deepcopy(meta['freshness']),
           'sourceObservation':{'operationAuthorized':False,'digest':digest,'report':{'digest':digest,'hand':copy.deepcopy(meta['hand'])}}}
- def test_recorded_lighting_candidates_stop_without_rearm(self):
+ def test_recorded_lighting_freshness_candidates_are_rejected(self):
   first,second=self.receipt('before'),self.receipt('after')
   self.assertEqual(first['freshness']['status'],'stable_kita_glyph_candidate')
   self.assertEqual(second['freshness']['status'],'stable_kita_glyph_candidate')
   self.assertFalse(rearm_friend_kita_candidate(self.op,first,second))
   self.op.log.assert_not_called()
- def test_same_recorded_frame_cannot_rearm(self):
+ def test_same_recorded_frame_is_rejected_at_freshness_gate(self):
   first=self.receipt('before')
   self.assertFalse(rearm_friend_kita_candidate(self.op,first,copy.deepcopy(first)))
   self.op.log.assert_not_called()
- def test_later_kita_and_kan_button_candidates_are_distinct(self):
+ def test_saved_offline_later_and_kan_candidate_labels(self):
   def actions(name):return [s.get('action') for s in self.manifest[name]['buttonRow']['value']['slots']]
   self.assertEqual(actions('later'),[None,'kita','skip'])
   self.assertEqual(actions('kan'),[None,'kan','skip'])
