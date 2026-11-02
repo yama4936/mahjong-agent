@@ -9106,13 +9106,22 @@ class PythonAutoOperator:
                 # black. Never use recovery as evidence that it is safe to repeat.
                 reason = "black_screen_unobservable"
                 recovered = False
+                recovery_state, recovery_confidence = state, confidence
+                stable_match_count = 0
+                try:
+                    recovery_url = page.url
+                    if not isinstance(recovery_url, str) or not recovery_url:
+                        raise ValueError("page URL unavailable")
+                except Exception:
+                    recovery_url = None
+                    reason = "black_screen_page_identity_unknown"
                 reviewed_start = getattr(self, "sanma_friend_reviewed_start_at", None)
                 start_is_usable = (type(reviewed_start) in (int, float) and isfinite(reviewed_start)
                                    and 0 <= reviewed_start <= started)
                 # Prefer the earlier bound even if a match frame was seen
                 # later: that frame cannot prove when the turn began.
                 conservative_start = min(action_observed_at, reviewed_start) if action_observed_at is not None and start_is_usable else action_observed_at if action_observed_at is not None else reviewed_start if start_is_usable else None
-                if not unconfirmed_input_seen and last_unconfirmed_action is None:
+                if recovery_url is not None and not unconfirmed_input_seen and last_unconfirmed_action is None:
                     for attempt in range(48):
                         if (time.monotonic() - black_started >= 240 or
                             (conservative_start is not None and
@@ -9128,6 +9137,13 @@ class PythonAutoOperator:
                         if self.verified_friend_300_active is not True:
                             reason = "friend_session_revoked"
                             break
+                        try:
+                            if page.url != recovery_url:
+                                reason = "black_screen_page_redirected"
+                                break
+                        except Exception:
+                            reason = "black_screen_page_identity_unknown"
+                            break
                         if (time.monotonic() - black_started >= 240 or
                             (conservative_start is not None and
                              (time.monotonic() - conservative_start) * 1000 >= self.args.action_deadline_ms)):
@@ -9135,26 +9151,40 @@ class PythonAutoOperator:
                             break
                         try:
                             candidate = page.screenshot(animations="disabled")
+                            last_frame = candidate
+                            recovery_state, recovery_confidence = "unknown", 0.0
                             candidate_state, candidate_confidence = classify_screen(candidate, self.screen_references)
+                            recovery_state, recovery_confidence = candidate_state, candidate_confidence
+                            if self.verified_friend_300_active is not True:
+                                reason = "friend_session_revoked"
+                                break
+                            if page.url != recovery_url:
+                                reason = "black_screen_page_redirected"
+                                break
                         except Exception as error:
                             reason = "black_screen_observation_failed"
                             self.log("sanma_friend_black_observation_failed", error=str(error))
                             break
-                        last_frame = candidate
                         if (time.monotonic() - black_started >= 240 or
                             (conservative_start is not None and
                              (time.monotonic() - conservative_start) * 1000 >= self.args.action_deadline_ms)):
                             reason = "black_screen_deadline_expired"
                             break
                         if candidate_state == "black_screen":
+                            stable_match_count = 0
                             continue
-                        if candidate_state != "match" or candidate_confidence < 0.95:
-                            last_frame = candidate
+                        if candidate_state == "unknown" or (candidate_state == "match" and candidate_confidence < 0.95):
+                            stable_match_count = 0
+                            continue
+                        if candidate_state != "match":
                             reason = "black_screen_recovered_unexpected_screen"
                             break
                         if conservative_start is None:
                             reason = "black_screen_action_deadline_unknown"
                             break
+                        stable_match_count += 1
+                        if stable_match_count < 2:
+                            continue
                         if action_observed_at != conservative_start:
                             self.log("sanma_friend_action_clock_started", basis="reviewed_room_start_input",
                                      turnStartVerified=False, actionDeadlineMs=300000)
@@ -9171,7 +9201,7 @@ class PythonAutoOperator:
                     # the ordinary loop takes a new screenshot and recognizes it.
                     continue
                 self.log("sanma_friend_stopped", reason=reason,
-                         screenState=state, confidence=confidence, screenshot=preserve(last_frame),
+                         screenState=recovery_state, confidence=recovery_confidence, screenshot=preserve(last_frame),
                          digest=hashlib.sha256(last_frame).hexdigest() if isinstance(last_frame, bytes) else None,
                          blackDigest=hashlib.sha256(frame).hexdigest(), recoveryInputAttempts=0,
                          priorGameplayInputCount=None, currentLoopUnconfirmedInputObserved=unconfirmed_input_seen,
