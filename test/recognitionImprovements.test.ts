@@ -5,10 +5,11 @@ import { HandConsensus, combineTileEvidence } from "../src/recognition/consensus
 import { normalizeTileFace } from "../src/recognition/normalizeTileFace.js";
 import { classifyTile, loadTemplates, matchTile, recognizeHand } from "../src/recognition/templateMatcher.js";
 import type { GameTile } from "../src/game/tiles.js";
-import { mkdtemp, readdir, copyFile, readFile } from "node:fs/promises";
+import { mkdtemp, readdir, copyFile, readFile, rm, writeFile } from "node:fs/promises";
 import { layoutSchema } from "../src/recognition/layout.js";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { createHash } from "node:crypto";
 import { validateTemplateDirectory } from "../src/recognition/templateValidator.js";
 import { parseGameState } from "../src/game/state.js";
 import { decide } from "../src/agent/decision.js";
@@ -18,16 +19,32 @@ test("cached feature statistics preserve exact live hand scores", { timeout: 30_
   const frame = "test/fixtures/hand-nine-sou-before-glare-20261021.jpg";
   const base = layoutSchema.parse(JSON.parse(await readFile("config/layout-300-regression.json", "utf8")));
   const layout = { ...base, ...await proposeLiveHandLayout(frame) };
-  const result = await recognizeHand(frame, layout, "templates/bootstrap");
+  // Pin the exact source images, independent of locally added friend captures.
+  // The expected scores were generated with the pre-cache 20db233 matcher.
+  const baseline = JSON.parse(await readFile("test/fixtures/template-score-baseline.json", "utf8")) as { sha256: Record<string, string> };
+  const directory = await mkdtemp(path.join(tmpdir(), "jantama-score-baseline-"));
+  let result: Awaited<ReturnType<typeof recognizeHand>>;
+  try {
+    for (const [file, expectedHash] of Object.entries(baseline.sha256)) {
+      const source = path.join("templates/bootstrap", file);
+      const bytes = await readFile(source);
+      const actualHash = createHash("sha256").update(bytes).digest("hex");
+      assert.equal(actualHash, expectedHash, `baseline template changed: ${file}`);
+      await writeFile(path.join(directory, file), bytes);
+    }
+    result = await recognizeHand(frame, layout, directory);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
   assert.deepEqual(result.tiles, ["1m", "1m", "2m", "2m", "0m", "5m", "7m", "8p", "8p", "2s", "5s", "6s", "9s", "S"]);
   assert.deepEqual(result.matches.map(m => [m.confidence, m.runnerUpConfidence]), [
     [0.972286576615051, 0.7532014931000057], [0.9726835960750061, 0.7502892155460991],
     [0.9523579461197592, 0.7905662721465146], [0.9477459211469759, 0.7972971850134268],
     [0.9282051819285445, 0.7854853882631092], [0.9683702133796888, 0.7758355148878965],
-    [0.9732730689999712, 0.8005693701333739], [0.9683727082238129, 0.7268910894555065],
-    [0.9677380598895307, 0.7275604269142054], [0.9227448899920774, 0.5277927600501153],
+    [0.9732730689999712, 0.8005693701333739], [0.9683727082238129, 0.7125078209602099],
+    [0.9677380598895307, 0.7111303464842295], [0.9227448899920774, 0.500241304603364],
     [0.900961956996347, 0.707705987252133], [0.9069794737478162, 0.6520373491434037],
-    [0.909273935211987, 0.5552780635516152], [0.9546193220341481, 0.6314237332676105],
+    [0.909273935211987, 0.4918161318791704], [0.9546193220341481, 0.6011945152662901],
   ]);
   assert.equal(result.safe, false);
 });
