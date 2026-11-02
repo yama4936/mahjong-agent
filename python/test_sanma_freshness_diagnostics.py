@@ -53,6 +53,26 @@ class FreshnessDiagnosticsTest(unittest.TestCase):
   with patch('auto_operator.os.open',side_effect=OSError('record unavailable')):
    with self.assertRaises(RuntimeError):self.op.inspect_sanma_self_turn(self.page)
   self.page.mouse.click.assert_not_called()
+ def test_fast_screenshot_timeout_stops_before_recognition_and_input(self):
+  from playwright.sync_api import TimeoutError as PlaywrightTimeout
+  self.op.args.experimental_sanma_fast_png=True
+  self.page.screenshot.side_effect=PlaywrightTimeout('capture deadline')
+  with self.assertRaises(PlaywrightTimeout):self.op.inspect_sanma_self_turn(self.page)
+  self.page.screenshot.assert_called_once_with(animations='disabled',timeout=3000)
+  self.op.observe_sanma_resident.assert_not_called();self.page.mouse.click.assert_not_called()
+ def test_fast_fresh_capture_timeout_stays_unknown_and_never_clicks(self):
+  from playwright.sync_api import TimeoutError as PlaywrightTimeout
+  self.op.args.experimental_sanma_fast_png=True
+  self.page.screenshot.side_effect=[self.frame,PlaywrightTimeout('capture deadline')]
+  receipt=self.op.inspect_sanma_self_turn(self.page)
+  self.assertEqual(receipt['freshness']['status'],'unknown');self.assertFalse(receipt['freshness']['operationAuthorized'])
+  self.page.mouse.click.assert_not_called()
+ def test_fast_corrupt_fresh_frame_stays_unknown_and_never_clicks(self):
+  self.op.args.experimental_sanma_fast_png=True
+  self.page.screenshot.side_effect=[self.frame,b'not a PNG']
+  receipt=self.op.inspect_sanma_self_turn(self.page)
+  self.assertEqual(receipt['freshness']['status'],'unknown');self.assertFalse(receipt['freshness']['operationAuthorized'])
+  self.page.mouse.click.assert_not_called()
  def test_parallel_guard_diagnostics_remain_independent(self):
   from concurrent.futures import ThreadPoolExecutor
   def invalid_frame():

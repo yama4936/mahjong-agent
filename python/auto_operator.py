@@ -7,7 +7,7 @@ touching the page.
 """
 
 from __future__ import annotations
-from contextlib import nullcontext
+from contextlib import nullcontext, ExitStack
 
 import argparse
 import base64
@@ -34,6 +34,7 @@ from playwright.sync_api import Browser, CDPSession, Page, sync_playwright
 from PIL import Image, ImageChops, ImageFilter, ImageStat
 from screen_state import _rgb_fraction, classify_screen, load_references, is_blank_white_client_frame, require_sanma_observable_frame
 from synchronous_capture import CaptureReceipt, capture_full_png
+from sanma_fast_capture import fast_capture_driver_environment
 from sanma_png_stream import SanmaPngStream
 from operator_lock import OperatorAlreadyRunning, endpoint_key, operator_lease
 from analysis_recorder import AnalysisRecorder
@@ -2724,6 +2725,8 @@ def experimental_sanma_friend_allowed(args: Any) -> bool:
 
 class PythonAutoOperator:
     def __init__(self, args: argparse.Namespace) -> None:
+        if getattr(args, 'experimental_sanma_fast_png', False) and not experimental_sanma_friend_allowed(args):
+            raise RuntimeError('fast PNG requires a reviewed 300+0 non-ranked sanma friend match')
         if getattr(args, 'experimental_sanma_png_stream', False):
             require_verified_png_stream_clock()
         # The CLI already rejects sanma before the lease and Playwright. A
@@ -4205,7 +4208,12 @@ class PythonAutoOperator:
         called by the playing loop and the sanma startup guard remains active.
         """
         capture_started = time.monotonic()
-        image = page.screenshot(animations="disabled")
+        capture_options = {'animations': 'disabled'}
+        if getattr(self.args, 'experimental_sanma_fast_png', False):
+            # This bound covers the complete Playwright preparation, CDP
+            # request and cleanup path. A timeout cannot authorize an action.
+            capture_options['timeout'] = 3000
+        image = page.screenshot(**capture_options)
         capture_finished = time.monotonic()
         capture_ms = round((capture_finished - capture_started) * 1000)
         require_sanma_observable_frame(image)
@@ -4245,7 +4253,7 @@ class PythonAutoOperator:
         freshness: dict[str, Any] = {"status": "unknown", "operationAuthorized": False}
         try:
             latest_started = time.monotonic()
-            latest = streamed_latest if stream is not None else page.screenshot(animations="disabled")
+            latest = streamed_latest if stream is not None else page.screenshot(**capture_options)
             latest_finished = time.monotonic()
             latest_capture_ms = round((latest_finished - latest_started) * 1000)
             require_sanma_observable_frame(latest)
@@ -10716,6 +10724,8 @@ def parse_args() -> argparse.Namespace:
                         help="game rules; sanma requires the experimental friend-only opt-in")
     parser.add_argument("--experimental-sanma-png-stream", action="store_true",
                         help="experimental friend-only PNG stream for post-recognition freshness")
+    parser.add_argument("--experimental-sanma-fast-png", action="store_true",
+                        help="friend-only experimental lossless screenshot compression")
     parser.add_argument("--experimental-sanma-friend", action="store_true",
                         help="friend-only experimental tsumo; stops on unsupported actions")
     parser.add_argument("--layout", required=True)
@@ -10790,6 +10800,8 @@ def parse_args() -> argparse.Namespace:
         parser.error("sanma automatic decisions and screen operation are not implemented; startup stopped")
     if args.experimental_sanma_png_stream and not (experimental_sanma_friend_allowed(args) and explicit_deadline):
         parser.error("experimental sanma PNG stream requires a reviewed 300+0 non-ranked force-auto friend room")
+    if args.experimental_sanma_fast_png and not (experimental_sanma_friend_allowed(args) and explicit_deadline):
+        parser.error("experimental fast PNG requires a reviewed 300+0 non-ranked sanma friend room")
     if args.experimental_sanma_png_stream:
         try:
             require_verified_png_stream_clock()
@@ -10806,6 +10818,24 @@ def parse_args() -> argparse.Namespace:
     return args
 
 
+def start_playwright_with_sanma_capture(stack, args, operator):
+    """Start the opted-in driver, or a fresh stock driver before browser access."""
+    with fast_capture_driver_environment(args.experimental_sanma_fast_png, operator.frames) as fast_status:
+        playwright = stack.enter_context(sync_playwright())
+    if fast_status['requested']:
+        marker = fast_status.get('marker')
+        try:
+            active = bool(marker and Path(marker).read_text() == 'patched\n')
+        except (OSError, UnicodeError):
+            active = False
+        if not active and fast_status['status'] == 'pending':
+            stack.close()
+            playwright = stack.enter_context(sync_playwright())
+        operator.log('sanma_fast_png_driver', enabled=active,
+                     status='patched' if active else 'stock_fallback', operationAuthorized=False)
+    return playwright
+
+
 def main() -> int:
     args = parse_args()
     try:
@@ -10814,7 +10844,8 @@ def main() -> int:
             operator = PythonAutoOperator(args)
             operator_closed = False
             try:
-                with sync_playwright() as playwright:
+                with ExitStack() as stack:
+                    playwright = start_playwright_with_sanma_capture(stack, args, operator)
                     try:
                         browser = playwright.chromium.connect_over_cdp(args.cdp)
                         operator.run(find_mahjong_page(browser))
