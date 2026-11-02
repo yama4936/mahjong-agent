@@ -122,17 +122,30 @@ class BoundaryTests(unittest.TestCase):
    self.assertFalse(s.worker.is_alive());self.assertTrue((s.path/'final.json').exists())
 
 class ProcessLockTests(unittest.TestCase):
- def test_root_rename_recreate_cannot_start_second_process(self):
+ def test_same_run_name_rejected_by_second_process(self):
   import subprocess,sys
   with tempfile.TemporaryDirectory() as d:
-   root=Path(d)/'root';root.mkdir(mode=0o700);s=make(root); t=s.begin('discard',True)
+   s=make(d)
+   code='from sanma_diagnostic_recorder import Session; import sys; Session(sys.argv[1],"run",opt_in=True,verified_friend=True,ranked=False,deadline_ms=300000,clock="300+0",commit="a"*40)'
+   p=subprocess.run([sys.executable,'-c',code,d],capture_output=True,text=True,timeout=3)
+   self.assertNotEqual(p.returncode,0);self.assertIn('FileExistsError',p.stderr)
+   s.close();s.worker.join(3);self.assertFalse(s.worker.is_alive())
+ def test_replaced_root_reports_failure(self):
+  with tempfile.TemporaryDirectory() as d:
+   root=Path(d)/'root';root.mkdir(mode=0o700);s=make(root);t=s.begin('discard',True)
    root.rename(Path(d)/'old');root.mkdir(mode=0o700)
-   code='from sanma_diagnostic_recorder import Session; import sys; Session(sys.argv[1],"second",opt_in=True,verified_friend=True,ranked=False,deadline_ms=300000,clock="300+0",commit="a"*40)'
-   p=subprocess.run([sys.executable,'-c',code,str(root)],capture_output=True,text=True,timeout=3)
-   self.assertNotEqual(p.returncode,0);self.assertIn('BlockingIOError',p.stderr)
    n=time.monotonic_ns();self.assertTrue(s._offer(t,b'data',n,n))
    for _ in range(100):
     if s.failed:break
     time.sleep(.01)
    self.assertTrue(s.failed);s.close();s.worker.join(3);self.assertFalse(s.worker.is_alive())
    self.assertFalse((root/'run/final.json').exists())
+ def test_distinct_runs_are_independent_and_each_bounded(self):
+  with tempfile.TemporaryDirectory() as d:
+   a=make(d);b=Session(d,'second',opt_in=True,verified_friend=True,ranked=False,deadline_ms=300000,clock='300+0',commit='a'*40)
+   for s in (a,b):
+    t=s.begin('discard',True);n=time.monotonic_ns()
+    with patch.object(s,'MAX_TOTAL',1):
+     self.assertTrue(s._offer(t,b'a',n,n));self.assertFalse(s._offer(t,b'b',n,n))
+    s.close();s.worker.join(3);self.assertFalse(s.worker.is_alive())
+    summary=json.loads((s.path/'started.json').read_text());self.assertIn('no shared total quota',summary['quotaScope'])

@@ -1,9 +1,9 @@
 """Opt-in diagnostics: records screenshots, never certifies game state."""
-import fcntl, hashlib, json, os, queue, stat, threading, time
+import hashlib, json, os, queue, stat, threading, time
 from pathlib import Path
 
 class Session:
- MAX_FRAME=4*1024*1024; MAX_TOTAL=32*1024*1024; MAX_COUNT=20; MAX_PARENT=256*1024*1024; MAX_SECONDS=30
+ MAX_FRAME=4*1024*1024; MAX_TOTAL=32*1024*1024; MAX_COUNT=20; MAX_SECONDS=30
  def __init__(self,parent,name,*,opt_in,verified_friend,ranked,deadline_ms,clock,commit):
   if not (opt_in is True and verified_friend is True and ranked is False and deadline_ms == 300000 and clock == '300+0'):
    raise ValueError('explicit opt-in and verified 300+0 friend required')
@@ -14,29 +14,19 @@ class Session:
   st=os.lstat(root)
   if not stat.S_ISDIR(st.st_mode) or st.st_uid!=os.getuid() or st.st_mode & 0o077:
    raise ValueError('recording root must be private and owned by current user')
-  # Lock the parent directory inode, not a removable file or the root inode.
-  # All cooperating recorders under this parent serialize quota reservations.
-  parent_fd=os.open(root.parent,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
-  self.lock=parent_fd
+  # A unique run directory reserves its name atomically; there is no shared
+  # quota. Each independent run is bounded by MAX_TOTAL and MAX_COUNT.
+  directory_fd=os.open(root,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
   try:
-   fcntl.flock(self.lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
-   opened_parent=os.fstat(self.lock)
-   current_parent=os.stat(root.parent,follow_symlinks=False)
-   if (opened_parent.st_dev,opened_parent.st_ino)!=(current_parent.st_dev,current_parent.st_ino): raise ValueError('parent replaced')
-   current=os.lstat(root)
-   if (current.st_dev,current.st_ino)!=(st.st_dev,st.st_ino): raise ValueError('root replaced')
+   opened=os.fstat(directory_fd)
+   if (opened.st_dev,opened.st_ino)!=(st.st_dev,st.st_ino): raise ValueError('root replaced')
+   os.mkdir(name,0o700,dir_fd=directory_fd)
    self.root=root; self.root_identity=(st.st_dev,st.st_ino)
-   used=0
-   for base,dirs,files in os.walk(root,followlinks=False):
-    for n in dirs+files:
-     p=Path(base)/n
-     if p.is_symlink(): raise ValueError('symlink')
-     if p.is_file(): used+=p.stat().st_size
-   if used+self.MAX_TOTAL+65536>self.MAX_PARENT: raise ValueError('quota')
-   self.path=root/name; self.path.mkdir(mode=0o700)
-   self._atomic('started.json',dict(version=1,confirmed=False,commit=commit,clock=clock,deadlineMs=deadline_ms))
-  except BaseException:
-   os.close(self.lock); raise
+   self.path=root/name
+   self._atomic('started.json',dict(version=1,confirmed=False,commit=commit,clock=clock,deadlineMs=deadline_ms,
+                                    quotaScope='this run only; no shared total quota'))
+  finally:
+   os.close(directory_fd)
   self.q=queue.Queue(maxsize=2); self.mu=threading.Lock(); self.closed=False; self.failed=False
   self.accepted=0; self.dropped=0; self.total=0; self.results=[]; self.error=None; self.serial=0
   self.worker=threading.Thread(target=self._run,daemon=True); self.worker.start()
@@ -86,7 +76,6 @@ class Session:
     written={x['index'] for x in self.results}
     self._atomic('final.json',dict(version=1,confirmed=False,timingMeaning='screenshot call interval, not render time',accepted=self.accepted,dropped=self.dropped,written=len(self.results),missingAccepted=[i for i in range(self.accepted) if i not in written],error=self.error,frames=self.results))
    except Exception: self.failed=True
-   os.close(self.lock)
  def close(self):
   with self.mu: self.closed=True
 
