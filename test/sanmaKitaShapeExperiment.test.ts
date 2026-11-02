@@ -45,7 +45,7 @@ test("open meld inventory reduces the number of concealed tiles and observed cop
 });
 
 
-test("missing, malformed and double-counted own melds are rejected", () => {
+test("missing or malformed own melds and inventories exceeding four copies are rejected", () => {
   const reducedHand = ["1p", "2p", "3p", "1s", "2s", "3s", "4s", "5s", "E", "E", "N"];
   assert.throws(() => inspectSanmaKitaReplacementShapes({ hand: reducedHand, knownOutsideHand: [], ownMelds: [] }), /inventory/);
   assert.throws(() => inspectSanmaKitaReplacementShapes({ hand: reducedHand, knownOutsideHand: [], ownMelds: [["7s", "8s", "9s"]] }), /meld/);

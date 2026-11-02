@@ -6,7 +6,9 @@ import { assertTilesAvailable, normalizeTile, parseGameTile, tileAvailableInRule
  * no assertion about kita legality, action priority, score, or choice of UI.
  * Own melds are supplied separately and validated. The caller must provide
  * rivers, indicators, opponents’ melds and extracted norths separately.
- * Completeness of these observations cannot be established by this function.
+ * Each physical tile must occur exactly once across hand, ownMelds and
+ * knownOutsideHand. This function cannot detect duplicate reports unless
+ * they exceed four copies, nor can it establish observation completeness.
  */
 export function inspectSanmaKitaReplacementShapes(input: {
   hand: readonly string[];
