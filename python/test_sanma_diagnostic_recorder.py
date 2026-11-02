@@ -99,9 +99,7 @@ class BoundaryTests(unittest.TestCase):
   with tempfile.TemporaryDirectory() as d:
    root=Path(d)/'root';root.mkdir(mode=0o700);alias=Path(d)/'alias';alias.symlink_to(root,target_is_directory=True)
    with self.assertRaises(ValueError):make(alias)
-   (root/'.recorder.lock').symlink_to(Path(d)/'victim')
-   with self.assertRaises(OSError):make(root)
-   (root/'.recorder.lock').unlink();root.chmod(0o755)
+   root.chmod(0o755)
    with self.assertRaises(ValueError):make(root)
  def test_hard_kill_cannot_claim_final(self):
   import subprocess,sys
@@ -122,3 +120,19 @@ class BoundaryTests(unittest.TestCase):
     start=time.monotonic();s.close();self.assertLess(time.monotonic()-start,.1)
     self.assertTrue(s.worker.is_alive());release.set();s.worker.join(3)
    self.assertFalse(s.worker.is_alive());self.assertTrue((s.path/'final.json').exists())
+
+class ProcessLockTests(unittest.TestCase):
+ def test_root_rename_recreate_cannot_start_second_process(self):
+  import subprocess,sys
+  with tempfile.TemporaryDirectory() as d:
+   root=Path(d)/'root';root.mkdir(mode=0o700);s=make(root); t=s.begin('discard',True)
+   root.rename(Path(d)/'old');root.mkdir(mode=0o700)
+   code='from sanma_diagnostic_recorder import Session; import sys; Session(sys.argv[1],"second",opt_in=True,verified_friend=True,ranked=False,deadline_ms=300000,clock="300+0",commit="a"*40)'
+   p=subprocess.run([sys.executable,'-c',code,str(root)],capture_output=True,text=True,timeout=3)
+   self.assertNotEqual(p.returncode,0);self.assertIn('BlockingIOError',p.stderr)
+   n=time.monotonic_ns();self.assertTrue(s._offer(t,b'data',n,n))
+   for _ in range(100):
+    if s.failed:break
+    time.sleep(.01)
+   self.assertTrue(s.failed);s.close();s.worker.join(3);self.assertFalse(s.worker.is_alive())
+   self.assertFalse((root/'run/final.json').exists())

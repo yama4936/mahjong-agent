@@ -14,21 +14,18 @@ class Session:
   st=os.lstat(root)
   if not stat.S_ISDIR(st.st_mode) or st.st_uid!=os.getuid() or st.st_mode & 0o077:
    raise ValueError('recording root must be private and owned by current user')
-  directory_fd=os.open(root,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
-  try:
-   opened=os.fstat(directory_fd)
-   if (st.st_dev,st.st_ino)!=(opened.st_dev,opened.st_ino): raise ValueError('root replaced')
-   lock_fd=os.open('.recorder.lock',os.O_RDWR|os.O_CREAT|os.O_NOFOLLOW,0o600,dir_fd=directory_fd)
-   lock_stat=os.fstat(lock_fd)
-   if not stat.S_ISREG(lock_stat.st_mode) or lock_stat.st_uid!=os.getuid() or lock_stat.st_nlink!=1 or lock_stat.st_mode & 0o077:
-    os.close(lock_fd);raise ValueError('invalid lock')
-   self.lock=os.fdopen(lock_fd,'a+b')
-  finally:
-   os.close(directory_fd)
+  # Lock the parent directory inode, not a removable file or the root inode.
+  # All cooperating recorders under this parent serialize quota reservations.
+  parent_fd=os.open(root.parent,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+  self.lock=parent_fd
   try:
    fcntl.flock(self.lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
-   lock_path=os.stat(root/'.recorder.lock',follow_symlinks=False)
-   if (lock_path.st_dev,lock_path.st_ino)!=(lock_stat.st_dev,lock_stat.st_ino): raise ValueError('lock replaced')
+   opened_parent=os.fstat(self.lock)
+   current_parent=os.stat(root.parent,follow_symlinks=False)
+   if (opened_parent.st_dev,opened_parent.st_ino)!=(current_parent.st_dev,current_parent.st_ino): raise ValueError('parent replaced')
+   current=os.lstat(root)
+   if (current.st_dev,current.st_ino)!=(st.st_dev,st.st_ino): raise ValueError('root replaced')
+   self.root=root; self.root_identity=(st.st_dev,st.st_ino)
    used=0
    for base,dirs,files in os.walk(root,followlinks=False):
     for n in dirs+files:
@@ -39,7 +36,7 @@ class Session:
    self.path=root/name; self.path.mkdir(mode=0o700)
    self._atomic('started.json',dict(version=1,confirmed=False,commit=commit,clock=clock,deadlineMs=deadline_ms))
   except BaseException:
-   self.lock.close(); raise
+   os.close(self.lock); raise
   self.q=queue.Queue(maxsize=2); self.mu=threading.Lock(); self.closed=False; self.failed=False
   self.accepted=0; self.dropped=0; self.total=0; self.results=[]; self.error=None; self.serial=0
   self.worker=threading.Thread(target=self._run,daemon=True); self.worker.start()
@@ -72,6 +69,8 @@ class Session:
      with self.mu:
       if self.closed: break
      continue
+    current=os.lstat(self.root)
+    if (current.st_dev,current.st_ino)!=self.root_identity: raise ValueError('recording root replaced')
     i,serial,action,data,start,end=item; name=f'{i:02}.png'; temp=self.path/(name+'.partial')
     with temp.open('xb') as f: f.write(data)
     os.replace(temp,self.path/name)
@@ -87,7 +86,7 @@ class Session:
     written={x['index'] for x in self.results}
     self._atomic('final.json',dict(version=1,confirmed=False,timingMeaning='screenshot call interval, not render time',accepted=self.accepted,dropped=self.dropped,written=len(self.results),missingAccepted=[i for i in range(self.accepted) if i not in written],error=self.error,frames=self.results))
    except Exception: self.failed=True
-   self.lock.close()
+   os.close(self.lock)
  def close(self):
   with self.mu: self.closed=True
 
