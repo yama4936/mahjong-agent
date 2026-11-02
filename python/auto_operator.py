@@ -9302,9 +9302,13 @@ class PythonAutoOperator:
                             self.log("sanma_friend_wait", reason="discard_preclick_reobserve",
                                      screenshot=receipt.get("screenshot"), digest=frame_digest,
                                      streak=discard_preclick_rejections, clicked=False, error=str(error))
-                            if (discard_preclick_rejections >= 3 or unconfirmed_input_seen
+                            # No input was sent on this specific path. Permit fresh
+                            # observations until the original action deadline, with a
+                            # poll cap as a second bound if the clock stalls. A prior
+                            # uncertain input still forbids any retry.
+                            if (discard_preclick_rejections >= 120 or unconfirmed_input_seen
                                     or self.verified_friend_300_active is not True
-                                    or not 0 <= time.monotonic() - action_observed_at < 300):
+                                    or not 0 <= (time.monotonic() - action_observed_at) * 1000 < self.args.action_deadline_ms):
                                 self.log("sanma_friend_stopped", reason="discard_preclick_reobserve_limit",
                                          streak=discard_preclick_rejections, clicked=False)
                                 return

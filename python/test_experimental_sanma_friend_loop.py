@@ -498,8 +498,51 @@ class ExperimentalSanmaFriendLoopTest(unittest.TestCase):
         self.receipt['candidates']={'candidates':[]};self.receipt['drawCandidate']={'status':'candidate'}
         with patch('sanma_friend_discard_experiment.execute_friend_draw_candidate',side_effect=DiscardPreclickChanged('changed')) as discard:
             self.run_room()
-        self.assertEqual(discard.call_count,3)
+        self.assertEqual(discard.call_count,120)
         self.assertTrue(any(c.kwargs.get('reason')=='discard_preclick_reobserve_limit' for c in self.op.log.call_args_list))
+
+    def test_discard_can_reobserve_more_than_three_unsent_attempts(self):
+        from sanma_friend_discard_experiment import DiscardPreclickChanged
+        self.op.args.max_iterations = 5
+        self.receipt['candidates'] = {'candidates': []}
+        self.receipt['drawCandidate'] = {'status': 'candidate'}
+        changed = [DiscardPreclickChanged('changed') for _ in range(3)]
+        with patch('sanma_friend_discard_experiment.execute_friend_draw_candidate',
+                   side_effect=changed + [{'clicked': True, 'confirmation': 'unknown'}]) as discard:
+            self.run_room()
+        self.assertEqual(discard.call_count, 4)
+        self.assertTrue(any(c.kwargs.get('streak') == 3 and c.kwargs.get('clicked') is False
+                            for c in self.op.log.call_args_list))
+
+    def test_discard_reobserve_stops_at_original_deadline(self):
+        from sanma_friend_discard_experiment import DiscardPreclickChanged
+        self.op.args.max_iterations = 0
+        self.receipt['candidates'] = {'candidates': []}
+        self.receipt['drawCandidate'] = {'status': 'candidate'}
+        now = [1000.0]
+        def reject(*_):
+            now[0] += 300.0
+            raise DiscardPreclickChanged('changed')
+        with patch('auto_operator.time.monotonic', side_effect=lambda: now[0]), \
+             patch('sanma_friend_discard_experiment.execute_friend_draw_candidate', side_effect=reject) as discard:
+            self.run_room()
+        discard.assert_called_once()
+        self.assertTrue(any(c.kwargs.get('reason') == 'discard_preclick_reobserve_limit'
+                            for c in self.op.log.call_args_list))
+
+    def test_discard_reobserve_stops_if_session_revoked(self):
+        from sanma_friend_discard_experiment import DiscardPreclickChanged
+        self.op.args.max_iterations = 0
+        self.receipt['candidates'] = {'candidates': []}
+        self.receipt['drawCandidate'] = {'status': 'candidate'}
+        def reject(*_):
+            self.op.verified_friend_300_active = False
+            raise DiscardPreclickChanged('changed')
+        with patch('sanma_friend_discard_experiment.execute_friend_draw_candidate', side_effect=reject) as discard:
+            self.run_room()
+        discard.assert_called_once()
+        self.assertTrue(any(c.kwargs.get('reason') == 'discard_preclick_reobserve_limit'
+                            for c in self.op.log.call_args_list))
 
     def test_discard_preclick_after_unconfirmed_input_does_not_retry(self):
         from sanma_friend_discard_experiment import DiscardPreclickChanged
