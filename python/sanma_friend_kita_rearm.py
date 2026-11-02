@@ -4,7 +4,7 @@ import io
 from collections import Counter
 from pathlib import Path
 from PIL import Image, ImageChops, ImageStat
-from sanma_friend_freshness import friend_action_target_key
+from sanma_friend_freshness import friend_action_target_key, friend_frame_changes
 
 
 def rearm_friend_kita_candidate(operator, before, after):
@@ -30,6 +30,15 @@ def rearm_friend_kita_candidate(operator, before, after):
             if source.get('operationAuthorized') is not False or source.get('digest') != digest or report.get('digest') != digest: return False
             frame=Path(receipt['screenshot']).read_bytes()
             if hashlib.sha256(frame).hexdigest() != digest: return False
+            # Recompute, never trust a status without its exact image evidence.
+            latest=Path(fresh['screenshot']).read_bytes()
+            if hashlib.sha256(latest).hexdigest() != fresh.get('digest'): return False
+            changes=friend_frame_changes(frame, latest)
+            if changes['fullFrame']: return False
+            expected='stable_except_clock_candidate' if changes['clock'] else 'identical_pixels_candidate'
+            if fresh['status'] != expected: return False
+            if fresh.get('clockChanged') is not changes['clock']: return False
+            if fresh.get('regionsChanged') != {k:v for k,v in changes.items() if k != 'clock'}: return False
             h=report['hand']['value']; matches=h['matches']; tiles=h['tiles']
             if report['hand']['status'] != 'candidate' or len(tiles)!=14 or len(matches)!=14: return False
             if any(m.get('tile')!=tile for m,tile in zip(matches,tiles)):return False
