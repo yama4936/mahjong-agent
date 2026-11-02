@@ -171,10 +171,12 @@ def parse_board_tokens(tokens: list[dict], expected_total_points: int = 100000) 
 
 
 def recognize_board(image_path: Path, *, sanma_compact_candidate: bool = False,
-                    sanma_extra_score_retry: bool = False) -> dict:
+                    sanma_extra_score_retry: bool = False, _rgb_sink=None) -> dict:
     # Optional dependencies stay outside the live operator until validated.
     from PIL import Image
     image = Image.open(image_path).convert("RGB")
+    if _rgb_sink is not None:
+        _rgb_sink.append(image)
     if image.size != (1920, 1080):
         return {"verified": False, "reason": "uncalibrated_viewport"}
     from screen_state import classify_screen_image

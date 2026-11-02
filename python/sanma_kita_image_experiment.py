@@ -33,16 +33,22 @@ def detect_own_north_candidates(image_path: Path, template_path: Path, *, image_
             'frame_sha256': sha256(Path(image_path).read_bytes()).hexdigest()}
 
 
-def detect_own_partial_north_candidate(image_path: Path, template_path: Path) -> dict:
+def detect_own_partial_north_candidate(image_path: Path, template_path: Path, *, image_rgb=None) -> dict:
     """Unverified visible left part of the north/clock overlap, not a count."""
     from PIL import Image, ImageChops, ImageStat
     base = {'scope': 'sanma_offline_own_partial_north_visual_candidate',
             'status': 'unknown', 'verified': False, 'complete': False}
     try:
-        with Image.open(image_path) as image, Image.open(template_path) as reference:
-            if image.size != (1920, 1080) or reference.size != (35, 85):
-                return {**base, 'reason': 'uncalibrated_dimensions'}
-            visible = image.convert('RGB').crop((1390, 765, 1425, 850))
+        with Image.open(template_path) as reference:
+            if image_rgb is None:
+                with Image.open(image_path) as image:
+                    if image.size != (1920, 1080) or reference.size != (35, 85):
+                        return {**base, 'reason': 'uncalibrated_dimensions'}
+                    visible = image.convert('RGB').crop((1390, 765, 1425, 850))
+            else:
+                if image_rgb.size != (1920, 1080) or reference.size != (35, 85):
+                    return {**base, 'reason': 'uncalibrated_dimensions'}
+                visible = image_rgb.crop((1390, 765, 1425, 850))
             delta = ImageChops.difference(visible, reference.convert('RGB'))
             score = 1 - sum(ImageStat.Stat(delta).mean) / 765
         candidate = {'x': 1390, 'y': 765, 'similarity': score, 'verified': False} if score >= .995 else None

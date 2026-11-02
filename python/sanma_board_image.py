@@ -11,8 +11,9 @@ from board_metadata import recognize_board, parse_sanma_board_tokens
 
 
 def recognize_sanma_board_candidate(image_path: Path, *, expected_total_points: int | None,
-                                    payment_phase: str | None) -> dict:
-    raw = recognize_board(image_path, sanma_compact_candidate=True, sanma_extra_score_retry=True)
+                                    payment_phase: str | None, _rgb_sink=None) -> dict:
+    raw = recognize_board(image_path, sanma_compact_candidate=True, sanma_extra_score_retry=True,
+                          **({"_rgb_sink": _rgb_sink} if _rgb_sink is not None else {}))
     if 'tokens' not in raw:
         return {'verified': False, 'scope': 'sanma_offline_image_candidate',
                 'reason': raw.get('reason', 'ocr_unavailable')}
@@ -29,14 +30,16 @@ def observe_sanma_image(image_path: Path) -> dict:
     from sanma_opposite_kita_experiment import opposite_north_candidate
     from sanma_left_kita_experiment import left_north_candidate
     from sanma_right_kita_experiment import right_north_candidate
-    board = recognize_sanma_board_candidate(image_path, expected_total_points=None, payment_phase=None)
+    rgb_sink = []
+    board = recognize_sanma_board_candidate(image_path, expected_total_points=None, payment_phase=None, _rgb_sink=rgb_sink)
     root = Path(__file__).resolve().parents[1] / 'test/fixtures'
     try:
         import cv2
         image_gray = cv2.imread(str(image_path), cv2.IMREAD_GRAYSCALE)
         observations = {
             'own': {**detect_own_north_candidates(image_path, root / 'sanma-public-experiment/own-north-face.png', image_gray=image_gray),
-                'partialObservation': detect_own_partial_north_candidate(image_path, Path(__file__).parent / 'fixtures/sanma-own-north-partial-c177.png')},
+                'partialObservation': detect_own_partial_north_candidate(image_path, Path(__file__).parent / 'fixtures/sanma-own-north-partial-c177.png',
+                                                                   image_rgb=rgb_sink[0] if rgb_sink else None)},
             'opposite': opposite_north_candidate(image_path, root / 'sanma-opposite-kita/north-glyph-reference.png',
                 shadow_template_path=root / 'sanma-opposite-kita/north-glyph-shadow-reference.png', image_gray=image_gray),
             'left': left_north_candidate(image_path, root / 'sanma-left-kita/left-north-reference.png',
