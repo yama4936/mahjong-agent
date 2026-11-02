@@ -4617,10 +4617,15 @@ class PythonAutoOperator:
         self.log("sanma_friend_candidate_click", action="kita", screenshot=str(before_path),
                  digest=hashlib.sha256(fresh).hexdigest(), baselineDigest=receipt["digest"],
                  baselineScreenshot=receipt["screenshot"], clickPoint=point, candidateConfidence=slots[1]["confidence"])
+        # Saving evidence and logging can block past the action deadline.
+        if self.verified_friend_300_active is not True or not 0 <= time.monotonic() - started_at < 300:
+            raise RuntimeError("experimental sanma friend session or timing expired")
+        latch_friend_action_target(self, baseline, "kita")
+        if self.verified_friend_300_active is not True or not 0 <= time.monotonic() - started_at < 300:
+            raise RuntimeError("experimental sanma friend session or timing expired")
         attempted = getattr(self, "_sanma_friend_attempted_frames", set())
         attempted.add(receipt["digest"])
         self._sanma_friend_attempted_frames = attempted
-        latch_friend_action_target(self, baseline, "kita")
         try:
             page.mouse.click(point["x"], point["y"])
         except Exception as error:

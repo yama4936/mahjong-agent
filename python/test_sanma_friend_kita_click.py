@@ -66,6 +66,32 @@ process.stdout.write(JSON.stringify(report));
                 'report': copy.deepcopy(self.report)},
             'freshness': {'status': 'identical_pixels_candidate', 'operationAuthorized': False, 'elapsedMs': 1000}}
 
+    def test_logging_delay_or_session_revocation_prevents_kita_click(self):
+        for failure in ('deadline', 'session'):
+            with self.subTest(failure=failure):
+                self.setUp()
+                clock = {'offset': 0}
+                real_monotonic = time.monotonic
+                def expire_on_log(event, **kwargs):
+                    if event == 'sanma_friend_candidate_click':
+                        if failure == 'deadline':
+                            clock['offset'] = 301
+                        else:
+                            self.operator.verified_friend_300_active = False
+                self.operator.log.side_effect = expire_on_log
+                with patch('auto_operator.time.monotonic', side_effect=lambda: real_monotonic() + clock['offset']):
+                    with self.assertRaisesRegex(RuntimeError, 'session or timing expired'):
+                        self.operator.execute_sanma_friend_kita_candidate(self.page, self.receipt)
+                self.page.mouse.click.assert_not_called()
+
+    def test_latch_revocation_prevents_kita_click(self):
+        def revoke(*args):
+            self.operator.verified_friend_300_active = False
+        with patch('auto_operator.latch_friend_action_target', side_effect=revoke):
+            with self.assertRaisesRegex(RuntimeError, 'session or timing expired'):
+                self.operator.execute_sanma_friend_kita_candidate(self.page, self.receipt)
+        self.page.mouse.click.assert_not_called()
+
     def test_real_prompt_clicks_once_and_stops_with_unknown_outcome(self):
         result = self.operator.execute_sanma_friend_kita_candidate(self.page, self.receipt)
         self.page.mouse.click.assert_called_once_with(1012.5, 830.0)
