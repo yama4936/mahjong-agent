@@ -1890,19 +1890,39 @@ def experimental_friend_score_transfer_candidate(frame: bytes) -> bool:
         return False
 
 
+def _kita_color_labels(image, np):
+    """The legacy red/green class for every pixel, without unsigned wrap."""
+    pixels=np.asarray(image,dtype=np.int16)
+    r,g,b=(pixels[:,:,i] for i in range(3))
+    red=(r-g>35)&(r-b>35);green=(g-r>20)&(g-b>15)
+    return np.where(red,1,np.where(green,2,0))
+
+
 def experimental_kita_color_stable(before: bytes, after: bytes, boxes: list[dict[str, Any]]) -> bool:
     """Reject material changes in red/green glyph classes under relighting."""
     def kind(pixel):
         r, g, b = pixel
         return 1 if r-g > 35 and r-b > 35 else 2 if g-r > 20 and g-b > 15 else 0
+    try:
+        import numpy as np
+    except ImportError:
+        np = None
     with _open_screenshot(before) as a, _open_screenshot(after) as b:
         a,b=a.convert("RGB"),b.convert("RGB")
         if a.size != (1920,1080) or b.size != a.size: return False
         for box in boxes:
             x,y,w,h=(int(box[k]) for k in ("x","y","width","height"))
             if x<0 or y<0 or w<=0 or h<=0 or x+w>1920 or y+h>1080:return False
-            first=list(a.crop((x,y,x+w,y+h)).getdata());second=list(b.crop((x,y,x+w,y+h)).getdata())
-            if sum(kind(p)!=kind(q) for p,q in zip(first,second)) > max(2,len(first)*.001): return False
+            first=a.crop((x,y,x+w,y+h));second=b.crop((x,y,x+w,y+h))
+            if np is None:
+                changed = sum(kind(p)!=kind(q) for p,q in zip(first.getdata(),second.getdata()))
+            else:
+                try:
+                    # Signed arithmetic prevents uint8 subtraction wrapping.
+                    changed=int(np.count_nonzero(_kita_color_labels(first,np)!=_kita_color_labels(second,np)))
+                except Exception:
+                    return False  # Any array or dependency error must not authorize input.
+            if changed > max(2,w*h*.001): return False
         return True
 
 
