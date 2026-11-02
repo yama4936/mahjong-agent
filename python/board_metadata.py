@@ -177,8 +177,8 @@ def recognize_board(image_path: Path, *, sanma_compact_candidate: bool = False,
     image = Image.open(image_path).convert("RGB")
     if image.size != (1920, 1080):
         return {"verified": False, "reason": "uncalibrated_viewport"}
-    from screen_state import classify_screen
-    state, _ = classify_screen(image_path, {})
+    from screen_state import classify_screen_image
+    state, _ = classify_screen_image(image, {})
     # Opt-in OCR candidate only: a saved sanma three-meld hand missed the
     # ordinary gameplay gate by 0.00057 dark-ink fraction despite visible
     # faces. This does not alter screen classification or authorize actions.

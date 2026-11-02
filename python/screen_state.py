@@ -410,7 +410,14 @@ def classify_screen(
     references: dict[str, tuple[ScreenState, Image.Image]],
     maximum_distance: float = 0.16,
 ) -> tuple[ScreenState, float]:
-    image = _open(screenshot)
+    return classify_screen_image(_open(screenshot), references, maximum_distance)
+
+
+def classify_screen_image(image: Image.Image, references: dict[str, tuple[ScreenState, Image.Image]],
+                          maximum_distance: float = 0.16) -> tuple[ScreenState, float]:
+    """Classify an already-decoded RGB frame without changing its pixels."""
+    if image.mode != "RGB":
+        image = image.convert("RGB")
     # A lost client canvas otherwise satisfies the dark ranked-menu/card
     # heuristics forever. Require a full-size frame with no visible UI at all;
     # normal loading artwork, progress bars and darkened dialogs do not qualify.
