@@ -6,13 +6,13 @@ from unittest.mock import patch
 from sanma_fast_capture import fast_capture_driver_environment
 
 class FastCaptureEnvironmentTest(unittest.TestCase):
- def test_driver_hook_is_temporary_and_does_not_change_process_environment(self):
+ def test_scoped_factory_does_not_change_process_or_playwright_globals(self):
   import playwright._impl._transport as transport
   original=transport.get_driver_env;before=dict(os.environ)
   with tempfile.TemporaryDirectory() as directory:
    with fast_capture_driver_environment(True,directory) as state:
-    self.assertEqual(state['status'],'pending');env=transport.get_driver_env()
-    self.assertIn('sanma_fast_capture_preload.cjs',env['NODE_OPTIONS']);self.assertEqual(env['SANMA_FAST_CAPTURE_STATUS'],state['marker'])
+    self.assertEqual(state['status'],'pending');self.assertTrue(callable(state['factory']))
+    self.assertIs(transport.get_driver_env,original)
     self.assertEqual(dict(os.environ),before)
    self.assertIs(transport.get_driver_env,original);self.assertEqual(dict(os.environ),before)
  def test_incompatible_hash_uses_stock_driver(self):
@@ -66,9 +66,95 @@ class FastCaptureEnvironmentTest(unittest.TestCase):
    env={**os.environ,'NODE_OPTIONS':'--require='+str(preload),'SANMA_FAST_CAPTURE_TARGET':str(target),'SANMA_FAST_CAPTURE_STATUS':str(marker)}
    result=subprocess.run(['node','-e','if(require(process.argv[1])!==42)process.exit(1)',str(target)],env=env,capture_output=True,timeout=5)
    self.assertEqual(result.returncode,0);self.assertFalse(marker.exists())
+ def test_scoped_driver_start_error_falls_back_before_browser_access(self):
+  from contextlib import ExitStack,contextmanager
+  from types import SimpleNamespace
+  from unittest.mock import Mock,MagicMock
+  from auto_operator import start_playwright_with_sanma_capture
+  with tempfile.TemporaryDirectory() as directory:
+   marker=Path(directory)/'status';marker.write_text('patched\n')
+   broken=MagicMock();broken.__enter__.side_effect=RuntimeError('compile failed')
+   stock=MagicMock();stock.__enter__.return_value='stock'
+   @contextmanager
+   def environment(enabled,directory):yield {'requested':True,'status':'pending','marker':str(marker),'factory':lambda:broken}
+   operator=Mock();operator.frames=Path(directory)
+   with patch('auto_operator.fast_capture_driver_environment',side_effect=environment),patch('auto_operator.sync_playwright',return_value=stock) as factory:
+    with ExitStack() as stack:
+     self.assertEqual(start_playwright_with_sanma_capture(stack,SimpleNamespace(experimental_sanma_fast_png=True),operator),'stock')
+    factory.assert_called_once()
+   operator.log.assert_called_once_with('sanma_fast_png_driver',enabled=False,status='stock_fallback',operationAuthorized=False)
+ def test_failed_cleanup_forbids_fallback_driver(self):
+  from contextlib import ExitStack,contextmanager
+  from types import SimpleNamespace
+  from unittest.mock import Mock,MagicMock
+  from auto_operator import start_playwright_with_sanma_capture
+  from sanma_fast_capture import ScopedStartupCleanupError
+  broken=MagicMock();broken.__enter__.side_effect=ScopedStartupCleanupError('not cleaned')
+  @contextmanager
+  def environment(enabled,directory):yield {'requested':True,'status':'pending','marker':'/missing','factory':lambda:broken}
+  operator=Mock();operator.frames=Path('/unused')
+  with patch('auto_operator.fast_capture_driver_environment',side_effect=environment),patch('auto_operator.sync_playwright') as stock:
+   with ExitStack() as stack:
+    with self.assertRaises(ScopedStartupCleanupError):start_playwright_with_sanma_capture(stack,SimpleNamespace(experimental_sanma_fast_png=True),operator)
+   stock.assert_not_called();operator.log.assert_not_called()
+ def test_real_driver_start_failure_cleans_up_and_starts_stock(self):
+  import subprocess,sys
+  script='''
+import tempfile
+from contextlib import ExitStack
+from types import SimpleNamespace
+from unittest.mock import Mock,patch
+from pathlib import Path
+from auto_operator import start_playwright_with_sanma_capture
+with tempfile.TemporaryDirectory() as d:
+ op=SimpleNamespace(frames=Path(d),log=Mock())
+ with patch("playwright._impl._driver.compute_driver_executable",return_value=("/bin/false","ignored")):
+  with ExitStack() as stack:
+   p=start_playwright_with_sanma_capture(stack,SimpleNamespace(experimental_sanma_fast_png=True),op)
+   assert p is not None
+ op.log.assert_called_once_with("sanma_fast_png_driver",enabled=False,status="stock_fallback",operationAuthorized=False)
+'''
+  result=subprocess.run([sys.executable,'-c',script],env={**os.environ,'PYTHONPATH':str(Path(__file__).parent)},capture_output=True,text=True,timeout=15)
+  self.assertEqual(result.returncode,0,result.stderr)
 
 @unittest.skipUnless(os.environ.get('SANMA_FAST_CAPTURE_CHROMIUM'), 'isolated Chromium path not provided')
 class FastCaptureChromiumTest(unittest.TestCase):
+ def test_overlapping_scoped_managers_close_out_of_order_without_global_hook(self):
+  import playwright._impl._transport as transport
+  original=transport.get_driver_env;before=dict(os.environ)
+  with tempfile.TemporaryDirectory(dir='/home/yama1/.codex') as directory:
+   first=fast_capture_driver_environment(True,directory);second=fast_capture_driver_environment(True,directory)
+   a=first.__enter__();b=second.__enter__()
+   self.assertNotEqual(a['marker'],b['marker']);self.assertIs(transport.get_driver_env,original)
+   first.__exit__(None,None,None);self.assertIs(transport.get_driver_env,original)
+   second.__exit__(None,None,None)
+  self.assertIs(transport.get_driver_env,original);self.assertEqual(dict(os.environ),before)
+ def test_scoped_manager_reentry_is_rejected_and_original_instance_closes(self):
+  with tempfile.TemporaryDirectory(dir='/home/yama1/.codex') as directory:
+   with fast_capture_driver_environment(True,directory) as state:
+    manager=state['factory']()
+    try:
+     manager.__enter__()
+     with self.assertRaisesRegex(RuntimeError,'reentered'):manager.__enter__()
+    finally:manager.__exit__(None,None,None)
+ def test_concurrent_opted_and_unrelated_threads_use_independent_drivers(self):
+  from concurrent.futures import ThreadPoolExecutor
+  import threading
+  from playwright.sync_api import sync_playwright
+  import playwright._impl._transport as transport
+  original=transport.get_driver_env;before=dict(os.environ);gate=threading.Barrier(2)
+  with tempfile.TemporaryDirectory(dir='/home/yama1/.codex') as directory:
+   def task(opted):
+    with fast_capture_driver_environment(opted,directory) as state:
+     gate.wait(timeout=10)
+     manager=state['factory']() if opted else sync_playwright()
+     with manager:
+      return state['marker'],state['status'],transport.get_driver_env is original,dict(os.environ)==before
+   with ThreadPoolExecutor(max_workers=2) as pool:
+    a=pool.submit(task,True);b=pool.submit(task,False);fast,stock=a.result(timeout=30),b.result(timeout=30)
+   self.assertEqual(fast[1],'pending');self.assertEqual(Path(fast[0]).read_text(),'patched\n')
+   self.assertEqual(stock[:2],(None,'disabled'));self.assertTrue(all(fast[2:]));self.assertTrue(all(stock[2:]))
+  self.assertIs(transport.get_driver_env,original);self.assertEqual(dict(os.environ),before)
  def test_static_css_and_webgl_pixels_match_stock_screenshots(self):
   import io,base64
   from contextlib import ExitStack

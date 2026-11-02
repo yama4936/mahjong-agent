@@ -34,7 +34,7 @@ from playwright.sync_api import Browser, CDPSession, Page, sync_playwright
 from PIL import Image, ImageChops, ImageFilter, ImageStat
 from screen_state import _rgb_fraction, classify_screen, load_references, is_blank_white_client_frame, require_sanma_observable_frame
 from synchronous_capture import CaptureReceipt, capture_full_png
-from sanma_fast_capture import fast_capture_driver_environment
+from sanma_fast_capture import fast_capture_driver_environment, ScopedStartupCleanupError
 from sanma_png_stream import SanmaPngStream
 from operator_lock import OperatorAlreadyRunning, endpoint_key, operator_lease
 from analysis_recorder import AnalysisRecorder
@@ -10820,15 +10820,29 @@ def parse_args() -> argparse.Namespace:
 
 def start_playwright_with_sanma_capture(stack, args, operator):
     """Start the opted-in driver, or a fresh stock driver before browser access."""
+    startup_failed = False
     with fast_capture_driver_environment(args.experimental_sanma_fast_png, operator.frames) as fast_status:
+        factory = fast_status.get('factory') or sync_playwright
+        try:
+            playwright = stack.enter_context(factory())
+        except ScopedStartupCleanupError:
+            raise
+        except Exception:
+            if fast_status['status'] != 'pending':
+                raise
+            startup_failed = True
+    if startup_failed:
+        # No browser connection exists yet. The failed scoped manager must
+        # clean its own resources before the independent stock driver starts.
+        stack.close()
         playwright = stack.enter_context(sync_playwright())
     if fast_status['requested']:
         marker = fast_status.get('marker')
         try:
-            active = bool(marker and Path(marker).read_text() == 'patched\n')
+            active = not startup_failed and bool(marker and Path(marker).read_text() == 'patched\n')
         except (OSError, UnicodeError):
             active = False
-        if not active and fast_status['status'] == 'pending':
+        if not active and fast_status['status'] == 'pending' and not startup_failed:
             stack.close()
             playwright = stack.enter_context(sync_playwright())
         operator.log('sanma_fast_png_driver', enabled=active,
