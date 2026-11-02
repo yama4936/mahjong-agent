@@ -10799,7 +10799,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--experimental-sanma-fast-png", action="store_true",
                         help="friend-only experimental lossless screenshot compression")
     parser.add_argument("--experimental-sanma-transition-record", type=Path, metavar="DIRECTORY",
-                        help="opt-in friend-only diagnostic full screenshots; may contain personal information")
+                        help="opt-in friend-only full screenshots (may contain personal information); "
+                             "32 MiB per run, no aggregate quota; abrupt exit may lose frames; "
+                             "recordings do not prove action success")
     parser.add_argument("--experimental-sanma-friend", action="store_true",
                         help="friend-only experimental tsumo; stops on unsupported actions")
     parser.add_argument("--layout", required=True)
