@@ -4613,7 +4613,8 @@ class PythonAutoOperator:
         before_path.write_bytes(fresh)
         point = {"x": 1012.5, "y": 830.0}
         self.log("sanma_friend_candidate_click", action="kita", screenshot=str(before_path),
-                 digest=receipt["digest"], clickPoint=point, candidateConfidence=slots[1]["confidence"])
+                 digest=hashlib.sha256(fresh).hexdigest(), baselineDigest=receipt["digest"],
+                 baselineScreenshot=receipt["screenshot"], clickPoint=point, candidateConfidence=slots[1]["confidence"])
         attempted = getattr(self, "_sanma_friend_attempted_frames", set())
         attempted.add(receipt["digest"])
         self._sanma_friend_attempted_frames = attempted

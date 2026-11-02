@@ -9,7 +9,7 @@ import time
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 from PIL import Image, ImageDraw
 
 from auto_operator import PythonAutoOperator
@@ -148,10 +148,42 @@ process.stdout.write(JSON.stringify(report));
         data=io.BytesIO();changed.save(data,format='PNG')
         self.page.screenshot.side_effect=[data.getvalue(),AFTER.read_bytes()]
         self.receipt['freshness']['status']='stable_except_clock_candidate'
-        result=self.operator.execute_sanma_friend_kita_candidate(self.page,self.receipt)
+        with patch('auto_operator.latch_friend_action_target') as latch:
+            result=self.operator.execute_sanma_friend_kita_candidate(self.page,self.receipt)
         self.assertTrue(result['clicked'])
         self.assertEqual(result['confirmation'],'unknown')
         self.page.mouse.click.assert_called_once_with(1012.5,830.0)
+        latch.assert_called_once_with(self.operator, self.frame, 'kita')
+        self.assertIn(self.digest, self.operator._sanma_friend_attempted_frames)
+        event=next(call for call in self.operator.log.call_args_list if call.args[0]=='sanma_friend_candidate_click')
+        self.assertEqual(Path(event.kwargs['screenshot']).read_bytes(), data.getvalue())
+        self.assertEqual(event.kwargs['digest'], hashlib.sha256(data.getvalue()).hexdigest())
+        self.assertEqual(event.kwargs['baselineDigest'], self.digest)
+        self.assertEqual(event.kwargs['baselineScreenshot'], str(self.path))
+        self.assertNotEqual(event.kwargs['digest'], event.kwargs['baselineDigest'])
+
+    def test_a5fb00b_recorded_preclick_keeps_its_own_digest(self):
+        root = Path('/home/yama1/.codex/sanma-a5fb00b-20261103/retry/frames')
+        receipts = list(root.glob('*18-02-53*sanma-self-turn.receipt.json'))
+        before = list(root.glob('*18-02-57*sanma-kita-before.png'))
+        after = list(root.glob('*18-02-58*sanma-kita-after.png'))
+        if not receipts or not before or not after:
+            self.skipTest('a5fb00b friend evidence unavailable')
+        receipt = json.loads(receipts[0].read_text())
+        baseline = Path(receipt['screenshot']).read_bytes()
+        fresh = before[0].read_bytes()
+        self.assertNotEqual(hashlib.sha256(baseline).hexdigest(), hashlib.sha256(fresh).hexdigest())
+        self.page.screenshot.side_effect = [fresh, after[0].read_bytes()]
+        with patch('auto_operator.latch_friend_action_target') as latch:
+            result = self.operator.execute_sanma_friend_kita_candidate(self.page, receipt)
+        self.page.mouse.click.assert_called_once_with(1012.5, 830.0)
+        latch.assert_called_once_with(self.operator, baseline, 'kita')
+        self.assertIn(receipt['digest'], self.operator._sanma_friend_attempted_frames)
+        event = next(c for c in self.operator.log.call_args_list if c.args[0] == 'sanma_friend_candidate_click')
+        self.assertEqual(hashlib.sha256(Path(event.kwargs['screenshot']).read_bytes()).hexdigest(), event.kwargs['digest'])
+        self.assertEqual(event.kwargs['baselineDigest'], hashlib.sha256(baseline).hexdigest())
+        self.assertEqual(event.kwargs['baselineScreenshot'], receipt['screenshot'])
+        self.assertEqual(result['confirmation'], 'unknown')
 
 
 if __name__ == '__main__':
