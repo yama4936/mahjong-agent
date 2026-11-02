@@ -9432,12 +9432,29 @@ class PythonAutoOperator:
                 page.on("framenavigated", lambda frame: self.revoke_verified_friend_300("navigation")
                         if frame == page.main_frame else None)
                 self.verified_friend_300_active = True
+                self.sanma_transition_recorder = None
+                record_directory = getattr(self.args, "experimental_sanma_transition_record", None)
+                if record_directory:
+                    try:
+                        commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=self.root,
+                                                capture_output=True, text=True, check=True).stdout.strip()
+                        from sanma_diagnostic_recorder import Session
+                        self.sanma_transition_recorder = Session(
+                            record_directory, uuid.uuid4().hex, opt_in=True,
+                            verified_friend=self.verified_friend_300_active, ranked=getattr(self.args, "ranked_loop", False),
+                            deadline_ms=self.configured_action_deadline_ms(), clock="300+0", commit=commit)
+                    except Exception as error:
+                        self.log("sanma_recording_unavailable", error=str(error))
                 try:
                     inspect_sanma_friend_start(page, reviewed, action_deadline_ms=300000,
                                                attempts=32, on_capture=save_friend_start_capture)
                     if self.verified_friend_300_active is not True:
                         raise RuntimeError("friend session revoked during final room check")
                 except Exception as error:
+                    recorder = self.sanma_transition_recorder
+                    self.sanma_transition_recorder = None
+                    if recorder is not None:
+                        recorder.close()
                     self.verified_friend_300_active = False
                     self.log("sanma_friend_stopped", reason="final_friend_room_check_failed",
                              error=str(error), preflight=str(preflight_path))
@@ -9447,6 +9464,10 @@ class PythonAutoOperator:
                 try:
                     page.mouse.click(1140, 998)
                 except Exception:
+                    recorder = self.sanma_transition_recorder
+                    self.sanma_transition_recorder = None
+                    if recorder is not None:
+                        recorder.close()
                     self.verified_friend_300_active = False
                     self.log("sanma_friend_stopped", reason="friend_start_click_failed", preflight=str(preflight_path))
                     raise
@@ -9461,6 +9482,10 @@ class PythonAutoOperator:
                     page.mouse.move(retreat_point['x'], retreat_point['y'])
                     self.log("sanma_friend_pointer_retreated", reason="after_friend_start", point=retreat_point)
                 except Exception as error:
+                    recorder = self.sanma_transition_recorder
+                    self.sanma_transition_recorder = None
+                    if recorder is not None:
+                        recorder.close()
                     self.verified_friend_300_active = False
                     self.log("sanma_friend_stopped", reason="friend_pointer_retreat_failed", preflight=str(preflight_path),
                              error=str(error), startInputSent=True)
@@ -9473,17 +9498,6 @@ class PythonAutoOperator:
                 self.log("sanma_friend_start_clicked", preflight=str(preflight_path), commit=commit,
                          point={"x":1140,"y":998}, actionDeadlineMs=300000, roomClock="300+0",
                          scope="experimental_friend_only")
-                self.sanma_transition_recorder = None
-                record_directory = getattr(self.args, "experimental_sanma_transition_record", None)
-                if record_directory and experimental_sanma_friend_allowed(self.args) and self.verified_friend_300_active is True:
-                    try:
-                        from sanma_diagnostic_recorder import Session
-                        self.sanma_transition_recorder = Session(
-                            record_directory, uuid.uuid4().hex, opt_in=True,
-                            verified_friend=self.verified_friend_300_active, ranked=self.args.ranked_loop,
-                            deadline_ms=self.configured_action_deadline_ms(), clock="300+0", commit=commit)
-                    except Exception as error:
-                        self.log("sanma_recording_unavailable", error=str(error))
                 try:
                     self.run_experimental_sanma_friend(page)
                 finally:

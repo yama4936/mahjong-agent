@@ -1,5 +1,5 @@
 """Opt-in diagnostics: records screenshots, never certifies game state."""
-import fcntl, hashlib, json, os, queue, threading, time
+import fcntl, hashlib, json, os, queue, stat, threading, time
 from pathlib import Path
 
 class Session:
@@ -9,10 +9,26 @@ class Session:
    raise ValueError('explicit opt-in and verified 300+0 friend required')
   if not isinstance(commit,str) or len(commit)!=40 or any(c not in '0123456789abcdef' for c in commit): raise ValueError('commit')
   if not name or Path(name).name!=name or name in ('.','..'): raise ValueError('name')
-  root=Path(parent).resolve(strict=True)
-  self.lock=(root/'.recorder.lock').open('a+b')
+  root=Path(parent).absolute()
+  # Require a private directory; ownership is the trust boundary for all paths.
+  st=os.lstat(root)
+  if not stat.S_ISDIR(st.st_mode) or st.st_uid!=os.getuid() or st.st_mode & 0o077:
+   raise ValueError('recording root must be private and owned by current user')
+  directory_fd=os.open(root,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+  try:
+   opened=os.fstat(directory_fd)
+   if (st.st_dev,st.st_ino)!=(opened.st_dev,opened.st_ino): raise ValueError('root replaced')
+   lock_fd=os.open('.recorder.lock',os.O_RDWR|os.O_CREAT|os.O_NOFOLLOW,0o600,dir_fd=directory_fd)
+   lock_stat=os.fstat(lock_fd)
+   if not stat.S_ISREG(lock_stat.st_mode) or lock_stat.st_uid!=os.getuid() or lock_stat.st_nlink!=1 or lock_stat.st_mode & 0o077:
+    os.close(lock_fd);raise ValueError('invalid lock')
+   self.lock=os.fdopen(lock_fd,'a+b')
+  finally:
+   os.close(directory_fd)
   try:
    fcntl.flock(self.lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+   lock_path=os.stat(root/'.recorder.lock',follow_symlinks=False)
+   if (lock_path.st_dev,lock_path.st_ino)!=(lock_stat.st_dev,lock_stat.st_ino): raise ValueError('lock replaced')
    used=0
    for base,dirs,files in os.walk(root,followlinks=False):
     for n in dirs+files:

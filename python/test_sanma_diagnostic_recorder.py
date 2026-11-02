@@ -93,3 +93,32 @@ class HookTests(unittest.TestCase):
   op.sanma_transition_recorder=Mock();op._observe_sanma_friend_transition=Mock(return_value={'confirmed':False})
   page=Mock();op.observe_sanma_friend_transition(page,{},'discard')
   op.sanma_transition_recorder.begin.assert_not_called();self.assertIs(op._observe_sanma_friend_transition.call_args.args[0],page)
+
+class BoundaryTests(unittest.TestCase):
+ def test_untrusted_root_and_lock(self):
+  with tempfile.TemporaryDirectory() as d:
+   root=Path(d)/'root';root.mkdir(mode=0o700);alias=Path(d)/'alias';alias.symlink_to(root,target_is_directory=True)
+   with self.assertRaises(ValueError):make(alias)
+   (root/'.recorder.lock').symlink_to(Path(d)/'victim')
+   with self.assertRaises(OSError):make(root)
+   (root/'.recorder.lock').unlink();root.chmod(0o755)
+   with self.assertRaises(ValueError):make(root)
+ def test_hard_kill_cannot_claim_final(self):
+  import subprocess,sys
+  with tempfile.TemporaryDirectory() as d:
+   code='from sanma_diagnostic_recorder import Session; import sys,time; s=Session(sys.argv[1],"run",opt_in=True,verified_friend=True,ranked=False,deadline_ms=300000,clock="300+0",commit="a"*40);print("ready",flush=True);time.sleep(30)'
+   p=subprocess.Popen([sys.executable,'-c',code,d],stdout=subprocess.PIPE,text=True)
+   self.assertEqual(p.stdout.readline().strip(),'ready');p.kill();p.wait(timeout=3);p.stdout.close()
+   self.assertTrue((Path(d)/'run/started.json').exists());self.assertFalse((Path(d)/'run/final.json').exists())
+ def test_delayed_write_does_not_wait_on_offer_or_close(self):
+  from unittest.mock import patch
+  with tempfile.TemporaryDirectory() as d:
+   s=make(d);t=s.begin('discard',True);ready=threading.Event();release=threading.Event();original=Path.open
+   def delayed(path,*args,**kwargs):
+    if str(path).endswith('.png.partial'):ready.set();release.wait(3)
+    return original(path,*args,**kwargs)
+   with patch.object(Path,'open',delayed):
+    now=time.monotonic_ns();self.assertTrue(s._offer(t,b'data',now,now));self.assertTrue(ready.wait(1))
+    start=time.monotonic();s.close();self.assertLess(time.monotonic()-start,.1)
+    self.assertTrue(s.worker.is_alive());release.set();s.worker.join(3)
+   self.assertFalse(s.worker.is_alive());self.assertTrue((s.path/'final.json').exists())
