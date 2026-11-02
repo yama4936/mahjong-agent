@@ -60,3 +60,52 @@ class KitaRearmTests(unittest.TestCase):
             if case=='ranked':self.op.args.ranked_loop=True
             if case=='north':after['sourceObservation']['report']['hand']['value']['tiles'][11]='S'
             with self.subTest(case=case):self.assertFalse(rearm_friend_kita_candidate(self.op,before,after))
+
+class SyntheticFreshnessReceiptTests(unittest.TestCase):
+    """Fabricated observations exercise freshness checks, not independent live captures."""
+
+    def setUp(self):
+        self.tmp=tempfile.TemporaryDirectory(); self.addCleanup(self.tmp.cleanup)
+        self.receipts=[]
+        for i, tiles in enumerate((
+            ['N','N','1p','2p','3p','4p','5p','6p','7p','8p','9p','1s','2s','3s'],
+            ['N','1p','2p','3p','4p','5p','6p','7p','8p','9p','1s','2s','3s','4s'],
+        )):
+            image=Image.new('RGB',(1920,1080),'black')
+            if i:
+                with Image.open(Path(__file__).parent/'fixtures'/'sanma-friend-first-north-visible.png') as north:
+                    image.paste(north.convert('RGB'),(1390,765))
+            path=Path(self.tmp.name)/f'{i}.png'; image.save(path)
+            digest=hashlib.sha256(path.read_bytes()).hexdigest()
+            hand={'tiles':tiles,'matches':[{'tile':t,'confidence':.99,'runnerUpConfidence':.1} for t in tiles]}
+            self.receipts.append({'scope':'sanma_self_turn_observation','operationAuthorized':False,
+                'screenshot':str(path),'digest':digest,
+                'sourceObservation':{'operationAuthorized':False,'digest':digest,
+                    'report':{'digest':digest,'hand':{'status':'candidate','value':hand}}},
+                'freshness':{'status':'identical_pixels_candidate','operationAuthorized':False,
+                    'elapsedMs':1,'screenshot':str(path),'digest':digest,'clockChanged':False,
+                    'regionsChanged':{'hand':False,'actions':False,'fullFrame':False}},
+                'drawCandidate':{'status':'candidate','index':13,'tile':tiles[-1],'digest':digest}})
+        self.op=Mock(); self.op.args=SimpleNamespace(experimental_sanma_friend=True,rules='sanma',mode='force-auto',action_deadline_ms=300000,ranked_loop=False)
+        self.op.verified_friend_300_active=True; self.op._sanma_friend_kita_rearmed=False
+        self.op._sanma_friend_attempted_targets={friend_action_target_key(Path(self.receipts[0]['screenshot']).read_bytes(),'kita')}
+
+    def test_fabricated_receipts_are_consistent_without_claiming_live_confirmation(self):
+        self.assertTrue(rearm_friend_kita_candidate(self.op,*self.receipts))
+        self.assertFalse(self.op.log.call_args.kwargs['confirmed'])
+
+    def test_fabricated_receipts_reject_missing_swapped_and_contradictory_freshness(self):
+        for case in ('missing','digest','swapped','pixels','status','regions','clock'):
+            with self.subTest(case=case):
+                self.setUp(); before,after=copy.deepcopy(self.receipts); f=after['freshness']
+                if case=='missing': f['screenshot']=str(Path(self.tmp.name)/'missing.png')
+                elif case=='digest': f['digest']='0'*64
+                elif case=='swapped': f['screenshot']=before['screenshot'];f['digest']=before['digest']
+                elif case=='pixels':
+                    with Image.open(f['screenshot']) as original: image=original.convert('RGB')
+                    image.putpixel((800,600),(255,255,255)); path=Path(self.tmp.name)/'changed.png';image.save(path)
+                    f['screenshot']=str(path);f['digest']=hashlib.sha256(path.read_bytes()).hexdigest()
+                elif case=='status': f['status']='stable_except_clock_candidate'
+                elif case=='regions': f['regionsChanged']['hand']=True
+                elif case=='clock': f['clockChanged']=True
+                self.assertFalse(rearm_friend_kita_candidate(self.op,before,after))
