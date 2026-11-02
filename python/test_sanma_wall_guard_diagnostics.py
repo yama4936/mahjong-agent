@@ -78,16 +78,21 @@ class WallGuardIntegration(unittest.TestCase):
   session={'mode':'cpu_friend','rules':'sanma','clock':'300+0','actionDeadlineMs':300000,'ranked':False,'cpuCount':2,'roomVerified':True}
   point={'x':200,'y':1000};observation={'status':'candidate','phase':'self_turn','promptStatus':'none','handStatus':'candidate','layoutStatus':'candidate','slots':[{'tile':'1m',**point}],'frameSha256':self.digest,'referenceFrame':self.frame,'experimentalDrawReport':self.report}
   plan={'scope':'offline_untrusted_sanma_discard_plan','operationAuthorized':False,'tile':'1m','clickIndex':0,'clickPoint':point}
-  self.page.screenshot.return_value=b'not-identical';records=[]
+  observation['experimentalDrawReport']=json.loads(json.dumps(self.report))
+  observation['experimentalDrawReport']['hand']['value']['turnReady']=True
+  observation['experimentalDrawReport']['buttonRow']['value']['slots']=[{'slot':i,'status':'empty_candidate'} for i in range(3)]
+  changed=io.BytesIO();Image.new('RGB',(1920,1080),(35,45,65)).save(changed,format='PNG')
+  self.page.screenshot.return_value=changed.getvalue();records=[]
   for logger_fails in (False,True):
    def log(data):
     records.append(data)
     if logger_fails and data.get('kind')=='sanma_wall_guard_error':raise OSError('log unavailable')
-   def fail(*args,on_wall_error=None,**kwargs):
-    try:on_wall_error(self.failure)
-    except Exception:pass
-    return False
-   with self.subTest(logger_fails=logger_fails),patch('sanma_friend_discard_experiment.friend_frame_stable',return_value=False),patch('auto_operator.experimental_draw_glyph_stability',side_effect=fail),patch('sanma_friend_discard_experiment.send_discard_click') as send:
+   original_import=builtins.__import__
+   def missing_numpy(name,*args,**kwargs):
+    if name=='numpy':raise ImportError('simulated missing numpy')
+    return original_import(name,*args,**kwargs)
+   with self.subTest(logger_fails=logger_fails),patch('sanma_friend_discard_experiment.friend_frame_stable',return_value=False),patch('builtins.__import__',side_effect=missing_numpy),patch('sanma_friend_discard_experiment.send_discard_click') as send:
     with self.assertRaises(DiscardPreclickChanged):execute_friend_discard(self.page,session=session,observation=observation,plan=plan,layout={'viewport':{'width':1920,'height':1080}},log=log,turn_started_monotonic=100,clock=lambda:101)
     send.assert_not_called();self.page.mouse.click.assert_not_called()
+    self.assertEqual(records[-2]['kind'],'sanma_wall_guard_error')
   self.assertTrue(any(x.get('kind')=='sanma_wall_guard_error' for x in records))
