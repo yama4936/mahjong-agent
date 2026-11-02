@@ -3,11 +3,11 @@ from hashlib import sha256
 from pathlib import Path
 
 
-def right_north_candidate(image_path: Path, templates: list[Path]) -> dict:
+def right_north_candidate(image_path: Path, templates: list[Path], *, image_gray=None) -> dict:
     import cv2
     base = {'scope': 'sanma_offline_right_north_visual_candidates',
             'status': 'unknown', 'verified': False, 'complete': False}
-    image = cv2.imread(str(image_path), cv2.IMREAD_GRAYSCALE)
+    image = image_gray if image_gray is not None else cv2.imread(str(image_path), cv2.IMREAD_GRAYSCALE)
     if image is None or image.shape != (1080, 1920):
         return {**base, 'reason': 'uncalibrated_or_unreadable_image'}
     boxes = ((1410, 214, 1455, 239), (1418, 247, 1463, 272))

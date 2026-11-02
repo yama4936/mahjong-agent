@@ -8,11 +8,11 @@ from pathlib import Path
 
 
 def opposite_north_candidate(image_path: Path, template_path: Path, *,
-                             shadow_template_path: Path | None = None) -> dict:
+                             shadow_template_path: Path | None = None, image_gray=None) -> dict:
     import cv2
     scope = {'scope': 'sanma_offline_opposite_north_visual_candidate',
              'verified': False, 'complete': False, 'status': 'unknown'}
-    image = cv2.imread(str(image_path), cv2.IMREAD_GRAYSCALE)
+    image = image_gray if image_gray is not None else cv2.imread(str(image_path), cv2.IMREAD_GRAYSCALE)
     template = cv2.imread(str(template_path), cv2.IMREAD_GRAYSCALE)
     if image is None or image.shape != (1080, 1920):
         return {**scope, 'reason': 'uncalibrated_or_unreadable_image'}

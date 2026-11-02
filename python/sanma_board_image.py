@@ -32,15 +32,17 @@ def observe_sanma_image(image_path: Path) -> dict:
     board = recognize_sanma_board_candidate(image_path, expected_total_points=None, payment_phase=None)
     root = Path(__file__).resolve().parents[1] / 'test/fixtures'
     try:
+        import cv2
+        image_gray = cv2.imread(str(image_path), cv2.IMREAD_GRAYSCALE)
         observations = {
-            'own': {**detect_own_north_candidates(image_path, root / 'sanma-public-experiment/own-north-face.png'),
+            'own': {**detect_own_north_candidates(image_path, root / 'sanma-public-experiment/own-north-face.png', image_gray=image_gray),
                 'partialObservation': detect_own_partial_north_candidate(image_path, Path(__file__).parent / 'fixtures/sanma-own-north-partial-c177.png')},
             'opposite': opposite_north_candidate(image_path, root / 'sanma-opposite-kita/north-glyph-reference.png',
-                shadow_template_path=root / 'sanma-opposite-kita/north-glyph-shadow-reference.png'),
+                shadow_template_path=root / 'sanma-opposite-kita/north-glyph-shadow-reference.png', image_gray=image_gray),
             'left': left_north_candidate(image_path, root / 'sanma-left-kita/left-north-reference.png',
-                glare_template_path=root / 'sanma-left-kita/left-north-glare-reference.png'),
+                glare_template_path=root / 'sanma-left-kita/left-north-glare-reference.png', image_gray=image_gray),
             'right': right_north_candidate(image_path, [Path(__file__).parent / f'fixtures/sanma-right-north-c177-{label}.png'
-                                                        for label in ('top', 'bottom')]),
+                                                        for label in ('top', 'bottom')], image_gray=image_gray),
         }
         result = {'status': 'unknown', 'verified': False, 'complete': False, 'positions': observations}
     except Exception as error:

@@ -9,9 +9,9 @@ from hashlib import sha256
 import math
 
 
-def detect_own_north_candidates(image_path: Path, template_path: Path) -> dict:
+def detect_own_north_candidates(image_path: Path, template_path: Path, *, image_gray=None) -> dict:
     import cv2
-    image = cv2.imread(str(image_path), cv2.IMREAD_GRAYSCALE)
+    image = image_gray if image_gray is not None else cv2.imread(str(image_path), cv2.IMREAD_GRAYSCALE)
     template = cv2.imread(str(template_path), cv2.IMREAD_GRAYSCALE)
     base = {'verified': False, 'scope': 'sanma_offline_own_north_visual_candidates'}
     if image is None or image.shape != (1080, 1920):
