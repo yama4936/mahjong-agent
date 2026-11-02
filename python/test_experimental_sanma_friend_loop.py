@@ -109,6 +109,36 @@ class ExperimentalSanmaFriendLoopTest(unittest.TestCase):
         self.assertTrue(self.op.verified_friend_300_active)
         self.assertTrue(any(call.args[0]=='sanma_friend_stopped' for call in self.op.log.call_args_list))
 
+    def test_requested_recorder_failure_never_starts_room(self):
+        self.op.args.experimental_sanma_transition_record = Path(self.temp.name) / 'missing'
+        self.op.root = Path(__file__).resolve().parents[1]
+        with self.assertRaisesRegex(RuntimeError, 'recording unavailable') as caught:
+            self.run_room()
+        self.assertIsInstance(caught.exception.__cause__, FileNotFoundError)
+        self.assertFalse(self.op.verified_friend_300_active)
+        self.page.mouse.click.assert_not_called()
+        self.op.inspect_sanma_self_turn.assert_not_called()
+        event = next(c for c in self.op.log.call_args_list if c.args[0] == 'sanma_recording_unavailable')
+        self.assertFalse(event.kwargs['operationAuthorized'])
+
+    def test_requested_recorder_success_starts_and_closes(self):
+        root = Path(self.temp.name) / 'recordings'
+        root.mkdir(mode=0o700)
+        self.op.args.experimental_sanma_transition_record = root
+        self.op.root = Path(__file__).resolve().parents[1]
+        session = Mock()
+        with patch('sanma_diagnostic_recorder.Session', return_value=session) as factory:
+            self.run_room()
+        self.assertEqual(factory.call_args.args[0], root)
+        session.close.assert_called_once_with()
+        self.page.mouse.click.assert_called_once_with(1140, 998)
+
+    def test_without_recording_does_not_initialize_recorder(self):
+        with patch('sanma_diagnostic_recorder.Session') as factory:
+            self.run_room()
+        factory.assert_not_called()
+        self.page.mouse.click.assert_called_once_with(1140, 998)
+
     def test_pointer_retreat_failure_stops_after_start_without_gameplay(self):
         self.page.mouse.move.side_effect=RuntimeError('move failed')
         with self.assertRaisesRegex(RuntimeError,'move failed'):

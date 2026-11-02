@@ -9444,7 +9444,11 @@ class PythonAutoOperator:
                             verified_friend=self.verified_friend_300_active, ranked=getattr(self.args, "ranked_loop", False),
                             deadline_ms=self.configured_action_deadline_ms(), clock="300+0", commit=commit)
                     except Exception as error:
-                        self.log("sanma_recording_unavailable", error=str(error))
+                        # Recording was explicitly requested for this run. Do not
+                        # start a match whose required evidence cannot be kept.
+                        self.verified_friend_300_active = False
+                        self.log("sanma_recording_unavailable", error=str(error), operationAuthorized=False)
+                        raise RuntimeError("requested sanma transition recording unavailable") from error
                 try:
                     inspect_sanma_friend_start(page, reviewed, action_deadline_ms=300000,
                                                attempts=32, on_capture=save_friend_start_capture)
@@ -10800,6 +10804,8 @@ def parse_args() -> argparse.Namespace:
                         help="friend-only experimental lossless screenshot compression")
     parser.add_argument("--experimental-sanma-transition-record", type=Path, metavar="DIRECTORY",
                         help="opt-in friend-only full screenshots (may contain personal information); "
+                             "DIRECTORY must already exist, be private and owned by the current user; "
+                             "failure to initialize stops the match before start; "
                              "32 MiB per run, no aggregate quota; abrupt exit may lose frames; "
                              "recordings do not prove action success")
     parser.add_argument("--experimental-sanma-friend", action="store_true",
