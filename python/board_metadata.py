@@ -1,6 +1,7 @@
 """Read-only OCR probe for the calibrated Mahjong Soul center scoreboard."""
 import argparse
 import json
+import os
 import re
 import copy
 from functools import lru_cache
@@ -38,9 +39,16 @@ def remap_seats(value, source_seat: str, target_seat: str):
     return visit(copy.deepcopy(value))
 
 
-@lru_cache(maxsize=1)
-def ocr_engine():
+@lru_cache(maxsize=2)
+def ocr_engine(*, sanma_threads: bool = False):
     from rapidocr import RapidOCR
+    if sanma_threads:
+        # The resident sanma worker runs this concurrently with the image
+        # recognizer; bounding ONNX worker threads reduces contention. This
+        # changes scheduling only, never OCR thresholds or action authority.
+        threads = min(4, os.cpu_count() or 1)
+        return RapidOCR(params={"EngineConfig.onnxruntime.intra_op_num_threads": threads,
+                                "EngineConfig.onnxruntime.inter_op_num_threads": threads})
     return RapidOCR()
 
 
@@ -199,7 +207,7 @@ def recognize_board(image_path: Path, *, sanma_compact_candidate: bool = False,
     if state != "match" and not compact_candidate:
         return {"verified": False, "reason": "not_gameplay_screen", "screenState": state}
     import numpy as np
-    engine = ocr_engine()
+    engine = ocr_engine(sanma_threads=True) if sanma_compact_candidate else ocr_engine()
     result = engine(np.array(image.crop((780, 310, 1160, 545)).resize((1140, 705))),
                     use_det=True, use_cls=True, use_rec=True)
     tokens = []
