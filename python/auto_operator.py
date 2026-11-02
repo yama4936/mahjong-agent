@@ -4215,6 +4215,7 @@ class PythonAutoOperator:
         path.write_bytes(image)
         stream = None
         streamed_latest = None
+        stream_wait_ms = None
         if getattr(self.args, "experimental_sanma_png_stream", False):
             if (not experimental_sanma_friend_allowed(self.args)
                     or getattr(self, "verified_friend_300_active", False) is not True):
@@ -4227,7 +4228,9 @@ class PythonAutoOperator:
             result = self.observe_sanma_resident(path)
             recognition_ms = round((time.monotonic() - recognition_started) * 1000)
             if stream is not None:
+                stream_wait_started = time.monotonic()
                 streamed_latest = stream.capture_after(time.time())
+                stream_wait_ms = round((time.monotonic() - stream_wait_started) * 1000)
         finally:
             if stream is not None:
                 stream.close()
@@ -4281,9 +4284,12 @@ class PythonAutoOperator:
                          "stable_except_clock_candidate" if clock_changed else "identical_pixels_candidate",
                          "operationAuthorized": False, "elapsedMs": round((time.monotonic() - capture_started) * 1000),
                          "regionsChanged": changes, "clockChanged": clock_changed, "digest": hashlib.sha256(latest).hexdigest(),
+                         "captureMode": "png_stream" if stream is not None else "screenshot",
                          "timingMs": {"initialCapture": capture_ms, "recognition": recognition_ms,
-                                      "freshCapture": latest_capture_ms, "frameComparison": changes_ms,
-                                      "betweenCaptureReturns": round((latest_finished - capture_finished) * 1000)},
+                                      "freshCapture": latest_capture_ms if stream is None else None,
+                                      "streamWait": stream_wait_ms,
+                                      "frameComparison": changes_ms,
+                                      "betweenCaptureReturns": round((latest_finished - capture_finished) * 1000) if stream is None else None},
                          "guards": guard_diagnostics,
                          "screenshot": str(latest_path),
                          "reason": ("wall guard execution failed" if wall_errors else "glyph structure is a lighting-tolerant hypothesis; colors, concealed content and turn are unverified"
