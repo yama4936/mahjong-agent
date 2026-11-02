@@ -795,6 +795,44 @@ class ExperimentalSanmaFriendLoopTest(unittest.TestCase):
             self.op.run(self.page)
         self.assertTrue(self.op.sanma_friend_riichi_attempted)
 
+    def test_kita_replacement_keeps_original_action_deadline(self):
+        self.op.args.max_iterations = 2
+        self.op.verified_friend_300_active = True
+        self.receipt['candidates'] = {'candidates': [{'action': 'kita'}]}
+        after = dict(self.receipt, digest='replacement', candidates={'candidates': [{'action': 'tsumo'}]})
+        self.op.inspect_sanma_self_turn.side_effect = [self.receipt, after]
+        clock = [100.0]
+        self.op.observe_sanma_friend_transition.side_effect = lambda *args: (clock.__setitem__(0, 390.0) or
+            {'status': 'visual_change_unconfirmed', 'confirmed': False})
+        seen = []
+        self.op.execute_sanma_friend_tsumo_candidate.side_effect = lambda *args: (seen.append(self.op.sanma_friend_action_observed_at) or {'clicked': False})
+        with patch('auto_operator.time.monotonic', side_effect=lambda: clock[0]), \
+             patch('auto_operator.classify_screen', return_value=('match', 1.0)):
+            self.op.run_experimental_sanma_friend(self.page)
+        self.assertEqual(seen, [100.0])
+        self.assertEqual(sum(c.args[0] == 'sanma_friend_action_clock_started' for c in self.op.log.call_args_list), 1)
+
+    def test_kita_then_discard_keeps_original_action_deadline(self):
+        self.op.args.max_iterations = 2
+        self.op.verified_friend_300_active = True
+        self.receipt['candidates'] = {'candidates': [{'action': 'kita'}]}
+        after = dict(self.receipt, digest='replacement', candidates={'candidates': []},
+                     drawCandidate={'status': 'candidate'})
+        self.op.inspect_sanma_self_turn.side_effect = [self.receipt, after]
+        clock = [100.0]
+        self.op.observe_sanma_friend_transition.side_effect = lambda *args: (clock.__setitem__(0, 401.0) or
+            {'status': 'visual_change_unconfirmed', 'confirmed': False})
+        seen = []
+        def discard(op, page, receipt):
+            seen.append((op.sanma_friend_action_observed_at, clock[0]))
+            raise RuntimeError('simulated expired deadline')
+        with patch('auto_operator.time.monotonic', side_effect=lambda: clock[0]), \
+             patch('auto_operator.classify_screen', return_value=('match', 1.0)), \
+             patch('sanma_friend_discard_experiment.execute_friend_draw_candidate', side_effect=discard):
+            self.op.run_experimental_sanma_friend(self.page)
+        self.assertEqual(seen, [(100.0, 401.0)])
+        self.assertEqual(sum(c.args[0] == 'sanma_friend_action_clock_started' for c in self.op.log.call_args_list), 1)
+
     def test_new_digest_cannot_repeat_an_unconfirmed_kita(self):
         self.op.args.max_iterations = 2
         self.op.observe_sanma_friend_transition.return_value = {'status':'visual_change_unconfirmed','confirmed':False}

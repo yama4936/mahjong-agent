@@ -9370,7 +9370,11 @@ class PythonAutoOperator:
                         return
                     if transition.get("status") == "round_end_candidate":
                         round_end_started = time.monotonic()
-                    action_observed_at = None
+                    # A north extraction and its replacement draw are part of
+                    # the same turn. Neither an unconfirmed visual change nor the
+                    # replacement draw grants a fresh action deadline.
+                    if action != "kita":
+                        action_observed_at = None
                     # This is not confirmation. Start a new independent screen
                     # observation; unchanged or reused frames cannot click.
                     continue
