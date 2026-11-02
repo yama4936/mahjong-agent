@@ -9,7 +9,7 @@ from hashlib import sha256
 import math
 
 
-def detect_own_north_candidates(image_path: Path, template_path: Path, *, image_gray=None) -> dict:
+def detect_own_north_candidates(image_path: Path, template_path: Path, *, image_gray=None, _immutable_sha256=None) -> dict:
     import cv2
     image = image_gray if image_gray is not None else cv2.imread(str(image_path), cv2.IMREAD_GRAYSCALE)
     template = cv2.imread(str(template_path), cv2.IMREAD_GRAYSCALE)
@@ -30,10 +30,10 @@ def detect_own_north_candidates(image_path: Path, template_path: Path, *, image_
         matches.append({'x': x + 1180, 'y': y + 750, 'similarity': float(value)})
         cv2.rectangle(scores, (x - 40, y - 30), (x + 40, y + 30), -1, -1)
     return {**base, 'matches': matches, 'complete': False,
-            'frame_sha256': sha256(Path(image_path).read_bytes()).hexdigest()}
+            'frame_sha256': _immutable_sha256 if _immutable_sha256 is not None else sha256(Path(image_path).read_bytes()).hexdigest()}
 
 
-def detect_own_partial_north_candidate(image_path: Path, template_path: Path, *, image_rgb=None, expected_sha256=None) -> dict:
+def detect_own_partial_north_candidate(image_path: Path, template_path: Path, *, image_rgb=None, expected_sha256=None, _immutable_sha256=None) -> dict:
     """Unverified visible left part of the north/clock overlap, not a count."""
     from PIL import Image, ImageChops, ImageStat
     base = {'scope': 'sanma_offline_own_partial_north_visual_candidate',
@@ -42,7 +42,7 @@ def detect_own_partial_north_candidate(image_path: Path, template_path: Path, *,
         if image_rgb is not None:
             if not isinstance(expected_sha256, str):
                 return {**base, 'reason': 'shared_frame_digest_unavailable'}
-            frame_digest = sha256(Path(image_path).read_bytes()).hexdigest()
+            frame_digest = _immutable_sha256 if _immutable_sha256 is not None else sha256(Path(image_path).read_bytes()).hexdigest()
             if frame_digest != expected_sha256:
                 return {**base, 'reason': 'shared_frame_digest_mismatch'}
         with Image.open(template_path) as reference:

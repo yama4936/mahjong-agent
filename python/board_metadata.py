@@ -171,7 +171,7 @@ def parse_board_tokens(tokens: list[dict], expected_total_points: int = 100000) 
 
 
 def recognize_board(image_path: Path, *, sanma_compact_candidate: bool = False,
-                    sanma_extra_score_retry: bool = False, _rgb_sink=None) -> dict:
+                    sanma_extra_score_retry: bool = False, _rgb_sink=None, _frame_bytes=None) -> dict:
     # Optional dependencies stay outside the live operator until validated.
     from PIL import Image
     if _rgb_sink is None:
@@ -180,7 +180,7 @@ def recognize_board(image_path: Path, *, sanma_compact_candidate: bool = False,
         # Both decoded pixels and digest refer to the exact same byte snapshot.
         from io import BytesIO
         from hashlib import sha256
-        frame_bytes = Path(image_path).read_bytes()
+        frame_bytes = _frame_bytes if _frame_bytes is not None else Path(image_path).read_bytes()
         image = Image.open(BytesIO(frame_bytes)).convert("RGB")
         _rgb_sink.append((image, sha256(frame_bytes).hexdigest()))
     if image.size != (1920, 1080):

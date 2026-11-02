@@ -25,7 +25,7 @@ for line in sys.stdin:
             file.write(frame)
         from sanma_board_image import observe_sanma_image
         frame_digest = sha256(frame).hexdigest()
-        prediction = observe_sanma_image(Path(filename), expected_sha256=frame_digest)
+        prediction = observe_sanma_image(Path(filename), expected_sha256=frame_digest, _frame_bytes=frame)
         if sha256(Path(filename).read_bytes()).hexdigest() != frame_digest:
             raise ValueError('frame changed during observation')
         prediction['frame_sha256'] = frame_digest

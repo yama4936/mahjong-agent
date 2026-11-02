@@ -3,7 +3,7 @@ from hashlib import sha256
 from pathlib import Path
 
 
-def right_north_candidate(image_path: Path, templates: list[Path], *, image_gray=None) -> dict:
+def right_north_candidate(image_path: Path, templates: list[Path], *, image_gray=None, _immutable_sha256=None) -> dict:
     import cv2
     base = {'scope': 'sanma_offline_right_north_visual_candidates',
             'status': 'unknown', 'verified': False, 'complete': False}
@@ -23,5 +23,5 @@ def right_north_candidate(image_path: Path, templates: list[Path], *, image_gray
         if score >= .99:
             candidates.append({'slot': slot, 'x': x0, 'y': y0, 'similarity': score, 'verified': False})
     return {**base, 'candidates': candidates,
-            'frame_sha256': sha256(Path(image_path).read_bytes()).hexdigest(),
+            'frame_sha256': _immutable_sha256 if _immutable_sha256 is not None else sha256(Path(image_path).read_bytes()).hexdigest(),
             'reason': 'fixed visual candidates only; missing or obscured tiles remain unknown'}

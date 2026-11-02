@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 def opposite_north_candidate(image_path: Path, template_path: Path, *,
-                             shadow_template_path: Path | None = None, image_gray=None) -> dict:
+                             shadow_template_path: Path | None = None, image_gray=None, _immutable_sha256=None) -> dict:
     import cv2
     scope = {'scope': 'sanma_offline_opposite_north_visual_candidate',
              'verified': False, 'complete': False, 'status': 'unknown'}
@@ -39,4 +39,4 @@ def opposite_north_candidate(image_path: Path, template_path: Path, *,
     candidate = {'x': x, 'y': y, 'similarity': float(value), 'reference': label} if (
         value >= 0.97 and abs(x - 535) <= 4 and abs(y - 101) <= 4) else None
     return {**scope, 'candidate': candidate,
-            'frame_sha256': sha256(Path(image_path).read_bytes()).hexdigest()}
+            'frame_sha256': _immutable_sha256 if _immutable_sha256 is not None else sha256(Path(image_path).read_bytes()).hexdigest()}

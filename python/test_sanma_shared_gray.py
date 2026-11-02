@@ -1,4 +1,5 @@
 import concurrent.futures
+from io import BytesIO
 import tempfile
 import unittest
 from pathlib import Path
@@ -132,6 +133,29 @@ class SharedRgbPartialTest(unittest.TestCase):
             with patch('sanma_board_image.recognize_sanma_board_candidate', side_effect=board):
                 with self.assertRaisesRegex(ValueError, 'board frame digest mismatch'):
                     observe_sanma_image(path, expected_sha256='0' * 64)
+
+    def test_immutable_worker_frame_ignores_path_replacement_for_all_north_branches(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'frame.png'
+            Image.new('RGB', (1920, 1080), 'white').save(path)
+            frame_bytes = path.read_bytes()
+            digest = sha256(frame_bytes).hexdigest()
+            expected = separate(path)
+            Image.new('RGB', (1920, 1080), 'black').save(path)
+            def board(path, **kwargs):
+                self.assertEqual(kwargs['_frame_bytes'], frame_bytes)
+                with Image.open(BytesIO(kwargs['_frame_bytes'])) as source:
+                    kwargs['_rgb_sink'].append((source.convert('RGB'), digest))
+                return {'verified': False}
+            real_imread = cv2.imread
+            def no_frame_read(filename, flags):
+                if filename == str(path):
+                    raise AssertionError('frame path was reread')
+                return real_imread(filename, flags)
+            with patch('sanma_board_image.recognize_sanma_board_candidate', side_effect=board), \
+                 patch.object(cv2, 'imread', side_effect=no_frame_read):
+                actual = observe_sanma_image(path, expected_sha256=digest, _frame_bytes=frame_bytes)
+            self.assertEqual(actual['north']['positions'], expected)
 
     def test_observation_wires_board_rgb_to_partial_recognizer(self):
         with tempfile.TemporaryDirectory() as directory:
