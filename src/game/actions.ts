@@ -1,7 +1,8 @@
+import { physicalConsumption } from "./physicalConsumption.js";
 import { knownTilesOutsideHand, type GameState } from "./state.js";
 import { calculateShanten } from "./shanten.js";
 import { evaluateDiscards } from "./ukeire.js";
-import { isTerminalOrHonor, normalizeTile, suitRank, tileFromIndex, tileIndex, toCounts, type GameTile, type Tile } from "./tiles.js";
+import { isTerminalOrHonor, normalizeTile, suitRank, tileFromIndex, tileIndex, toCounts, type GameTile } from "./tiles.js";
 
 export type LegalAction =
   | { id: string; action: "discard"; tile: string }
@@ -13,31 +14,6 @@ export type LegalAction =
   | { id: string; action: "pon"; tile: GameTile; consumedTiles: GameTile[]; consumedTileChoices?: GameTile[][] }
   | { id: string; action: "minkan" | "ankan" | "kakan"; tile: GameTile; consumedTiles: GameTile[]; consumedTileChoices?: GameTile[][] }
   | { id: "pass"; action: "pass" };
-
-/** Preserve forced physical tiles; expose red/normal alternatives without
- * pretending the UI confirmed which copy it consumed. Structural action IDs
- * remain unchanged, including the order of the chi selectors. */
-function physicalConsumption(hand: readonly GameTile[], required: readonly Tile[]) {
-  const choices = new Map<string, GameTile[]>();
-  function visit(remaining: GameTile[], selected: GameTile[]): void {
-    if (selected.length === required.length) {
-      const key = [...selected].sort().join("_");
-      if (!choices.has(key)) choices.set(key, selected);
-      return;
-    }
-    const tried = new Set<GameTile>();
-    remaining.forEach((tile, index) => {
-      if (normalizeTile(tile) !== required[selected.length] || tried.has(tile)) return;
-      tried.add(tile);
-      visit([...remaining.slice(0, index), ...remaining.slice(index + 1)], [...selected, tile]);
-    });
-  }
-  visit([...hand], []);
-  const alternatives = [...choices.values()];
-  if (!alternatives.length) throw new Error("Call consumption is not present in concealed hand");
-  return { consumedTiles: alternatives[0]!,
-    ...(alternatives.length > 1 ? { consumedTileChoices: alternatives } : {}) };
-}
 
 export function generateSelfTurnActions(state: GameState): LegalAction[] {
   if (state.rules === "sanma") throw new Error("Sanma automatic actions are not implemented");
