@@ -2,6 +2,7 @@ import concurrent.futures
 import tempfile
 import unittest
 from pathlib import Path
+from hashlib import sha256
 from unittest.mock import patch
 
 import cv2
@@ -86,7 +87,7 @@ class SharedRgbPartialTest(unittest.TestCase):
                 expected = detect_own_partial_north_candidate(path, template)
                 with Image.open(path) as img:
                     rgb = img.convert('RGB')
-                return detect_own_partial_north_candidate(path, template, image_rgb=rgb) == expected
+                return detect_own_partial_north_candidate(path, template, image_rgb=rgb, expected_sha256=sha256(path.read_bytes()).hexdigest()) == expected
             with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
                 self.assertTrue(all(pool.map(compare, paths * 2)))
 
@@ -99,10 +100,38 @@ class SharedRgbPartialTest(unittest.TestCase):
                 rgb = img.convert('RGB')
             absent = root / 'missing.png'
             expected = detect_own_partial_north_candidate(p, absent)
-            self.assertEqual(detect_own_partial_north_candidate(p, absent, image_rgb=rgb), expected)
+            self.assertEqual(detect_own_partial_north_candidate(p, absent, image_rgb=rgb, expected_sha256=sha256(p.read_bytes()).hexdigest()), expected)
+            digest = sha256(p.read_bytes()).hexdigest()
             p.unlink()
-            self.assertEqual(detect_own_partial_north_candidate(p, PYREF / 'sanma-own-north-partial-c177.png', image_rgb=rgb),
+            self.assertEqual(detect_own_partial_north_candidate(p, PYREF / 'sanma-own-north-partial-c177.png', image_rgb=rgb, expected_sha256=digest),
                              detect_own_partial_north_candidate(p, PYREF / 'sanma-own-north-partial-c177.png'))
+
+    def test_replaced_frame_is_rejected_without_fabricated_digest(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'frame.png'
+            Image.new('RGB', (1920, 1080), 'white').save(path)
+            with Image.open(path) as source:
+                rgb = source.convert('RGB')
+            digest = sha256(path.read_bytes()).hexdigest()
+            Image.new('RGB', (1920, 1080), 'black').save(path)
+            result = detect_own_partial_north_candidate(path, PYREF / 'sanma-own-north-partial-c177.png',
+                                                        image_rgb=rgb, expected_sha256=digest)
+            self.assertEqual(result['reason'], 'shared_frame_digest_mismatch')
+            self.assertNotIn('candidate', result)
+            self.assertNotIn('frame_sha256', result)
+            self.assertFalse(result['verified'])
+
+    def test_board_snapshot_mismatch_rejects_observation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'frame.png'
+            Image.new('RGB', (1920, 1080), 'white').save(path)
+            def board(path, **kwargs):
+                with Image.open(path) as source:
+                    kwargs['_rgb_sink'].append((source.convert('RGB'), sha256(path.read_bytes()).hexdigest()))
+                return {'verified': False}
+            with patch('sanma_board_image.recognize_sanma_board_candidate', side_effect=board):
+                with self.assertRaisesRegex(ValueError, 'board frame digest mismatch'):
+                    observe_sanma_image(path, expected_sha256='0' * 64)
 
     def test_observation_wires_board_rgb_to_partial_recognizer(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -110,7 +139,7 @@ class SharedRgbPartialTest(unittest.TestCase):
             Image.new('RGB', (1920, 1080), 'white').save(path)
             def board(path, **kwargs):
                 with Image.open(path) as source:
-                    kwargs['_rgb_sink'].append(source.convert('RGB'))
+                    kwargs['_rgb_sink'].append((source.convert('RGB'), sha256(path.read_bytes()).hexdigest()))
                 return {'verified': False}
             with patch('sanma_board_image.recognize_sanma_board_candidate', side_effect=board), \
                  patch('sanma_kita_image_experiment.detect_own_partial_north_candidate', wraps=detect_own_partial_north_candidate) as partial:

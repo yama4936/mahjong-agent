@@ -24,8 +24,11 @@ for line in sys.stdin:
             filename = file.name
             file.write(frame)
         from sanma_board_image import observe_sanma_image
-        prediction = observe_sanma_image(Path(filename))
-        prediction['frame_sha256'] = sha256(frame).hexdigest()
+        frame_digest = sha256(frame).hexdigest()
+        prediction = observe_sanma_image(Path(filename), expected_sha256=frame_digest)
+        if sha256(Path(filename).read_bytes()).hexdigest() != frame_digest:
+            raise ValueError('frame changed during observation')
+        prediction['frame_sha256'] = frame_digest
         print(json.dumps({'id': request_id, 'predictions': [prediction]}, ensure_ascii=False), flush=True)
     except Exception as error:
         print(json.dumps({'id': request_id, 'error': str(error)}, ensure_ascii=False), flush=True)

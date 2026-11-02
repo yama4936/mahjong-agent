@@ -24,7 +24,7 @@ def recognize_sanma_board_candidate(image_path: Path, *, expected_total_points: 
             **({'screenEvidence': raw['screenEvidence']} if 'screenEvidence' in raw else {})}
 
 
-def observe_sanma_image(image_path: Path) -> dict:
+def observe_sanma_image(image_path: Path, *, expected_sha256: str | None = None) -> dict:
     """Same unverified board and north observations as the CLI --with-north path."""
     from sanma_kita_image_experiment import detect_own_north_candidates, detect_own_partial_north_candidate
     from sanma_opposite_kita_experiment import opposite_north_candidate
@@ -32,6 +32,8 @@ def observe_sanma_image(image_path: Path) -> dict:
     from sanma_right_kita_experiment import right_north_candidate
     rgb_sink = []
     board = recognize_sanma_board_candidate(image_path, expected_total_points=None, payment_phase=None, _rgb_sink=rgb_sink)
+    if expected_sha256 is not None and (not rgb_sink or rgb_sink[0][1] != expected_sha256):
+        raise ValueError('board frame digest mismatch')
     root = Path(__file__).resolve().parents[1] / 'test/fixtures'
     try:
         import cv2
@@ -39,7 +41,8 @@ def observe_sanma_image(image_path: Path) -> dict:
         observations = {
             'own': {**detect_own_north_candidates(image_path, root / 'sanma-public-experiment/own-north-face.png', image_gray=image_gray),
                 'partialObservation': detect_own_partial_north_candidate(image_path, Path(__file__).parent / 'fixtures/sanma-own-north-partial-c177.png',
-                                                                   image_rgb=rgb_sink[0] if rgb_sink else None)},
+                                                                   image_rgb=rgb_sink[0][0] if rgb_sink else None,
+                                                                   expected_sha256=rgb_sink[0][1] if rgb_sink else None)},
             'opposite': opposite_north_candidate(image_path, root / 'sanma-opposite-kita/north-glyph-reference.png',
                 shadow_template_path=root / 'sanma-opposite-kita/north-glyph-shadow-reference.png', image_gray=image_gray),
             'left': left_north_candidate(image_path, root / 'sanma-left-kita/left-north-reference.png',

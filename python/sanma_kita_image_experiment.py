@@ -33,12 +33,18 @@ def detect_own_north_candidates(image_path: Path, template_path: Path, *, image_
             'frame_sha256': sha256(Path(image_path).read_bytes()).hexdigest()}
 
 
-def detect_own_partial_north_candidate(image_path: Path, template_path: Path, *, image_rgb=None) -> dict:
+def detect_own_partial_north_candidate(image_path: Path, template_path: Path, *, image_rgb=None, expected_sha256=None) -> dict:
     """Unverified visible left part of the north/clock overlap, not a count."""
     from PIL import Image, ImageChops, ImageStat
     base = {'scope': 'sanma_offline_own_partial_north_visual_candidate',
             'status': 'unknown', 'verified': False, 'complete': False}
     try:
+        if image_rgb is not None:
+            if not isinstance(expected_sha256, str):
+                return {**base, 'reason': 'shared_frame_digest_unavailable'}
+            frame_digest = sha256(Path(image_path).read_bytes()).hexdigest()
+            if frame_digest != expected_sha256:
+                return {**base, 'reason': 'shared_frame_digest_mismatch'}
         with Image.open(template_path) as reference:
             if image_rgb is None:
                 with Image.open(image_path) as image:
@@ -52,7 +58,7 @@ def detect_own_partial_north_candidate(image_path: Path, template_path: Path, *,
             delta = ImageChops.difference(visible, reference.convert('RGB'))
             score = 1 - sum(ImageStat.Stat(delta).mean) / 765
         candidate = {'x': 1390, 'y': 765, 'similarity': score, 'verified': False} if score >= .995 else None
-        return {**base, 'candidate': candidate, 'frame_sha256': sha256(Path(image_path).read_bytes()).hexdigest(),
+        return {**base, 'candidate': candidate, 'frame_sha256': frame_digest if image_rgb is not None else sha256(Path(image_path).read_bytes()).hexdigest(),
                 'reason': 'partially occluded visual candidate; hidden contents and count unknown'}
     except (OSError, ValueError):
         return {**base, 'reason': 'uncalibrated_or_unreadable_image'}
