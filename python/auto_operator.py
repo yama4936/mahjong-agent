@@ -8968,6 +8968,9 @@ class PythonAutoOperator:
                     last = frame
                     continue
                 if state != "match" or confidence < 0.95:
+                    # Stability requires consecutive recognized match frames.
+                    # An unknown interposed screen breaks the observation chain.
+                    previous = None
                     last = frame
                     continue
                 if action == "pass_pon":
