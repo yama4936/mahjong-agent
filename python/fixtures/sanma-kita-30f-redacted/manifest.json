@@ -1,0 +1,515 @@
+{
+  "before": {
+    "sourceSha256": "68f7f4bd60b28e7ec592447e7ed378598cb9c3e662207628c1a3c7cf65f45a7f",
+    "redactedSha256": "c6a9fe774b6d83f5f69fae171a94c8b377ad5e66cf5f79fe134c80972973c873",
+    "regions": [
+      [
+        760,
+        300,
+        1140,
+        540
+      ],
+      [
+        220,
+        920,
+        1580,
+        1080
+      ],
+      [
+        590,
+        775,
+        1425,
+        875
+      ]
+    ],
+    "freshness": {
+      "status": "stable_kita_glyph_candidate",
+      "operationAuthorized": false,
+      "elapsedMs": 5538
+    },
+    "hand": {
+      "status": "candidate",
+      "value": {
+        "tiles": [
+          "1m",
+          "1m",
+          "9m",
+          "9m",
+          "9m",
+          "3p",
+          "3p",
+          "1s",
+          "5s",
+          "E",
+          "N",
+          "N",
+          "P",
+          "5s"
+        ],
+        "matches": [
+          {
+            "tile": "1m",
+            "confidence": 0.9899454984118203,
+            "runnerUpConfidence": 0.7782271379437169
+          },
+          {
+            "tile": "1m",
+            "confidence": 0.9857745349048949,
+            "runnerUpConfidence": 0.7775239920215714
+          },
+          {
+            "tile": "9m",
+            "confidence": 0.9973497459819599,
+            "runnerUpConfidence": 0.7516829433401093
+          },
+          {
+            "tile": "9m",
+            "confidence": 0.9864345506161762,
+            "runnerUpConfidence": 0.7887094312526624
+          },
+          {
+            "tile": "9m",
+            "confidence": 0.9921506123829353,
+            "runnerUpConfidence": 0.7827294333118748
+          },
+          {
+            "tile": "3p",
+            "confidence": 0.9961609600086608,
+            "runnerUpConfidence": 0.630429272530745
+          },
+          {
+            "tile": "3p",
+            "confidence": 0.995336831385207,
+            "runnerUpConfidence": 0.631305605639897
+          },
+          {
+            "tile": "1s",
+            "confidence": 0.9906248822181252,
+            "runnerUpConfidence": 0.6138467326224544
+          },
+          {
+            "tile": "5s",
+            "confidence": 0.9652084304924988,
+            "runnerUpConfidence": 0.736148456909562
+          },
+          {
+            "tile": "E",
+            "confidence": 0.9955690060438137,
+            "runnerUpConfidence": 0.6107281865717805
+          },
+          {
+            "tile": "N",
+            "confidence": 0.959516735001535,
+            "runnerUpConfidence": 0.6099254364377058
+          },
+          {
+            "tile": "N",
+            "confidence": 0.9626145778600256,
+            "runnerUpConfidence": 0.6075277011227648
+          },
+          {
+            "tile": "P",
+            "confidence": 0,
+            "runnerUpConfidence": 0
+          },
+          {
+            "tile": "5s",
+            "confidence": 0.9703363097773985,
+            "runnerUpConfidence": 0.7323557116273615
+          }
+        ],
+        "confidence": 0,
+        "ambiguityMargin": 0,
+        "presenceFractions": [
+          0.8789951050964584,
+          0.8788008260343232,
+          0.8546606850388093,
+          0.8536637470625935,
+          0.8551684422689317,
+          0.8742441693060754,
+          0.8746760725597467,
+          0.856608119781169,
+          0.8155664744000569,
+          0.8454034038310902,
+          0.8590756960763369,
+          0.858648436943673,
+          0.9954650158364526,
+          0.8214080046069681
+        ],
+        "safe": false,
+        "turnReady": true,
+        "slotClassificationSafe": false,
+        "candidateMelds": 0
+      }
+    }
+  },
+  "after": {
+    "sourceSha256": "ad8205a2a15e261a652f985563aab8851763c9f5c5b54580f489277665d63a69",
+    "redactedSha256": "92df18edd0d6af243be8f932c8dd6d877a60f7c3e7a7b61d59a0b9f55cfddae0",
+    "regions": [
+      [
+        760,
+        300,
+        1140,
+        540
+      ],
+      [
+        220,
+        920,
+        1580,
+        1080
+      ],
+      [
+        590,
+        775,
+        1425,
+        875
+      ]
+    ],
+    "freshness": {
+      "status": "stable_kita_glyph_candidate",
+      "operationAuthorized": false,
+      "elapsedMs": 5283
+    },
+    "hand": {
+      "status": "candidate",
+      "value": {
+        "tiles": [
+          "1m",
+          "1m",
+          "9m",
+          "9m",
+          "9m",
+          "3p",
+          "3p",
+          "1s",
+          "5s",
+          "5s",
+          "E",
+          "N",
+          "P",
+          "4s"
+        ],
+        "matches": [
+          {
+            "tile": "1m",
+            "confidence": 0.9899454984118203,
+            "runnerUpConfidence": 0.7782271379437169
+          },
+          {
+            "tile": "1m",
+            "confidence": 0.9857745349048949,
+            "runnerUpConfidence": 0.7775239920215714
+          },
+          {
+            "tile": "9m",
+            "confidence": 0.9973497459819599,
+            "runnerUpConfidence": 0.7516829433401093
+          },
+          {
+            "tile": "9m",
+            "confidence": 0.9864345506161762,
+            "runnerUpConfidence": 0.7887094312526624
+          },
+          {
+            "tile": "9m",
+            "confidence": 0.9921506123829353,
+            "runnerUpConfidence": 0.7827294333118748
+          },
+          {
+            "tile": "3p",
+            "confidence": 0.9961609600086608,
+            "runnerUpConfidence": 0.630429272530745
+          },
+          {
+            "tile": "3p",
+            "confidence": 0.995336831385207,
+            "runnerUpConfidence": 0.631305605639897
+          },
+          {
+            "tile": "1s",
+            "confidence": 0.9906248822181252,
+            "runnerUpConfidence": 0.6138467326224544
+          },
+          {
+            "tile": "5s",
+            "confidence": 0.9652084304924988,
+            "runnerUpConfidence": 0.736148456909562
+          },
+          {
+            "tile": "5s",
+            "confidence": 0.9442421213584345,
+            "runnerUpConfidence": 0.7376496583061231
+          },
+          {
+            "tile": "E",
+            "confidence": 0.9962551301619762,
+            "runnerUpConfidence": 0.6153575167201877
+          },
+          {
+            "tile": "N",
+            "confidence": 0.9626145778600256,
+            "runnerUpConfidence": 0.6075277011227648
+          },
+          {
+            "tile": "P",
+            "confidence": 0,
+            "runnerUpConfidence": 0
+          },
+          {
+            "tile": "4s",
+            "confidence": 0.9961198715827694,
+            "runnerUpConfidence": 0.5210033220234989
+          }
+        ],
+        "confidence": 0,
+        "ambiguityMargin": 0,
+        "presenceFractions": [
+          0.8789951050964584,
+          0.8788008260343232,
+          0.8546606850388093,
+          0.8536637470625935,
+          0.8551684422689317,
+          0.8742441693060754,
+          0.8746760725597467,
+          0.856608119781169,
+          0.8155664744000569,
+          0.8276721498255358,
+          0.8446200954212063,
+          0.858648436943673,
+          0.9954650158364526,
+          0.8586236682983012
+        ],
+        "safe": false,
+        "turnReady": true,
+        "slotClassificationSafe": false,
+        "candidateMelds": 0
+      }
+    }
+  },
+  "later": {
+    "sourceSha256": "149a6935bc15a106f7e870c0d2369bb7051839dcb2b3823e8595f77d8cd97f10",
+    "redactedSha256": "3a07abd197cce6425b203f3234de135156d35bccb4d36f701aab66f4fd6fed9c",
+    "regions": [
+      [
+        760,
+        300,
+        1140,
+        540
+      ],
+      [
+        220,
+        920,
+        1580,
+        1080
+      ],
+      [
+        590,
+        775,
+        1425,
+        875
+      ]
+    ],
+    "hand": {
+      "status": "unresolved",
+      "reason": "suspected false compact hand and raised-row recovery unavailable"
+    },
+    "buttonRow": {
+      "status": "candidate",
+      "value": {
+        "scope": "offline_untrusted_sanma_button_row",
+        "slots": [
+          {
+            "status": "empty_candidate",
+            "slot": 0,
+            "confidence": 0.9998885144335512
+          },
+          {
+            "status": "candidate",
+            "action": "kita",
+            "slot": 1,
+            "confidence": 0.9999693627450981
+          },
+          {
+            "status": "candidate",
+            "action": "skip",
+            "slot": 2,
+            "confidence": 0.9999991489651416,
+            "evidence": "partially_occluded_skip"
+          }
+        ],
+        "complete": false,
+        "operationAuthorized": false
+      }
+    },
+    "freshnessNote": "offline same-image mock; not a live freshness receipt"
+  },
+  "kan": {
+    "sourceSha256": "b6f6e6b9c811391a159c794b67df5e92ee3d2ee0773a1fe803d1a3af0b9fd538",
+    "redactedSha256": "52951b2636b3024ec92895d984fe5185b21816b9a1e11e64d3cb9e3e1cd2c8dd",
+    "regions": [
+      [
+        760,
+        300,
+        1140,
+        540
+      ],
+      [
+        220,
+        920,
+        1580,
+        1080
+      ],
+      [
+        590,
+        775,
+        1425,
+        875
+      ]
+    ],
+    "hand": {
+      "status": "candidate",
+      "value": {
+        "tiles": [
+          "1m",
+          "1m",
+          "9m",
+          "9m",
+          "9m",
+          "3p",
+          "3p",
+          "5p",
+          "1s",
+          "4s",
+          "5s",
+          "5s",
+          "P",
+          "9m"
+        ],
+        "matches": [
+          {
+            "tile": "1m",
+            "confidence": 0.9899454984118203,
+            "runnerUpConfidence": 0.7782271379437169
+          },
+          {
+            "tile": "1m",
+            "confidence": 0.9857745349048949,
+            "runnerUpConfidence": 0.7775239920215714
+          },
+          {
+            "tile": "9m",
+            "confidence": 0.9973497459819599,
+            "runnerUpConfidence": 0.7516829433401093
+          },
+          {
+            "tile": "9m",
+            "confidence": 0.9864345506161762,
+            "runnerUpConfidence": 0.7887094312526624
+          },
+          {
+            "tile": "9m",
+            "confidence": 0.9921506123829353,
+            "runnerUpConfidence": 0.7827294333118748
+          },
+          {
+            "tile": "3p",
+            "confidence": 0.9961609600086608,
+            "runnerUpConfidence": 0.630429272530745
+          },
+          {
+            "tile": "3p",
+            "confidence": 0.995336831385207,
+            "runnerUpConfidence": 0.631305605639897
+          },
+          {
+            "tile": "5p",
+            "confidence": 0.9905112865337664,
+            "runnerUpConfidence": 0.7747022161713791
+          },
+          {
+            "tile": "1s",
+            "confidence": 0.9884804149945466,
+            "runnerUpConfidence": 0.6163323216416773
+          },
+          {
+            "tile": "4s",
+            "confidence": 0.9883372281816367,
+            "runnerUpConfidence": 0.5332390758794792
+          },
+          {
+            "tile": "5s",
+            "confidence": 0.9942304721084106,
+            "runnerUpConfidence": 0.7206813669354611
+          },
+          {
+            "tile": "5s",
+            "confidence": 0.9917314426926385,
+            "runnerUpConfidence": 0.7158504248738041
+          },
+          {
+            "tile": "P",
+            "confidence": 0,
+            "runnerUpConfidence": 0
+          },
+          {
+            "tile": "9m",
+            "confidence": 0.9998342327917873,
+            "runnerUpConfidence": 0.7486385770195957
+          }
+        ],
+        "confidence": 0,
+        "ambiguityMargin": 0,
+        "presenceFractions": [
+          0.8789951050964584,
+          0.8788008260343232,
+          0.8546606850388093,
+          0.8536637470625935,
+          0.8551684422689317,
+          0.8742441693060754,
+          0.8746760725597467,
+          0.7900230348401958,
+          0.8461155023855301,
+          0.8615680410168768,
+          0.8255358541622161,
+          0.8218329416791283,
+          0.9954650158364526,
+          0.8552404261445437
+        ],
+        "safe": false,
+        "turnReady": true,
+        "slotClassificationSafe": false,
+        "candidateMelds": 0
+      }
+    },
+    "buttonRow": {
+      "status": "candidate",
+      "value": {
+        "scope": "offline_untrusted_sanma_button_row",
+        "slots": [
+          {
+            "status": "empty_candidate",
+            "slot": 0,
+            "confidence": 0.9999242578976035
+          },
+          {
+            "status": "candidate",
+            "action": "kan",
+            "slot": 1,
+            "confidence": 0.9999727668845316
+          },
+          {
+            "status": "candidate",
+            "action": "skip",
+            "slot": 2,
+            "confidence": 0.9628625408496732,
+            "evidence": "partially_occluded_skip"
+          }
+        ],
+        "complete": false,
+        "operationAuthorized": false
+      }
+    },
+    "freshnessNote": "offline same-image mock; not a live freshness receipt"
+  }
+}
