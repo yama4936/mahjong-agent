@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { layoutSchema } from "../recognition/layout.js";
 import { recognizeHand, recognizeTileSlots } from "../recognition/templateMatcher.js";
 import { detectConfiguredPublicRegions } from "../recognition/regionDetector.js";
-import { recognizeConfiguredPublicTiles, recognizeConfiguredPublicTilesWithVit, toPublicTileObservation } from "../recognition/publicTileRecognizer.js";
+import { recognizeConfiguredPublicTiles, recognizeConfiguredPublicTilesWithVit, recognizeSanmaPublicCandidates, toPublicTileObservation } from "../recognition/publicTileRecognizer.js";
 import { proposeHandLayout } from "../recognition/handLayoutProposal.js";
 import { HybridTileRecognizer } from "../recognition/hybridTileRecognizer.js";
 import { availableUiActions, recognizeActionButtons } from "../recognition/actionButtonRecognizer.js";
@@ -57,16 +57,27 @@ async function publicObservation(args: CliArguments): Promise<void> {
   if (!(["east", "south", "west", "north"] as const).includes(seat as any)) throw new Error("Invalid seat");
   const layout = layoutSchema.parse(JSON.parse(await readFile(layoutPath, "utf8")));
   const useHybrid = args.has("--backend=hybrid");
+  const rules = args.option("--rules") ?? "yonma";
+  if (rules !== "yonma" && rules !== "sanma") throw new Error("Invalid rules");
+  if (rules === "sanma" && (seat === "north" || !useHybrid)) {
+    throw new Error("Sanma public candidates require a valid seat and the hybrid backend");
+  }
   const recognizer = useHybrid ? new HybridTileRecognizer() : undefined;
   let recognition;
+  let observation;
   try {
-    recognition = recognizer
-      ? await recognizeConfiguredPublicTilesWithVit(screenshot, layout, recognizer)
-      : await recognizeConfiguredPublicTiles(screenshot, layout, templates);
+    if (rules === "sanma" && recognizer) {
+      ({ recognition, observation } = await recognizeSanmaPublicCandidates(
+        screenshot, layout, seat as "east" | "south" | "west", recognizer));
+    } else {
+      recognition = recognizer
+        ? await recognizeConfiguredPublicTilesWithVit(screenshot, layout, recognizer)
+        : await recognizeConfiguredPublicTiles(screenshot, layout, templates);
+      observation = toPublicTileObservation(recognition, seat as "east" | "south" | "west" | "north");
+    }
   } finally {
     await recognizer?.close();
   }
-  const observation = toPublicTileObservation(recognition, seat as "east" | "south" | "west" | "north");
   const highlightedDiscard = args.has("--reaction-highlight")
     ? await recognizeHighlightedDiscard(screenshot, recognition, seat as "east" | "south" | "west" | "north") : undefined;
   console.log(JSON.stringify({ ...observation, ...(highlightedDiscard ? { highlightedDiscard } : {}) }));

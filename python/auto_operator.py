@@ -2851,7 +2851,7 @@ class PythonAutoOperator:
                 self.public_recognition_server = subprocess.Popen(
                     [
                         "node", "dist/src/recognition/publicRecognitionServer.js",
-                        str(self.layout_path), self.public_state.get("seat", "east"),
+                        str(self.layout_path), self.public_state.get("seat", "east"), getattr(args, "rules", "yonma"),
                     ],
                     cwd=self.root,
                     env=self.evaluator_env,
@@ -3778,6 +3778,10 @@ class PythonAutoOperator:
 
     def accept_public_observation(self, current: dict[str, Any]) -> bool:
         """Apply one capture through the shared history and receipt guards."""
+        # Sanma candidate observations are diagnostic only; the calibrated
+        # four-player cache cannot promote them into operational state.
+        if getattr(getattr(self, "args", None), "rules", "yonma") == "sanma" or current.get("rules") == "sanma":
+            return False
         prior = self.cached_public_observation
         captured = public_capture_seconds(current.get("capturedAt"))
         previous_capture = public_capture_seconds((prior or {}).get("capturedAt"))
@@ -7171,6 +7175,8 @@ class PythonAutoOperator:
         ]
         if self.args.mode == "force-auto":
             command.append("--backend=hybrid")
+        if getattr(self.args, "rules", "yonma") == "sanma":
+            command.append("--rules=sanma")
         if reaction_highlight:
             command.append("--reaction-highlight")
         result = subprocess.run(command, cwd=self.root, env=self.evaluator_env, text=True,

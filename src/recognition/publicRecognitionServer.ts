@@ -2,12 +2,14 @@ import { readFile } from "node:fs/promises";
 import { createInterface } from "node:readline";
 import { HybridTileRecognizer } from "./hybridTileRecognizer.js";
 import { layoutSchema } from "./layout.js";
-import { recognizeConfiguredPublicTilesWithVit, toPublicTileObservation } from "./publicTileRecognizer.js";
+import { recognizeConfiguredPublicTilesWithVit, recognizeSanmaPublicCandidates, toPublicTileObservation } from "./publicTileRecognizer.js";
 import { recognizeHighlightedDiscard } from "./highlightedDiscard.js";
 import { handPlanInputCacheKey, JevClient, type HandPlanInput, type JevHandPlan } from "../jev/client.js";
 import { exitWhenOutputPipeBreaks } from "./outputPipe.js";
 
-const [layoutPath, ownSeatArgument = "east"] = process.argv.slice(2);
+const [layoutPath, ownSeatArgument = "east", rulesArgument = "yonma"] = process.argv.slice(2);
+if (rulesArgument !== "yonma" && rulesArgument !== "sanma") throw new Error("Invalid rules");
+if (rulesArgument === "sanma" && ownSeatArgument === "north") throw new Error("Invalid sanma seat");
 exitWhenOutputPipeBreaks();
 if (!layoutPath) throw new Error("Usage: publicRecognitionServer <layout.json> [seat]");
 if (!(["east", "south", "west", "north"] as const).includes(ownSeatArgument as any)) {
@@ -78,24 +80,24 @@ for await (const line of lines) {
     }
     const requestedSeat = observationSeat as typeof ownSeat;
     const startedAt = performance.now();
-    const recognitionPromise = recognizeConfiguredPublicTilesWithVit(
-      request.screenshot,
-      layout,
-      recognizer,
-    );
+    if (rulesArgument === "sanma" && requestedSeat === "north") throw new Error("Invalid sanma seat");
+    const recognitionPromise = rulesArgument === "sanma"
+      ? recognizeSanmaPublicCandidates(request.screenshot, layout, requestedSeat as "east" | "south" | "west", recognizer)
+      : recognizeConfiguredPublicTilesWithVit(request.screenshot, layout, recognizer)
+        .then(recognition => ({ recognition, observation: toPublicTileObservation(recognition, requestedSeat) }));
     const planPromise = choosePlan(request);
-    const recognition = await recognitionPromise;
+    const { recognition, observation: publicObservation } = await recognitionPromise;
     const recognitionLatencyMs = Math.max(0, Math.round(performance.now() - startedAt));
     const handPlan = await planPromise;
     const highlightedDiscard = request.reactionHighlight
       ? await recognizeHighlightedDiscard(request.screenshot, recognition, requestedSeat) : undefined;
     const observation = {
-      ...toPublicTileObservation(recognition, requestedSeat),
+      ...publicObservation,
       ...(highlightedDiscard ? { highlightedDiscard } : {}),
       capturedAt: request.capturedAt ?? new Date().toISOString(),
       recognizedAt: new Date().toISOString(),
       recognitionLatencyMs,
-      configuredRegions: Object.keys(layout.publicTileRegions ?? {}),
+      configuredRegions: Object.keys(recognition),
       ...(handPlan ? { handPlan } : {}),
     };
     process.stdout.write(`${JSON.stringify({ id, result: observation })}\n`);
