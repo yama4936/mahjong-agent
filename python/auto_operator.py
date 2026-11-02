@@ -4432,7 +4432,11 @@ class PythonAutoOperator:
         point = {"x": 1012.5, "y": 830.0}
         self.log("sanma_friend_candidate_click", action="tsumo", screenshot=str(before_path),
                  digest=receipt["digest"], clickPoint=point, candidateConfidence=slots[1]["confidence"])
+        if self.verified_friend_300_active is not True or not 0 <= time.monotonic() - started_at < 300:
+            raise RuntimeError("experimental sanma friend session or timing expired")
         latch_friend_action_target(self, baseline, "tsumo")
+        if self.verified_friend_300_active is not True or not 0 <= time.monotonic() - started_at < 300:
+            raise RuntimeError("experimental sanma friend session or timing expired")
         page.mouse.click(point["x"], point["y"])
         try:
             page.wait_for_timeout(200)
@@ -4517,7 +4521,11 @@ class PythonAutoOperator:
         point = {"x": 1012.5, "y": 830.0}
         self.log("sanma_friend_candidate_click", action="ron", screenshot=str(before_path),
                  digest=receipt["digest"], clickPoint=point, candidateConfidence=slots[1]["confidence"])
+        if self.verified_friend_300_active is not True or not 0 <= time.monotonic() - started_at < 300:
+            raise RuntimeError("experimental sanma friend session or timing expired")
         latch_friend_action_target(self, baseline, "ron")
+        if self.verified_friend_300_active is not True or not 0 <= time.monotonic() - started_at < 300:
+            raise RuntimeError("experimental sanma friend session or timing expired")
         page.mouse.click(point["x"], point["y"])
         try:
             page.wait_for_timeout(200)
