@@ -95,6 +95,26 @@ class FriendDiscardExperimentTests(unittest.TestCase):
         self.assertNotIsInstance(error.exception,DiscardPreclickChanged)
         send.assert_called_once()
 
+    @patch("sanma_friend_discard_experiment.send_discard_click")
+    def test_deadline_expiring_during_attempt_log_prevents_selection(self, send):
+        now = [101.0]
+        def log(event):
+            if event["status"] == "attempted":
+                now[0] = 401.0
+        with self.assertRaisesRegex(RuntimeError, "action deadline expired"):
+            execute_friend_discard(self.page, **{**self.kwargs, "clock": lambda: now[0], "log": log})
+        send.assert_not_called()
+
+    @patch("sanma_friend_discard_experiment.send_discard_click")
+    def test_session_revoked_during_attempt_log_prevents_selection(self, send):
+        active = [True]
+        def log(event):
+            if event["status"] == "attempted":
+                active[0] = False
+        with self.assertRaisesRegex(RuntimeError, "friend session revoked"):
+            execute_friend_discard(self.page, **{**self.kwargs, "session_check": lambda: active[0], "log": log})
+        send.assert_not_called()
+
     @patch("sanma_friend_discard_experiment.send_discard_click", side_effect=RuntimeError("selection uncertain"))
     def test_failed_selection_is_logged_and_propagated(self, send):
         with self.assertRaisesRegex(RuntimeError, "selection uncertain"):

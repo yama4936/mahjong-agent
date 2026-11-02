@@ -452,6 +452,9 @@ def execute_friend_discard(page, *, session, observation, plan, layout, log,
                         pass  # The first input is still unresolved; never confirm.
                 raise
             return frame
+        # The attempted-event logger may block beyond the action deadline or
+        # the friend session may be revoked while it writes.
+        deadline()
         receipt = send_discard_click(page.mouse, point, layout["viewport"], page.wait_for_timeout,
                                      before,
                                      checked_selection, layout, index, 5, deadline)
