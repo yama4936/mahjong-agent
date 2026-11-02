@@ -387,6 +387,18 @@ def parse_sanma_board_tokens(tokens: list[dict], *, expected_total_points: int |
                 matches.append(text)
         return matches[0] if len(matches) == 1 else None
 
+    def score_at(x, y):
+        matches = []
+        for item in tokens:
+            text, confidence, px, py = (item.get(k) for k in ('text', 'confidence', 'x', 'y'))
+            if (isinstance(text, str) and re.fullmatch(r'-?\d{3,6}|0', text)
+                    and type(confidence) in (int, float)
+                    and (0.95 if text == '0' else 0.98) <= confidence <= 1
+                    and type(px) in (int, float) and type(py) in (int, float)
+                    and abs(px - x) <= 24 and abs(py - y) <= 20):
+                matches.append(text)
+        return matches[0] if len(matches) == 1 else None
+
     wind = at(824, 514, "[東南西]")
     round_text = at(960, 405, "[東南西北][1-3]局")
     sticks = at(132, 155, r"\d{1,2}")
@@ -394,23 +406,21 @@ def parse_sanma_board_tokens(tokens: list[dict], *, expected_total_points: int |
     positions = (("own", 960, 482), ("left", 876, 423), ("opposite", 958, 364))
     numbers = {}
     for position, x, y in positions:
-        number = at(x, y, r"-?\d{3,6}")
-        if number is None:
-            number = at(x, y, r"0", 0.95)
-        numbers[position] = number
+        numbers[position] = score_at(x, y)
     # A newer, separately recorded friend match places an opponent and score
     # to the right, with no opposite score. This is only a layout hypothesis:
     # never feed these positions into the calibrated left/opposite mapping.
-    right = at(1047, 419, r"-?\d{3,6}")
-    if right is None:
-        right = at(1047, 419, r"0", 0.95)
+    right = score_at(1047, 419)
     # Presence is deliberately separate from at() uniqueness: duplicate or
     # conflicting left-side OCR must never appear to prove an empty seat.
-    left_score_evidence = any(
-        isinstance(t.get('text'), str) and re.fullmatch(r'-?\d{3,6}|0', t['text'])
-        and type(t.get('confidence')) in (int, float) and 0 <= t['confidence'] <= 1
-        and type(t.get('x')) in (int, float) and type(t.get('y')) in (int, float)
-        and abs(t['x'] - 876) <= 24 and abs(t['y'] - 423) <= 20 for t in tokens)
+    def score_evidence(x, y):
+        return any(
+            isinstance(t.get('text'), str) and re.fullmatch(r'-?\d{3,6}|0', t['text'])
+            and type(t.get('confidence')) in (int, float) and 0 <= t['confidence'] <= 1
+            and type(t.get('x')) in (int, float) and type(t.get('y')) in (int, float)
+            and abs(t['x'] - x) <= 24 and abs(t['y'] - y) <= 20 for t in tokens)
+
+    left_score_evidence = score_evidence(876, 423)
     if right is not None and numbers['opposite'] is not None and not left_score_evidence:
         # The saved right/opposite layout has no validated OCR for the
         # opposite wind. Expose positions only, never infer seat ownership.
@@ -427,7 +437,7 @@ def parse_sanma_board_tokens(tokens: list[dict], *, expected_total_points: int |
                 "layoutCandidate": {"opponents": ["opposite", "right"], "verified": False},
                 "positionObservation": {"verified": False, "complete": False,
                                         "positions": positions}}
-    if right is not None and numbers['opposite'] is None:
+    if right is not None and not score_evidence(958, 364):
         # These three separately observed wind glyphs sit next to their own
         # score positions. Never derive the opponents' winds from own wind;
         # missing or conflicting OCR stays missing. This remains diagnostic
@@ -462,7 +472,7 @@ def parse_sanma_board_tokens(tokens: list[dict], *, expected_total_points: int |
                 "rightLayoutObservation": observation}
     if not wind or not round_text or sticks is None or honba is None or any(v is None for v in numbers.values()):
         return {**result, "reason": "incomplete_or_ambiguous_tokens"}
-    if any(isinstance(t.get("text"), str) and re.fullmatch(r"-?\d{1,6}", t["text"])
+    if score_evidence(1047, 419) or any(isinstance(t.get("text"), str) and re.fullmatch(r"-?\d{1,6}", t["text"])
            and type(t.get("confidence")) in (int, float) and 0.98 <= t["confidence"] <= 1
            and type(t.get("x")) in (int, float) and type(t.get("y")) in (int, float)
            and abs(t["x"] - 1047) <= 24 and abs(t["y"] - 419) <= 20 for t in tokens):

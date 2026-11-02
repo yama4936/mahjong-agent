@@ -76,3 +76,22 @@ class OppositeRightDiagnostics(unittest.TestCase):
                 self.assertFalse(result['verified'])
                 self.assertNotIn('positionObservation', result)
 
+    def test_mixed_zero_and_duplicate_scores_are_never_accepted_per_position(self):
+        def token(text, x, y):
+            return {'text': text, 'confidence': 0.999, 'x': x, 'y': y}
+        positions = {'own': (960, 482), 'left': (876, 423),
+                     'opposite': (958, 364), 'right': (1047, 419)}
+        for layout in (('own', 'left', 'opposite'), ('own', 'opposite', 'right'),
+                       ('own', 'left', 'right')):
+            for position in layout:
+                for conflicting in ('0', '35000', '32000'):
+                    tokens = [token('35000', *positions[p]) for p in layout]
+                    tokens.append(token(conflicting, *positions[position]))
+                    with self.subTest(layout=layout, position=position, conflicting=conflicting):
+                        result = parse_sanma_board_tokens(tokens, expected_total_points=105000,
+                                                           payment_phase='settled')
+                        self.assertNotIn('candidate', result)
+                        for key in ('positionObservation', 'rightLayoutObservation'):
+                            observation = result.get(key, {})
+                            self.assertNotIn('score', observation.get('positions', {}).get(position, {}))
+
