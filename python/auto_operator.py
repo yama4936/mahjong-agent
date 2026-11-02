@@ -2745,6 +2745,8 @@ def experimental_sanma_friend_allowed(args: Any) -> bool:
 
 class PythonAutoOperator:
     def __init__(self, args: argparse.Namespace) -> None:
+        if getattr(args, "experimental_sanma_transition_record", None) and not experimental_sanma_friend_allowed(args):
+            raise RuntimeError("transition recording requires reviewed 300+0 non-ranked sanma friend")
         if getattr(args, 'experimental_sanma_fast_png', False) and not experimental_sanma_friend_allowed(args):
             raise RuntimeError('fast PNG requires a reviewed 300+0 non-ranked sanma friend match')
         if getattr(args, 'experimental_sanma_png_stream', False):
@@ -8925,6 +8927,21 @@ class PythonAutoOperator:
         return min(original_gate_captured_at, gate_processing_started_at)
 
     def observe_sanma_friend_transition(self, page: Page, receipt: dict[str, Any], action: str) -> dict[str, Any]:
+        recorder = getattr(self, "sanma_transition_recorder", None)
+        if recorder is None or self.verified_friend_300_active is not True:
+            return self._observe_sanma_friend_transition(page, receipt, action)
+        try:
+            from sanma_diagnostic_recorder import PageProxy
+            transition = recorder.begin(action, self.verified_friend_300_active)
+        except Exception as error:
+            self.log("sanma_recording_unavailable", error=str(error))
+            return self._observe_sanma_friend_transition(page, receipt, action)
+        try:
+            return self._observe_sanma_friend_transition(PageProxy(page, transition), receipt, action)
+        finally:
+            transition.close()
+
+    def _observe_sanma_friend_transition(self, page: Page, receipt: dict[str, Any], action: str) -> dict[str, Any]:
         """Wait for a stable visible change, never certifying the preceding action."""
         try:
             before = Path(receipt["screenshot"]).read_bytes()
@@ -9456,7 +9473,24 @@ class PythonAutoOperator:
                 self.log("sanma_friend_start_clicked", preflight=str(preflight_path), commit=commit,
                          point={"x":1140,"y":998}, actionDeadlineMs=300000, roomClock="300+0",
                          scope="experimental_friend_only")
-                self.run_experimental_sanma_friend(page)
+                self.sanma_transition_recorder = None
+                record_directory = getattr(self.args, "experimental_sanma_transition_record", None)
+                if record_directory and experimental_sanma_friend_allowed(self.args) and self.verified_friend_300_active is True:
+                    try:
+                        from sanma_diagnostic_recorder import Session
+                        self.sanma_transition_recorder = Session(
+                            record_directory, uuid.uuid4().hex, opt_in=True,
+                            verified_friend=self.verified_friend_300_active, ranked=self.args.ranked_loop,
+                            deadline_ms=self.configured_action_deadline_ms(), clock="300+0", commit=commit)
+                    except Exception as error:
+                        self.log("sanma_recording_unavailable", error=str(error))
+                try:
+                    self.run_experimental_sanma_friend(page)
+                finally:
+                    recorder = self.sanma_transition_recorder
+                    self.sanma_transition_recorder = None
+                    if recorder is not None:
+                        recorder.close()
                 return
 
             # Transient animated particles can interrupt otherwise matching
@@ -10750,6 +10784,8 @@ def parse_args() -> argparse.Namespace:
                         help="experimental friend-only PNG stream for post-recognition freshness")
     parser.add_argument("--experimental-sanma-fast-png", action="store_true",
                         help="friend-only experimental lossless screenshot compression")
+    parser.add_argument("--experimental-sanma-transition-record", type=Path, metavar="DIRECTORY",
+                        help="opt-in friend-only diagnostic full screenshots; may contain personal information")
     parser.add_argument("--experimental-sanma-friend", action="store_true",
                         help="friend-only experimental tsumo; stops on unsupported actions")
     parser.add_argument("--layout", required=True)
