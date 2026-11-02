@@ -66,5 +66,10 @@ def execute_friend_pon_pass(operator, page, receipt, *, declare_riichi=False):
     point = {'x':1010,'y':830} if declare_riichi else {'x':1300,'y':830}
     operator.log('sanma_friend_candidate_click', action=action, options=options, screenshot=receipt['screenshot'],
                  digest=receipt['digest'], clickPoint=point, confirmed=False)
+    # Logging or target latching may block long enough to invalidate the
+    # authorization checked above. Keep the latch if that happens so an
+    # uncertain attempt can never be silently repeated.
+    if operator.verified_friend_300_active is not True or not 0 <= time.monotonic() - started < 300:
+        raise RuntimeError('friend session or timing expired before click')
     page.mouse.click(point['x'],point['y'])
     return {'clicked':True,'action':action,'confirmation':'unknown','stopped':True}

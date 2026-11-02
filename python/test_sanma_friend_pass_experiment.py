@@ -33,6 +33,21 @@ class FriendPassTests(unittest.TestCase):
         self.assertEqual(result['confirmation'],'unknown');self.page.mouse.click.assert_called_once_with(1300,830)
         with self.assertRaisesRegex(RuntimeError,'already attempted'):execute_friend_pon_pass(self.op,self.page,self.receipt)
         self.page.mouse.click.assert_called_once()
+
+    def test_revocation_during_click_log_does_not_click(self):
+        self.op.log.side_effect = lambda *a, **kw: setattr(self.op, 'verified_friend_300_active', False)
+        with self.assertRaisesRegex(RuntimeError, 'expired'):
+            execute_friend_pon_pass(self.op, self.page, self.receipt)
+        self.page.mouse.click.assert_not_called()
+
+    def test_deadline_expires_during_click_log_does_not_click(self):
+        self.op.sanma_friend_action_observed_at = 100.0
+        current = [399.0]
+        self.op.log.side_effect = lambda *a, **kw: current.__setitem__(0, 400.0)
+        with patch('sanma_friend_pass_experiment.time.monotonic', side_effect=lambda: current[0]):
+            with self.assertRaisesRegex(RuntimeError, 'expired'):
+                execute_friend_pon_pass(self.op, self.page, self.receipt)
+        self.page.mouse.click.assert_not_called()
     def test_ron_unknown_changed_and_ranked_block(self):
         for case in ('ron','unknown','changed','ranked','stale'):
             self.setUp(); slots=self.receipt['sourceObservation']['report']['buttonRow']['value']['slots']
