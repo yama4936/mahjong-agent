@@ -62,3 +62,17 @@ class OppositeRightDiagnostics(unittest.TestCase):
         self.assertFalse(result['verified'])
         self.assertNotIn('positionObservation', result)
 
+    def test_left_score_duplicates_and_low_confidence_never_imply_empty_seat(self):
+        def token(text, x, y, confidence=0.999):
+            return {'text': text, 'confidence': confidence, 'x': x, 'y': y}
+        common = [token('35000', 960, 482), token('35000', 958, 364),
+                  token('35000', 1047, 419)]
+        for left in ([token('35000', 876, 423), token('35000', 876, 423)],
+                     [token('35000', 876, 423), token('32000', 876, 423)],
+                     [token('35000', 876, 423, 0.4)], [token('0', 876, 423, 0.4)]):
+            with self.subTest(left=left):
+                result = parse_sanma_board_tokens(common + left, expected_total_points=105000,
+                                                   payment_phase='settled')
+                self.assertFalse(result['verified'])
+                self.assertNotIn('positionObservation', result)
+

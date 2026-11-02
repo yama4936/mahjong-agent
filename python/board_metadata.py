@@ -404,7 +404,14 @@ def parse_sanma_board_tokens(tokens: list[dict], *, expected_total_points: int |
     right = at(1047, 419, r"-?\d{3,6}")
     if right is None:
         right = at(1047, 419, r"0", 0.95)
-    if right is not None and numbers['opposite'] is not None and numbers['left'] is None:
+    # Presence is deliberately separate from at() uniqueness: duplicate or
+    # conflicting left-side OCR must never appear to prove an empty seat.
+    left_score_evidence = any(
+        isinstance(t.get('text'), str) and re.fullmatch(r'-?\d{3,6}|0', t['text'])
+        and type(t.get('confidence')) in (int, float) and 0 <= t['confidence'] <= 1
+        and type(t.get('x')) in (int, float) and type(t.get('y')) in (int, float)
+        and abs(t['x'] - 876) <= 24 and abs(t['y'] - 423) <= 20 for t in tokens)
+    if right is not None and numbers['opposite'] is not None and not left_score_evidence:
         # The saved right/opposite layout has no validated OCR for the
         # opposite wind. Expose positions only, never infer seat ownership.
         positions = {"opposite": {"score": int(numbers['opposite'])},
