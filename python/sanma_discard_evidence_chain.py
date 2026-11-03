@@ -48,9 +48,11 @@ def _right_north_additions(before, posts):
 
 
 def _opposite_north_additions(before, posts):
-    """One newly visible opposite north in two later frame candidates."""
+    """Newly visible opposite norths in two later frame candidates."""
     from PIL import Image
     from sanma_opposite_kita_experiment import opposite_north_candidate
+    import cv2
+    import numpy as np
     root = Path(__file__).resolve().parents[1] / 'test/fixtures/sanma-opposite-kita'
     try:
         frames = [before, *posts]
@@ -58,14 +60,28 @@ def _opposite_north_additions(before, posts):
                         shadow_template_path=root/'north-glyph-shadow-reference.png') for r in frames]
         if any(o.get('frame_sha256') != r['digest'] for o,r in zip(observations,frames)):
             return 0
-        if observations[0].get('candidate') is not None or any(
-                not isinstance(o.get('candidate'),dict) for o in observations[1:]):
+        if any(not isinstance(o.get('candidate'),dict) for o in observations[1:]):
             return 0
-        light=[]
+        light=[]; gray=[]
         for r in frames:
             with Image.open(r['screenshot']) as image:
-                light.append(sum(min(pixel)>180 for pixel in image.convert('RGB').crop((535,101,575,130)).getdata()))
-        return int(light[0] <= 100 and all(n >= 500 for n in light[1:]))
+                image=image.convert('RGB');gray.append(cv2.cvtColor(np.asarray(image),cv2.COLOR_RGB2GRAY))
+                light.append([sum(min(pixel)>180 for pixel in image.crop((x,101,x+40,130)).getdata())
+                              for x in (535,585)])
+        first = int(observations[0].get('candidate') is None and light[0][0] <= 100
+                    and all(row[0] >= 500 for row in light[1:]))
+        template=cv2.imread(str(root/'north-glyph-reference.png'),cv2.IMREAD_GRAYSCALE)
+        if template is None or template.shape != (29,40) or template.std() < 5:
+            return first
+        # The second glyph is 50 px to the right of the independently
+        # detected first. Require it in both later images, and a dark
+        # baseline crop; absence of a template match alone is insufficient.
+        def second_match(image):
+            roi=image[97:134,581:629]
+            return float(cv2.matchTemplate(roi,template,cv2.TM_CCOEFF_NORMED).max()) >= .97
+        second = int(light[0][1] <= 100 and all(row[1] >= 500 for row in light[1:])
+                     and all(second_match(image) for image in gray[1:]))
+        return first + second
     except (KeyError, TypeError, ValueError, OSError, IndexError, ImportError):
         return 0
 

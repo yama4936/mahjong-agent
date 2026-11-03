@@ -16,6 +16,40 @@ from sanma_friend_freshness import check_friend_recovery_guard
 ROOT = Path('/home/yama1/server/data/dev-work/jantama/evidence139')
 
 class RecoveryGuardTest(unittest.TestCase):
+    @unittest.skipUnless(Path('/home/yama1/server/data/dev-work/jantama/evidence158/artifacts/frames').exists(),
+                         'saved two opposite north match unavailable')
+    def test_two_opposite_norths_support_saved_later_turn(self):
+        from sanma_discard_evidence_chain import _opposite_north_additions
+        root=Path('/home/yama1/server/data/dev-work/jantama/evidence158/artifacts/frames')
+        prefixes=('2026-11-03T20-55-22','2026-11-03T20-55-52','2026-11-03T20-56-03')
+        with tempfile.TemporaryDirectory() as directory:
+            receipts=[]
+            for i,prefix in enumerate(prefixes):
+                receipt=json.loads(next(root.glob(prefix+'*.sanma-self-turn.receipt.json')).read_text())
+                src=Path(receipt['screenshot']);folder=Path(directory)/str(i);folder.mkdir()
+                target=folder/src.name;shutil.copyfile(src,target);receipt['screenshot']=str(target)
+                target.with_suffix('.receipt.json').write_text(json.dumps(receipt));receipts.append(receipt)
+            self.assertEqual(_opposite_north_additions(receipts[0],receipts[1:]),2)
+            self.assertEqual(_opposite_north_additions(receipts[1],receipts[1:]),0)
+            self.assertEqual(_opposite_north_additions(receipts[0],[receipts[1],receipts[0]]),0)
+            self.assertEqual(_opposite_north_additions(receipts[0],[receipts[1],dict(receipts[2],digest='0'*64)]),0)
+            event={'tile':'C','clickIndex':13,'clickPoint':{'x':1532,'y':996.5},'frameSha256':receipts[0]['digest']}
+            journal=[dict(event,status='attempted',timestamp='2026-11-03T20:55:27.507162+00:00'),
+                     dict(event,status='selection_confirmed',result='discard_not_verified',
+                          timestamp='2026-11-03T20:55:28.782773+00:00')]
+            watch=Mock();watch.alive.return_value=True
+            check=lambda:candidate(receipts[0],receipts[1:],journal,continuity=watch,
+                                   active=lambda:True,started=time.monotonic(),deadline_ms=300000)
+            self.assertTrue(check())
+            for post in receipts[1:]:
+                post['sourceObservation']['board']['candidate']['remainingTiles']=48
+                Path(post['screenshot']).with_suffix('.receipt.json').write_text(json.dumps(post))
+            self.assertFalse(check())
+            broken=json.loads(json.dumps(receipts[2]));path=Path(directory)/'non-north.png'
+            with Image.open(broken['screenshot']) as src:
+                image=src.convert('RGB');image.paste((240,240,240),(581,97,629,134));image.save(path)
+            broken['screenshot']=str(path);broken['digest']=hashlib.sha256(path.read_bytes()).hexdigest()
+            self.assertEqual(_opposite_north_additions(receipts[0],[receipts[1],broken]),1)
     @unittest.skipUnless(Path('/home/yama1/server/data/dev-work/jantama/evidence157/artifacts/frames').exists(),
                          'saved opposite north match unavailable')
     def test_saved_opposite_north_and_reobserved_river(self):
