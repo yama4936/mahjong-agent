@@ -9393,7 +9393,12 @@ class PythonAutoOperator:
                     kita_preclick_rejections = 0
                     discard_preclick_rejections = 0
                     attempted_frames.add(frame_digest)
-                    only_unconfirmed_kita = action == "kita" and not unconfirmed_input_seen
+                    # Preserve the same-turn deadline across a chain of north
+                    # extractions, not just the first unconfirmed extraction.
+                    # This does not confirm any input or rearm a target.
+                    only_unconfirmed_kita = action == "kita" and (
+                        not unconfirmed_input_seen or only_unconfirmed_kita
+                    )
                     unconfirmed_input_seen = True
                     last_unconfirmed_action = action
                     last_kita_receipt = receipt if action == "kita" else None
