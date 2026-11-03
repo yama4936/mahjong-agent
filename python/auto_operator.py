@@ -2024,6 +2024,34 @@ def experimental_kita_wall_color_stable(before: bytes, after: bytes, *, on_error
         return False
 
 
+def experimental_friend_kita_kan_row(frame, report):
+    """Recognize only the reviewed three-button row; never proves game state."""
+    try:
+        row = report['buttonRow']
+        value = row['value']
+        slots = value['slots']
+        if (row['status'] != 'candidate' or value.get('ronReferenceCompared') is not True
+                or len(slots) != 3
+                or any(type(slot.get('slot')) is not int or slot['slot'] != i
+                       or slot.get('status') != 'candidate' or slot.get('action') != action
+                       for i, (slot, action) in enumerate(zip(slots, ('kita', 'kan', 'skip'))))
+                or type(slots[0].get('confidence')) not in (int, float)
+                or not .985 <= slots[0]['confidence'] <= 1
+                or any(type(slot.get('confidence')) not in (int, float) or not .98 <= slot['confidence'] <= 1 for slot in slots[1:])):
+            return False
+        with _open_screenshot(frame) as image, Image.open(Path(__file__).parent / 'fixtures' / 'sanma-kita-kan-skip-131-row.png') as reference:
+            if image.size != (1920, 1080) or reference.size != (825, 90): return False
+            diff = ImageChops.difference(image.convert('RGB').crop((600, 785, 1425, 875)), reference.convert('RGB'))
+            # Do not let a local replacement be averaged over the whole row.
+            for y in range(0, 90, 8):
+                for x in range(0, 824, 8):
+                    tile = diff.crop((x, y, min(x+8, 824), min(y+8, 90)))
+                    if max(ImageStat.Stat(tile).mean) > 10: return False
+            return max(ImageStat.Stat(diff).mean) <= .1
+    except (AttributeError, KeyError, TypeError, ValueError, OSError, IndexError):
+        return False
+
+
 def experimental_kita_glyph_stability(before: bytes, after: bytes, report: dict[str, Any], *, on_wall_error=None, diagnostic=None) -> bool:
     """Decode each full frame once; preserve all existing candidate checks."""
     try:
@@ -2049,9 +2077,11 @@ def _experimental_kita_glyph_stability_decoded(before: bytes, after: bytes, repo
         hv = hand['value']; gv = geometry['value']; buttons = row['value']['slots']
         if (hand['status'] != 'candidate' or geometry['status'] != 'candidate' or row['status'] != 'candidate'
                 or len(hv['tiles']) != 14 or 'N' not in hv['tiles'] or len(buttons) != 3
-                or buttons[0].get('status') != 'empty_candidate'
-                or buttons[1].get('status') != 'candidate' or buttons[1].get('action') != 'kita'
-                or buttons[2].get('status') != 'candidate' or buttons[2].get('action') != 'skip'):
+                or not ((buttons[0].get('status') == 'empty_candidate'
+                         and buttons[1].get('status') == 'candidate' and buttons[1].get('action') == 'kita'
+                         and buttons[2].get('status') == 'candidate' and buttons[2].get('action') == 'skip')
+                        or (experimental_friend_kita_kan_row(before, report)
+                            and experimental_friend_kita_kan_row(after, report)))):
             return False
         if diagnostic is not None: diagnostic.update(stage='hand_faces')
         layout = {'handSlots':gv['handSlots'],'drawSlot':gv['drawSlot']}
@@ -4646,13 +4676,24 @@ class PythonAutoOperator:
         if (not isinstance(report, dict) or report.get("digest") != receipt.get("digest")
                 or not isinstance(row, dict) or row.get("status") != "candidate"
                 or not isinstance(slots, list) or len(slots) != 3
-                or any(not isinstance(slot, dict) or type(slot.get("slot")) is not int or slot.get("slot") != i for i, slot in enumerate(slots))
-                or slots[0].get("status") != "empty_candidate"
-                or slots[1].get("status") != "candidate" or slots[1].get("action") != "kita"
-                or type(slots[1].get("confidence")) not in (float, int)
-                or not 0.99 <= slots[1]["confidence"] <= 1
-                or slots[2].get("status") != "candidate" or slots[2].get("action") != "skip"):
+                or any(not isinstance(slot, dict) or type(slot.get("slot")) is not int or slot.get("slot") != i for i, slot in enumerate(slots))):
             raise RuntimeError("sanma kita prompt is unknown or ambiguous")
+        standard = (slots[0].get("status") == "empty_candidate"
+                    and slots[1].get("status") == "candidate" and slots[1].get("action") == "kita"
+                    and type(slots[1].get("confidence")) in (float, int) and .99 <= slots[1]["confidence"] <= 1
+                    and slots[2].get("status") == "candidate" and slots[2].get("action") == "skip")
+        three_buttons = ([slot.get("action") for slot in slots] == ["kita", "kan", "skip"])
+        if not standard and not three_buttons:
+            raise RuntimeError("sanma kita prompt is unknown or ambiguous")
+        if three_buttons:
+            candidates = receipt.get("candidates", {}).get("candidates", [])
+            if (not isinstance(candidates, list) or len(candidates) != 2
+                    or any(not isinstance(c, dict) for c in candidates)
+                    or {(c.get("action"), c.get("slot")) for c in candidates
+                           if isinstance(c.get("action"), str) and type(c.get("slot")) is int} != {("kita", 0), ("kan", 1)}
+                    or getattr(self, "_sanma_friend_attempted_frames", set())
+                    or getattr(self, "_sanma_friend_attempted_targets", set())):
+                raise RuntimeError("three-button north requires no prior input or win candidate")
         hand = report.get("hand")
         tiles = hand.get("value", {}).get("tiles") if isinstance(hand, dict) and isinstance(hand.get("value"), dict) else None
         if (not isinstance(hand, dict) or hand.get("status") != "candidate" or not isinstance(tiles, list)
@@ -4667,6 +4708,9 @@ class PythonAutoOperator:
             require_sanma_observable_frame(fresh)
             if hashlib.sha256(baseline).hexdigest() != receipt["digest"]:
                 raise ValueError("baseline changed")
+            if three_buttons and not (experimental_friend_kita_kan_row(baseline, report)
+                                      and experimental_friend_kita_kan_row(fresh, report)):
+                raise ValueError("three-button north row not independently verified")
             if (not friend_frame_stable(baseline, fresh)
                     and not (freshness.get("status") == "stable_kita_glyph_candidate"
                              and experimental_kita_glyph_stability(baseline, fresh, report,
@@ -4692,10 +4736,10 @@ class PythonAutoOperator:
             raise RuntimeError("experimental sanma friend session or timing expired")
         before_path = self.frames / f"{utc_stamp()}.{uuid.uuid4().hex}.sanma-kita-before.png"
         before_path.write_bytes(fresh)
-        point = {"x": 1012.5, "y": 830.0}
+        point = {"x": 722.5 if three_buttons else 1012.5, "y": 830.0}
         self.log("sanma_friend_candidate_click", action="kita", screenshot=str(before_path),
                  digest=hashlib.sha256(fresh).hexdigest(), baselineDigest=receipt["digest"],
-                 baselineScreenshot=receipt["screenshot"], clickPoint=point, candidateConfidence=slots[1]["confidence"])
+                 baselineScreenshot=receipt["screenshot"], clickPoint=point, candidateConfidence=slots[0 if three_buttons else 1]["confidence"])
         # Saving evidence and logging can block past the action deadline.
         if self.verified_friend_300_active is not True or not 0 <= time.monotonic() - started_at < 300:
             raise RuntimeError("experimental sanma friend session or timing expired")
