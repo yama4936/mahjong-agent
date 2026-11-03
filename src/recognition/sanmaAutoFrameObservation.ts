@@ -10,6 +10,7 @@ import type { ExperimentalTemplates } from "./sanmaButtonExperiment.js";
 import { mapPublicOpponentPositions } from "./publicSeatMapping.js";
 import type { PublicVitClassifier } from "./publicTileRecognizer.js";
 import { inspectSanmaLeftRiverCandidate, inspectSanmaRightRiverCandidate } from "./sanmaRightRiverCandidate.js";
+import { inspectSanmaOwnRiverCandidate } from "./sanmaOwnRiverCandidate.js";
 
 const run = promisify(execFile);
 type NorthPosition = { verified: false; complete: false; frame_sha256?: string; [key: string]: unknown };
@@ -97,6 +98,14 @@ export async function observeSanmaFrameAutomatically(input: {
       () => inspectSanmaLeftRiverCandidate(frame, input.layout, riverClassifier),
     );
   }
+  // Physical own-river candidates do not require a wind-to-seat mapping. Keep
+  // them explicitly unverified and separate from publicTiles and decisions.
+  let ownRiver: Awaited<ReturnType<typeof inspectSanmaOwnRiverCandidate>> | undefined;
+  let ownRiverError: string | undefined;
+  if (board.reason === "unsupported_opposite_right_layout" || board.reason === "unsupported_right_opponent_layout") {
+    try { ownRiver = await inspectSanmaOwnRiverCandidate(frame, input.layout, input.publicClassifier); }
+    catch (error) { ownRiverError = error instanceof Error ? error.message : String(error); }
+  }
   // The older diagnostic evaluates with an assumed empty visible-tile list.
   // Do not expose it in the automatic observation as if unknown tiles were zero.
   report.shape = {status: "unresolved", reason: "visible tile completeness unavailable"};
@@ -106,6 +115,7 @@ export async function observeSanmaFrameAutomatically(input: {
   if (!input.buttonRowReferences?.ron) candidates.missing.push("ron reference unavailable");
   else candidates.missing.push("sanma ron reference not independently verified");
   return { scope: "offline_untrusted_sanma_auto_observation" as const, digest, board, north: { ...north, ...(bySeat ? { bySeat, mappingVerified: false as const } : {}) }, candidates,
+    ...(ownRiver ? {ownRiver} : ownRiverError ? {ownRiverError} : {}),
     ...(rightRiver ? {rightRiver} : {}),
     ...(leftRiver ? {leftRiver} : {}),
     ownSeat: ownSeat ? { status: "candidate" as const, value: ownSeat, verified: false as const }

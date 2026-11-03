@@ -60,6 +60,19 @@ class ResidentObservationTests(unittest.TestCase):
             with self.subTest(changed=changed), self.assertRaisesRegex(RuntimeError, 'right river'):
                 self.operator({'id': 1, 'result': bad}).observe_sanma_resident(self.file)
 
+    def test_own_river_must_be_unverified_same_frame_evidence(self):
+        own = {'scope': 'offline_untrusted_sanma_own_river', 'frameSha256': self.digest,
+               'status': 'unknown', 'verified': False, 'complete': False,
+               'operationAuthorized': False, 'candidates': [{'tile': '1s', 'verified': False}]}
+        result = {**self.result(), 'ownRiver': own}
+        self.assertEqual(self.operator({'id': 1, 'result': result}).observe_sanma_resident(self.file)['ownRiver'], own)
+        for changed in ({'frameSha256': '0' * 64}, {'complete': True}, {'verified': True},
+                        {'operationAuthorized': True}, {'candidates': [{'verified': True}]},
+                        {'status': 'observed'}, {'candidates': None}):
+            bad = {**self.result(), 'ownRiver': {**own, **changed}}
+            with self.subTest(changed=changed), self.assertRaisesRegex(RuntimeError, 'own river'):
+                self.operator({'id': 1, 'result': bad}).observe_sanma_resident(self.file)
+
     def test_frame_changed_during_observation_is_rejected(self):
         op = self.operator({'id': 1, 'result': self.result()})
         path = self.file

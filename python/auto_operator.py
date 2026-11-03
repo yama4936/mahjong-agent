@@ -4243,6 +4243,14 @@ class PythonAutoOperator:
                     or right.get("operationAuthorized") is not False or not isinstance(right.get("candidates"), list)
                     or any(not isinstance(item, dict) or item.get("verified") is not False for item in right["candidates"])):
                 raise RuntimeError("resident sanma right river is not matching unverified evidence")
+        if "ownRiver" in result:
+            own = result["ownRiver"]
+            if (not isinstance(own, dict) or own.get("scope") != "offline_untrusted_sanma_own_river"
+                    or own.get("frameSha256") != expected_digest or own.get("status") != "unknown"
+                    or own.get("verified") is not False or own.get("complete") is not False
+                    or own.get("operationAuthorized") is not False or not isinstance(own.get("candidates"), list)
+                    or any(not isinstance(item, dict) or item.get("verified") is not False for item in own["candidates"])):
+                raise RuntimeError("resident sanma own river is not matching unverified evidence")
         return result
 
     def inspect_sanma_self_turn(self, page: Page) -> dict[str, Any]:
