@@ -2142,6 +2142,20 @@ def _sanma_draw_wall_edge_lighting(a, b, first_mask, second_mask, x, y, changed)
     Call only after the wall chroma check. Non-wall blocks stay under the
     original 14-pixel limit; no clock, score, river, or prompt pixels are masked.
     """
+    if (x, y) == (320, 96) and 14 < changed <= 36:
+        # Reviewed friend frames show this fixed wall seam moving across the
+        # binary threshold while the self lamp also flickers. Bound every RGB
+        # channel as well as its local mean; the independent full-wall chroma
+        # check has already run. Opponent lamps, tiles and prompts remain in
+        # the normal comparison. This is a visual hypothesis, not turn proof.
+        delta = ImageChops.difference(a.crop((x, y, x+32, y+32)).convert('RGB'),
+                                      b.crop((x, y, x+32, y+32)).convert('RGB'))
+        lamp = (910, 498, 1010, 514)
+        lamps = [ImageStat.Stat(image.convert('RGB').crop(lamp)).mean for image in (a, b)]
+        if (all(rgb[0] >= 190 and rgb[1] >= 150 for rgb in lamps)
+                and max(high for _, high in delta.getextrema()) <= 28
+                and max(ImageStat.Stat(delta).mean) <= 16):
+            return True
     if not (160 <= x <= 352 and 96 <= y <= 672 and 14 < changed <= 20):
         return False
     # The regular comparator permits self-turn-lamp flicker, but the reviewed
