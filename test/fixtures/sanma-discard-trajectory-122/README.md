@@ -1,0 +1,7 @@
+# Anonymous sanma discard trajectory fixtures
+
+Only the original pixel rectangles `(760,540)-(1150,760)` and `(220,920)-(1580,1080)` are retained at their original locations on a black 1920×1080 canvas. Names, avatars, account IDs and other screen areas have been removed. The files are real friend-match image regions, not generated tiles.
+
+`before`, `after`, `next_turn` are the 2026-11-03 a729631 300+0 friend run 122 retry: the first frame shows a South draw and an empty own river, the next shows South as the first own discard, and the third shows that discard and a new turn. The original source and logs are retained under `/home/yama1/server/data/dev-work/jantama/regression-a729631-122/`. `pon_before` and `pon_after` are from an independently captured friend match, immediately before and after a pon. Their own river contains 9m, W, S, 9s in both frames. The source was `/home/yama1/sanma-independent-20261031/27-turn.png` and `28-pon.png`.
+
+Run the offline diagnostic with `python python/sanma_discard_trajectory_evaluation.py`. The candidate lists and rectangles are hand annotated for these fixtures; they are not recognizer output. One case intentionally supplies a false candidate list for the pon to show why a candidate append alone is not proof. The diagnostic has no operation authority and none of these cases certifies a discard. Skin, orientation, white tiles, red tiles, occlusion, missing detections, other players' calls and turns require further independent evidence.
