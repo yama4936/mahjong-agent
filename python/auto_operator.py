@@ -9406,6 +9406,12 @@ class PythonAutoOperator:
                                 return
                             resumed_watch = watch
                             self._sanma_friend_resume_guard = (watch, discard_recovery['started'], self.args.action_deadline_ms)
+                            # The independent later-turn evidence supersedes the
+                            # startup black-screen bound. Keep the old turn's
+                            # deadline in the resume guard through the next input;
+                            # only subsequent turns can use their own bound.
+                            recovery_deadline_at = None
+                            recovery_deadline_basis = None
                             action_observed_at = discard_recovery['new_started']
                             self.sanma_friend_action_observed_at = action_observed_at
                             unconfirmed_input_seen = False

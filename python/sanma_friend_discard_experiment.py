@@ -436,13 +436,19 @@ def execute_friend_discard(page, *, session, observation, plan, layout, log,
                     pass  # Failed evidence never permits input.
             raise
         reference = observation.get("referenceFrame")
-        if not isinstance(before, bytes) or (hashlib.sha256(before).hexdigest() != observation.get("frameSha256")
-                and (not isinstance(reference, bytes)
-                     or hashlib.sha256(reference).hexdigest() != observation.get("frameSha256")
-                     or not (friend_frame_stable(reference, before)
-                             or (observation.get("experimentalDrawReport") is not None
-                                 and __import__("auto_operator").experimental_draw_glyph_stability(reference, before, observation["experimentalDrawReport"],
-                                     on_wall_error=lambda data: log({"kind":"sanma_wall_guard_error", **data})))))):
+        matched = isinstance(before, bytes) and hashlib.sha256(before).hexdigest() == observation.get("frameSha256")
+        diagnostic = {"stage": "frame_identity"}
+        if not matched and isinstance(before, bytes) and isinstance(reference, bytes):
+            if hashlib.sha256(reference).hexdigest() == observation.get("frameSha256"):
+                diagnostic["stage"] = "friend_frame_stable"
+                matched = friend_frame_stable(reference, before)
+                if not matched and observation.get("experimentalDrawReport") is not None:
+                    diagnostic = {}
+                    matched = __import__("auto_operator").experimental_draw_glyph_stability(
+                        reference, before, observation["experimentalDrawReport"], diagnostic=diagnostic,
+                        on_wall_error=lambda data: log({"kind":"sanma_wall_guard_error", **data}))
+        if not matched:
+            event['preclickDiagnostic'] = diagnostic
             if isinstance(before, bytes) and save_rejected_frame is not None:
                 try:
                     save_rejected_frame(before)

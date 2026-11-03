@@ -257,6 +257,46 @@ class ExperimentalSanmaFriendLoopTest(unittest.TestCase):
         self.assertTrue(any(c.kwargs.get('basis')=='reviewed_room_start_input' for c in self.op.log.call_args_list))
         self.page.mouse.click.assert_not_called()
 
+    def test_later_discard_evidence_replaces_black_screen_bound_after_guarded_click(self):
+        from sanma_friend_freshness import check_friend_recovery_guard
+        self.op.verified_friend_300_active=True
+        self.op.sanma_friend_reviewed_start_at=100.0
+        self.op.args.max_iterations=5
+        now=[100.0]
+        frames=iter([(b'black',100.),(b'recovered',150.),(b'recovered2',150.),
+                     (b'first',200.),(b'post1',220.),(b'post2',230.),(b'late',401.)])
+        def capture(**kwargs):
+            frame, now[0] = next(frames)
+            return frame
+        self.page.screenshot.side_effect=capture
+        receipts=[{'candidates':{'candidates':[]},'freshness':{'status':'identical_pixels_candidate'},
+                   'drawCandidate':{'status':'candidate'},'digest':str(i),'screenshot':f'{i}.png'} for i in range(4)]
+        receipts[-1]['drawCandidate']={'status':'unresolved'}
+        self.op.inspect_sanma_self_turn.side_effect=receipts
+        def transition(*args):
+            now[0] += 1
+            return {'status':'visual_change_unconfirmed','confirmed':False}
+        self.op.observe_sanma_friend_transition.side_effect=transition
+        result={'status':'selection_confirmed','result':'discard_not_verified','tile':'1m',
+                'clickIndex':0,'clickPoint':{'x':1,'y':1},'frameSha256':'0'}
+        def discard(op, page, receipt):
+            if receipt is receipts[2]:
+                self.assertEqual(op._sanma_friend_resume_guard[1:], (100.0,300000))
+            check_friend_recovery_guard(op)
+            return result
+        watch=Mock(); watch.alive.return_value=True
+        with patch('auto_operator.time.monotonic',side_effect=lambda:now[0]), \
+             patch('auto_operator.classify_screen',side_effect=[('black_screen',1.),('match',1.),('match',1.),
+                                                                ('match',1.),('match',1.),('match',1.),('match',1.)]), \
+             patch('sanma_friend_discard_recovery.MatchContinuity',return_value=watch), \
+             patch('sanma_friend_discard_recovery.candidate',return_value=True), \
+             patch('sanma_friend_discard_experiment.execute_friend_draw_candidate',side_effect=discard) as execute:
+            self.op.run_experimental_sanma_friend(self.page)
+        self.assertEqual(execute.call_count,2, self.op.log.call_args_list)
+        self.assertEqual(self.op.inspect_sanma_self_turn.call_count,4)
+        self.assertTrue(any(c.args[0]=='sanma_friend_discard_recovery_candidate' for c in self.op.log.call_args_list))
+        self.assertFalse(any(c.kwargs.get('reason')=='black_screen_deadline_expired' for c in self.op.log.call_args_list))
+
     def test_real_black_then_recovery_uses_reviewed_start_clock(self):
         from screen_state import load_references
         black=Path('/home/yama1/.codex/sanma-run-cd82c23-20261101/current9.png')

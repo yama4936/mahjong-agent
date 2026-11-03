@@ -3,6 +3,7 @@ import io
 import hashlib
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 from PIL import Image,ImageDraw
 from sanma_friend_freshness import friend_frame_changes,friend_frame_stable,latch_friend_action_target
@@ -29,7 +30,9 @@ class SanmaFriendFreshnessTests(unittest.TestCase):
     def test_action_latch_ignores_clock_and_rejects_repeat(self):
         for action in ("kita", "tsumo", "discard"):
             with self.subTest(action=action):
-                operator=Mock()
+                # A plain object models the initial operator state: missing
+                # guard means no resumed-action guard has been installed.
+                operator=SimpleNamespace()
                 latch_friend_action_target(operator,self.frame,action)
                 with self.assertRaisesRegex(RuntimeError,"outcome unknown"):
                     latch_friend_action_target(operator,modified(self.frame,(1500,780,1550,830)),action)

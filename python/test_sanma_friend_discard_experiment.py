@@ -43,6 +43,34 @@ class FriendDiscardExperimentTests(unittest.TestCase):
             execute_friend_discard(self.page, **{**self.kwargs, 'session_check': lambda: False})
         send.assert_not_called()
 
+    @patch('auto_operator.experimental_draw_glyph_stability')
+    @patch('sanma_friend_discard_experiment.friend_frame_stable', return_value=False)
+    @patch('sanma_friend_discard_experiment.send_discard_click')
+    def test_preclick_rejection_records_guard_stage_and_position(self, send, stable, glyph):
+        def reject(*args, diagnostic, **kwargs):
+            diagnostic.update(stage='binary_frame', blockX=320, blockY=96, changedPixels=21, threshold=14)
+            return False
+        glyph.side_effect = reject
+        self.page.screenshot.return_value = self.frame + b'changed'
+        observation = {**self.observation, 'referenceFrame': self.frame, 'experimentalDrawReport': {}}
+        saved = Mock()
+        with self.assertRaises(DiscardPreclickChanged):
+            execute_friend_discard(self.page, **{**self.kwargs, 'observation': observation,
+                                               'save_rejected_frame': saved})
+        self.assertEqual(self.logs[-1]['preclickDiagnostic'], {
+            'stage': 'binary_frame', 'blockX': 320, 'blockY': 96, 'changedPixels': 21, 'threshold': 14})
+        saved.assert_called_once()
+        send.assert_not_called()
+
+    @patch('sanma_friend_discard_experiment.send_discard_click')
+    def test_invalid_reference_records_identity_failure_without_click(self, send):
+        self.page.screenshot.return_value = self.frame + b'changed'
+        observation = {**self.observation, 'referenceFrame': b'wrong'}
+        with self.assertRaises(DiscardPreclickChanged):
+            execute_friend_discard(self.page, **{**self.kwargs, 'observation': observation})
+        self.assertEqual(self.logs[-1]['preclickDiagnostic'], {'stage': 'frame_identity'})
+        send.assert_not_called()
+
     @patch("sanma_friend_discard_experiment.send_discard_click")
     def test_ambiguous_prompts_ranked_changed_frame_and_expired_turn_are_blocked(self, send):
         variants = [dict(observation={**self.observation, "promptStatus": "unknown"}),
