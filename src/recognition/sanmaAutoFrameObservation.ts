@@ -91,9 +91,10 @@ export async function observeSanmaFrameAutomatically(input: {
   let leftRiver: Awaited<ReturnType<typeof inspectSanmaLeftRiverCandidate>> | undefined;
   if (board.reason === 'unsupported_right_opponent_layout' && board.layoutCandidate?.verified === false
       && JSON.stringify(board.layoutCandidate.opponents) === JSON.stringify(['left','right'])) {
+    const riverClassifier = serializeRiverClassifier(input.publicClassifier);
     [rightRiver, leftRiver] = await inspectIndependentRivers(
-      () => inspectSanmaRightRiverCandidate(frame, input.layout, input.publicClassifier),
-      () => inspectSanmaLeftRiverCandidate(frame, input.layout, input.publicClassifier),
+      () => inspectSanmaRightRiverCandidate(frame, input.layout, riverClassifier),
+      () => inspectSanmaLeftRiverCandidate(frame, input.layout, riverClassifier),
     );
   }
   // The older diagnostic evaluates with an assumed empty visible-tile list.
@@ -154,4 +155,17 @@ export function deriveSanmaActionCandidates(report: ObservedFrame, hasSeatCandid
 export async function inspectIndependentRivers<R, L>(right: () => Promise<R>, left: () => Promise<L>): Promise<[R | undefined, L | undefined]> {
   const [r, l] = await Promise.allSettled([Promise.resolve().then(right), Promise.resolve().then(left)]);
   return [r.status === "fulfilled" ? r.value : undefined, l.status === "fulfilled" ? l.value : undefined];
+}
+
+/** Queue model calls before they enter the shared worker's timed request queue. */
+export function serializeRiverClassifier(classifier: PublicVitClassifier): PublicVitClassifier {
+  let tail: Promise<void> = Promise.resolve();
+  return {
+    ...(classifier.backend ? { backend: classifier.backend } : {}),
+    classifyTileImages(images) {
+      const result = tail.then(() => classifier.classifyTileImages(images));
+      tail = result.then(() => undefined, () => undefined);
+      return result;
+    },
+  };
 }
