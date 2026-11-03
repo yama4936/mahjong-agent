@@ -47,6 +47,7 @@ def friend_action_target_key(frame: bytes, action: str) -> str:
 
 def latch_friend_action_target(operator, frame: bytes, action: str) -> str:
     """Suppress repeated input on the same visible target, without claiming success."""
+    check_friend_recovery_guard(operator)
     key = friend_action_target_key(frame, action)
     attempted = getattr(operator, "_sanma_friend_attempted_targets", None)
     if not isinstance(attempted, set):
@@ -56,6 +57,18 @@ def latch_friend_action_target(operator, frame: bytes, action: str) -> str:
         raise RuntimeError("sanma action target already attempted; outcome unknown")
     attempted.add(key)
     return key
+
+
+def check_friend_recovery_guard(operator):
+    """Preserve the previous input's bounds until the first resumed click."""
+    guard = getattr(operator, '_sanma_friend_resume_guard', None)
+    if guard is None:
+        return
+    import time
+    watch, started, deadline = guard
+    if (getattr(operator, 'verified_friend_300_active', False) is not True
+            or not watch.alive() or not 0 <= (time.monotonic() - started) * 1000 < deadline):
+        raise RuntimeError('discard recovery continuity or original deadline lost')
 
 
 def friend_action_started_at(operator):

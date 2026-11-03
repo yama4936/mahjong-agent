@@ -5,6 +5,7 @@ The terminal candidate state never confirms a discard or authorizes input.
 """
 import json
 import re
+from collections import Counter
 from pathlib import Path
 from datetime import datetime
 from sanma_river_cell_diagnostic import compare as compare_cells
@@ -36,7 +37,7 @@ def _frame_time(path):
     return datetime.fromisoformat(f'{date}T{hour}:{minute}:{second}{zone_hour}:{zone_minute}')
 
 
-def evaluate(before_path, after_paths, journal):
+def evaluate(before_path, after_paths, journal, *, recheck_round=False):
     """Cross-check retained evidence; caller must preserve provenance and order."""
     result = {'scope': 'offline_untrusted_sanma_discard_evidence_chain',
               'state': 'pending', 'confirmed': False, 'operationAuthorized': False,
@@ -62,6 +63,10 @@ def evaluate(before_path, after_paths, journal):
                 return reject('journal mismatch')
         before = _read(before_path)
         posts = [_read(p) for p in after_paths]
+        if recheck_round:
+            from sanma_round_fresh_ocr import check_round
+            if not all(check_round(p) for p in [before, *posts]):
+                return reject('fresh frame-bound round OCR unavailable or disagrees')
         times = [_frame_time(p['screenshot']) for p in [before, *posts]]
         if (not times[0] <= _time(attempt) <= _time(selection) < times[1]
                 or any(a >= b for a, b in zip(times[1:], times[2:]))
@@ -118,6 +123,26 @@ def evaluate(before_path, after_paths, journal):
             return reject('missing repeated draw candidates')
         if len({d['tile'] for d in draws}) != 1:
             return reject('draw candidate changed')
+        # A closed hand on a later turn must equal the previously observed
+        # fourteen tiles less the selected tile plus the subsequent draw. This
+        # is an additional consistency check, not proof: both observations can
+        # contain the same recognition error and open calls remain unresolved.
+        before_tiles = hand_value.get('tiles')
+        if (hand_value.get('candidateMelds') != 0 or not isinstance(before_tiles, list)
+                or len(before_tiles) != 14 or not all(isinstance(t, str) for t in before_tiles)):
+            return reject('missing full previous hand')
+        expected = Counter(before_tiles)
+        expected[attempt['tile']] -= 1
+        expected += Counter([draws[0]['tile']])
+        for post in posts:
+            post_hand = post['sourceObservation']['report']['hand']
+            value = post_hand.get('value')
+            if (post_hand.get('status') != 'candidate' or not isinstance(value, dict)
+                    or value.get('candidateMelds') != 0
+                    or not isinstance(value.get('tiles'), list) or len(value['tiles']) != 14
+                    or not all(isinstance(t, str) for t in value['tiles'])
+                    or Counter(value['tiles']) != expected):
+                return reject('closed hand conservation failed or unavailable')
         result['state'] = 'later_turn_evidence_candidate'
         result['evidence'] = {'selectedTile': attempt['tile'], 'selectedIndex': attempt['clickIndex'],
                               'cellIndex': indices[0], 'remainingCandidates': remaining,

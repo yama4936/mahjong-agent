@@ -56,8 +56,9 @@ class FriendDiscardExperimentTests(unittest.TestCase):
         send.assert_not_called()
 
     @patch("sanma_friend_discard_experiment.send_discard_click")
-    def test_cd82_actual_frame_change_rejected_before_latch_or_click(self, send):
-        import glob, json
+    def test_cd82_lighting_change_accepted_but_draw_change_rejected(self, send):
+        import glob, io, json
+        from PIL import Image
         root = Path('/home/yama1/.codex/sanma-run-cd82c23-20261101/run/frames')
         source = glob.glob(str(root / '*15-13-52*sanma-self-turn.png'))
         rejected = glob.glob(str(root / '*sanma-discard-preclick-rejected.png'))
@@ -67,7 +68,18 @@ class FriendDiscardExperimentTests(unittest.TestCase):
         report=json.loads(report_path.read_text())
         observation={**self.observation,'frameSha256':hashlib.sha256(reference).hexdigest(),
                      'referenceFrame':reference,'experimentalDrawReport':report}
+        # Both retained frames show the same hand and board; the clock and
+        # illumination differ. A true draw change must still stop before input.
         latch=Mock(); saved=Mock()
+        send.return_value = {"lift": 48}
+        execute_friend_discard(self.page,**{**self.kwargs,'observation':observation,'before_click':latch,'save_rejected_frame':saved})
+        latch.assert_called_once(); send.assert_called_once(); saved.assert_not_called()
+        latch.reset_mock(); send.reset_mock()
+        changed = Image.open(io.BytesIO(self.page.screenshot.return_value)).convert('RGB')
+        # Replace drawn south with the adjacent west, leaving all other pixels.
+        changed.paste(changed.crop((1360, 922, 1453, 1073)), (1485, 922))
+        output=io.BytesIO(); changed.save(output, format='PNG')
+        self.page.screenshot.return_value=output.getvalue()
         with self.assertRaises(DiscardPreclickChanged):
             execute_friend_discard(self.page,**{**self.kwargs,'observation':observation,'before_click':latch,'save_rejected_frame':saved})
         saved.assert_called_once_with(self.page.screenshot.return_value)

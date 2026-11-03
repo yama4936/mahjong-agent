@@ -9162,6 +9162,9 @@ class PythonAutoOperator:
         last_frame = None
         attempted_frames: set[str] = set()
         last_unconfirmed_action: str | None = None
+        discard_recovery = None
+        resumed_watch = None
+        watch = None
         unconfirmed_input_seen = False
         only_unconfirmed_kita = False
         last_kita_receipt = None
@@ -9186,451 +9189,558 @@ class PythonAutoOperator:
             path = self.frames / f"{utc_stamp()}.{uuid.uuid4().hex}.sanma-friend-stop.png"
             path.write_bytes(frame)
             return str(path)
-        while time.monotonic() - started < 3600:
-            polls += 1
-            if getattr(self.args, "max_iterations", 0) and polls > self.args.max_iterations:
-                break
-            if self.verified_friend_300_active is not True:
-                self.log("sanma_friend_stopped", reason="friend_session_revoked", screenshot=preserve(last_frame))
-                return
-            try:
-                observation_started = time.monotonic()
-                frame = page.screenshot(animations="disabled")
-                last_frame = frame
-                state, confidence = classify_screen(frame, self.screen_references)
-                white_candidate = is_blank_white_client_frame(frame)
-            except Exception as error:
-                self.log("sanma_friend_stopped", reason="screen_observation_failed", error=str(error),
-                         screenshot=preserve(last_frame))
-                return
-            # A pre-click mismatch proves no input was sent, but a different
-            # screen cannot establish a new turn or a new action deadline.
-            if kita_preclick_rejections and (state != "match" or confidence < 0.95):
-                self.log("sanma_friend_stopped", reason="kita_reobserve_screen_changed",
-                         screenState=state, confidence=confidence, screenshot=preserve(frame),
-                         operationAuthorized=False)
-                return
-            if white_candidate:
-                self.log("sanma_friend_stopped", reason="white_screen_unobservable",
-                         screenState=state, confidence=confidence, screenshot=preserve(frame),
-                         digest=hashlib.sha256(frame).hexdigest(), operationAuthorized=False,
-                         recovery="manual_review_required", gameplayInputAttempts=0,
-                         currentLoopUnconfirmedInputObserved=unconfirmed_input_seen)
-                return
-            if state == "black_screen":
-                black_started = time.monotonic()
-                self.log("sanma_friend_black_screen_observed", screenshot=preserve(frame),
-                         digest=hashlib.sha256(frame).hexdigest(), recoveryInputAttempts=0,
-                         currentLoopUnconfirmedInputObserved=unconfirmed_input_seen,
-                         operationAuthorized=False)
-                # A prior uncertain input could have completed while the display was
-                # black. Never use recovery as evidence that it is safe to repeat.
-                reason = "black_screen_unobservable"
-                recovered = False
-                recovery_state, recovery_confidence = state, confidence
-                stable_match_count = 0
+        try:
+            while time.monotonic() - started < 3600:
+                polls += 1
+                if getattr(self.args, "max_iterations", 0) and polls > self.args.max_iterations:
+                    break
+                if self.verified_friend_300_active is not True:
+                    self.log("sanma_friend_stopped", reason="friend_session_revoked", screenshot=preserve(last_frame))
+                    return
                 try:
-                    recovery_url = page.url
-                    if not isinstance(recovery_url, str) or not recovery_url:
-                        raise ValueError("page URL unavailable")
-                except Exception:
-                    recovery_url = None
-                    reason = "black_screen_page_identity_unknown"
-                reviewed_start = getattr(self, "sanma_friend_reviewed_start_at", None)
-                start_is_usable = (type(reviewed_start) in (int, float) and isfinite(reviewed_start)
-                                   and 0 <= reviewed_start <= started)
-                # Prefer the earlier bound even if a match frame was seen
-                # later: that frame cannot prove when the turn began.
-                conservative_start = min(action_observed_at, reviewed_start) if action_observed_at is not None and start_is_usable else action_observed_at if action_observed_at is not None else reviewed_start if start_is_usable else None
-                if recovery_url is not None and not unconfirmed_input_seen and last_unconfirmed_action is None:
-                    for attempt in range(48):
-                        if (time.monotonic() - black_started >= 240 or
-                            (conservative_start is not None and
-                             (time.monotonic() - conservative_start) * 1000 >= self.args.action_deadline_ms)):
-                            reason = "black_screen_deadline_expired"
-                            break
-                        try:
-                            page.wait_for_timeout(5000)
-                        except Exception as error:
-                            reason = "black_screen_observation_failed"
-                            self.log("sanma_friend_black_observation_failed", error=str(error))
-                            break
-                        if self.verified_friend_300_active is not True:
-                            reason = "friend_session_revoked"
-                            break
-                        try:
-                            if page.url != recovery_url:
-                                reason = "black_screen_page_redirected"
+                    observation_started = time.monotonic()
+                    frame = page.screenshot(animations="disabled")
+                    last_frame = frame
+                    state, confidence = classify_screen(frame, self.screen_references)
+                    white_candidate = is_blank_white_client_frame(frame)
+                except Exception as error:
+                    self.log("sanma_friend_stopped", reason="screen_observation_failed", error=str(error),
+                             screenshot=preserve(last_frame))
+                    return
+                # A pre-click mismatch proves no input was sent, but a different
+                # screen cannot establish a new turn or a new action deadline.
+                if kita_preclick_rejections and (state != "match" or confidence < 0.95):
+                    self.log("sanma_friend_stopped", reason="kita_reobserve_screen_changed",
+                             screenState=state, confidence=confidence, screenshot=preserve(frame),
+                             operationAuthorized=False)
+                    return
+                if white_candidate:
+                    self.log("sanma_friend_stopped", reason="white_screen_unobservable",
+                             screenState=state, confidence=confidence, screenshot=preserve(frame),
+                             digest=hashlib.sha256(frame).hexdigest(), operationAuthorized=False,
+                             recovery="manual_review_required", gameplayInputAttempts=0,
+                             currentLoopUnconfirmedInputObserved=unconfirmed_input_seen)
+                    return
+                if state == "black_screen":
+                    black_started = time.monotonic()
+                    self.log("sanma_friend_black_screen_observed", screenshot=preserve(frame),
+                             digest=hashlib.sha256(frame).hexdigest(), recoveryInputAttempts=0,
+                             currentLoopUnconfirmedInputObserved=unconfirmed_input_seen,
+                             operationAuthorized=False)
+                    # A prior uncertain input could have completed while the display was
+                    # black. Never use recovery as evidence that it is safe to repeat.
+                    reason = "black_screen_unobservable"
+                    recovered = False
+                    recovery_state, recovery_confidence = state, confidence
+                    stable_match_count = 0
+                    try:
+                        recovery_url = page.url
+                        if not isinstance(recovery_url, str) or not recovery_url:
+                            raise ValueError("page URL unavailable")
+                    except Exception:
+                        recovery_url = None
+                        reason = "black_screen_page_identity_unknown"
+                    reviewed_start = getattr(self, "sanma_friend_reviewed_start_at", None)
+                    start_is_usable = (type(reviewed_start) in (int, float) and isfinite(reviewed_start)
+                                       and 0 <= reviewed_start <= started)
+                    # Prefer the earlier bound even if a match frame was seen
+                    # later: that frame cannot prove when the turn began.
+                    conservative_start = min(action_observed_at, reviewed_start) if action_observed_at is not None and start_is_usable else action_observed_at if action_observed_at is not None else reviewed_start if start_is_usable else None
+                    if recovery_url is not None and not unconfirmed_input_seen and last_unconfirmed_action is None:
+                        for attempt in range(48):
+                            if (time.monotonic() - black_started >= 240 or
+                                (conservative_start is not None and
+                                 (time.monotonic() - conservative_start) * 1000 >= self.args.action_deadline_ms)):
+                                reason = "black_screen_deadline_expired"
                                 break
-                        except Exception:
-                            reason = "black_screen_page_identity_unknown"
-                            break
-                        if (time.monotonic() - black_started >= 240 or
-                            (conservative_start is not None and
-                             (time.monotonic() - conservative_start) * 1000 >= self.args.action_deadline_ms)):
-                            reason = "black_screen_deadline_expired"
-                            break
-                        try:
-                            candidate = page.screenshot(animations="disabled")
-                            last_frame = candidate
-                            recovery_state, recovery_confidence = "unknown", 0.0
-                            candidate_state, candidate_confidence = classify_screen(candidate, self.screen_references)
-                            recovery_state, recovery_confidence = candidate_state, candidate_confidence
+                            try:
+                                page.wait_for_timeout(5000)
+                            except Exception as error:
+                                reason = "black_screen_observation_failed"
+                                self.log("sanma_friend_black_observation_failed", error=str(error))
+                                break
                             if self.verified_friend_300_active is not True:
                                 reason = "friend_session_revoked"
                                 break
-                            if page.url != recovery_url:
-                                reason = "black_screen_page_redirected"
+                            try:
+                                if page.url != recovery_url:
+                                    reason = "black_screen_page_redirected"
+                                    break
+                            except Exception:
+                                reason = "black_screen_page_identity_unknown"
                                 break
-                        except Exception as error:
-                            reason = "black_screen_observation_failed"
-                            self.log("sanma_friend_black_observation_failed", error=str(error))
+                            if (time.monotonic() - black_started >= 240 or
+                                (conservative_start is not None and
+                                 (time.monotonic() - conservative_start) * 1000 >= self.args.action_deadline_ms)):
+                                reason = "black_screen_deadline_expired"
+                                break
+                            try:
+                                candidate = page.screenshot(animations="disabled")
+                                last_frame = candidate
+                                recovery_state, recovery_confidence = "unknown", 0.0
+                                candidate_state, candidate_confidence = classify_screen(candidate, self.screen_references)
+                                recovery_state, recovery_confidence = candidate_state, candidate_confidence
+                                if self.verified_friend_300_active is not True:
+                                    reason = "friend_session_revoked"
+                                    break
+                                if page.url != recovery_url:
+                                    reason = "black_screen_page_redirected"
+                                    break
+                            except Exception as error:
+                                reason = "black_screen_observation_failed"
+                                self.log("sanma_friend_black_observation_failed", error=str(error))
+                                break
+                            if (time.monotonic() - black_started >= 240 or
+                                (conservative_start is not None and
+                                 (time.monotonic() - conservative_start) * 1000 >= self.args.action_deadline_ms)):
+                                reason = "black_screen_deadline_expired"
+                                break
+                            if candidate_state == "black_screen":
+                                stable_match_count = 0
+                                continue
+                            if candidate_state == "unknown" or (candidate_state == "match" and candidate_confidence < 0.95):
+                                stable_match_count = 0
+                                continue
+                            if candidate_state != "match":
+                                reason = "black_screen_recovered_unexpected_screen"
+                                break
+                            if conservative_start is None:
+                                reason = "black_screen_action_deadline_unknown"
+                                break
+                            stable_match_count += 1
+                            if stable_match_count < 2:
+                                continue
+                            if action_observed_at != conservative_start:
+                                self.log("sanma_friend_action_clock_started", basis="reviewed_room_start_input",
+                                         turnStartVerified=False, actionDeadlineMs=300000)
+                            action_observed_at = conservative_start
+                            self.sanma_friend_action_observed_at = conservative_start
+                            recovery_deadline_at = conservative_start
+                            recovery_deadline_basis = ("reviewed_room_start_input" if start_is_usable
+                                                       and conservative_start == reviewed_start
+                                                       else "prior_action_observation")
+                            self.log("sanma_friend_black_screen_recovered", screenshot=preserve(candidate),
+                                     digest=hashlib.sha256(candidate).hexdigest(), attempts=attempt + 1,
+                                     operationAuthorized=False, freshRecognitionRequired=True,
+                                     recoveryDeadlineBasis=recovery_deadline_basis,
+                                     recoveryDeadlineElapsedMs=round((time.monotonic() - recovery_deadline_at) * 1000),
+                                     actionDeadlineMs=self.args.action_deadline_ms)
+                            recovered = True
                             break
-                        if (time.monotonic() - black_started >= 240 or
-                            (conservative_start is not None and
-                             (time.monotonic() - conservative_start) * 1000 >= self.args.action_deadline_ms)):
-                            reason = "black_screen_deadline_expired"
-                            break
-                        if candidate_state == "black_screen":
-                            stable_match_count = 0
-                            continue
-                        if candidate_state == "unknown" or (candidate_state == "match" and candidate_confidence < 0.95):
-                            stable_match_count = 0
-                            continue
-                        if candidate_state != "match":
-                            reason = "black_screen_recovered_unexpected_screen"
-                            break
-                        if conservative_start is None:
-                            reason = "black_screen_action_deadline_unknown"
-                            break
-                        stable_match_count += 1
-                        if stable_match_count < 2:
-                            continue
-                        if action_observed_at != conservative_start:
-                            self.log("sanma_friend_action_clock_started", basis="reviewed_room_start_input",
-                                     turnStartVerified=False, actionDeadlineMs=300000)
-                        action_observed_at = conservative_start
-                        self.sanma_friend_action_observed_at = conservative_start
-                        recovery_deadline_at = conservative_start
-                        recovery_deadline_basis = ("reviewed_room_start_input" if start_is_usable
-                                                   and conservative_start == reviewed_start
-                                                   else "prior_action_observation")
-                        self.log("sanma_friend_black_screen_recovered", screenshot=preserve(candidate),
-                                 digest=hashlib.sha256(candidate).hexdigest(), attempts=attempt + 1,
-                                 operationAuthorized=False, freshRecognitionRequired=True,
-                                 recoveryDeadlineBasis=recovery_deadline_basis,
-                                 recoveryDeadlineElapsedMs=round((time.monotonic() - recovery_deadline_at) * 1000),
-                                 actionDeadlineMs=self.args.action_deadline_ms)
-                        recovered = True
-                        break
-                if recovered:
-                    # Discard the recovery frame and all pre-black observations;
-                    # the ordinary loop takes a new screenshot and recognizes it.
-                    continue
-                self.log("sanma_friend_stopped", reason=reason,
-                         screenState=recovery_state, confidence=recovery_confidence, screenshot=preserve(last_frame),
-                         digest=hashlib.sha256(last_frame).hexdigest() if isinstance(last_frame, bytes) else None,
-                         blackDigest=hashlib.sha256(frame).hexdigest(), recoveryInputAttempts=0,
-                         priorGameplayInputCount=None, currentLoopUnconfirmedInputObserved=unconfirmed_input_seen,
-                         recovery="passive_only", operationAuthorized=False)
-                return
-            if state == "match" and confidence >= 0.95:
-                recovery_elapsed_ms = ((time.monotonic() - recovery_deadline_at) * 1000
-                                       if recovery_deadline_at is not None else None)
-                if recovery_elapsed_ms is not None and recovery_elapsed_ms >= self.args.action_deadline_ms:
-                    self.log("sanma_friend_stopped", reason="black_screen_deadline_expired", screenshot=preserve(frame),
-                             screenState=state, confidence=confidence, deadlineContext="after_black_screen_recovery",
-                             recoveryDeadlineBasis=recovery_deadline_basis, recoveryDeadlineElapsedMs=round(recovery_elapsed_ms),
-                             actionDeadlineMs=self.args.action_deadline_ms, stage="before_recognition",
-                             currentLoopUnconfirmedInputObserved=unconfirmed_input_seen, operationAuthorized=False)
+                    if recovered:
+                        # Discard the recovery frame and all pre-black observations;
+                        # the ordinary loop takes a new screenshot and recognizes it.
+                        continue
+                    self.log("sanma_friend_stopped", reason=reason,
+                             screenState=recovery_state, confidence=recovery_confidence, screenshot=preserve(last_frame),
+                             digest=hashlib.sha256(last_frame).hexdigest() if isinstance(last_frame, bytes) else None,
+                             blackDigest=hashlib.sha256(frame).hexdigest(), recoveryInputAttempts=0,
+                             priorGameplayInputCount=None, currentLoopUnconfirmedInputObserved=unconfirmed_input_seen,
+                             recovery="passive_only", operationAuthorized=False)
                     return
-                if round_end_started is not None:
-                    self.log("sanma_friend_round_transition_reobserved", screenState=state,
-                             screenshot=preserve(frame), confirmed=False)
-                    round_end_started = None
-                    # A visual round-end candidate does not establish a new
-                    # round; retain any attempted-riichi lock for this session.
-                    # An unconfirmed kita may still be the same turn.
-                    if not only_unconfirmed_kita:
-                        action_observed_at = None
-                match_seen = True
-                if action_observed_at is None:
-                    action_observed_at = observation_started
-                    self.sanma_friend_action_observed_at = action_observed_at
-                    self.log("sanma_friend_action_clock_started", basis="first_visible_observation",
-                             turnStartVerified=False, actionDeadlineMs=300000)
-                if result_latched is not None:
-                    self.result_screen_advanced = None
-                    result_latched = None
-                try:
-                    receipt = self.inspect_sanma_self_turn(page)
+                if state == "match" and confidence >= 0.95:
                     recovery_elapsed_ms = ((time.monotonic() - recovery_deadline_at) * 1000
                                            if recovery_deadline_at is not None else None)
                     if recovery_elapsed_ms is not None and recovery_elapsed_ms >= self.args.action_deadline_ms:
-                        self.log("sanma_friend_stopped", reason="black_screen_deadline_expired", screenshot=receipt.get("screenshot"),
-                                 lastOuterScreenState=state, lastOuterConfidence=confidence,
-                                 deadlineContext="after_black_screen_recovery", recoveryDeadlineBasis=recovery_deadline_basis,
-                                 recoveryDeadlineElapsedMs=round(recovery_elapsed_ms), actionDeadlineMs=self.args.action_deadline_ms,
-                                 stage="after_recognition", currentLoopUnconfirmedInputObserved=unconfirmed_input_seen,
-                                 operationAuthorized=False)
+                        self.log("sanma_friend_stopped", reason="black_screen_deadline_expired", screenshot=preserve(frame),
+                                 screenState=state, confidence=confidence, deadlineContext="after_black_screen_recovery",
+                                 recoveryDeadlineBasis=recovery_deadline_basis, recoveryDeadlineElapsedMs=round(recovery_elapsed_ms),
+                                 actionDeadlineMs=self.args.action_deadline_ms, stage="before_recognition",
+                                 currentLoopUnconfirmedInputObserved=unconfirmed_input_seen, operationAuthorized=False)
                         return
-                    candidates = receipt.get("candidates")
-                    actions = candidates.get("candidates") if isinstance(candidates, dict) else None
-                    if not isinstance(actions, list):
-                        self.log("sanma_friend_stopped", reason="unsupported_or_unknown_action", screenshot=receipt.get("screenshot"),
-                                 digest=receipt.get("digest"), candidates=candidates, operationAuthorized=False)
-                        return
-                    candidate_actions = (tuple(sorted(item["action"] for item in actions))
-                                         if all(isinstance(item, dict) and isinstance(item.get("action"), str)
-                                                for item in actions) else None)
-                    if kita_preclick_rejections and (candidate_actions is None or candidate_actions != kita_reobserve_actions):
-                        self.log("sanma_friend_stopped", reason="kita_reobserve_candidate_changed",
-                                 screenshot=receipt.get("screenshot"), operationAuthorized=False)
-                        return
-                    freshness = receipt.get("freshness")
-                    if isinstance(freshness, dict) and freshness.get("status") == "changed":
-                        if changed_since is None:
-                            changed_since = time.monotonic()
-                        changed_streak += 1
-                        elapsed = time.monotonic() - changed_since
-                        self.log("sanma_friend_wait", reason="observation_changed_reobserve",
-                                 screenshot=receipt.get("screenshot"),
-                                 freshnessScreenshot=freshness.get("screenshot"),
-                                 digest=receipt.get("digest"), freshnessDigest=freshness.get("digest"),
-                                 changedRegions=freshness.get("regionsChanged"),
-                                 streak=changed_streak, elapsedSeconds=round(elapsed, 2))
-                        if changed_streak >= 120 or elapsed >= 120:
-                            self.log("sanma_friend_stopped", reason="observation_changed_timeout",
-                                     screenshot=freshness.get("screenshot"), streak=changed_streak)
+                    if round_end_started is not None:
+                        self.log("sanma_friend_round_transition_reobserved", screenState=state,
+                                 screenshot=preserve(frame), confirmed=False)
+                        round_end_started = None
+                        # A visual round-end candidate does not establish a new
+                        # round; retain any attempted-riichi lock for this session.
+                        # An unconfirmed kita may still be the same turn.
+                        if not only_unconfirmed_kita and last_unconfirmed_action != 'discard':
+                            action_observed_at = None
+                    match_seen = True
+                    if action_observed_at is None:
+                        action_observed_at = observation_started
+                        self.sanma_friend_action_observed_at = action_observed_at
+                        self.log("sanma_friend_action_clock_started", basis="first_visible_observation",
+                                 turnStartVerified=False, actionDeadlineMs=300000)
+                    if result_latched is not None:
+                        self.result_screen_advanced = None
+                        result_latched = None
+                    try:
+                        receipt = self.inspect_sanma_self_turn(page)
+                        if last_unconfirmed_action == "discard":
+                            if discard_recovery is None:
+                                self.log("sanma_friend_stopped", reason="discard_recovery_unavailable", operationAuthorized=False)
+                                return
+                            watch = discard_recovery['watch']
+                            if (not watch.alive() or self.verified_friend_300_active is not True
+                                    or not 0 <= (time.monotonic() - discard_recovery['started']) * 1000 < 300000):
+                                watch.close()
+                                self.log("sanma_friend_stopped", reason="discard_recovery_session_or_deadline", operationAuthorized=False)
+                                return
+                            draw = receipt.get('drawCandidate')
+                            if not isinstance(draw, dict) or draw.get('status') != 'candidate':
+                                page.wait_for_timeout(500)
+                                continue
+                            if (not discard_recovery['started'] <= discard_recovery['attempted_monotonic'] <= discard_recovery['selected_monotonic']
+                                    or observation_started <= discard_recovery['selected_monotonic']
+                                    or (discard_recovery['posts'] and observation_started <= discard_recovery['post_monotonic'])):
+                                watch.close()
+                                self.log("sanma_friend_stopped", reason="discard_recovery_capture_order", operationAuthorized=False)
+                                return
+                            if not discard_recovery['posts']:
+                                discard_recovery['posts'].append(receipt)
+                                discard_recovery['post_monotonic'] = observation_started
+                                discard_recovery['new_started'] = observation_started
+                                page.wait_for_timeout(500)
+                                continue
+                            discard_recovery['posts'].append(receipt)
+                            from sanma_friend_discard_recovery import candidate as discard_recovery_candidate
+                            accepted = discard_recovery_candidate(
+                                discard_recovery['before'], discard_recovery['posts'], discard_recovery['journal'],
+                                continuity=watch, active=lambda: self.verified_friend_300_active is True,
+                                started=discard_recovery['started'], deadline_ms=self.args.action_deadline_ms)
+                            if not accepted:
+                                watch.close()
+                                self.log("sanma_friend_stopped", reason="discard_recovery_evidence_rejected", operationAuthorized=False)
+                                return
+                            resumed_watch = watch
+                            self._sanma_friend_resume_guard = (watch, discard_recovery['started'], self.args.action_deadline_ms)
+                            action_observed_at = discard_recovery['new_started']
+                            self.sanma_friend_action_observed_at = action_observed_at
+                            unconfirmed_input_seen = False
+                            only_unconfirmed_kita = False
+                            last_unconfirmed_action = None
+                            self.log("sanma_friend_discard_recovery_candidate", screenshot=receipt.get('screenshot'),
+                                     confirmed=False, operationAuthorized=False, freshRecognitionRequired=False,
+                                     originalStart=discard_recovery['started'], attemptedMonotonic=discard_recovery['attempted_monotonic'],
+                                     selectedMonotonic=discard_recovery['selected_monotonic'],
+                                     postMonotonic=[discard_recovery['post_monotonic'], observation_started],
+                                     journal=discard_recovery['journal'],
+                                     screenshots=[discard_recovery['before'].get('screenshot'),
+                                                  *[post.get('screenshot') for post in discard_recovery['posts']]])
+                            discard_recovery = None
+                        recovery_elapsed_ms = ((time.monotonic() - recovery_deadline_at) * 1000
+                                               if recovery_deadline_at is not None else None)
+                        if recovery_elapsed_ms is not None and recovery_elapsed_ms >= self.args.action_deadline_ms:
+                            self.log("sanma_friend_stopped", reason="black_screen_deadline_expired", screenshot=receipt.get("screenshot"),
+                                     lastOuterScreenState=state, lastOuterConfidence=confidence,
+                                     deadlineContext="after_black_screen_recovery", recoveryDeadlineBasis=recovery_deadline_basis,
+                                     recoveryDeadlineElapsedMs=round(recovery_elapsed_ms), actionDeadlineMs=self.args.action_deadline_ms,
+                                     stage="after_recognition", currentLoopUnconfirmedInputObserved=unconfirmed_input_seen,
+                                     operationAuthorized=False)
                             return
-                        page.wait_for_timeout(500)
-                        continue
-                    changed_streak = 0
-                    changed_since = None
-                    frame_digest = receipt.get("digest")
-                    if not isinstance(frame_digest, str) or frame_digest in attempted_frames:
-                        self.log("sanma_friend_stopped", reason="frame_already_attempted_or_unknown", screenshot=receipt.get("screenshot"))
-                        return
-                    if actions:
+                        candidates = receipt.get("candidates")
+                        actions = candidates.get("candidates") if isinstance(candidates, dict) else None
+                        if not isinstance(actions, list):
+                            self.log("sanma_friend_stopped", reason="unsupported_or_unknown_action", screenshot=receipt.get("screenshot"),
+                                     digest=receipt.get("digest"), candidates=candidates, operationAuthorized=False)
+                            return
+                        candidate_actions = (tuple(sorted(item["action"] for item in actions))
+                                             if all(isinstance(item, dict) and isinstance(item.get("action"), str)
+                                                    for item in actions) else None)
+                        if kita_preclick_rejections and (candidate_actions is None or candidate_actions != kita_reobserve_actions):
+                            self.log("sanma_friend_stopped", reason="kita_reobserve_candidate_changed",
+                                     screenshot=receipt.get("screenshot"), operationAuthorized=False)
+                            return
+                        freshness = receipt.get("freshness")
+                        if isinstance(freshness, dict) and freshness.get("status") == "changed":
+                            if changed_since is None:
+                                changed_since = time.monotonic()
+                            changed_streak += 1
+                            elapsed = time.monotonic() - changed_since
+                            self.log("sanma_friend_wait", reason="observation_changed_reobserve",
+                                     screenshot=receipt.get("screenshot"),
+                                     freshnessScreenshot=freshness.get("screenshot"),
+                                     digest=receipt.get("digest"), freshnessDigest=freshness.get("digest"),
+                                     changedRegions=freshness.get("regionsChanged"),
+                                     streak=changed_streak, elapsedSeconds=round(elapsed, 2))
+                            if changed_streak >= 120 or elapsed >= 120:
+                                self.log("sanma_friend_stopped", reason="observation_changed_timeout",
+                                         screenshot=freshness.get("screenshot"), streak=changed_streak)
+                                return
+                            page.wait_for_timeout(500)
+                            continue
+                        changed_streak = 0
+                        changed_since = None
+                        frame_digest = receipt.get("digest")
+                        if not isinstance(frame_digest, str) or frame_digest in attempted_frames:
+                            self.log("sanma_friend_stopped", reason="frame_already_attempted_or_unknown", screenshot=receipt.get("screenshot"))
+                            return
+                        if actions:
+                            unknown_streak = 0
+                            unknown_since = None
+                        if resumed_watch is not None and not resumed_watch.alive():
+                            resumed_watch.close()
+                            self.log("sanma_friend_stopped", reason="discard_recovery_session_changed", operationAuthorized=False)
+                            return
+                        if resumed_watch is not None and actions:
+                            resumed_watch.close()
+                            self._sanma_friend_resume_guard = None
+                            self.log("sanma_friend_stopped", reason="discard_recovery_action_requires_review", operationAuthorized=False)
+                            return
+                        if any(isinstance(item, dict) and item.get("action") == "ron" for item in actions):
+                            action = "ron"
+                            result = self.execute_sanma_friend_ron_candidate(page, receipt)
+                        elif any(isinstance(item, dict) and item.get("action") == "tsumo" for item in actions):
+                            action = "tsumo"
+                            result = self.execute_sanma_friend_tsumo_candidate(page, receipt)
+                        elif any(isinstance(item, dict) and item.get("action") == "kita" for item in actions):
+                            rearm_snapshot = None
+                            if last_unconfirmed_action == "kita":
+                                # Rearm temporarily removes the preceding action's
+                                # target. Restore it if the next input was not sent.
+                                prior_targets = getattr(self, "_sanma_friend_attempted_targets", None)
+                                prior_frames = getattr(self, "_sanma_friend_attempted_frames", None)
+                                if isinstance(prior_targets, set) and isinstance(prior_frames, set):
+                                    rearm_snapshot = (frozenset(prior_targets), frozenset(prior_frames),
+                                                      getattr(self, "_sanma_friend_kita_rearmed", False))
+                                from sanma_friend_kita_rearm import rearm_friend_kita_candidate
+                                if not rearm_friend_kita_candidate(self, last_kita_receipt, receipt):
+                                    self.log("sanma_friend_stopped", reason="previous_kita_unconfirmed",
+                                             screenshot=receipt.get("screenshot"), digest=frame_digest,
+                                             previousActionConfirmed=False)
+                                    return
+                            action = "kita"
+                            try:
+                                result = self.execute_sanma_friend_kita_candidate(page, receipt)
+                            except SanmaKitaPreclickChanged as error:
+                                prior_kita_targets = None
+                                if rearm_snapshot is not None:
+                                    targets, frames, was_rearmed = rearm_snapshot
+                                    current_targets = getattr(self, "_sanma_friend_attempted_targets", None)
+                                    current_frames = getattr(self, "_sanma_friend_attempted_frames", None)
+                                    removed = targets - current_targets if isinstance(current_targets, set) else set()
+                                    # Revert precisely the one-target rearm only when
+                                    # neither frame nor any other target was latched.
+                                    if (was_rearmed is False and self._sanma_friend_kita_rearmed is True
+                                            and isinstance(current_targets, set) and len(removed) == 1
+                                            and current_targets == targets - removed
+                                            and isinstance(current_frames, set) and current_frames == frames):
+                                        current_targets.update(removed)
+                                        self._sanma_friend_kita_rearmed = False
+                                        if only_unconfirmed_kita:
+                                            prior_kita_targets = targets
+                                kita_preclick_rejections += 1
+                                kita_reobserve_actions = candidate_actions
+                                self.log("sanma_friend_wait", reason="kita_preclick_reobserve",
+                                         screenshot=receipt.get("screenshot"), digest=frame_digest,
+                                         streak=kita_preclick_rejections, clicked=False, error=str(error))
+                                if not may_reobserve_unsent_kita(
+                                        self, frame_digest, unconfirmed_input_seen,
+                                        action_observed_at, time.monotonic(),
+                                        prior_kita_targets=prior_kita_targets):
+                                    self.log("sanma_friend_stopped", reason="kita_preclick_reobserve_limit",
+                                             streak=kita_preclick_rejections, clicked=False)
+                                    return
+                                page.wait_for_timeout(500)
+                                continue
+                        elif len(actions) == 1 and isinstance(actions[0], dict) and actions[0].get("action") == "riichi":
+                            from sanma_friend_riichi_experiment import execute_friend_riichi
+                            action = "riichi"
+                            result = execute_friend_riichi(self, page, receipt)
+                        elif actions and all(isinstance(item, dict) and item.get("action") in {"pon", "kan", "riichi"} for item in actions):
+                            from sanma_friend_pass_experiment import execute_friend_pon_pass
+                            result = execute_friend_pon_pass(self, page, receipt)
+                            if resumed_watch is not None:
+                                resumed_watch.close()
+                                resumed_watch = None
+                            unconfirmed_input_seen = True
+                            only_unconfirmed_kita = False
+                            self.log("sanma_friend_action_unconfirmed", action="pass_optional", result=result, confirmed=False)
+                            transition = self.observe_sanma_friend_transition(page, receipt, "pass_pon")
+                            self.log("sanma_friend_transition", **transition)
+                            if transition.get("status") not in {"visual_change_unconfirmed", "terminal"}:
+                                self.log("sanma_friend_stopped", reason="pass_transition_requires_review", transition=transition)
+                                return
+                            action_observed_at = None
+                            continue
+                        elif not actions:
+                            # No draw may mean an opponent turn or unavailable
+                            # recognition. Reobserve a bounded number of times.
+                            draw = receipt.get("drawCandidate")
+                            if not isinstance(draw, dict) or draw.get("status") != "candidate":
+                                if unknown_since is None:
+                                    unknown_since = time.monotonic()
+                                unknown_streak += 1
+                                elapsed = time.monotonic() - unknown_since
+                                if unknown_streak == 1 or unknown_streak % 10 == 0:
+                                    self.log("sanma_friend_wait", reason="draw_or_turn_unknown", screenshot=receipt.get("screenshot"),
+                                             streak=unknown_streak, elapsedSeconds=round(elapsed, 2), opponentTurnConfirmed=False)
+                                if unknown_streak >= 120 or elapsed >= 120:
+                                    self.log("sanma_friend_stopped", reason="draw_or_turn_unknown", screenshot=receipt.get("screenshot"))
+                                    return
+                                page.wait_for_timeout(500)
+                                continue
+                            action = "discard"
+                            from sanma_friend_discard_experiment import execute_friend_draw_candidate, DiscardPreclickChanged
+                            from sanma_friend_discard_recovery import MatchContinuity
+                            try:
+                                watch = MatchContinuity(page)
+                            except Exception:
+                                watch = None
+                            attempted_at = datetime.now(timezone.utc).isoformat()
+                            attempted_monotonic = time.monotonic()
+                            try:
+                                result = execute_friend_draw_candidate(self, page, receipt)
+                            except DiscardPreclickChanged as error:
+                                if watch is not None:
+                                    watch.close()
+                                discard_preclick_rejections += 1
+                                self.log("sanma_friend_wait", reason="discard_preclick_reobserve",
+                                         screenshot=receipt.get("screenshot"), digest=frame_digest,
+                                         streak=discard_preclick_rejections, clicked=False, error=str(error))
+                                # No input was sent on this specific path. Permit fresh
+                                # observations until the original action deadline, with a
+                                # poll cap as a second bound if the clock stalls. A prior
+                                # uncertain input forbids retry, except a lone kita: its
+                                # replacement draw retains the same deadline and its
+                                # separate rearm guard remains in force.
+                                if (discard_preclick_rejections >= 120
+                                        or (unconfirmed_input_seen and not only_unconfirmed_kita)
+                                        or self.verified_friend_300_active is not True
+                                        or not 0 <= (time.monotonic() - action_observed_at) * 1000 < self.args.action_deadline_ms):
+                                    self.log("sanma_friend_stopped", reason="discard_preclick_reobserve_limit",
+                                             streak=discard_preclick_rejections, clicked=False)
+                                    return
+                                page.wait_for_timeout(500)
+                                continue
+                            if (watch is not None and isinstance(result, dict)
+                                    and result.get('status') == 'selection_confirmed'
+                                    and result.get('result') == 'discard_not_verified'):
+                                selected_at = datetime.now(timezone.utc).isoformat()
+                                selected_monotonic = time.monotonic()
+                                event = {key: result.get(key) for key in ('tile', 'clickIndex', 'clickPoint', 'frameSha256')}
+                                discard_recovery = {'watch': watch, 'before': receipt, 'posts': [],
+                                                'started': action_observed_at, 'selected_monotonic': selected_monotonic,
+                                                'attempted_monotonic': attempted_monotonic,
+                                                    'journal': [{**event, 'status':'attempted', 'timestamp':attempted_at},
+                                                                {**event, 'status':'selection_confirmed',
+                                                                 'result':result.get('result'), 'timestamp':selected_at}]}
+                            elif watch is not None:
+                                watch.close()
+                        else:
+                            self.log("sanma_friend_stopped", reason="unsupported_or_unknown_action", screenshot=receipt.get("screenshot"),
+                                     digest=frame_digest, candidates=candidates, operationAuthorized=False)
+                            return
+                        kita_preclick_rejections = 0
+                        discard_preclick_rejections = 0
+                        if resumed_watch is not None:
+                            resumed_watch.close()
+                            resumed_watch = None
+                            self._sanma_friend_resume_guard = None
+                        attempted_frames.add(frame_digest)
+                        # Preserve the same-turn deadline across a chain of north
+                        # extractions, not just the first unconfirmed extraction.
+                        # This does not confirm any input or rearm a target.
+                        only_unconfirmed_kita = action == "kita" and (
+                            not unconfirmed_input_seen or only_unconfirmed_kita
+                        )
+                        unconfirmed_input_seen = True
+                        last_unconfirmed_action = action
+                        last_kita_receipt = receipt if action == "kita" else None
                         unknown_streak = 0
                         unknown_since = None
-                    if any(isinstance(item, dict) and item.get("action") == "ron" for item in actions):
-                        action = "ron"
-                        result = self.execute_sanma_friend_ron_candidate(page, receipt)
-                    elif any(isinstance(item, dict) and item.get("action") == "tsumo" for item in actions):
-                        action = "tsumo"
-                        result = self.execute_sanma_friend_tsumo_candidate(page, receipt)
-                    elif any(isinstance(item, dict) and item.get("action") == "kita" for item in actions):
-                        rearm_snapshot = None
-                        if last_unconfirmed_action == "kita":
-                            # Rearm temporarily removes the preceding action's
-                            # target. Restore it if the next input was not sent.
-                            prior_targets = getattr(self, "_sanma_friend_attempted_targets", None)
-                            prior_frames = getattr(self, "_sanma_friend_attempted_frames", None)
-                            if isinstance(prior_targets, set) and isinstance(prior_frames, set):
-                                rearm_snapshot = (frozenset(prior_targets), frozenset(prior_frames),
-                                                  getattr(self, "_sanma_friend_kita_rearmed", False))
-                            from sanma_friend_kita_rearm import rearm_friend_kita_candidate
-                            if not rearm_friend_kita_candidate(self, last_kita_receipt, receipt):
-                                self.log("sanma_friend_stopped", reason="previous_kita_unconfirmed",
-                                         screenshot=receipt.get("screenshot"), digest=frame_digest,
-                                         previousActionConfirmed=False)
-                                return
-                        action = "kita"
-                        try:
-                            result = self.execute_sanma_friend_kita_candidate(page, receipt)
-                        except SanmaKitaPreclickChanged as error:
-                            prior_kita_targets = None
-                            if rearm_snapshot is not None:
-                                targets, frames, was_rearmed = rearm_snapshot
-                                current_targets = getattr(self, "_sanma_friend_attempted_targets", None)
-                                current_frames = getattr(self, "_sanma_friend_attempted_frames", None)
-                                removed = targets - current_targets if isinstance(current_targets, set) else set()
-                                # Revert precisely the one-target rearm only when
-                                # neither frame nor any other target was latched.
-                                if (was_rearmed is False and self._sanma_friend_kita_rearmed is True
-                                        and isinstance(current_targets, set) and len(removed) == 1
-                                        and current_targets == targets - removed
-                                        and isinstance(current_frames, set) and current_frames == frames):
-                                    current_targets.update(removed)
-                                    self._sanma_friend_kita_rearmed = False
-                                    if only_unconfirmed_kita:
-                                        prior_kita_targets = targets
-                            kita_preclick_rejections += 1
-                            kita_reobserve_actions = candidate_actions
-                            self.log("sanma_friend_wait", reason="kita_preclick_reobserve",
-                                     screenshot=receipt.get("screenshot"), digest=frame_digest,
-                                     streak=kita_preclick_rejections, clicked=False, error=str(error))
-                            if not may_reobserve_unsent_kita(
-                                    self, frame_digest, unconfirmed_input_seen,
-                                    action_observed_at, time.monotonic(),
-                                    prior_kita_targets=prior_kita_targets):
-                                self.log("sanma_friend_stopped", reason="kita_preclick_reobserve_limit",
-                                         streak=kita_preclick_rejections, clicked=False)
-                                return
-                            page.wait_for_timeout(500)
-                            continue
-                    elif len(actions) == 1 and isinstance(actions[0], dict) and actions[0].get("action") == "riichi":
-                        from sanma_friend_riichi_experiment import execute_friend_riichi
-                        action = "riichi"
-                        result = execute_friend_riichi(self, page, receipt)
-                    elif actions and all(isinstance(item, dict) and item.get("action") in {"pon", "kan", "riichi"} for item in actions):
-                        from sanma_friend_pass_experiment import execute_friend_pon_pass
-                        result = execute_friend_pon_pass(self, page, receipt)
-                        unconfirmed_input_seen = True
-                        only_unconfirmed_kita = False
-                        self.log("sanma_friend_action_unconfirmed", action="pass_optional", result=result, confirmed=False)
-                        transition = self.observe_sanma_friend_transition(page, receipt, "pass_pon")
+                        self.log("sanma_friend_action_unconfirmed", action=action, result=result, confirmed=False)
+                        transition = self.observe_sanma_friend_transition(page, receipt, action)
                         self.log("sanma_friend_transition", **transition)
-                        if transition.get("status") not in {"visual_change_unconfirmed", "terminal"}:
-                            self.log("sanma_friend_stopped", reason="pass_transition_requires_review", transition=transition)
+                        if transition.get("status") not in {"visual_change_unconfirmed", "terminal", "round_end_candidate"}:
+                            self.log("sanma_friend_stopped", reason="transition_requires_review", transition=transition)
                             return
-                        action_observed_at = None
+                        if transition.get("status") == "round_end_candidate":
+                            round_end_started = time.monotonic()
+                        # A north extraction and its replacement draw are part of
+                        # the same turn. Neither an unconfirmed visual change nor the
+                        # replacement draw grants a fresh action deadline.
+                        if action not in {"kita", "discard"}:
+                            action_observed_at = None
+                        # This is not confirmation. Start a new independent screen
+                        # observation; unchanged or reused frames cannot click.
                         continue
-                    elif not actions:
-                        # No draw may mean an opponent turn or unavailable
-                        # recognition. Reobserve a bounded number of times.
-                        draw = receipt.get("drawCandidate")
-                        if not isinstance(draw, dict) or draw.get("status") != "candidate":
-                            if unknown_since is None:
-                                unknown_since = time.monotonic()
-                            unknown_streak += 1
-                            elapsed = time.monotonic() - unknown_since
-                            if unknown_streak == 1 or unknown_streak % 10 == 0:
-                                self.log("sanma_friend_wait", reason="draw_or_turn_unknown", screenshot=receipt.get("screenshot"),
-                                         streak=unknown_streak, elapsedSeconds=round(elapsed, 2), opponentTurnConfirmed=False)
-                            if unknown_streak >= 120 or elapsed >= 120:
-                                self.log("sanma_friend_stopped", reason="draw_or_turn_unknown", screenshot=receipt.get("screenshot"))
-                                return
-                            page.wait_for_timeout(500)
-                            continue
-                        action = "discard"
-                        from sanma_friend_discard_experiment import execute_friend_draw_candidate, DiscardPreclickChanged
-                        try:
-                            result = execute_friend_draw_candidate(self, page, receipt)
-                        except DiscardPreclickChanged as error:
-                            discard_preclick_rejections += 1
-                            self.log("sanma_friend_wait", reason="discard_preclick_reobserve",
-                                     screenshot=receipt.get("screenshot"), digest=frame_digest,
-                                     streak=discard_preclick_rejections, clicked=False, error=str(error))
-                            # No input was sent on this specific path. Permit fresh
-                            # observations until the original action deadline, with a
-                            # poll cap as a second bound if the clock stalls. A prior
-                            # uncertain input forbids retry, except a lone kita: its
-                            # replacement draw retains the same deadline and its
-                            # separate rearm guard remains in force.
-                            if (discard_preclick_rejections >= 120
-                                    or (unconfirmed_input_seen and not only_unconfirmed_kita)
-                                    or self.verified_friend_300_active is not True
-                                    or not 0 <= (time.monotonic() - action_observed_at) * 1000 < self.args.action_deadline_ms):
-                                self.log("sanma_friend_stopped", reason="discard_preclick_reobserve_limit",
-                                         streak=discard_preclick_rejections, clicked=False)
-                                return
-                            page.wait_for_timeout(500)
-                            continue
-                    else:
-                        self.log("sanma_friend_stopped", reason="unsupported_or_unknown_action", screenshot=receipt.get("screenshot"),
-                                 digest=frame_digest, candidates=candidates, operationAuthorized=False)
+                    except Exception as error:
+                        if resumed_watch is not None:
+                            resumed_watch.close()
+                            resumed_watch = None
+                            self._sanma_friend_resume_guard = None
+                        if discard_recovery is not None:
+                            discard_recovery['watch'].close()
+                            discard_recovery = None
+                        self.log("sanma_friend_stopped", reason="observation_or_action_failed", error=str(error),
+                                 screenshot=preserve(last_frame), operationAuthorized=False)
                         return
-                    kita_preclick_rejections = 0
-                    discard_preclick_rejections = 0
-                    attempted_frames.add(frame_digest)
-                    # Preserve the same-turn deadline across a chain of north
-                    # extractions, not just the first unconfirmed extraction.
-                    # This does not confirm any input or rearm a target.
-                    only_unconfirmed_kita = action == "kita" and (
-                        not unconfirmed_input_seen or only_unconfirmed_kita
-                    )
-                    unconfirmed_input_seen = True
-                    last_unconfirmed_action = action
-                    last_kita_receipt = receipt if action == "kita" else None
-                    unknown_streak = 0
-                    unknown_since = None
-                    self.log("sanma_friend_action_unconfirmed", action=action, result=result, confirmed=False)
-                    transition = self.observe_sanma_friend_transition(page, receipt, action)
-                    self.log("sanma_friend_transition", **transition)
-                    if transition.get("status") not in {"visual_change_unconfirmed", "terminal", "round_end_candidate"}:
-                        self.log("sanma_friend_stopped", reason="transition_requires_review", transition=transition)
-                        return
-                    if transition.get("status") == "round_end_candidate":
-                        round_end_started = time.monotonic()
-                    # A north extraction and its replacement draw are part of
-                    # the same turn. Neither an unconfirmed visual change nor the
-                    # replacement draw grants a fresh action deadline.
-                    if action != "kita":
-                        action_observed_at = None
-                    # This is not confirmation. Start a new independent screen
-                    # observation; unchanged or reused frames cannot click.
-                    continue
-                except Exception as error:
-                    self.log("sanma_friend_stopped", reason="observation_or_action_failed", error=str(error),
-                             screenshot=preserve(last_frame), operationAuthorized=False)
-                    return
-            if (round_end_started is None and match_seen and state in {"away", "unknown", "lobby", "round_result"}
-                    and experimental_friend_score_transfer_candidate(frame)):
-                round_end_started = time.monotonic()
-                self.log("sanma_friend_score_transfer_candidate", screenState=state, confidence=confidence,
-                         screenshot=preserve(frame), confirmed=False)
-            if (round_end_started is not None and (state in {"lobby", "unknown", "away"}
-                    or (state == "round_result" and experimental_friend_score_transfer_candidate(frame)))):
-                elapsed = time.monotonic() - round_end_started
-                self.log("sanma_friend_wait", reason="round_end_unconfirmed", screenState=state,
-                         screenshot=preserve(frame), elapsedSeconds=round(elapsed,2), confirmed=False)
-                if elapsed >= 120:
-                    self.log("sanma_friend_stopped", reason="round_end_timeout", screenshot=preserve(frame))
-                    return
-                page.wait_for_timeout(500)
-                continue
-            if state in {"round_result", "match_result"}:
-                path = preserve(frame)
-                self.log("sanma_friend_result_observed", screenState=state, confidence=confidence,
-                         screenshot=path, confirmed=False)
-                if confidence < 0.95:
-                    self.log("sanma_friend_stopped", reason="uncertain_result", screenshot=path)
-                    return
-                if state == "match_result":
-                    self.log("sanma_friend_stopped", reason="match_result_observed", screenshot=path)
-                    return
-                if result_latched == state:
-                    self.log("sanma_friend_stopped", reason="round_result_not_advanced", screenshot=path)
-                    return
-                page.wait_for_timeout(500)
-                fresh = page.screenshot(animations="disabled")
-                next_state, next_confidence = classify_screen(fresh, self.screen_references)
-                if (self.verified_friend_300_active is True and next_state in {"away", "unknown", "lobby", "round_result"}
-                        and experimental_friend_score_transfer_candidate(fresh)):
+                if (round_end_started is None and match_seen and state in {"away", "unknown", "lobby", "round_result"}
+                        and experimental_friend_score_transfer_candidate(frame)):
                     round_end_started = time.monotonic()
-                    self.log("sanma_friend_score_transfer_candidate", screenState=next_state, confidence=next_confidence,
-                             screenshot=preserve(fresh), confirmed=False)
+                    self.log("sanma_friend_score_transfer_candidate", screenState=state, confidence=confidence,
+                             screenshot=preserve(frame), confirmed=False)
+                if (round_end_started is not None and (state in {"lobby", "unknown", "away"}
+                        or (state == "round_result" and experimental_friend_score_transfer_candidate(frame)))):
+                    elapsed = time.monotonic() - round_end_started
+                    self.log("sanma_friend_wait", reason="round_end_unconfirmed", screenState=state,
+                             screenshot=preserve(frame), elapsedSeconds=round(elapsed,2), confirmed=False)
+                    if elapsed >= 120:
+                        self.log("sanma_friend_stopped", reason="round_end_timeout", screenshot=preserve(frame))
+                        return
                     page.wait_for_timeout(500)
                     continue
-                if (next_state != state or next_confidence < 0.95 or not friend_frame_stable(frame, fresh)
-                        or self.verified_friend_300_active is not True):
-                    self.log("sanma_friend_stopped", reason="result_changed_before_advance", screenshot=preserve(fresh))
+                if state in {"round_result", "match_result"}:
+                    path = preserve(frame)
+                    self.log("sanma_friend_result_observed", screenState=state, confidence=confidence,
+                             screenshot=path, confirmed=False)
+                    if confidence < 0.95:
+                        self.log("sanma_friend_stopped", reason="uncertain_result", screenshot=path)
+                        return
+                    if state == "match_result":
+                        self.log("sanma_friend_stopped", reason="match_result_observed", screenshot=path)
+                        return
+                    if result_latched == state:
+                        self.log("sanma_friend_stopped", reason="round_result_not_advanced", screenshot=path)
+                        return
+                    page.wait_for_timeout(500)
+                    fresh = page.screenshot(animations="disabled")
+                    next_state, next_confidence = classify_screen(fresh, self.screen_references)
+                    if (self.verified_friend_300_active is True and next_state in {"away", "unknown", "lobby", "round_result"}
+                            and experimental_friend_score_transfer_candidate(fresh)):
+                        round_end_started = time.monotonic()
+                        self.log("sanma_friend_score_transfer_candidate", screenState=next_state, confidence=next_confidence,
+                                 screenshot=preserve(fresh), confirmed=False)
+                        page.wait_for_timeout(500)
+                        continue
+                    if (next_state != state or next_confidence < 0.95 or not friend_frame_stable(frame, fresh)
+                            or self.verified_friend_300_active is not True):
+                        self.log("sanma_friend_stopped", reason="result_changed_before_advance", screenshot=preserve(fresh))
+                        return
+                    self.result_screen_advanced = None
+                    self.advance_result_screen_once(page, state, confidence)
+                    result_latched = state
+                    action_observed_at = None
+                    unknown_streak = 0
+                    unknown_since = None
+                    self.log("sanma_friend_result_advance_unconfirmed", screenState=state, screenshot=path, confirmed=False)
+                    page.wait_for_timeout(500)
+                    continue
+                if state == "unknown" and not match_seen and time.monotonic() - started < 30 and startup_unknown_polls < 20:
+                    startup_unknown_polls += 1
+                    self.log("sanma_friend_wait", reason="startup_screen_unknown", screenshot=preserve(frame),
+                             confidence=confidence, poll=startup_unknown_polls)
+                    page.wait_for_timeout(500)
+                    continue
+                if state in {"unknown", "login", "connection_error", "rank_entry_denied", "match_result", "round_result"}:
+                    self.log("sanma_friend_stopped", reason="unexpected_screen", screenState=state, confidence=confidence,
+                             screenshot=preserve(last_frame))
                     return
-                self.result_screen_advanced = None
-                self.advance_result_screen_once(page, state, confidence)
-                result_latched = state
-                action_observed_at = None
-                unknown_streak = 0
-                unknown_since = None
-                self.log("sanma_friend_result_advance_unconfirmed", screenState=state, screenshot=path, confirmed=False)
+                if getattr(self.args, "max_iterations", 0) and polls >= self.args.max_iterations:
+                    break
                 page.wait_for_timeout(500)
-                continue
-            if state == "unknown" and not match_seen and time.monotonic() - started < 30 and startup_unknown_polls < 20:
-                startup_unknown_polls += 1
-                self.log("sanma_friend_wait", reason="startup_screen_unknown", screenshot=preserve(frame),
-                         confidence=confidence, poll=startup_unknown_polls)
-                page.wait_for_timeout(500)
-                continue
-            if state in {"unknown", "login", "connection_error", "rank_entry_denied", "match_result", "round_result"}:
-                self.log("sanma_friend_stopped", reason="unexpected_screen", screenState=state, confidence=confidence,
-                         screenshot=preserve(last_frame))
-                return
-            if getattr(self.args, "max_iterations", 0) and polls >= self.args.max_iterations:
-                break
-            page.wait_for_timeout(500)
-        self.log("sanma_friend_stopped", reason="friend_monitor_limit", polls=polls, screenshot=preserve(last_frame))
+            self.log("sanma_friend_stopped", reason="friend_monitor_limit", polls=polls, screenshot=preserve(last_frame))
+        finally:
+            if resumed_watch is not None:
+                resumed_watch.close()
+            if discard_recovery is not None:
+                discard_recovery["watch"].close()
+            if watch is not None:
+                watch.close()
+            self._sanma_friend_resume_guard = None
 
     def run(self, page: Page) -> None:
         self.ensure_viewport(page, force=True)

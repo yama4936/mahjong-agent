@@ -377,10 +377,14 @@ def execute_friend_draw_candidate(operator, page, receipt):
                      sha256=hashlib.sha256(frame).hexdigest(),
                      referenceScreenshot=receipt["screenshot"], referenceSha256=receipt["digest"],
                      operationAuthorized=False)
+    def session_check():
+        from sanma_friend_freshness import check_friend_recovery_guard
+        check_friend_recovery_guard(operator)
+        return getattr(operator, "verified_friend_300_active", False) is True
     return execute_friend_discard(page, session=session, observation=observation, plan=plan,
                                   layout=operator.layout, log=record,
                                   turn_started_monotonic=friend_action_started_at(operator),
-                                  session_check=lambda: getattr(operator, "verified_friend_300_active", False) is True,
+                                  session_check=session_check,
                                   save_rejected_frame=save_rejected_frame,
                                   before_click=lambda: latch_friend_action_target(operator, baseline, "discard"))
 
