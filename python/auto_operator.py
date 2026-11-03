@@ -2024,6 +2024,28 @@ def experimental_kita_wall_color_stable(before: bytes, after: bytes, *, on_error
         return False
 
 
+def experimental_friend_abort_kita_row(frame, report):
+    """Narrow friend-only hypothesis for the reviewed abort/kita/skip row."""
+    try:
+        row = report['buttonRow']; value = row['value']; slots = value['slots']
+        if (row['status'] != 'candidate' or value.get('ronReferenceCompared') is not True
+                or len(slots) != 3 or slots[0].get('slot') != 0 or slots[0].get('status') != 'unresolved'
+                or any(type(slots[i].get('slot')) is not int or slots[i]['slot'] != i
+                       or slots[i].get('status') != 'candidate' or slots[i].get('action') != action
+                       or type(slots[i].get('confidence')) not in (float, int)
+                       or not .99 <= slots[i]['confidence'] <= 1
+                       for i, action in ((1, 'kita'), (2, 'skip')))):
+            return False
+        with _open_screenshot(frame) as image, Image.open(Path(__file__).parent / 'fixtures' / 'sanma-abort-kita-skip-155-row.png') as reference:
+            if image.size != (1920, 1080) or reference.size != (825, 90): return False
+            diff = ImageChops.difference(image.convert('RGB').crop((600,785,1424,875)), reference.convert('RGB').crop((0,0,824,90)))
+            if max(ImageStat.Stat(diff).mean) > .1: return False
+            return all(max(ImageStat.Stat(diff.crop((x,y,min(x+8,824),min(y+8,90)))).mean) <= 10
+                       for y in range(0,90,8) for x in range(0,824,8))
+    except (AttributeError, KeyError, TypeError, ValueError, OSError, IndexError):
+        return False
+
+
 def experimental_friend_kita_kan_row(frame, report):
     """Recognize only the reviewed three-button row; never proves game state."""
     try:
@@ -2081,7 +2103,9 @@ def _experimental_kita_glyph_stability_decoded(before: bytes, after: bytes, repo
                          and buttons[1].get('status') == 'candidate' and buttons[1].get('action') == 'kita'
                          and buttons[2].get('status') == 'candidate' and buttons[2].get('action') == 'skip')
                         or (experimental_friend_kita_kan_row(before, report)
-                            and experimental_friend_kita_kan_row(after, report)))):
+                            and experimental_friend_kita_kan_row(after, report))
+                        or (experimental_friend_abort_kita_row(before, report)
+                            and experimental_friend_abort_kita_row(after, report)))):
             return False
         if diagnostic is not None: diagnostic.update(stage='hand_faces')
         layout = {'handSlots':gv['handSlots'],'drawSlot':gv['drawSlot']}
@@ -4697,8 +4721,17 @@ class PythonAutoOperator:
                     and type(slots[1].get("confidence")) in (float, int) and .99 <= slots[1]["confidence"] <= 1
                     and slots[2].get("status") == "candidate" and slots[2].get("action") == "skip")
         three_buttons = ([slot.get("action") for slot in slots] == ["kita", "kan", "skip"])
-        if not standard and not three_buttons:
+        abort_row = (slots[0].get('status') == 'unresolved'
+                     and slots[1].get('status') == 'candidate' and slots[1].get('action') == 'kita'
+                     and slots[2].get('status') == 'candidate' and slots[2].get('action') == 'skip')
+        if not standard and not three_buttons and not abort_row:
             raise RuntimeError("sanma kita prompt is unknown or ambiguous")
+        if abort_row:
+            candidates = receipt.get('candidates', {}).get('candidates', [])
+            if (not isinstance(candidates, list) or len(candidates) != 1
+                    or not isinstance(candidates[0], dict) or candidates[0].get('action') != 'kita'
+                    or type(candidates[0].get('slot')) is not int or candidates[0]['slot'] != 1):
+                raise RuntimeError('abort/kita row has other or ambiguous action candidates')
         if three_buttons:
             candidates = receipt.get("candidates", {}).get("candidates", [])
             if (not isinstance(candidates, list) or len(candidates) != 2
@@ -4725,6 +4758,9 @@ class PythonAutoOperator:
             if three_buttons and not (experimental_friend_kita_kan_row(baseline, report)
                                       and experimental_friend_kita_kan_row(fresh, report)):
                 raise ValueError("three-button north row not independently verified")
+            if abort_row and not (experimental_friend_abort_kita_row(baseline, report)
+                                  and experimental_friend_abort_kita_row(fresh, report)):
+                raise ValueError('abort/kita row not independently verified')
             if (not friend_frame_stable(baseline, fresh)
                     and not (freshness.get("status") == "stable_kita_glyph_candidate"
                              and experimental_kita_glyph_stability(baseline, fresh, report,
