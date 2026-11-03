@@ -102,3 +102,22 @@ test('river worker errors remain missing, not empty or authorized',async()=>{
  assert.equal(result.ownRiverError,'worker failed');
  assert.equal(result.operationAuthorized,false);
 });
+
+test('failed frame drains pending board and river work before rejection',async()=>{
+ const bad=await sharp({create:{width:1921,height:1080,channels:3,background:'black'}})
+  .composite([{input:crop,left:750,top:535}]).png().toBuffer();
+ const hash=createHash('sha256').update(bad).digest('hex');
+ let boardFinished=false, active=0, calls=0, maxActive=0;
+ const delayedBoard={async observe(){await new Promise(resolve=>setTimeout(resolve,30));boardFinished=true;
+  return {frame_sha256:hash,board:{verified:false,reason:'expected_total_points_unknown'},
+   north:{status:'unknown',verified:false,complete:false}};}};
+ const slowClassifier={async classifyTileImages(images:Buffer[]){calls++;active++;maxActive=Math.max(maxActive,active);
+  await new Promise(resolve=>setTimeout(resolve,20));active--;
+  return images.map(()=>({tile:'8p' as const,confidence:.99,runnerUpTile:'2s' as const,runnerUpConfidence:.001}));}};
+ await assert.rejects(observeSanmaFrameAutomatically({frame:bad,layout,buttonTemplates,publicClassifier:slowClassifier,
+  templates:'templates/bootstrap',boardObserver:delayedBoard}),/Unreviewed frame dimensions/);
+ assert.equal(boardFinished,true); assert.equal(calls,0); assert.equal(active,0);
+ const valid=await observeSanmaFrameAutomatically({frame,layout,buttonTemplates,publicClassifier:slowClassifier,
+  templates:'templates/bootstrap',boardObserver});
+ assert.equal(valid.digest,digest); assert.ok(calls>0); assert.equal(active,0); assert.equal(maxActive,1);
+});

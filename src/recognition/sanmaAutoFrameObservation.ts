@@ -82,38 +82,54 @@ export async function observeSanmaFrameAutomatically(input: {
     const ownSeat: "east" | "south" | "west" | undefined = seat === "east" || seat === "south" || seat === "west" ? seat : undefined;
     return { board, north, ownSeat };
   })();
+  // Keep the report's original classifier and ordering for every layout.
+  // In the measured unknown-score case, only image preprocessing overlaps the
+  // report; model requests wait for it to finish before entering the worker.
+  const riverClassifier = serializeRiverClassifier(input.publicClassifier);
   const reportPromise = inspectSanmaFrame({ frame, layout: input.layout, templates: input.templates,
     buttonTemplates: input.buttonTemplates, publicClassifier: input.publicClassifier,
     ownSeatPromise: boardPromise.then(result => result.ownSeat),
     ...(input.buttonRowReferences ? { buttonRowReferences: input.buttonRowReferences } : {}) });
-  const [{ board, north, ownSeat }, report] = await Promise.all([boardPromise, reportPromise]);
+  const riversPromise = boardPromise.then(async ({ board }) => {
+    if (board.reason !== "expected_total_points_unknown") await reportPromise;
+    const ownClassifier: PublicVitClassifier = board.reason === "expected_total_points_unknown" ? {
+      ...(riverClassifier.backend ? {backend: riverClassifier.backend} : {}),
+      async classifyTileImages(images) {
+        await reportPromise;
+        return riverClassifier.classifyTileImages(images);
+      },
+    } : riverClassifier;
+    const opponentsPromise = board.reason === 'unsupported_right_opponent_layout' && board.layoutCandidate?.verified === false
+        && JSON.stringify(board.layoutCandidate.opponents) === JSON.stringify(['left','right'])
+      ? inspectIndependentRivers(
+        () => inspectSanmaRightRiverCandidate(frame, input.layout, riverClassifier),
+        () => inspectSanmaLeftRiverCandidate(frame, input.layout, riverClassifier),
+      ) : Promise.resolve([undefined, undefined] as const);
+    const ownPromise = (async () => {
+      if (board.reason === "unsupported_opposite_right_layout" || board.reason === "unsupported_right_opponent_layout"
+          || board.reason === "expected_total_points_unknown") {
+        try { return {ownRiver: await inspectSanmaOwnRiverCandidate(frame, input.layout, ownClassifier)}; }
+        catch (error) { return {ownRiverError: error instanceof Error ? error.message : String(error)}; }
+      }
+      return {};
+    })();
+    const [[rightRiver, leftRiver], own] = await Promise.all([opponentsPromise, ownPromise]);
+    return {rightRiver, leftRiver, ...own};
+  });
+  // Even a malformed frame may fail one branch before OCR and river work
+  // finish. Drain every branch before returning or rejecting, so the next
+  // request cannot overlap a previous request's resident classifier calls.
+  const [boardResult, reportResult, riversResult] = await Promise.allSettled([boardPromise, reportPromise, riversPromise]);
+  if (boardResult.status === "rejected") throw boardResult.reason;
+  if (reportResult.status === "rejected") throw reportResult.reason;
+  if (riversResult.status === "rejected") throw riversResult.reason;
+  const { board, north, ownSeat } = boardResult.value;
+  const report = reportResult.value;
+  const rivers = riversResult.value;
   if (report.digest !== digest) throw new Error("snapshot digest mismatch");
-  let rightRiver: Awaited<ReturnType<typeof inspectSanmaRightRiverCandidate>> | undefined;
-  let leftRiver: Awaited<ReturnType<typeof inspectSanmaLeftRiverCandidate>> | undefined;
-  let ownRiver: Awaited<ReturnType<typeof inspectSanmaOwnRiverCandidate>> | undefined;
-  let ownRiverError: string | undefined;
-  // Preprocess all independently observed physical rivers concurrently. A
-  // single queue still serializes calls into the resident model worker, so its
-  // timed request queue never sees parallel requests from these branches.
-  const riverClassifier = serializeRiverClassifier(input.publicClassifier);
-  const opponentsPromise = board.reason === 'unsupported_right_opponent_layout' && board.layoutCandidate?.verified === false
-      && JSON.stringify(board.layoutCandidate.opponents) === JSON.stringify(['left','right'])
-    ? inspectIndependentRivers(
-      () => inspectSanmaRightRiverCandidate(frame, input.layout, riverClassifier),
-      () => inspectSanmaLeftRiverCandidate(frame, input.layout, riverClassifier),
-    ) : Promise.resolve([undefined, undefined] as const);
-  // Physical own-river candidates do not require a wind-to-seat mapping. Keep
-  // them explicitly unverified and separate from publicTiles and decisions.
-  const ownPromise = (async () => {
-    if (board.reason === "unsupported_opposite_right_layout" || board.reason === "unsupported_right_opponent_layout"
-        || board.reason === "expected_total_points_unknown") {
-      // A missing expected-score total does not change the physical bottom
-      // region. This is still incomplete, unverified image-position evidence.
-      try { ownRiver = await inspectSanmaOwnRiverCandidate(frame, input.layout, riverClassifier); }
-      catch (error) { ownRiverError = error instanceof Error ? error.message : String(error); }
-    }
-  })();
-  [[rightRiver, leftRiver]] = await Promise.all([opponentsPromise, ownPromise]);
+  const {rightRiver, leftRiver} = rivers;
+  const ownRiver = 'ownRiver' in rivers ? rivers.ownRiver : undefined;
+  const ownRiverError = 'ownRiverError' in rivers ? rivers.ownRiverError : undefined;
   // The older diagnostic evaluates with an assumed empty visible-tile list.
   // Do not expose it in the automatic observation as if unknown tiles were zero.
   report.shape = {status: "unresolved", reason: "visible tile completeness unavailable"};
