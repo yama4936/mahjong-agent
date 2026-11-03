@@ -41,3 +41,29 @@ test('real classifier observes saved 8p only as an unverified candidate', {skip:
  const {HybridTileRecognizer}=await import('../src/recognition/hybridTileRecognizer.js');const h=new HybridTileRecognizer();
  try {const result=await inspectSanmaOwnRiverCandidate(await frame('after'),layout,h);assert.deepEqual(result.candidates.map(x=>x.tile),['8p']);assert.equal(result.verified,false);assert.equal(result.complete,false);assert.equal(result.operationAuthorized,false)}finally{await h.close()}
 });
+
+// The labels below were read from retained river-only crops, not generated from
+// the recognition receipts. All four images are from one game and are not
+// independent samples. A passing result does not certify absence of tiles.
+test('real classifier measures detection and labels on a saved sanma river sequence', {
+ skip:!((await import('node:fs')).existsSync('.runtime/hybrid-vision/cvmaj-pretrained.tar') && (await import('node:fs')).existsSync('.runtime/hybrid-vision/automajsoul-best-model.pt')),
+ timeout:60000,
+},async()=>{
+ const {HybridTileRecognizer}=await import('../src/recognition/hybridTileRecognizer.js');
+ const recognizer=new HybridTileRecognizer();
+ const west={tile:'W',x:799,y:571}, one={tile:'1p',x:860,y:571}, nine={tile:'9s',x:922,y:571};
+ const cases=[['run116-empty',[]],['run116-west',[west]],['run116-west-1p',[west,one]],['run116-west-1p-9s',[west,one,nine]]] as const;
+ try {
+  for(const [name,expected] of cases){
+   const result=await inspectSanmaOwnRiverCandidate(await frame(name),layout,recognizer);
+   const remaining=[...result.candidates]; let missed=0, mislabeled=0;
+   for(const target of expected){
+    const i=remaining.findIndex(c=>Math.abs(c.x+c.width/2-target.x)<=12 && Math.abs(c.y+c.height/2-target.y)<=15);
+    if(i<0){missed++;continue;}
+    if(remaining.splice(i,1)[0]!.tile!==target.tile)mislabeled++;
+   }
+   assert.deepEqual({missed,extra:remaining.length,mislabeled},{missed:0,extra:0,mislabeled:0},name);
+   assert.equal(result.verified,false);assert.equal(result.complete,false);assert.equal(result.operationAuthorized,false);
+  }
+ }finally{await recognizer.close()}
+});
