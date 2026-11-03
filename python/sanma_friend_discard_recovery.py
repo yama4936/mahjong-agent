@@ -64,9 +64,9 @@ def candidate(before, posts, journal, *, continuity, active, started, deadline_m
         if len(posts) != 2 or not valid():
             return False
         receipts = [before, *posts]
-        # A five-sou may occur in the retained hand only when its separate
-        # face check supports the ordinary tile in every frame. Other fives
-        # remain excluded: conservation alone cannot establish red identity.
+        # Each five-sou has its ordinary/red glyph independently checked in
+        # every frame; other fives remain excluded because conservation alone
+        # cannot establish red identity.
         for receipt in receipts:
             data = Path(receipt['screenshot']).read_bytes()
             digest = hashlib.sha256(data).hexdigest()
@@ -74,14 +74,15 @@ def candidate(before, posts, journal, *, continuity, active, started, deadline_m
                 return False
             hand = receipt['sourceObservation']['report']['hand']['value']
             tiles = hand.get('tiles', [])
-            if (hand.get('candidateMelds') != 0 or any(t in {'0p','5p','0s'} for t in tiles)):
+            if (hand.get('candidateMelds') != 0 or any(t in {'0p','5p'} for t in tiles)):
                 return False
-            if '5s' in tiles:
-                from sanma_five_sou_candidate import ordinary_five_sou_face_candidate
+            if any(t in {'0s','5s'} for t in tiles):
+                from sanma_five_sou_candidate import ordinary_five_sou_face_candidate, red_five_sou_face_candidate
                 geometry = receipt['sourceObservation']['report']['handGeometry']['value']
                 slots = [*geometry['handSlots'], geometry['drawSlot']]
                 if len(tiles) != 14 or len(slots) != 14 or any(
-                    not ordinary_five_sou_face_candidate(data, slots[i]) for i,tile in enumerate(tiles) if tile == '5s'
+                    not (red_five_sou_face_candidate if tile == '0s' else ordinary_five_sou_face_candidate)(data, slots[i])
+                    for i,tile in enumerate(tiles) if tile in {'0s','5s'}
                 ):
                     return False
         paths = [str(Path(r['screenshot']).with_suffix('.receipt.json')) for r in receipts]

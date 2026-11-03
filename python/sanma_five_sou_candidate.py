@@ -31,6 +31,15 @@ def ordinary_five_sou_candidate(frame, hand, geometry, draw):
 
 def ordinary_five_sou_face_candidate(frame, slot):
     """Color and glyph check at a supplied calibrated hand slot, not identity proof."""
+    return _five_sou_face_candidate(frame, slot, red_five=False)
+
+
+def red_five_sou_face_candidate(frame, slot):
+    """Check the full-red five-sou glyph, not independently verified identity."""
+    return _five_sou_face_candidate(frame, slot, red_five=True)
+
+
+def _five_sou_face_candidate(frame, slot, *, red_five):
     try:
         x,y,w,h=(slot[k] for k in ('x','y','width','height'))
         if any(type(v) is not int for v in (x,y,w,h)) or not (0 <= x and 0 <= y and 70 <= w <= 110 and 120 <= h <= 180 and x+w <= 1920 and y+h <= 1080):
@@ -47,7 +56,7 @@ def ordinary_five_sou_face_candidate(frame, slot):
         def bands(x0,x1):
             out=[]; start=None
             for y in range(20,136):
-                hit=y<135 and sum(green(image.getpixel((x,y))) for x in range(x0,x1)) >= 3
+                hit=y<135 and sum((red if red_five else green)(image.getpixel((x,y))) for x in range(x0,x1)) >= 3
                 if hit and start is None: start=y
                 if not hit and start is not None:
                     out.append((start,y-1)); start=None

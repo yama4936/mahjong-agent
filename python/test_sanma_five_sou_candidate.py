@@ -3,11 +3,25 @@ import io
 from pathlib import Path
 import unittest
 from PIL import Image
-from sanma_five_sou_candidate import ordinary_five_sou_candidate
+from sanma_five_sou_candidate import ordinary_five_sou_candidate, red_five_sou_face_candidate
 
 FIXTURES = Path(__file__).parent / 'fixtures' / 'sanma-five-sou-review'
 
 class FiveSouCandidateTest(unittest.TestCase):
+    def test_red_five_face_rejects_other_labels_and_faded_color(self):
+        from PIL import ImageEnhance
+        slot={'x':1486,'y':921,'width':92,'height':151}
+        def frame(tile):
+            image=Image.new('RGB',(1920,1080),'white');image.paste(tile.convert('RGB').resize((92,151)),(1486,921))
+            out=io.BytesIO();image.save(out,format='BMP');return out.getvalue()
+        with Image.open(FIXTURES/'0s.png') as image:
+            self.assertTrue(red_five_sou_face_candidate(frame(image),slot))
+            self.assertFalse(red_five_sou_face_candidate(frame(ImageEnhance.Color(image).enhance(.1)),slot))
+        for f in Path('/home/yama1/projects/jantama-auto/templates/live-verified').glob('*.png'):
+            if f.name.startswith('0s__'): continue
+            with self.subTest(template=f.name), Image.open(f) as image:
+                self.assertFalse(red_five_sou_face_candidate(frame(image),slot))
+
     def setUp(self):
         self.hand={'turnReady':True, 'tiles':['1m']*13+['5s'],
                    'matches':[{'tile':'1m'}]*13+[{'tile':'5s','confidence':.970336,'runnerUpConfidence':.732356}]}

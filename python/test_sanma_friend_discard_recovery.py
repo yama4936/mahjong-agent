@@ -16,6 +16,25 @@ from sanma_friend_freshness import check_friend_recovery_guard
 ROOT = Path('/home/yama1/server/data/dev-work/jantama/evidence139')
 
 class RecoveryGuardTest(unittest.TestCase):
+    @unittest.skipUnless(Path('/home/yama1/server/data/dev-work/jantama/evidence154/artifacts2/frames').exists(),
+                         'saved red 5s match unavailable')
+    def test_saved_hand_with_red_and_ordinary_5s_reaches_recovery(self):
+        root=Path('/home/yama1/server/data/dev-work/jantama/evidence154/artifacts2/frames')
+        prefixes=('2026-11-03T19-09-58','2026-11-03T19-10-14','2026-11-03T19-10-20')
+        with tempfile.TemporaryDirectory() as directory:
+            receipts=[]
+            for i,prefix in enumerate(prefixes):
+                receipt=json.loads(next(root.glob(prefix+'*.sanma-self-turn.receipt.json')).read_text())
+                source=Path(receipt['screenshot']);folder=Path(directory)/str(i);folder.mkdir()
+                target=folder/source.name;shutil.copyfile(source,target);receipt['screenshot']=str(target)
+                target.with_suffix('.receipt.json').write_text(json.dumps(receipt));receipts.append(receipt)
+            event={'tile':'W','clickIndex':13,'clickPoint':{'x':1532,'y':996.5},'frameSha256':receipts[0]['digest']}
+            journal=[dict(event,status='attempted',timestamp='2026-11-03T19:10:03.499907+00:00'),
+                     dict(event,status='selection_confirmed',result='discard_not_verified',
+                          timestamp='2026-11-03T19:10:04.944922+00:00')]
+            watch=Mock();watch.alive.return_value=True
+            self.assertTrue(candidate(receipts[0],receipts[1:],journal,continuity=watch,
+                                      active=lambda:True,started=time.monotonic(),deadline_ms=300000))
     @unittest.skipUnless(Path('/home/yama1/server/data/dev-work/jantama/evidence152/artifacts/frames').exists(),
                          'saved ordinary 5s match unavailable')
     def test_saved_hand_with_ordinary_5s_reaches_recovery(self):
