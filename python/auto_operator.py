@@ -1959,6 +1959,11 @@ def experimental_kita_other_regions_stable(before: bytes, after: bytes, boxes: l
                 crop=diff.crop((x,y,min(x+32,1920),min(y+32,1080)))
                 changed=crop.histogram()[255]
                 if changed > 14:
+                    # The draw guard already has a bounded wall-edge lighting
+                    # hypothesis. Reuse it only after kita's wall-color guard;
+                    # all non-wall, prompt, river and hand checks still apply.
+                    if _sanma_draw_wall_edge_lighting(a, b, masks[0], masks[1], x, y, changed):
+                        continue
                     # The reviewed extra threshold crossings follow a narrow
                     # tile-back seam, not the rest of the 32x32 block.
                     if (x,y) != (320,96) or changed > 20:return False
