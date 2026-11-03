@@ -62,3 +62,43 @@ test('score-total uncertainty does not suppress the physical own-river candidate
  assert.equal(failed.ownRiverError,'classifier unavailable');
  assert.equal(failed.operationAuthorized,false);
 });
+
+test('all three physical river branches share one inference queue',async()=>{
+ let active=0, maxActive=0, calls=0;
+ const singleWorker={async classifyTileImages(images:Buffer[]){
+  calls++; maxActive=Math.max(maxActive,++active);
+  await new Promise(resolve=>setTimeout(resolve,5));
+  active--;
+  return images.map(()=>({tile:'8p' as const,confidence:.99,runnerUpTile:'2s' as const,runnerUpConfidence:.001}));
+ }};
+ const board={async observe(){return {frame_sha256:digest,board:{verified:false,
+  reason:'unsupported_right_opponent_layout',layoutCandidate:{verified:false,opponents:['left','right']}},
+  north:{status:'unknown',verified:false,complete:false}};}};
+ const result=await observeSanmaFrameAutomatically({frame,layout,buttonTemplates,publicClassifier:singleWorker,templates:'templates/bootstrap',boardObserver:board});
+ assert.ok(calls>0);
+ assert.equal(maxActive,1);
+ assert.ok('ownRiver' in result);
+ assert.equal(result.ownRiver.frameSha256,digest);
+ assert.equal(result.leftRiver?.frameSha256,digest);
+ assert.equal(result.rightRiver?.frameSha256,digest);
+ for(const river of [result.ownRiver,result.leftRiver,result.rightRiver]) {
+  assert.equal(river?.verified,false);assert.equal(river?.complete,false);assert.equal(river?.operationAuthorized,false);
+ }
+});
+
+test('river worker errors remain missing, not empty or authorized',async()=>{
+ let active=0, maxActive=0;
+ const broken={async classifyTileImages():Promise<never>{
+  maxActive=Math.max(maxActive,++active); await new Promise(resolve=>setTimeout(resolve,5)); active--;
+  throw new Error('worker failed');
+ }};
+ const board={async observe(){return {frame_sha256:digest,board:{verified:false,
+  reason:'unsupported_right_opponent_layout',layoutCandidate:{verified:false,opponents:['left','right']}},
+  north:{status:'unknown',verified:false,complete:false}};}};
+ const result=await observeSanmaFrameAutomatically({frame,layout,buttonTemplates,publicClassifier:broken,templates:'templates/bootstrap',boardObserver:board});
+ assert.equal(maxActive,1);
+ assert.equal('ownRiver' in result,false);
+ assert.ok('ownRiverError' in result);
+ assert.equal(result.ownRiverError,'worker failed');
+ assert.equal(result.operationAuthorized,false);
+});

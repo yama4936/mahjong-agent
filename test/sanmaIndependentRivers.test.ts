@@ -43,3 +43,26 @@ test('shared classifier queues calls before worker timeout and continues after f
   assert.equal(maxActive, 1);
   assert.equal(classifier.backend, 'hybrid');
 });
+
+test('three callers keep FIFO after synchronous and asynchronous worker failures', async () => {
+  const { serializeRiverClassifier } = await import('../src/recognition/sanmaAutoFrameObservation.js');
+  const order: number[] = [];
+  let active=0, maxActive=0;
+  const classifier = serializeRiverClassifier({ classifyTileImages(images) {
+    const id=images[0]?.[0];
+    if(id === undefined) throw new Error('missing call identifier');
+    order.push(id); maxActive=Math.max(maxActive,++active);
+    if(id===1) {active--; throw new Error('sync failure');}
+    return Promise.resolve().then(() => {
+      active--;
+      if(id===2) throw new Error('async failure');
+      return [];
+    });
+  }});
+  const a=classifier.classifyTileImages([Buffer.from([1])]);
+  const b=classifier.classifyTileImages([Buffer.from([2])]);
+  const c=classifier.classifyTileImages([Buffer.from([3])]);
+  const results=await Promise.allSettled([a,b,c]);
+  assert.deepEqual(order,[1,2,3]); assert.equal(maxActive,1);
+  assert.deepEqual(results.map(x=>x.status),['rejected','rejected','fulfilled']);
+});
