@@ -9455,6 +9455,21 @@ class PythonAutoOperator:
                                 continuity=watch, active=lambda: self.verified_friend_300_active is True,
                                 started=discard_recovery['started'], deadline_ms=self.args.action_deadline_ms)
                             if not accepted:
+                                # No input was sent during evidence evaluation.
+                                # Retain the original deadline and take another
+                                # independent observation when lighting or an
+                                # animation made the pair inconclusive.
+                                failures = discard_recovery.get('evidence_rejections', 0) + 1
+                                discard_recovery['evidence_rejections'] = failures
+                                if (failures < 3 and watch.alive() and self.verified_friend_300_active is True
+                                        and 0 <= (time.monotonic() - discard_recovery['started']) * 1000 < 300000):
+                                    discard_recovery['posts'] = [receipt]
+                                    discard_recovery['post_monotonic'] = observation_started
+                                    self.log('sanma_friend_discard_recovery_reobserve',
+                                             screenshot=receipt.get('screenshot'), rejections=failures,
+                                             operationAuthorized=False)
+                                    page.wait_for_timeout(500)
+                                    continue
                                 watch.close()
                                 self.log("sanma_friend_stopped", reason="discard_recovery_evidence_rejected", operationAuthorized=False)
                                 return

@@ -16,6 +16,53 @@ from sanma_friend_freshness import check_friend_recovery_guard
 ROOT = Path('/home/yama1/server/data/dev-work/jantama/evidence139')
 
 class RecoveryGuardTest(unittest.TestCase):
+    @unittest.skipUnless(Path('/home/yama1/server/data/dev-work/jantama/evidence157/artifacts/frames').exists(),
+                         'saved opposite north match unavailable')
+    def test_saved_opposite_north_and_reobserved_river(self):
+        from sanma_discard_evidence_chain import _opposite_north_additions
+        root=Path('/home/yama1/server/data/dev-work/jantama/evidence157/artifacts/frames')
+        prefixes=('2026-11-03T20-40-52','2026-11-03T20-41-04','2026-11-03T20-41-10')
+        with tempfile.TemporaryDirectory() as directory:
+            receipts=[]
+            for i,prefix in enumerate(prefixes):
+                receipt=json.loads(next(root.glob(prefix+'*.sanma-self-turn.receipt.json')).read_text())
+                source=Path(receipt['screenshot']); folder=Path(directory)/str(i);folder.mkdir()
+                target=folder/source.name;shutil.copyfile(source,target);receipt['screenshot']=str(target)
+                target.with_suffix('.receipt.json').write_text(json.dumps(receipt));receipts.append(receipt)
+            self.assertEqual(_opposite_north_additions(receipts[0],receipts[1:]),1)
+            self.assertEqual(_opposite_north_additions(receipts[1],receipts[1:]),0)
+            self.assertEqual(_opposite_north_additions(receipts[0],[receipts[1],receipts[0]]),0)
+            self.assertEqual(_opposite_north_additions(receipts[0],[receipts[1],dict(receipts[2],digest='0'*64)]),0)
+            event={'tile':'C','clickIndex':12,'clickPoint':{'x':1407,'y':996.5},'frameSha256':receipts[0]['digest']}
+            journal=[dict(event,status='attempted',timestamp='2026-11-03T20:40:57.389991+00:00'),
+                     dict(event,status='selection_confirmed',result='discard_not_verified',
+                          timestamp='2026-11-03T20:40:58.612896+00:00')]
+            watch=Mock();watch.alive.return_value=True
+            check=lambda posts:candidate(receipts[0],posts,journal,continuity=watch,
+                                         active=lambda:True,started=time.monotonic(),deadline_ms=300000)
+            self.assertFalse(check(receipts[1:]))
+            # A later frame is simulated from the retained second observation,
+            # changing one clock pixel while preserving the stable game state.
+            later=json.loads(json.dumps(receipts[2])); folder=Path(directory)/'3';folder.mkdir()
+            target=folder/'2026-11-03T20-41-16.000000+00-00.reobserved.sanma-self-turn.png'
+            with Image.open(later['screenshot']) as src:
+                img=src.convert('RGB');img.putpixel((1500,800),(0,0,0));img.save(target)
+            digest=hashlib.sha256(target.read_bytes()).hexdigest()
+            later['screenshot']=str(target);later['digest']=digest;later['sourceObservation']['digest']=digest
+            later['sourceObservation']['ownRiver']['frameSha256']=digest;later['drawCandidate']['digest']=digest
+            target.with_suffix('.receipt.json').write_text(json.dumps(later))
+            self.assertTrue(check([receipts[2],later]))
+            # The single observed north cannot explain two extra wall draws.
+            for post in (receipts[2],later):
+                post['sourceObservation']['board']['candidate']['remainingTiles']=48
+                Path(post['screenshot']).with_suffix('.receipt.json').write_text(json.dumps(post))
+            self.assertFalse(check([receipts[2],later]))
+            # A light-colored non-north shape cannot substitute for its glyph.
+            broken=json.loads(json.dumps(later));broken_path=folder/'wrong-north.png'
+            with Image.open(later['screenshot']) as src:
+                img=src.convert('RGB');img.paste((240,240,240),(535,101,575,130));img.save(broken_path)
+            broken['screenshot']=str(broken_path);broken['digest']=hashlib.sha256(broken_path.read_bytes()).hexdigest()
+            self.assertEqual(_opposite_north_additions(receipts[0],[receipts[2],broken]),0)
     @unittest.skipUnless(Path('/home/yama1/server/data/dev-work/jantama/evidence154/artifacts2/frames').exists(),
                          'saved red 5s match unavailable')
     def test_saved_hand_with_red_and_ordinary_5s_reaches_recovery(self):
@@ -205,6 +252,33 @@ class RecoveryTest(unittest.TestCase):
             case.run_room()
         self.assertEqual(discard.call_count,2)
         self.assertTrue(any(c.args[0]=='sanma_friend_discard_recovery_candidate' for c in case.op.log.call_args_list))
+
+    def test_reobserve_is_bounded_and_does_not_repeat_uncertain_input(self):
+        from test_experimental_sanma_friend_loop import ExperimentalSanmaFriendLoopTest
+        for accepted in (True,False):
+            with self.subTest(accepted=accepted):
+                case=ExperimentalSanmaFriendLoopTest('runTest');case.setUp();self.addCleanup(case.doCleanups)
+                case.op.args.max_iterations=4 if accepted else 6
+                receipts=[]
+                for i in range(6):
+                    r=dict(self.receipts[min(i,2)],candidates={'candidates':[]},
+                           freshness={'status':'identical_pixels_candidate'},digest=str(i))
+                    receipts.append(r)
+                case.op.inspect_sanma_self_turn.side_effect=receipts
+                case.op.observe_sanma_friend_transition.return_value={'status':'visual_change_unconfirmed','confirmed':False}
+                output={**self.journal[1]}
+                calls=[False,True] if accepted else [False,False,False]
+                with patch('sanma_friend_discard_recovery.MatchContinuity',return_value=self.watch), \
+                     patch('sanma_friend_discard_recovery.candidate',side_effect=calls) as evaluate, \
+                     patch('sanma_friend_discard_experiment.execute_friend_draw_candidate',return_value=output) as discard:
+                    case.run_room()
+                self.assertEqual(evaluate.call_count,len(calls))
+                self.assertEqual(discard.call_count,2 if accepted else 1)
+                retries=[c for c in case.op.log.call_args_list if c.args[0]=='sanma_friend_discard_recovery_reobserve']
+                self.assertEqual(len(retries),1 if accepted else 2)
+                self.assertTrue(all(c.kwargs['operationAuthorized'] is False for c in retries))
+                if not accepted:
+                    self.assertTrue(any(c.kwargs.get('reason')=='discard_recovery_evidence_rejected' for c in case.op.log.call_args_list))
 
     def _real_executor_and_current_journal_with_simulated_page(self, expire=False):
         from auto_operator import utc_stamp

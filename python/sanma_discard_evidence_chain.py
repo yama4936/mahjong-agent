@@ -47,6 +47,29 @@ def _right_north_additions(before, posts):
         return 0
 
 
+def _opposite_north_additions(before, posts):
+    """One newly visible opposite north in two later frame candidates."""
+    from PIL import Image
+    from sanma_opposite_kita_experiment import opposite_north_candidate
+    root = Path(__file__).resolve().parents[1] / 'test/fixtures/sanma-opposite-kita'
+    try:
+        frames = [before, *posts]
+        observations = [opposite_north_candidate(Path(r['screenshot']), root/'north-glyph-reference.png',
+                        shadow_template_path=root/'north-glyph-shadow-reference.png') for r in frames]
+        if any(o.get('frame_sha256') != r['digest'] for o,r in zip(observations,frames)):
+            return 0
+        if observations[0].get('candidate') is not None or any(
+                not isinstance(o.get('candidate'),dict) for o in observations[1:]):
+            return 0
+        light=[]
+        for r in frames:
+            with Image.open(r['screenshot']) as image:
+                light.append(sum(min(pixel)>180 for pixel in image.convert('RGB').crop((535,101,575,130)).getdata()))
+        return int(light[0] <= 100 and all(n >= 500 for n in light[1:]))
+    except (KeyError, TypeError, ValueError, OSError, IndexError, ImportError):
+        return 0
+
+
 def _read(path):
     source = Path(path)
     result = json.loads(source.read_text())
@@ -144,7 +167,7 @@ def evaluate(before_path, after_paths, journal, *, recheck_round=False):
             if boards[0].get(key) is None or any(board.get(key) != boards[0][key] for board in boards[1:]):
                 return reject('board candidate changed or missing')
         remaining = [x.get('remainingTiles') for x in boards]
-        extra = _right_north_additions(before, posts) if all(type(x) is int for x in remaining) and remaining[0] - remaining[1] > 3 else 0
+        extra = (_right_north_additions(before, posts) + _opposite_north_additions(before, posts)) if all(type(x) is int for x in remaining) and remaining[0] - remaining[1] > 3 else 0
         if (any(type(x) is not int for x in remaining) or not all(0 <= x <= 70 for x in remaining)
                 or not all(0 < remaining[0] - x <= 3 + extra for x in remaining[1:])
                 or len(set(remaining[1:])) != 1):
