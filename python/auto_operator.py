@@ -57,13 +57,17 @@ class SanmaKitaPreclickChanged(RetryableSafetyAbort):
     """A kita screenshot changed before any input was attempted."""
 
 
-def may_reobserve_unsent_kita(operator, frame_digest, unconfirmed_input_seen, started_at, now):
+def may_reobserve_unsent_kita(operator, frame_digest, unconfirmed_input_seen, started_at, now, *, prior_kita_targets=None):
     """Only reobserve a known-unsent candidate within the original deadline."""
     return (operator.verified_friend_300_active is True
-            and unconfirmed_input_seen is False
+            and (unconfirmed_input_seen is False or (unconfirmed_input_seen is True
+                 and isinstance(prior_kita_targets, frozenset) and bool(prior_kita_targets)
+                 and getattr(operator, '_sanma_friend_attempted_targets', set()) == prior_kita_targets))
             and isinstance(frame_digest, str)
             and frame_digest not in getattr(operator, '_sanma_friend_attempted_frames', set())
-            and not getattr(operator, '_sanma_friend_attempted_targets', set())
+            and (not getattr(operator, '_sanma_friend_attempted_targets', set())
+                 or (unconfirmed_input_seen is True and isinstance(prior_kita_targets, frozenset)
+                     and getattr(operator, '_sanma_friend_attempted_targets', set()) == prior_kita_targets))
             and type(started_at) in (int, float) and isfinite(started_at)
             and type(now) in (int, float) and isfinite(now)
             and 0 <= (now - started_at) * 1000 < operator.args.action_deadline_ms)
@@ -9304,7 +9308,15 @@ class PythonAutoOperator:
                         action = "tsumo"
                         result = self.execute_sanma_friend_tsumo_candidate(page, receipt)
                     elif any(isinstance(item, dict) and item.get("action") == "kita" for item in actions):
+                        rearm_snapshot = None
                         if last_unconfirmed_action == "kita":
+                            # Rearm temporarily removes the preceding action's
+                            # target. Restore it if the next input was not sent.
+                            prior_targets = getattr(self, "_sanma_friend_attempted_targets", None)
+                            prior_frames = getattr(self, "_sanma_friend_attempted_frames", None)
+                            if isinstance(prior_targets, set) and isinstance(prior_frames, set):
+                                rearm_snapshot = (frozenset(prior_targets), frozenset(prior_frames),
+                                                  getattr(self, "_sanma_friend_kita_rearmed", False))
                             from sanma_friend_kita_rearm import rearm_friend_kita_candidate
                             if not rearm_friend_kita_candidate(self, last_kita_receipt, receipt):
                                 self.log("sanma_friend_stopped", reason="previous_kita_unconfirmed",
@@ -9315,6 +9327,22 @@ class PythonAutoOperator:
                         try:
                             result = self.execute_sanma_friend_kita_candidate(page, receipt)
                         except SanmaKitaPreclickChanged as error:
+                            prior_kita_targets = None
+                            if rearm_snapshot is not None:
+                                targets, frames, was_rearmed = rearm_snapshot
+                                current_targets = getattr(self, "_sanma_friend_attempted_targets", None)
+                                current_frames = getattr(self, "_sanma_friend_attempted_frames", None)
+                                removed = targets - current_targets if isinstance(current_targets, set) else set()
+                                # Revert precisely the one-target rearm only when
+                                # neither frame nor any other target was latched.
+                                if (was_rearmed is False and self._sanma_friend_kita_rearmed is True
+                                        and isinstance(current_targets, set) and len(removed) == 1
+                                        and current_targets == targets - removed
+                                        and isinstance(current_frames, set) and current_frames == frames):
+                                    current_targets.update(removed)
+                                    self._sanma_friend_kita_rearmed = False
+                                    if only_unconfirmed_kita:
+                                        prior_kita_targets = targets
                             kita_preclick_rejections += 1
                             kita_reobserve_actions = candidate_actions
                             self.log("sanma_friend_wait", reason="kita_preclick_reobserve",
@@ -9322,7 +9350,8 @@ class PythonAutoOperator:
                                      streak=kita_preclick_rejections, clicked=False, error=str(error))
                             if not may_reobserve_unsent_kita(
                                     self, frame_digest, unconfirmed_input_seen,
-                                    action_observed_at, time.monotonic()):
+                                    action_observed_at, time.monotonic(),
+                                    prior_kita_targets=prior_kita_targets):
                                 self.log("sanma_friend_stopped", reason="kita_preclick_reobserve_limit",
                                          streak=kita_preclick_rejections, clicked=False)
                                 return

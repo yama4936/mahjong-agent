@@ -105,6 +105,104 @@ class KitaReobserveLoopTest(unittest.TestCase):
         self.assertEqual(self.op.execute_sanma_friend_kita_candidate.call_count, 1)
         self.assertTrue(any(c.kwargs.get('reason') == 'observation_or_action_failed' for c in self.op.log.call_args_list))
 
+    def test_rearmed_kita_retries_only_known_unsent_input(self):
+        for cause in ('success', 'deadline', 'revoked', 'target', 'frame', 'non_kita'):
+            with self.subTest(cause=cause):
+                self.op.args.max_iterations = 4
+                self.op.verified_friend_300_active = True
+                self.op.log.reset_mock()
+                self.op._sanma_friend_attempted_targets = set()
+                self.op._sanma_friend_attempted_frames = set()
+                self.op._sanma_friend_kita_rearmed = False
+                self.op.observe_sanma_friend_transition = Mock(return_value={'status': 'visual_change_unconfirmed'})
+                def receipt(digest, actions):
+                    return {'candidates': {'candidates': actions}, 'digest': digest,
+                            'screenshot': digest, 'drawCandidate': {'status': 'candidate'}}
+                first = [] if cause == 'non_kita' else [{'action': 'kita'}]
+                self.op.inspect_sanma_self_turn.side_effect = [receipt('first', first),
+                    receipt('north1', [{'action':'kita'}]), receipt('north2', [{'action':'kita'}]),
+                    receipt('north3', [{'action':'kita'}]), receipt('north4', [{'action':'kita'}])]
+                clock = [100.0]
+                calls = [0]
+                def execute(page, receipt):
+                    calls[0] += 1
+                    if calls[0] == 1:
+                        self.op._sanma_friend_attempted_targets.add('old')
+                        self.op._sanma_friend_attempted_frames.add(receipt['digest'])
+                        return {}
+                    if calls[0] <= 3:
+                        if cause == 'deadline': clock[0] = 400.0
+                        if cause == 'revoked': self.op.verified_friend_300_active = False
+                        if cause == 'target': self.op._sanma_friend_attempted_targets.add('unexpected')
+                        if cause == 'frame': self.op._sanma_friend_attempted_frames.add('unexpected')
+                        raise SanmaKitaPreclickChanged('before click')
+                    return {}
+                self.op.execute_sanma_friend_kita_candidate.side_effect = execute
+                def rearm(op, before, after):
+                    self.assertIn('old', op._sanma_friend_attempted_targets)
+                    self.assertFalse(op._sanma_friend_kita_rearmed)
+                    op._sanma_friend_attempted_targets.remove('old')
+                    op._sanma_friend_kita_rearmed = True
+                    return True
+                with patch('auto_operator.time.monotonic', side_effect=lambda: clock[0]), \
+                     patch('sanma_friend_kita_rearm.rearm_friend_kita_candidate', side_effect=rearm) as rearm_mock, \
+                     patch('sanma_friend_discard_experiment.execute_friend_draw_candidate', return_value={}):
+                    self.run_loop()
+                if cause == 'success':
+                    self.assertEqual(calls[0], 4)
+                    self.assertEqual(rearm_mock.call_count, 3)
+                    self.assertEqual(sum(c.args[0] == 'sanma_friend_action_clock_started' for c in self.op.log.call_args_list), 1)
+                else:
+                    self.assertEqual(calls[0], 2)
+                    self.assertTrue(any(c.kwargs.get('reason') == 'kita_preclick_reobserve_limit' for c in self.op.log.call_args_list))
+                    if cause in ('target', 'frame'):
+                        self.assertNotIn('old', self.op._sanma_friend_attempted_targets)
+                        self.assertTrue(self.op._sanma_friend_kita_rearmed)
+
+    def test_live_receipts_revalidate_after_rearm_preclick_failure(self):
+        import copy
+        import json
+        from sanma_friend_freshness import friend_action_target_key
+        from sanma_friend_kita_rearm import rearm_friend_kita_candidate
+        data = Path('/home/yama1/server/data/dev-work/jantama/data88-run3/frames')
+        paths = sorted(data.glob('*.sanma-self-turn.receipt.json'))
+        if len(paths) < 2:
+            self.skipTest('independent live capture unavailable')
+        before, after = (json.loads(p.read_text()) for p in paths[-2:])
+        for cause in ('success', 'candidate', 'screen'):
+            with self.subTest(cause=cause):
+                self.op.args.max_iterations = 3
+                self.op.verified_friend_300_active = True
+                self.op._sanma_friend_attempted_targets = set()
+                self.op._sanma_friend_attempted_frames = set()
+                self.op._sanma_friend_kita_rearmed = False
+                self.op.log.reset_mock()
+                self.op.observe_sanma_friend_transition = Mock(return_value={'status': 'visual_change_unconfirmed'})
+                changed = copy.deepcopy(after)
+                if cause == 'candidate': changed['candidates']['candidates'] = [{'action': 'tsumo'}]
+                self.op.inspect_sanma_self_turn.side_effect = [before, after, changed]
+                self.op.execute_sanma_friend_tsumo_candidate = Mock()
+                calls = [0]
+                def execute(page, receipt):
+                    calls[0] += 1
+                    if calls[0] == 1:
+                        self.op._sanma_friend_attempted_targets.add(friend_action_target_key(Path(before['screenshot']).read_bytes(), 'kita'))
+                        self.op._sanma_friend_attempted_frames.add(before['digest'])
+                        return {}
+                    if calls[0] == 2: raise SanmaKitaPreclickChanged('before click')
+                    return {}
+                self.op.execute_sanma_friend_kita_candidate.side_effect = execute
+                states = [('match', 1.0), ('match', 1.0),
+                          ('round_result' if cause == 'screen' else 'match', 1.0)]
+                with patch('sanma_friend_kita_rearm.rearm_friend_kita_candidate', wraps=rearm_friend_kita_candidate) as guard:
+                    self.run_loop(states)
+                self.assertEqual(calls[0], 3 if cause == 'success' else 2)
+                self.assertEqual(guard.call_count, 2 if cause == 'success' else 1)
+                self.op.execute_sanma_friend_tsumo_candidate.assert_not_called()
+                if cause != 'success':
+                    reason = 'kita_reobserve_candidate_changed' if cause == 'candidate' else 'kita_reobserve_screen_changed'
+                    self.assertTrue(any(c.kwargs.get('reason') == reason for c in self.op.log.call_args_list))
+
     def test_two_unconfirmed_kita_keep_clock_for_unsent_discard_retry(self):
         from sanma_friend_discard_experiment import DiscardPreclickChanged
         self.op.args.max_iterations = 4
