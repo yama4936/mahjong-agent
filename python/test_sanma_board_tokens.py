@@ -6,6 +6,17 @@ from board_metadata import parse_sanma_board_tokens
 
 
 class SanmaBoardTokensTest(unittest.TestCase):
+    def test_left_right_complete_candidate_rejects_conflicts(self):
+        def t(text,x,y): return {'text':text,'x':x,'y':y,'confidence':.999}
+        tokens=[t('南',824,514),t('東',835,335),t('西',1093,514),
+                t('35000',960,482),t('35000',876,423),t('35000',1047,419),
+                t('東1局',960,405),t('余53',959,443),t('0',132,155),t('0',268,155)]
+        result=self.parse(tokens)
+        self.assertFalse(result['verified']); self.assertTrue(result['consistent'])
+        self.assertEqual(result['candidate']['scores'],{'south':35000,'east':35000,'west':35000})
+        for bad in ([x for x in tokens if x['x'] != 835], [*tokens,t('東',1093,514)],
+                    [*tokens,t('35000',958,364)], [*tokens,t('35000',876,423)]):
+            with self.subTest(bad=bad): self.assertNotIn('candidate',self.parse(bad))
     def test_opposite_right_layout_requires_three_distinct_observed_winds(self):
         def t(text,x,y): return {'text':text,'x':x,'y':y,'confidence':.999}
         tokens=[t('東',824,514),t('南',1093,514),t('西',1089,335),

@@ -40,9 +40,9 @@ class SanmaBoardImageTests(unittest.TestCase):
         frame = Path('/home/yama1/sanma-independent-20261031/20-turn.png')
         result = recognize_sanma_board_candidate(frame, expected_total_points=None, payment_phase=None)
         self.assertFalse(result['verified'])
-        self.assertEqual(result['reason'], 'unsupported_right_opponent_layout')
+        self.assertEqual(result['reason'], 'expected_total_points_unknown')
         self.assertEqual(result['layoutCandidate'], {'opponents':['left','right'], 'verified':False})
-        self.assertNotIn('candidate', result)
+        self.assertEqual(result['candidate']['seat'], 'south')
         observation = result['rightLayoutObservation']
         self.assertEqual(observation['positions'], {'own': {'wind': 'south', 'score': 35000},
             'left': {'wind': 'east', 'score': 35000}, 'right': {'wind': 'west', 'score': 35000}})
@@ -51,6 +51,17 @@ class SanmaBoardImageTests(unittest.TestCase):
         self.assertEqual(observation['remainingTilesCandidate'], 52)
         self.assertFalse(observation['verified'])
         self.assertFalse(observation['complete'])
+
+    @unittest.skipUnless(Path('/home/yama1/server/data/dev-work/jantama/evidence151/artifacts/frames').exists(),
+                         'saved left/right match unavailable')
+    def test_saved_left_right_layout_reads_three_winds(self):
+        root=Path('/home/yama1/server/data/dev-work/jantama/evidence151/artifacts/frames')
+        for prefix,wall in [('2026-11-03T17-19-32',53),('2026-11-03T17-19-50',48),('2026-11-03T17-19-55',48)]:
+            frame=next(root.glob(prefix+'*.sanma-self-turn.png'))
+            result=recognize_sanma_board_candidate(frame,expected_total_points=105000,payment_phase='settled')
+            self.assertEqual(result['candidate'],{'seat':'south','round':'east_1',
+                 'scores':{'south':35000,'east':35000,'west':35000},'riichiSticks':0,'honba':0,'remainingTiles':wall})
+            self.assertFalse(result['verified'])
 
     @unittest.skipUnless((ACTIONS / '2026-10-30T17-30-50-782Z-before.png').exists(), 'local score frame unavailable')
     def test_sanma_left_score_retry_recovers_unverified_candidate(self):

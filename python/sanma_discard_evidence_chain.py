@@ -12,6 +12,41 @@ from sanma_river_cell_diagnostic import compare as compare_cells
 from sanma_discard_glyph_diagnostic import compare as compare_glyph
 
 
+def _right_north_additions(before, posts):
+    """Conservative image candidates for newly exposed right-side norths.
+
+    Empty candidate lists alone do not establish absence; require each prior
+    glyph crop to lack a light tile face and both later crops to show one.
+    """
+    from PIL import Image
+    from sanma_right_kita_experiment import right_north_candidate
+    root = Path(__file__).parent / 'fixtures'
+    templates = [root / f'sanma-right-north-c177-{s}.png' for s in ('top','bottom')]
+    boxes = ((1410,214,1455,239),(1418,247,1463,272))
+    try:
+        frames = [before, *posts]
+        readings = [right_north_candidate(Path(r['screenshot']), templates) for r in frames]
+        if any(x.get('frame_sha256') != r['digest'] for x,r in zip(readings,frames)):
+            return 0
+        slots = [{c['slot'] for c in x.get('candidates', [])} for x in readings]
+        added = slots[1] - slots[0]
+        if not added or slots[2] - slots[0] != added or not added <= {0,1}:
+            return 0
+        with Image.open(before['screenshot']) as source:
+            baseline = source.convert('RGB')
+        later = []
+        for post in posts:
+            with Image.open(post['screenshot']) as source:
+                later.append(source.convert('RGB'))
+        for slot in added:
+            light = lambda image: sum(min(pixel) > 180 for pixel in image.crop(boxes[slot]).getdata())
+            if light(baseline) > 100 or any(light(image) < 500 for image in later):
+                return 0
+        return len(added)
+    except (KeyError, TypeError, ValueError, OSError, IndexError, ImportError):
+        return 0
+
+
 def _read(path):
     source = Path(path)
     result = json.loads(source.read_text())
@@ -109,8 +144,9 @@ def evaluate(before_path, after_paths, journal, *, recheck_round=False):
             if boards[0].get(key) is None or any(board.get(key) != boards[0][key] for board in boards[1:]):
                 return reject('board candidate changed or missing')
         remaining = [x.get('remainingTiles') for x in boards]
+        extra = _right_north_additions(before, posts) if all(type(x) is int for x in remaining) and remaining[0] - remaining[1] > 3 else 0
         if (any(type(x) is not int for x in remaining) or not all(0 <= x <= 70 for x in remaining)
-                or not all(0 < remaining[0] - x <= 3 for x in remaining[1:])
+                or not all(0 < remaining[0] - x <= 3 + extra for x in remaining[1:])
                 or len(set(remaining[1:])) != 1):
             return reject('remaining count not consistent with later candidate turn')
         glyphs = [compare_glyph(before_path, p, attempt['clickIndex']) for p in after_paths]

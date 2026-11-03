@@ -511,9 +511,23 @@ def parse_sanma_board_tokens(tokens: list[dict], *, expected_total_points: int |
                 and len({item["wind"] for item in observed_positions.values()}) == 3):
             observation["scoresByObservedWind"] = {item["wind"]: item["score"]
                                                      for item in observed_positions.values()}
-        return {**result, "reason": "unsupported_right_opponent_layout",
+        partial = {**result, "reason": "unsupported_right_opponent_layout",
                 "layoutCandidate": {"opponents": ["left", "right"], "verified": False},
                 "rightLayoutObservation": observation}
+        if ('scoresByObservedWind' not in observation or round_text is None
+                or sticks is None or honba is None):
+            return partial
+        candidate = {'seat': observed_positions['own']['wind'],
+                     'round': f"{WINDS[round_text[0]]}_{round_text[1]}",
+                     'scores': observation['scoresByObservedWind'],
+                     'riichiSticks': int(sticks), 'honba': int(honba)}
+        if 'remainingTilesCandidate' in observation:
+            candidate['remainingTiles'] = observation['remainingTilesCandidate']
+        check = validate_sanma_board_consistency(candidate, expected_total_points=expected_total_points,
+                                                  payment_phase=payment_phase)
+        return {**partial, 'candidate': candidate,
+                **({'consistent': True, 'reason': 'right_opponent_layout_candidate'} if check['consistent']
+                   else {'reason': check['reason']})}
     if not wind or not round_text or sticks is None or honba is None or any(v is None for v in numbers.values()):
         return {**result, "reason": "incomplete_or_ambiguous_tokens"}
     if score_evidence(1047, 419) or any(isinstance(t.get("text"), str) and re.fullmatch(r"-?\d{1,6}", t["text"])

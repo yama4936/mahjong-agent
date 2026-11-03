@@ -30,6 +30,44 @@ class RecoveryGuardTest(unittest.TestCase):
             with self.subTest(reason=reason), self.assertRaises(RuntimeError):
                 check_friend_recovery_guard(op)
 
+    @unittest.skipUnless(Path('/home/yama1/server/data/dev-work/jantama/evidence151/artifacts/frames').exists(),
+                         'saved right north frames unavailable')
+    def test_two_new_right_north_candidates_require_frame_bound_before_and_after(self):
+        from sanma_discard_evidence_chain import _right_north_additions
+        root=Path('/home/yama1/server/data/dev-work/jantama/evidence151/artifacts/frames')
+        receipts=[json.loads(next(root.glob(prefix+'*.sanma-self-turn.receipt.json')).read_text())
+                  for prefix in ('2026-11-03T17-19-32','2026-11-03T17-19-50','2026-11-03T17-19-55')]
+        self.assertEqual(_right_north_additions(receipts[0],receipts[1:]),2)
+        self.assertEqual(_right_north_additions(receipts[1],receipts[1:]),0)
+        self.assertEqual(_right_north_additions(receipts[0],[receipts[1],receipts[0]]),0)
+        corrupt=dict(receipts[2],digest='0'*64)
+        self.assertEqual(_right_north_additions(receipts[0],[receipts[1],corrupt]),0)
+
+    @unittest.skipUnless(Path('/home/yama1/server/data/dev-work/jantama/evidence151/artifacts/frames').exists(),
+                         'saved left/right match unavailable')
+    def test_real_left_right_north_extractions_reach_recovery_candidate(self):
+        from sanma_board_image import recognize_sanma_board_candidate
+        root=Path('/home/yama1/server/data/dev-work/jantama/evidence151/artifacts/frames')
+        prefixes=('2026-11-03T17-19-32','2026-11-03T17-19-50','2026-11-03T17-19-55')
+        with tempfile.TemporaryDirectory() as directory:
+            receipts=[]
+            for i,prefix in enumerate(prefixes):
+                original=json.loads(next(root.glob(prefix+'*.sanma-self-turn.receipt.json')).read_text())
+                source=Path(original['screenshot']); folder=Path(directory)/str(i); folder.mkdir()
+                target=folder/source.name; shutil.copyfile(source,target); original['screenshot']=str(target)
+                original['sourceObservation']['board']=recognize_sanma_board_candidate(
+                    target,expected_total_points=None,payment_phase=None)
+                target.with_suffix('.receipt.json').write_text(json.dumps(original))
+                receipts.append(original)
+            event={'tile':'1m','clickIndex':0,'clickPoint':{'x':269,'y':996.5},
+                   'frameSha256':receipts[0]['digest']}
+            journal=[dict(event,status='attempted',timestamp='2026-11-03T17:19:37.214237+00:00'),
+                     dict(event,status='selection_confirmed',result='discard_not_verified',
+                          timestamp='2026-11-03T17:19:38.617414+00:00')]
+            watch=Mock();watch.alive.return_value=True
+            self.assertTrue(candidate(receipts[0],receipts[1:],journal,continuity=watch,
+                                      active=lambda:True,started=time.monotonic(),deadline_ms=300000))
+
 @unittest.skipUnless((ROOT/'receipt0.json').exists(), 'local retained real-match evidence unavailable')
 class RecoveryTest(unittest.TestCase):
     def setUp(self):
