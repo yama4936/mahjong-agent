@@ -63,6 +63,9 @@ def candidate(before, posts, journal, *, continuity, active, started, deadline_m
     try:
         if len(posts) != 2 or not valid():
             return False
+        if (len(journal) != 2 or any(event.get('blankDrawIdentityUnknown') is True for event in journal)
+                and not all(event.get('blankDrawIdentityUnknown') is True for event in journal)):
+            return False
         receipts = [before, *posts]
         # Each five-sou has its ordinary/red glyph independently checked in
         # every frame; other fives remain excluded because conservation alone
@@ -115,7 +118,8 @@ if __name__ == '__main__':
     request = json.load(sys.stdin)
     paths, journal = request['paths'], request['journal']
     receipts = [json.loads(Path(path).read_text()) for path in paths]
-    result = evaluate(paths[0], paths[1:], journal, recheck_round=True)
+    unknown_draw = all(event.get('blankDrawIdentityUnknown') is True for event in journal)
+    result = evaluate(paths[0], paths[1:], journal, recheck_round=True, unknown_draw=unknown_draw)
     ok = (result.get('state') == 'later_turn_evidence_candidate'
           and all(consistent(receipts[0], post, journal[0]['clickIndex']) for post in receipts[1:]))
     print(json.dumps({'candidate': ok}))

@@ -9715,6 +9715,8 @@ class PythonAutoOperator:
                                 selected_at = datetime.now(timezone.utc).isoformat()
                                 selected_monotonic = time.monotonic()
                                 event = {key: result.get(key) for key in ('tile', 'clickIndex', 'clickPoint', 'frameSha256')}
+                                if result.get('blankDrawIdentityUnknown') is True:
+                                    event['blankDrawIdentityUnknown'] = True
                                 discard_recovery = {'watch': watch, 'before': receipt, 'posts': [],
                                                 'started': action_observed_at, 'selected_monotonic': selected_monotonic,
                                                 'attempted_monotonic': attempted_monotonic,

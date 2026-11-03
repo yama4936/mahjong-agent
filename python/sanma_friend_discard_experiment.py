@@ -282,6 +282,13 @@ def execute_friend_draw_candidate(operator, page, receipt):
     partial_row = (friend_visible_row_with_north_overlap(baseline, row_slots)
                    or friend_visible_empty_row_candidate(baseline, row_slots))
     draw_only = hand_value.get("safe") is not True and experimental_draw_only_candidate(hand_value, geo_value, draw)
+    blank_only = False
+    if hand_value.get("safe") is not True and not draw_only:
+        from sanma_friend_blank_draw import blank_draw_candidate
+        blank_only = draw_only = blank_draw_candidate(baseline, hand_value, geo_value, draw)
+        if blank_only:
+            operator.log('sanma_friend_blank_draw_candidate', digest=receipt['digest'], confirmed=False,
+                         operationAuthorized=False, reason='blank draw may be an unloaded tile; identity unknown')
     five_sou_only = False
     if hand_value.get("safe") is not True and not draw_only:
         from sanma_five_sou_candidate import ordinary_five_sou_candidate
@@ -291,7 +298,7 @@ def execute_friend_draw_candidate(operator, page, receipt):
                          operationAuthorized=False, reason='ordinary five sou color and shape hypothesis')
     defensive = (friend_genbutsu_candidate(source, receipt['digest'], threats, tiles, hand_value.get('matches'))
                  if threats and isinstance(tiles, list) and isinstance(points, list) and len(points) == len(tiles) else None)
-    if five_sou_only:
+    if five_sou_only or blank_only:
         defensive = None
     if defensive is not None and defensive['index'] != draw.get('index'):
         from sanma_friend_shape_candidate import friend_hand_click_geometry, friend_clear_riichi_rail
@@ -342,7 +349,7 @@ def execute_friend_draw_candidate(operator, page, receipt):
     calibrated_points = operator.layout.get("clickPoints", []) if isinstance(operator.layout, dict) else []
     calibrated_slots = ([*operator.layout.get("handSlots", []), operator.layout.get("drawSlot")]
                         if isinstance(operator.layout, dict) else [])
-    shape_choice = (not five_sou_only
+    shape_choice = (not five_sou_only and not blank_only
                     and getattr(operator, "sanma_friend_riichi_attempted", False) is False
                     and shape.get("status") == "candidate"
                     and (all(slot.get("status") == "empty_candidate" for slot in row_slots)
@@ -391,12 +398,15 @@ def execute_friend_draw_candidate(operator, page, receipt):
         from sanma_friend_freshness import check_friend_recovery_guard
         check_friend_recovery_guard(operator)
         return getattr(operator, "verified_friend_300_active", False) is True
-    return execute_friend_discard(page, session=session, observation=observation, plan=plan,
+    result = execute_friend_discard(page, session=session, observation=observation, plan=plan,
                                   layout=operator.layout, log=record,
                                   turn_started_monotonic=friend_action_started_at(operator),
                                   session_check=session_check,
                                   save_rejected_frame=save_rejected_frame,
                                   before_click=lambda: latch_friend_action_target(operator, baseline, "discard"))
+    if blank_only:
+        result['blankDrawIdentityUnknown'] = True
+    return result
 
 
 def execute_friend_discard(page, *, session, observation, plan, layout, log,

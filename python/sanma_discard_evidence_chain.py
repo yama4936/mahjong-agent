@@ -111,7 +111,7 @@ def _frame_time(path):
     return datetime.fromisoformat(f'{date}T{hour}:{minute}:{second}{zone_hour}:{zone_minute}')
 
 
-def evaluate(before_path, after_paths, journal, *, recheck_round=False):
+def evaluate(before_path, after_paths, journal, *, recheck_round=False, unknown_draw=False):
     """Cross-check retained evidence; caller must preserve provenance and order."""
     result = {'scope': 'offline_untrusted_sanma_discard_evidence_chain',
               'state': 'pending', 'confirmed': False, 'operationAuthorized': False,
@@ -125,6 +125,8 @@ def evaluate(before_path, after_paths, journal, *, recheck_round=False):
         result['failures'].append(reason)
         return result
     try:
+        if unknown_draw:
+            result['limitations'].append('unclassified blank draw may be an unloaded tile; appended identity is unverified')
         if len(after_paths) < 2 or len(journal) != 2:
             return reject('two observations and attempted/selection journal required')
         attempt, selection = journal
@@ -163,6 +165,16 @@ def evaluate(before_path, after_paths, journal, *, recheck_round=False):
                 or points[index] != attempt['clickPoint'] or tiles[index] != attempt['tile']
                 or matches[index].get('tile') != attempt['tile']):
             return reject('selected index, point and hand candidate mismatch')
+        if unknown_draw and (index != 13 or attempt['tile'] != 'P'
+                or any(item.get('blankDrawIdentityUnknown') is not True for item in journal)
+                or matches[index].get('confidence') != 0 or matches[index].get('runnerUpConfidence') != 0):
+            return reject('unknown draw requires unclassified physical draw journal')
+        if unknown_draw:
+            from sanma_friend_blank_draw import blank_draw_candidate
+            if (before['drawCandidate'].get('digest') != before['digest'] or
+                    not blank_draw_candidate(Path(before['screenshot']).read_bytes(), hand_value,
+                                        geometry_value, before['drawCandidate'])):
+                return reject('unclassified blank physical draw unavailable')
         physical = [compare_cells(before['screenshot'], p['screenshot']) for p in posts]
         if any(x['beforeSha256'] != before['digest'] or x['afterSha256'] != p['digest']
                for x, p in zip(physical, posts)):
@@ -188,8 +200,8 @@ def evaluate(before_path, after_paths, journal, *, recheck_round=False):
                 or not all(0 < remaining[0] - x <= 3 + extra for x in remaining[1:])
                 or len(set(remaining[1:])) != 1):
             return reject('remaining count not consistent with later candidate turn')
-        glyphs = [compare_glyph(before_path, p, attempt['clickIndex']) for p in after_paths]
-        if not all(x['exactSingleAppendCandidate'] and x['appendedTileCandidate'] == attempt['tile']
+        glyphs = [] if unknown_draw else [compare_glyph(before_path, p, attempt['clickIndex']) for p in after_paths]
+        if not unknown_draw and not all(x['exactSingleAppendCandidate'] and x['appendedTileCandidate'] == attempt['tile']
                    and x['glyphDistance'] is not None for x in glyphs):
             return reject('river tile candidate or glyph measurement unavailable')
         draws = [p.get('drawCandidate') for p in posts]
@@ -219,7 +231,8 @@ def evaluate(before_path, after_paths, journal, *, recheck_round=False):
                     or Counter(value['tiles']) != expected):
                 return reject('closed hand conservation failed or unavailable')
         result['state'] = 'later_turn_evidence_candidate'
-        result['evidence'] = {'selectedTile': attempt['tile'], 'selectedIndex': attempt['clickIndex'],
+        result['evidence'] = {'selectedTile': None if unknown_draw else attempt['tile'], 'selectedTileIdentityUnknown': unknown_draw,
+                              'selectedIndex': attempt['clickIndex'],
                               'cellIndex': indices[0], 'remainingCandidates': remaining,
                               'glyphDistances': [x['glyphDistance'] for x in glyphs],
                               'beforeSha256': before['digest'], 'afterSha256': [p['digest'] for p in posts],
