@@ -295,6 +295,75 @@ class ExperimentalSanmaFriendLoopTest(unittest.TestCase):
         self.assertTrue(any(c.kwargs.get('reason')=='black_screen_deadline_expired' for c in self.op.log.call_args_list))
         self.op.inspect_sanma_self_turn.assert_not_called(); self.page.mouse.click.assert_not_called()
 
+    def test_recovered_match_deadline_log_distinguishes_screen_and_clock(self):
+        for deadline_during_recognition in (False, True):
+            with self.subTest(deadline_during_recognition=deadline_during_recognition):
+                self.op.log.reset_mock(); self.op.inspect_sanma_self_turn.reset_mock()
+                self.op.verified_friend_300_active=True
+                self.op.sanma_friend_reviewed_start_at=100.0
+                self.op.args.max_iterations=3
+                now=[150.0]
+                frames=iter([b'black', b'recovered', b'recovered2', b'fresh'])
+                def capture(**kwargs):
+                    frame=next(frames)
+                    if frame==b'fresh' and not deadline_during_recognition:
+                        now[0]=401.0
+                    return frame
+                def recognize(page):
+                    now[0]=401.0
+                    return {'screenshot':'recognition.png', 'candidates':{'candidates':[]}}
+                self.page.screenshot.side_effect=capture
+                self.op.inspect_sanma_self_turn.side_effect=recognize
+                with patch('auto_operator.time.monotonic',side_effect=lambda:now[0]), \
+                     patch('auto_operator.classify_screen',side_effect=[('black_screen',1.0),('match',1.0),('match',1.0),('match',1.0)]):
+                    self.op.run_experimental_sanma_friend(self.page)
+                recovered=next(c for c in self.op.log.call_args_list if c.args[0]=='sanma_friend_black_screen_recovered')
+                self.assertEqual(recovered.kwargs['recoveryDeadlineBasis'],'reviewed_room_start_input')
+                self.assertEqual(recovered.kwargs['recoveryDeadlineElapsedMs'],50000)
+                stopped=next(c for c in self.op.log.call_args_list if c.kwargs.get('reason')=='black_screen_deadline_expired')
+                self.assertEqual(stopped.kwargs['deadlineContext'],'after_black_screen_recovery')
+                self.assertEqual(stopped.kwargs['recoveryDeadlineBasis'],'reviewed_room_start_input')
+                self.assertEqual(stopped.kwargs['recoveryDeadlineElapsedMs'],301000)
+                self.assertEqual(stopped.kwargs['actionDeadlineMs'],300000)
+                self.assertFalse(stopped.kwargs['currentLoopUnconfirmedInputObserved'])
+                self.assertFalse(stopped.kwargs['operationAuthorized'])
+                self.assertEqual(stopped.kwargs['stage'],'after_recognition' if deadline_during_recognition else 'before_recognition')
+                if deadline_during_recognition:
+                    self.assertEqual(stopped.kwargs['lastOuterScreenState'],'match')
+                    self.assertNotIn('screenState',stopped.kwargs)
+                else:
+                    self.assertEqual(stopped.kwargs['screenState'],'match')
+                self.page.mouse.click.assert_not_called()
+
+    def test_prior_action_observation_recovery_deadline_survives_following_action(self):
+        self.op.verified_friend_300_active=True
+        self.op.args.max_iterations=0
+        now=[100.0]
+        frames=iter([b'match', b'black', b'recovered', b'recovered2', b'fresh', b'fresh2', b'late'])
+        def capture(**kwargs):
+            frame=next(frames)
+            if frame==b'late':
+                now[0]=401.0
+            return frame
+        self.page.screenshot.side_effect=capture
+        self.op.inspect_sanma_self_turn.side_effect=[
+            {'candidates':{'candidates':[]}, 'digest':'initial', 'drawCandidate':{'status':'unresolved'}},
+            {'candidates':{'candidates':[{'action':'tsumo'}]}, 'digest':'fresh', 'screenshot':'fresh.png'},
+            {'candidates':{'candidates':[{'action':'tsumo'}]}, 'digest':'fresh2', 'screenshot':'fresh2.png'}]
+        self.op.observe_sanma_friend_transition.return_value={'status':'visual_change_unconfirmed','confirmed':False}
+        with patch('auto_operator.time.monotonic',side_effect=lambda:now[0]), \
+             patch('auto_operator.classify_screen',side_effect=[('match',1.0),('black_screen',1.0),('match',1.0),('match',1.0),('match',1.0),('match',1.0),('match',1.0)]):
+            self.op.run_experimental_sanma_friend(self.page)
+        recovered=next(c for c in self.op.log.call_args_list if c.args[0]=='sanma_friend_black_screen_recovered')
+        self.assertEqual(recovered.kwargs['recoveryDeadlineBasis'],'prior_action_observation')
+        stopped=next(c for c in self.op.log.call_args_list if c.kwargs.get('reason')=='black_screen_deadline_expired')
+        self.assertEqual(stopped.kwargs['recoveryDeadlineBasis'],'prior_action_observation')
+        self.assertEqual(stopped.kwargs['recoveryDeadlineElapsedMs'],301000)
+        self.assertTrue(stopped.kwargs['currentLoopUnconfirmedInputObserved'])
+        self.assertEqual(stopped.kwargs['screenState'],'match')
+        self.assertEqual(self.op.execute_sanma_friend_tsumo_candidate.call_count,2)
+        self.page.mouse.click.assert_not_called()
+
     def test_black_recovery_to_unexpected_screen_stops(self):
         self.op.verified_friend_300_active=True; self.op.args.max_iterations=0
         self.page.screenshot.side_effect=[b'black',b'login']

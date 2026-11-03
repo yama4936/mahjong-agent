@@ -9092,6 +9092,7 @@ class PythonAutoOperator:
         result_latched = None
         action_observed_at = None
         recovery_deadline_at = None
+        recovery_deadline_basis = None
         round_end_started = None
         self.sanma_friend_riichi_attempted = False
         def preserve(frame: bytes | None) -> str | None:
@@ -9226,9 +9227,15 @@ class PythonAutoOperator:
                         action_observed_at = conservative_start
                         self.sanma_friend_action_observed_at = conservative_start
                         recovery_deadline_at = conservative_start
+                        recovery_deadline_basis = ("reviewed_room_start_input" if start_is_usable
+                                                   and conservative_start == reviewed_start
+                                                   else "prior_action_observation")
                         self.log("sanma_friend_black_screen_recovered", screenshot=preserve(candidate),
                                  digest=hashlib.sha256(candidate).hexdigest(), attempts=attempt + 1,
-                                 operationAuthorized=False, freshRecognitionRequired=True)
+                                 operationAuthorized=False, freshRecognitionRequired=True,
+                                 recoveryDeadlineBasis=recovery_deadline_basis,
+                                 recoveryDeadlineElapsedMs=round((time.monotonic() - recovery_deadline_at) * 1000),
+                                 actionDeadlineMs=self.args.action_deadline_ms)
                         recovered = True
                         break
                 if recovered:
@@ -9243,8 +9250,14 @@ class PythonAutoOperator:
                          recovery="passive_only", operationAuthorized=False)
                 return
             if state == "match" and confidence >= 0.95:
-                if recovery_deadline_at is not None and (time.monotonic() - recovery_deadline_at) * 1000 >= self.args.action_deadline_ms:
-                    self.log("sanma_friend_stopped", reason="black_screen_deadline_expired", screenshot=preserve(frame), operationAuthorized=False)
+                recovery_elapsed_ms = ((time.monotonic() - recovery_deadline_at) * 1000
+                                       if recovery_deadline_at is not None else None)
+                if recovery_elapsed_ms is not None and recovery_elapsed_ms >= self.args.action_deadline_ms:
+                    self.log("sanma_friend_stopped", reason="black_screen_deadline_expired", screenshot=preserve(frame),
+                             screenState=state, confidence=confidence, deadlineContext="after_black_screen_recovery",
+                             recoveryDeadlineBasis=recovery_deadline_basis, recoveryDeadlineElapsedMs=round(recovery_elapsed_ms),
+                             actionDeadlineMs=self.args.action_deadline_ms, stage="before_recognition",
+                             currentLoopUnconfirmedInputObserved=unconfirmed_input_seen, operationAuthorized=False)
                     return
                 if round_end_started is not None:
                     self.log("sanma_friend_round_transition_reobserved", screenState=state,
@@ -9266,8 +9279,15 @@ class PythonAutoOperator:
                     result_latched = None
                 try:
                     receipt = self.inspect_sanma_self_turn(page)
-                    if recovery_deadline_at is not None and (time.monotonic() - recovery_deadline_at) * 1000 >= self.args.action_deadline_ms:
-                        self.log("sanma_friend_stopped", reason="black_screen_deadline_expired", screenshot=receipt.get("screenshot"), operationAuthorized=False)
+                    recovery_elapsed_ms = ((time.monotonic() - recovery_deadline_at) * 1000
+                                           if recovery_deadline_at is not None else None)
+                    if recovery_elapsed_ms is not None and recovery_elapsed_ms >= self.args.action_deadline_ms:
+                        self.log("sanma_friend_stopped", reason="black_screen_deadline_expired", screenshot=receipt.get("screenshot"),
+                                 lastOuterScreenState=state, lastOuterConfidence=confidence,
+                                 deadlineContext="after_black_screen_recovery", recoveryDeadlineBasis=recovery_deadline_basis,
+                                 recoveryDeadlineElapsedMs=round(recovery_elapsed_ms), actionDeadlineMs=self.args.action_deadline_ms,
+                                 stage="after_recognition", currentLoopUnconfirmedInputObserved=unconfirmed_input_seen,
+                                 operationAuthorized=False)
                         return
                     candidates = receipt.get("candidates")
                     actions = candidates.get("candidates") if isinstance(candidates, dict) else None
