@@ -28,6 +28,12 @@ test("uncertain red override cannot replace nine-man while real red fives surviv
     assert.equal(predictions[0]?.selectedBy, "normal");
     assert.ok((predictions[0]?.redPrediction.confidence ?? 1) < 0.5);
     assert.ok(predictions.slice(1).every(item => item.selectedBy === "red-gate"));
+    for (const item of predictions) {
+      assert.equal(typeof item.normalPrediction.runnerUpLabel, "string");
+      assert.equal(typeof item.normalPrediction.runnerUpConfidence, "number");
+      assert.equal(typeof item.redPrediction.runnerUpLabel, "string");
+      assert.equal(typeof item.redPrediction.runnerUpConfidence, "number");
+    }
   } finally { await recognizer.close(); }
 });
 
@@ -69,7 +75,7 @@ test("hybrid classifier preserves normal and red-gate decisions", async () => {
     },
     {
       label: "0m", confidence: 0.97, runnerUpLabel: "5m", runnerUpConfidence: 0.02,
-      selectedBy: "red-gate", normalPrediction: { label: "5m", confidence: 0.99 }, redPrediction: { label: "5m-", confidence: 0.97 },
+      selectedBy: "red-gate", normalPrediction: { label: "5m", confidence: 0.99, runnerUpLabel: "9m", runnerUpConfidence: 0.01 }, redPrediction: { label: "5m-", confidence: 0.97, runnerUpLabel: "x", runnerUpConfidence: 0.02 },
     },
   ];
   const result = await recognizer.classifyTileImages([Buffer.from("normal"), Buffer.from("red")]);
@@ -77,6 +83,26 @@ test("hybrid classifier preserves normal and red-gate decisions", async () => {
   assert.deepEqual(result.map((prediction: any) => prediction.selectedBy), ["normal", "red-gate"]);
   assert.equal(result[1]?.normalPrediction.tile, "5m");
   assert.equal(result[1]?.redPrediction.label, "5m-");
+  assert.equal(result[1]?.normalPrediction.label, "5m");
+  assert.equal(result[1]?.normalPrediction.runnerUpLabel, "9m");
+  assert.equal(result[1]?.normalPrediction.runnerUpConfidence, 0.01);
+  assert.equal(result[1]?.redPrediction.runnerUpLabel, "x");
+  assert.equal(result[1]?.redPrediction.runnerUpConfidence, 0.02);
+  // Legacy worker responses remain accepted, without fabricating a runner-up.
+  assert.equal(result[0]?.normalPrediction.runnerUpLabel, undefined);
+  assert.equal(result[0]?.redPrediction.runnerUpConfidence, undefined);
+});
+
+test("hybrid forwards malformed auxiliary scores without inventing a valid alternative", async () => {
+  const recognizer = new HybridTileRecognizer() as any;
+  recognizer.predict = async () => [{ label: "9p", confidence: 0.9, runnerUpLabel: "8p", runnerUpConfidence: 0.1,
+    selectedBy: "normal", normalPrediction: { label: "9p", confidence: 0.9, runnerUpLabel: "bad", runnerUpConfidence: NaN },
+    redPrediction: { label: "5s-", confidence: 0.95, runnerUpLabel: "x", runnerUpConfidence: Infinity } }];
+  const [prediction] = await recognizer.classifyTileImages([Buffer.from("tile")]);
+  assert.equal(prediction.tile, "9p");
+  assert.equal(prediction.normalPrediction.runnerUpLabel, "bad");
+  assert.ok(Number.isNaN(prediction.normalPrediction.runnerUpConfidence));
+  assert.equal(prediction.redPrediction.runnerUpConfidence, Infinity);
 });
 
 test("six-pin seven-pin veto keeps the measured verified gap", () => {

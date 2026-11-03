@@ -12,14 +12,14 @@ interface WorkerPrediction {
   runnerUpLabel: string;
   runnerUpConfidence: number;
   selectedBy: "normal" | "red-gate";
-  normalPrediction: { label: string; confidence: number };
-  redPrediction: { label: string; confidence: number };
+  normalPrediction: { label: string; confidence: number; runnerUpLabel?: string; runnerUpConfidence?: number };
+  redPrediction: { label: string; confidence: number; runnerUpLabel?: string; runnerUpConfidence?: number };
 }
 
 export interface HybridTilePrediction extends VitTilePrediction {
   selectedBy: "normal" | "red-gate";
-  normalPrediction: { tile: GameTile; confidence: number };
-  redPrediction: { label: string; confidence: number };
+  normalPrediction: { tile: GameTile; label?: string; confidence: number; runnerUpLabel?: string; runnerUpConfidence?: number };
+  redPrediction: { label: string; confidence: number; runnerUpLabel?: string; runnerUpConfidence?: number };
 }
 
 export function isKnownSixSevenPinConfusion(match: {
@@ -75,8 +75,8 @@ export class HybridTileRecognizer {
       runnerUpConfidence: prediction.runnerUpConfidence,
       selectedBy: prediction.selectedBy,
       normalPrediction: {
+        ...prediction.normalPrediction,
         tile: mapHybridLabel(prediction.normalPrediction.label),
-        confidence: prediction.normalPrediction.confidence,
       },
       redPrediction: prediction.redPrediction,
     }));
