@@ -2106,6 +2106,45 @@ def _experimental_kita_glyph_stability_decoded(before: bytes, after: bytes, repo
         return False
 
 
+def _sanma_draw_wall_edge_lighting(a, b, first_mask, second_mask, x, y, changed):
+    """Bound a reviewed left-wall edge-lighting hypothesis, not state proof.
+
+    Call only after the wall chroma check. Non-wall blocks stay under the
+    original 14-pixel limit; no clock, score, river, or prompt pixels are masked.
+    """
+    if not (160 <= x <= 352 and 96 <= y <= 672 and 14 < changed <= 20):
+        return False
+    # The regular comparator permits self-turn-lamp flicker, but the reviewed
+    # historical stop pair also has a large lamp change and otherwise passes
+    # the wall-edge rule. Do not combine two independent visual relaxations.
+    lamp = (890, 495, 1015, 516)
+    lamp_diff = ImageChops.difference(a.crop(lamp).convert('RGB'), b.crop(lamp).convert('RGB'))
+    if max(ImageStat.Stat(lamp_diff).mean) > 1:
+        return False
+    box = (x, y, x + 32, y + 32)
+    rgb_delta = ImageChops.difference(a.crop(box).convert('RGB'), b.crop(box).convert('RGB'))
+    maximum = max(high for _, high in rgb_delta.getextrema())
+    # This particular tile-back seam is already separately bounded for the
+    # friend-only kita guard. Keep its spatial bound and add a hard RGB limit.
+    if (x, y) == (320, 96):
+        if maximum > 18:
+            return False
+        diff = ImageChops.difference(first_mask.crop(box), second_mask.crop(box))
+        diff.paste(0, (0, 21, 21, 23))
+        return diff.histogram()[255] <= 14
+    if maximum > 12:
+        return False
+    # Compare a 1px padded region to avoid treating block edges as image edges.
+    padded = (x - 1, y - 1, x + 33, y + 33)
+    old = first_mask.crop(padded)
+    new = second_mask.crop(padded)
+    unmatched = ImageChops.lighter(
+        ImageChops.subtract(old, new.filter(ImageFilter.MaxFilter(3))),
+        ImageChops.subtract(new, old.filter(ImageFilter.MaxFilter(3))),
+    )
+    return unmatched.crop((1, 1, 33, 33)).getbbox() is None
+
+
 def experimental_draw_glyph_stability(before: bytes, after: bytes, report: dict[str, Any], *, on_wall_error=None, diagnostic=None) -> bool:
     """Compare the same full images after decoding each once."""
     try:
@@ -2160,7 +2199,8 @@ def _experimental_draw_glyph_stability_decoded(before: bytes, after: bytes, repo
                 delta = ImageChops.difference(a.convert('RGB').crop((x,y,x+w,y+h)), b.convert('RGB').crop((x,y,x+w,y+h)))
                 if max(ImageStat.Stat(delta).mean) > 1: return False
             if diagnostic is not None: diagnostic.update(stage='binary_frame')
-            diff = ImageChops.difference(*(im.convert('L').point(lambda v: 255 if v < 120 else 0) for im in (a,b)))
+            first_mask, second_mask = (im.convert('L').point(lambda v: 255 if v < 120 else 0) for im in (a,b))
+            diff = ImageChops.difference(first_mask, second_mask)
             # Ignore the observed extent of the self-turn lamp flicker only.
             # This cannot prove a turn: all other regions and action/deadline
             # checks remain mandatory, including the other players' lamps.
@@ -2176,8 +2216,9 @@ def _experimental_draw_glyph_stability_decoded(before: bytes, after: bytes, repo
                 for x in range(0,1920,32):
                     changed = diff.crop((x,y,min(x+32,1920),min(y+32,1080))).histogram()[255]
                     if changed > 14:
-                        if diagnostic is not None: diagnostic.update(blockX=x, blockY=y, changedPixels=changed, threshold=14)
-                        return False
+                        if not _sanma_draw_wall_edge_lighting(a, b, first_mask, second_mask, x, y, changed):
+                            if diagnostic is not None: diagnostic.update(blockX=x, blockY=y, changedPixels=changed, threshold=14)
+                            return False
         if diagnostic is not None: diagnostic.update(stage='center')
         center={'x':905,'y':375,'width':105,'height':90}
         return tile_face_structure_delta(crop_screenshot(before,center),crop_screenshot(after,center)) <= .5

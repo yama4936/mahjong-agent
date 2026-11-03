@@ -103,7 +103,7 @@ def experimental_white_hand_candidate(frame, hand, geometry):
 
 def friend_empty_first_two_pixels(image):
     """Independent visual check; still a partial, unverified observation."""
-    with Image.open('test/fixtures/sanma-button-rows/empty.png') as source:
+    with Image.open(Path(__file__).resolve().parent.parent / 'test/fixtures/sanma-button-rows/empty.png') as source:
         empty=source.convert('RGB')
     if empty.size != (825,90):return False
     for x in (600,890):
@@ -126,7 +126,7 @@ def friend_visible_row_with_north_overlap(frame, row_slots):
             if source.size != (1920, 1080): return False
             image = source.convert("RGB")
         if not friend_empty_first_two_pixels(image):return False
-        with Image.open("test/fixtures/sanma-button-rows/empty.png") as source:
+        with Image.open(Path(__file__).resolve().parent.parent / 'test/fixtures/sanma-button-rows/empty.png') as source:
             blank = source.convert("RGB").crop((580,0,715,90))
         with Image.open(Path(__file__).parent / "fixtures" / "sanma-friend-two-north-overlap.png") as source:
             north = source.convert("RGB")
