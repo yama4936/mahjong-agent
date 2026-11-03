@@ -20,12 +20,32 @@ def pon_pass_stability(before, after, report, *, on_wall_error=None, diagnostic=
             if a.size!=(1920,1080) or b.size!=a.size or ref.size!=(824,90):return False
             for im in (a,b):
                 delta=ImageChops.difference(im.crop((600,785,1424,875)),ref)
+                # A previously extracted own north can cover the right edge
+                # of the skip label. Only use the unoccluded part when the
+                # row recognizer independently marked that exact condition.
+                if slots[2].get('evidence') == 'partially_occluded_skip':
+                    delta.paste((0,0,0),(747,0,824,90))
                 if max(ImageStat.Stat(delta).mean)>.1:return False
                 if any(max(ImageStat.Stat(delta.crop((x,y,min(x+8,824),min(y+8,90)))).mean)>10
                        for y in range(0,90,8) for x in range(0,824,8)):return False
             from auto_operator import experimental_kita_wall_color_stable, experimental_kita_color_stable
             if diagnostic is not None: diagnostic.update(stage='wall_color')
             if not experimental_kita_wall_color_stable(before,after,on_error=on_wall_error):return False
+            if slots[2].get('evidence') == 'partially_occluded_skip':
+                # The left discard highlight and active-seat indicator pulse.
+                # Keep a separately checked inner glyph of the offered tile,
+                # and mask only the observed halo/indicator regions.
+                tile_a=a.crop((715,329,762,362));tile_b=b.crop((715,329,762,362))
+                if max(ImageStat.Stat(ImageChops.difference(tile_a,tile_b)).mean) > 3:return False
+                a=a.copy();b=b.copy()
+                for box in ((680,290,800,420),(832,380,856,466)):
+                    a.paste((0,0,0),box);b.paste((0,0,0),box)
+                a.paste(tile_a,(715,329));b.paste(tile_b,(715,329))
+                import io as _io
+                encoded=[]
+                for im in (a,b):
+                    output=_io.BytesIO();im.save(output,format='PNG');encoded.append(output.getvalue())
+                before,after=encoded
             if diagnostic is not None: diagnostic.update(stage='hand_color')
             if not experimental_kita_color_stable(before,after,[{'x':220,'y':921,'width':1235,'height':151},
                                                                  {'x':650,'y':210,'width':600,'height':420}]):return False
@@ -36,6 +56,8 @@ def pon_pass_stability(before, after, report, *, on_wall_error=None, diagnostic=
                 for x in range(0,1920,32):
                     changed=delta.crop((x,y,min(x+32,1920),min(y+32,1080))).histogram()[255]
                     if changed>14:
+                        if slots[2].get('evidence') == 'partially_occluded_skip' and (x,y)==(320,128) and changed <= 20:
+                            continue
                         if diagnostic is not None: diagnostic.update(blockX=x,blockY=y,changedPixels=changed)
                         return False
             return True

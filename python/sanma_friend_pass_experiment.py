@@ -77,5 +77,7 @@ def execute_friend_pon_pass(operator, page, receipt, *, declare_riichi=False):
     # uncertain attempt can never be silently repeated.
     if operator.verified_friend_300_active is not True or not 0 <= time.monotonic() - started < 300:
         raise RuntimeError('friend session or timing expired before click')
+    from sanma_friend_freshness import check_friend_recovery_guard
+    check_friend_recovery_guard(operator)
     page.mouse.click(point['x'],point['y'])
     return {'clicked':True,'action':action,'confirmation':'unknown','stopped':True}

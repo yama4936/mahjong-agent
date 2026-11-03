@@ -9434,6 +9434,25 @@ class PythonAutoOperator:
                                 return
                             draw = receipt.get('drawCandidate')
                             if not isinstance(draw, dict) or draw.get('status') != 'candidate':
+                                # A pon prompt can interrupt the later-turn
+                                # observation after our uncertain discard. A
+                                # guarded skip is distinct from retrying that
+                                # discard; retain its watch and old deadline.
+                                actions = (receipt.get('candidates') or {}).get('candidates')
+                                fresh = receipt.get('freshness') or {}
+                                if (not discard_recovery.get('pon_pass_attempted')
+                                        and isinstance(actions,list) and len(actions)==1
+                                        and isinstance(actions[0],dict) and actions[0].get('action')=='pon'
+                                        and fresh.get('status') in {'stable_pon_pass_candidate','identical_pixels_candidate','stable_except_clock_candidate'}):
+                                    from sanma_friend_pass_experiment import execute_friend_pon_pass
+                                    self._sanma_friend_resume_guard = (watch,discard_recovery['started'],300000)
+                                    try:
+                                        result=execute_friend_pon_pass(self,page,receipt)
+                                    finally:
+                                        self._sanma_friend_resume_guard = None
+                                    discard_recovery['pon_pass_attempted']=True
+                                    discard_recovery['posts']=[]
+                                    self.log('sanma_friend_recovery_pon_pass',result=result,confirmed=False)
                                 page.wait_for_timeout(500)
                                 continue
                             if (not discard_recovery['started'] <= discard_recovery['attempted_monotonic'] <= discard_recovery['selected_monotonic']
