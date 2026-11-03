@@ -6,6 +6,26 @@ from board_metadata import parse_sanma_board_tokens
 
 
 class SanmaBoardTokensTest(unittest.TestCase):
+    def test_opposite_right_layout_requires_three_distinct_observed_winds(self):
+        def t(text,x,y): return {'text':text,'x':x,'y':y,'confidence':.999}
+        tokens=[t('東',824,514),t('南',1093,514),t('西',1089,335),
+                t('35000',960,482),t('35000',1047,419),t('35000',958,364),
+                t('東1局',960,405),t('余54',959,443),t('0',132,155),t('0',268,155)]
+        result=self.parse(tokens)
+        self.assertFalse(result['verified'])
+        self.assertTrue(result['consistent'])
+        self.assertEqual(result['candidate'], {'seat':'east','round':'east_1',
+                         'scores':{'east':35000,'south':35000,'west':35000},
+                         'riichiSticks':0,'honba':0,'remainingTiles':54})
+        for changed in ([x for x in tokens if x['x'] != 1089],
+                        [*tokens,t('南',1089,335)],
+                        [x if x['x'] != 1089 else t('南',1089,335) for x in tokens],
+                        [*tokens,t('34000',876,423)],
+                        [*tokens,t('34000',1047,419)]):
+            with self.subTest(changed=changed):
+                self.assertNotIn('candidate',self.parse(changed))
+        self.assertFalse(self.parse(tokens,total=None).get('consistent',False))
+
     def tokens(self, seat):
         return json.loads((Path(__file__).resolve().parents[1] / 'test/fixtures/sanma-board-tokens' / f'{seat}.json').read_text())
 

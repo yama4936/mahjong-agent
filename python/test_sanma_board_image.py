@@ -19,6 +19,22 @@ CASES = [
 
 
 class SanmaBoardImageTests(unittest.TestCase):
+    @unittest.skipUnless(Path('/home/yama1/server/data/dev-work/jantama/evidence149/artifacts3/frames').exists(),
+                         'saved opposite/right friend match unavailable')
+    def test_saved_opposite_right_frames_have_independently_read_winds(self):
+        root=Path('/home/yama1/server/data/dev-work/jantama/evidence149/artifacts3/frames')
+        frames=sorted(root.glob('*.sanma-self-turn.png'))
+        self.assertEqual(len(frames),3)
+        for frame,remaining in zip(frames,(54,51,51)):
+            with self.subTest(frame=frame):
+                result=recognize_sanma_board_candidate(frame,expected_total_points=105000,payment_phase='settled')
+                self.assertFalse(result['verified'])
+                self.assertEqual(result['candidate'],{'seat':'east','round':'east_1',
+                    'scores':{'east':35000,'south':35000,'west':35000},'riichiSticks':0,
+                    'honba':0,'remainingTiles':remaining})
+                self.assertTrue(any(t.get('source')=='upright_opposite_wind_crop' and t['text']=='西'
+                                    and t['confidence']>=.98 for t in result['tokens']))
+
     @unittest.skipUnless(Path('/home/yama1/sanma-independent-20261031/20-turn.png').exists(), 'independent frame unavailable')
     def test_new_right_layout_is_not_mapped_as_the_old_opposite_layout(self):
         frame = Path('/home/yama1/sanma-independent-20261031/20-turn.png')

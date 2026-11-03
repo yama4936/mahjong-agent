@@ -272,6 +272,18 @@ def recognize_board(image_path: Path, *, sanma_compact_candidate: bool = False,
             text, confidence = seat_wind.txts[0], float(seat_wind.scores[0])
             tokens.append({"text": text, "confidence": confidence,
                            "x": 824, "y": 514, "source": "isolated_seat_wind_crop"})
+    if sanma_extra_score_retry and any(
+        abs(t['x'] - 1047) <= 24 and abs(t['y'] - 419) <= 20
+        and re.fullmatch(r'-?\d{3,6}|0', t['text']) and t['confidence'] >= .98 for t in tokens
+    ):
+        # Opposite wind is inverted at the upper-right of the scoreboard in
+        # the observed opposite/right layout. Read it independently instead
+        # of assigning the missing wind from the other two players.
+        wind_crop = image.crop((1060, 314, 1118, 357)).rotate(180, expand=True).resize((256, 192))
+        wind_result = engine(np.array(wind_crop), use_det=False, use_cls=False, use_rec=True)
+        if wind_result.txts is not None and len(wind_result.txts) == 1:
+            tokens.append({'text': wind_result.txts[0], 'confidence': float(wind_result.scores[0]),
+                           'x': 1089, 'y': 335, 'source': 'upright_opposite_wind_crop'})
     # Fixed isolated digits avoid confusing the stick icon and multiplication
     # sign with the count; never substitute zero when recognition fails.
     for box, x in [((110, 132, 155, 178), 132), ((250, 132, 285, 178), 268)]:
@@ -438,21 +450,37 @@ def parse_sanma_board_tokens(tokens: list[dict], *, expected_total_points: int |
 
     left_score_evidence = score_evidence(876, 423)
     if right is not None and numbers['opposite'] is not None and not left_score_evidence:
-        # The saved right/opposite layout has no validated OCR for the
-        # opposite wind. Expose positions only, never infer seat ownership.
         positions = {"opposite": {"score": int(numbers['opposite'])},
                      "right": {"score": int(right)}}
         if numbers['own'] is not None:
             positions['own'] = {"score": int(numbers['own'])}
         right_wind = at(1093, 514, "[東南西]")
+        opposite_wind = at(1089, 335, "[東南西]")
         if wind is not None and 'own' in positions:
             positions['own']['wind'] = WINDS[wind]
         if right_wind is not None:
             positions['right']['wind'] = WINDS[right_wind]
-        return {**result, "reason": "unsupported_opposite_right_layout",
+        if opposite_wind is not None:
+            positions['opposite']['wind'] = WINDS[opposite_wind]
+        partial = {**result, "reason": "unsupported_opposite_right_layout",
                 "layoutCandidate": {"opponents": ["opposite", "right"], "verified": False},
                 "positionObservation": {"verified": False, "complete": False,
                                         "positions": positions}}
+        if (len(positions) != 3 or any('wind' not in p or 'score' not in p for p in positions.values())
+                or len({p['wind'] for p in positions.values()}) != 3
+                or round_text is None or sticks is None or honba is None):
+            return partial
+        candidate = {'seat': positions['own']['wind'], 'round': f"{WINDS[round_text[0]]}_{round_text[1]}",
+                     'scores': {p['wind']: p['score'] for p in positions.values()},
+                     'riichiSticks': int(sticks), 'honba': int(honba)}
+        remaining = at(959, 443, r'余\d{1,2}')
+        if remaining is not None and int(remaining[1:]) <= 70:
+            candidate['remainingTiles'] = int(remaining[1:])
+        check = validate_sanma_board_consistency(candidate, expected_total_points=expected_total_points,
+                                                  payment_phase=payment_phase)
+        return {**partial, 'candidate': candidate,
+                **({'consistent': True, 'reason': 'opposite_right_layout_candidate'} if check['consistent']
+                   else {'reason': check['reason']})}
     if right is not None and not score_evidence(958, 364):
         # These three separately observed wind glyphs sit next to their own
         # score positions. Never derive the opponents' winds from own wind;
