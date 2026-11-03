@@ -56,6 +56,14 @@ class RiichiExperimentTests(unittest.TestCase):
    op=Mock();op.layout=self.layout;op.frames=Path(d);op.verified_friend_300_active=True;op.sanma_friend_action_observed_at=time.monotonic()
    op.args=SimpleNamespace(experimental_sanma_friend=True,rules='sanma',mode='force-auto',action_deadline_ms=300000,ranked_loop=False)
    op.screen_references=load_references(Path('/home/yama1/projects/jantama-auto/artifacts/live'))
+   # This historical receipt predates the ron-reference field and must fail closed.
+   page=Mock();page.screenshot.return_value=before
+   with self.assertRaisesRegex(RuntimeError,'incomplete or stale'):
+    execute_friend_riichi(op,page,receipt)
+   page.mouse.click.assert_not_called()
+   # Exercise the downstream path with the new field simulated; this does not
+   # assert the historical frame was compared with the ron reference.
+   receipt['sourceObservation']['report']['buttonRow']['value']['ronReferenceCompared']=True
    page=Mock();page.screenshot.side_effect=[before,self.selection,self.selection]
    with patch('sanma_friend_riichi_experiment.send_discard_click',return_value={}) as discard:
     result=execute_friend_riichi(op,page,receipt)

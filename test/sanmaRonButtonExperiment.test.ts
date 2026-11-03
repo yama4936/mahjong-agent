@@ -13,9 +13,11 @@ test("four-player ron references can identify separate ron image but never autho
   const ref = await sharp(await file("ron1")).extract({left:290,top:0,width:245,height:90}).png().toBuffer();
   const observed = await inspectSanmaButtonRow(await file("ron2"), templates, skip, empty, ref);
   assert.deepEqual(observed.slots.flatMap(s => s.status === "candidate" ? [s.action] : []), ["ron", "skip"]);
+  assert.equal(observed.ronReferenceCompared, true);
   assert.equal(observed.complete, false);
   assert.equal(observed.operationAuthorized, false);
   const original = await inspectSanmaButtonRow(await file("ron2"), templates, skip, empty);
+  assert.equal(original.ronReferenceCompared, false);
   assert.equal(original.slots[1]?.status, "unresolved");
   const ambiguous = await inspectSanmaButtonRow(await file("ron2"), { ...templates, tsumo: ref }, skip, empty, ref);
   assert.equal(ambiguous.slots[1]?.status, "unresolved");

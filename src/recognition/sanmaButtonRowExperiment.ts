@@ -97,5 +97,5 @@ export async function inspectSanmaButtonRow(row: Buffer, templates: Experimental
     }
     return { status: "unresolved", slot, reason: "unknown, obscured, animated, or ambiguous slot" };
   }));
-  return { scope: "offline_untrusted_sanma_button_row" as const, slots, complete: false as const, operationAuthorized: false as const };
+  return { scope: "offline_untrusted_sanma_button_row" as const, slots, ronReferenceCompared: Boolean(ronReference), complete: false as const, operationAuthorized: false as const };
 }

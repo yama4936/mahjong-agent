@@ -30,7 +30,8 @@ def execute_friend_pon_pass(operator, page, receipt, *, declare_riichi=False):
             or freshness.get('status') not in ('identical_pixels_candidate','stable_except_clock_candidate')
             or freshness.get('operationAuthorized') is not False
             or type(freshness.get('elapsedMs')) not in (int,float) or not 0 <= freshness['elapsedMs'] <= 20000
-            or row.get('status') != 'candidate' or not isinstance(slots,list) or len(slots) != 3):
+            or row.get('status') != 'candidate' or (row.get('value') or {}).get('ronReferenceCompared') is not True
+            or not isinstance(slots,list) or len(slots) != 3):
         raise RuntimeError('observation is incomplete or stale')
     if any(not isinstance(slot,dict) or slot.get('slot') != i for i,slot in enumerate(slots)):
         raise RuntimeError('action slots unknown')
