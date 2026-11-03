@@ -91,10 +91,10 @@ export async function observeSanmaFrameAutomatically(input: {
   let leftRiver: Awaited<ReturnType<typeof inspectSanmaLeftRiverCandidate>> | undefined;
   if (board.reason === 'unsupported_right_opponent_layout' && board.layoutCandidate?.verified === false
       && JSON.stringify(board.layoutCandidate.opponents) === JSON.stringify(['left','right'])) {
-    try { rightRiver = await inspectSanmaRightRiverCandidate(frame,input.layout,input.publicClassifier); }
-    catch { /* An unavailable visual branch remains absent, never an empty river. */ }
-    try { leftRiver = await inspectSanmaLeftRiverCandidate(frame,input.layout,input.publicClassifier); }
-    catch { /* An unavailable visual branch remains absent, never an empty river. */ }
+    [rightRiver, leftRiver] = await inspectIndependentRivers(
+      () => inspectSanmaRightRiverCandidate(frame, input.layout, input.publicClassifier),
+      () => inspectSanmaLeftRiverCandidate(frame, input.layout, input.publicClassifier),
+    );
   }
   // The older diagnostic evaluates with an assumed empty visible-tile list.
   // Do not expose it in the automatic observation as if unknown tiles were zero.
@@ -148,4 +148,10 @@ export function deriveSanmaActionCandidates(report: ObservedFrame, hasSeatCandid
   if (conflicts.length) missing.push("kita button conflicts with recognized hand; neither result is verified");
   return { status: supported.length ? "hypotheses" as const : "unresolved" as const,
     candidates: supported, conflicts, missing, operationAuthorized: false as const };
+}
+
+/** An unavailable visual branch remains absent, never an empty river. */
+export async function inspectIndependentRivers<R, L>(right: () => Promise<R>, left: () => Promise<L>): Promise<[R | undefined, L | undefined]> {
+  const [r, l] = await Promise.allSettled([Promise.resolve().then(right), Promise.resolve().then(left)]);
+  return [r.status === "fulfilled" ? r.value : undefined, l.status === "fulfilled" ? l.value : undefined];
 }
