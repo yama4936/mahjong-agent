@@ -842,6 +842,23 @@ class ExperimentalSanmaFriendLoopTest(unittest.TestCase):
         self.assertTrue(any(c.args[0]=='sanma_friend_round_transition_reobserved' for c in self.op.log.call_args_list))
         self.page.mouse.click.assert_called_once_with(1140,998)
 
+    def test_kita_round_end_candidate_keeps_original_deadline(self):
+        from sanma_friend_discard_experiment import DiscardPreclickChanged
+        self.op.args.max_iterations = 3
+        self.receipt["candidates"] = {"candidates": [{"action": "kita"}]}
+        self.op.observe_sanma_friend_transition.return_value = {"status": "round_end_candidate", "confirmed": False}
+        after = dict(self.receipt, digest="after", candidates={"candidates": []}, drawCandidate={"status": "candidate"})
+        self.op.inspect_sanma_self_turn.side_effect = [self.receipt, after]
+        now = [1000.0]
+        def reject(*_):
+            now[0] += 300.0
+            raise DiscardPreclickChanged("changed")
+        with patch("auto_operator.time.monotonic", side_effect=lambda: now[0]), patch("auto_operator.inspect_sanma_friend_start", return_value={"operationAuthorized": False}), patch("auto_operator.classify_screen", side_effect=[("match", 1.0), ("lobby", 1.0), ("match", 1.0)]), patch("sanma_friend_discard_experiment.execute_friend_draw_candidate", side_effect=reject) as discard:
+            self.op.run(self.page)
+        discard.assert_called_once()
+        self.assertEqual(sum(c.args[0] == "sanma_friend_action_clock_started" for c in self.op.log.call_args_list), 1)
+        self.assertTrue(any(c.kwargs.get("reason") == "discard_preclick_reobserve_limit" for c in self.op.log.call_args_list))
+
     def test_unconfirmed_round_end_does_not_clear_riichi_lock(self):
         self.op.args.max_iterations = 3
         self.receipt['candidates']={'candidates':[{'action':'riichi'}]}

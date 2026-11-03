@@ -9220,7 +9220,9 @@ class PythonAutoOperator:
                     round_end_started = None
                     # A visual round-end candidate does not establish a new
                     # round; retain any attempted-riichi lock for this session.
-                    action_observed_at = None
+                    # An unconfirmed kita may still be the same turn.
+                    if not only_unconfirmed_kita:
+                        action_observed_at = None
                 match_seen = True
                 if action_observed_at is None:
                     action_observed_at = observation_started
