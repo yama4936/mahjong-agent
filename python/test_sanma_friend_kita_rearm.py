@@ -14,6 +14,45 @@ from sanma_friend_freshness import friend_action_target_key
 REPLAY=Path('/home/yama1/projects/jantama-test-tmp/kita-observe-replay.jsonl')
 DATA88=Path('/home/yama1/server/data/dev-work/jantama/data88-run3/frames')
 
+@unittest.skipUnless(Path('/home/yama1/server/data/dev-work/jantama/evidence162/artifacts/frames').exists(),
+                     'saved three north match unavailable')
+class ThirdNorthTests(unittest.TestCase):
+    def setUp(self):
+        root=Path('/home/yama1/server/data/dev-work/jantama/evidence162/artifacts/frames')
+        self.before,self.after=[json.loads(next(root.glob(prefix+'*.sanma-self-turn.receipt.json')).read_text())
+                                for prefix in ('2026-11-03T22-48-02','2026-11-03T22-48-44')]
+        self.op=Mock();self.op.args=SimpleNamespace(experimental_sanma_friend=True,rules='sanma',mode='force-auto',action_deadline_ms=300000,ranked_loop=False)
+        self.op.verified_friend_300_active=True;self.op._sanma_friend_kita_rearmed=True;self.op._sanma_friend_kita_rearmed_twice=False
+        self.op._sanma_friend_attempted_targets={friend_action_target_key(Path(self.before['screenshot']).read_bytes(),'kita')}
+    def test_saved_third_north_candidate_rearms_once(self):
+        self.assertTrue(rearm_friend_kita_candidate(self.op,self.before,self.after))
+        self.assertTrue(self.op._sanma_friend_kita_rearmed_twice)
+        self.assertFalse(rearm_friend_kita_candidate(self.op,self.before,self.after))
+    def test_missing_changed_reversed_or_ranked_evidence_is_rejected(self):
+        for kind in ('same','reversed','no_target','wrong_tile','ranked','already_twice'):
+            with self.subTest(kind=kind):
+                self.setUp();before=copy.deepcopy(self.before);after=copy.deepcopy(self.after)
+                if kind=='same':after=before
+                if kind=='reversed':before,after=after,before
+                if kind=='no_target':self.op._sanma_friend_attempted_targets.clear()
+                if kind=='wrong_tile':after['sourceObservation']['report']['hand']['value']['tiles'][11]='S'
+                if kind=='ranked':self.op.args.ranked_loop=True
+                if kind=='already_twice':self.op._sanma_friend_kita_rearmed_twice=True
+                self.assertFalse(rearm_friend_kita_candidate(self.op,before,after))
+    def test_blank_or_spurious_second_north_fragment_is_rejected(self):
+        for color in ((255,255,255),(40,70,110)):
+            with self.subTest(color=color), tempfile.TemporaryDirectory() as tmp:
+                self.setUp();after=copy.deepcopy(self.after)
+                with Image.open(after['screenshot']) as source:
+                    image=source.convert('RGB');image.paste(color,(1324,765,1359,790));path=Path(tmp)/'altered.png';image.save(path)
+                digest=hashlib.sha256(path.read_bytes()).hexdigest()
+                after['screenshot']=str(path);after['digest']=digest
+                after['sourceObservation']['digest']=digest;after['sourceObservation']['report']['digest']=digest
+                after['drawCandidate']['digest']=digest
+                after['freshness'].update(screenshot=str(path),digest=digest,status='identical_pixels_candidate',
+                    clockChanged=False,regionsChanged={'hand':False,'actions':False,'fullFrame':False})
+                self.assertFalse(rearm_friend_kita_candidate(self.op,self.before,after))
+
 @unittest.skipUnless(DATA88.exists(), 'independent live capture unavailable')
 class Data88GuardReplayTests(unittest.TestCase):
     def test_real_guard_accepts_recorded_north_change_but_rejects_same_and_reversed(self):

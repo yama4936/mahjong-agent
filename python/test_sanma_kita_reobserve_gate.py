@@ -152,12 +152,40 @@ class KitaReobserveLoopTest(unittest.TestCase):
                     self.assertEqual(calls[0], 4)
                     self.assertEqual(rearm_mock.call_count, 3)
                     self.assertEqual(sum(c.args[0] == 'sanma_friend_action_clock_started' for c in self.op.log.call_args_list), 1)
+                elif cause == 'non_kita':
+                    # An unconfirmed discard without a recovery journal now
+                    # stops before a later kita may be attempted.
+                    self.assertEqual(calls[0], 0)
+                    self.assertTrue(any(c.kwargs.get('reason') == 'discard_recovery_unavailable' for c in self.op.log.call_args_list))
                 else:
                     self.assertEqual(calls[0], 2)
                     self.assertTrue(any(c.kwargs.get('reason') == 'kita_preclick_reobserve_limit' for c in self.op.log.call_args_list))
                     if cause in ('target', 'frame'):
                         self.assertNotIn('old', self.op._sanma_friend_attempted_targets)
                         self.assertTrue(self.op._sanma_friend_kita_rearmed)
+
+    def test_second_rearm_is_rolled_back_when_input_not_sent(self):
+        self.op.args.max_iterations=3
+        self.op._sanma_friend_attempted_targets=set();self.op._sanma_friend_attempted_frames=set()
+        self.op._sanma_friend_kita_rearmed=True;self.op._sanma_friend_kita_rearmed_twice=False
+        self.op.observe_sanma_friend_transition=Mock(return_value={'status':'visual_change_unconfirmed'})
+        def receipt(digest):
+            return {'candidates':{'candidates':[{'action':'kita'}]},'digest':digest,'screenshot':digest}
+        self.op.inspect_sanma_self_turn.side_effect=[receipt('north1'),receipt('north2'),receipt('north3')]
+        calls=[0]
+        def execute(page,r):
+            calls[0]+=1
+            if calls[0]==1:
+                self.op._sanma_friend_attempted_targets.add('old');self.op._sanma_friend_attempted_frames.add(r['digest']);return {}
+            if calls[0]==2:raise SanmaKitaPreclickChanged('before click')
+            return {}
+        def rearm(op,before,after):
+            self.assertTrue(op._sanma_friend_kita_rearmed);self.assertFalse(op._sanma_friend_kita_rearmed_twice)
+            op._sanma_friend_attempted_targets.remove('old');op._sanma_friend_kita_rearmed_twice=True;return True
+        self.op.execute_sanma_friend_kita_candidate.side_effect=execute
+        with patch('sanma_friend_kita_rearm.rearm_friend_kita_candidate',side_effect=rearm) as guard:
+            self.run_loop()
+        self.assertEqual(calls[0],3);self.assertEqual(guard.call_count,2)
 
     def test_live_receipts_revalidate_after_rearm_preclick_failure(self):
         import copy
@@ -247,8 +275,9 @@ class KitaReobserveLoopTest(unittest.TestCase):
                 with patch('sanma_friend_discard_experiment.execute_friend_draw_candidate', side_effect=discards) as discard, \
                      patch('sanma_friend_pass_experiment.execute_friend_pon_pass', return_value={}):
                     self.run_loop()
-                self.assertEqual(discard.call_count, 2 if first_action == 'discard' else 1)
-                self.assertTrue(any(c.kwargs.get('reason') == 'discard_preclick_reobserve_limit' for c in self.op.log.call_args_list))
+                self.assertEqual(discard.call_count, 1)
+                reason = 'discard_recovery_unavailable' if first_action == 'discard' else 'discard_preclick_reobserve_limit'
+                self.assertTrue(any(c.kwargs.get('reason') == reason for c in self.op.log.call_args_list))
 
     def test_two_kita_then_unsent_discard_stops_on_expiry_or_revocation(self):
         from sanma_friend_discard_experiment import DiscardPreclickChanged

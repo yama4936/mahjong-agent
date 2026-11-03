@@ -18,7 +18,8 @@ def rearm_friend_kita_candidate(operator, before, after):
         if (getattr(args,'experimental_sanma_friend',False) is not True or args.rules != 'sanma'
                 or args.mode != 'force-auto' or args.action_deadline_ms != 300000
                 or args.ranked_loop is not False or operator.verified_friend_300_active is not True): return False
-        if getattr(operator,'_sanma_friend_kita_rearmed',False) is True: return False
+        second = getattr(operator,'_sanma_friend_kita_rearmed',False) is True
+        if second and getattr(operator,'_sanma_friend_kita_rearmed_twice',False) is True: return False
         frames=[]; hands=[]
         for receipt in (before,after):
             if receipt.get('scope') != 'sanma_self_turn_observation' or receipt.get('operationAuthorized') is not False: return False
@@ -64,11 +65,24 @@ def rearm_friend_kita_candidate(operator, before, after):
                 if image.size != (1920,1080):return False
                 part=image.convert('RGB').crop((1390,765,1425,850))
             similarities.append(1-sum(ImageStat.Stat(ImageChops.difference(part,ref)).mean)/765)
-        if similarities[0] >= .95 or similarities[1] < .98:return False
+        if second:
+            # In this layout the second extracted north appears 66 pixels to
+            # the left; its lower portion is covered by the skip control.
+            # Require the first visible north to remain and a newly matching
+            # upper glyph fragment in the second slot.
+            if min(similarities) < .98:return False
+            second_similarities=[]
+            for frame in frames:
+                with Image.open(io.BytesIO(frame)) as image:
+                    part=image.convert('RGB').crop((1324,765,1359,790))
+                second_similarities.append(1-sum(ImageStat.Stat(ImageChops.difference(part,ref.crop((0,0,35,25)))).mean)/765)
+            if second_similarities[0] >= .95 or second_similarities[1] < .985:return False
+        elif similarities[0] >= .95 or similarities[1] < .98:return False
         key=friend_action_target_key(frames[0],'kita');attempts=operator._sanma_friend_attempted_targets
         if not isinstance(attempts,set) or key not in attempts:return False
         attempts.remove(key)
         operator._sanma_friend_kita_rearmed=True
+        if second: operator._sanma_friend_kita_rearmed_twice=True
         operator.log('sanma_friend_kita_rearm_candidate', beforeDigest=before['digest'],afterDigest=after['digest'],
                      addedDraw=tile, visibleNorthSimilarities=similarities, confirmed=False,
                      risk='visual change and labels unverified; clock hides part of north; input success unknown')

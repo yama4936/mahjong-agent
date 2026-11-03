@@ -9593,7 +9593,8 @@ class PythonAutoOperator:
                                 prior_frames = getattr(self, "_sanma_friend_attempted_frames", None)
                                 if isinstance(prior_targets, set) and isinstance(prior_frames, set):
                                     rearm_snapshot = (frozenset(prior_targets), frozenset(prior_frames),
-                                                      getattr(self, "_sanma_friend_kita_rearmed", False))
+                                                      getattr(self, "_sanma_friend_kita_rearmed", False),
+                                                      getattr(self, "_sanma_friend_kita_rearmed_twice", False))
                                 from sanma_friend_kita_rearm import rearm_friend_kita_candidate
                                 if not rearm_friend_kita_candidate(self, last_kita_receipt, receipt):
                                     self.log("sanma_friend_stopped", reason="previous_kita_unconfirmed",
@@ -9606,18 +9607,22 @@ class PythonAutoOperator:
                             except SanmaKitaPreclickChanged as error:
                                 prior_kita_targets = None
                                 if rearm_snapshot is not None:
-                                    targets, frames, was_rearmed = rearm_snapshot
+                                    targets, frames, was_rearmed, was_rearmed_twice = rearm_snapshot
                                     current_targets = getattr(self, "_sanma_friend_attempted_targets", None)
                                     current_frames = getattr(self, "_sanma_friend_attempted_frames", None)
                                     removed = targets - current_targets if isinstance(current_targets, set) else set()
                                     # Revert precisely the one-target rearm only when
                                     # neither frame nor any other target was latched.
-                                    if (was_rearmed is False and self._sanma_friend_kita_rearmed is True
+                                    changed_rearm = ((was_rearmed is False and self._sanma_friend_kita_rearmed is True)
+                                                     or (was_rearmed is True and was_rearmed_twice is False
+                                                         and getattr(self, '_sanma_friend_kita_rearmed_twice', False) is True))
+                                    if (changed_rearm
                                             and isinstance(current_targets, set) and len(removed) == 1
                                             and current_targets == targets - removed
                                             and isinstance(current_frames, set) and current_frames == frames):
                                         current_targets.update(removed)
-                                        self._sanma_friend_kita_rearmed = False
+                                        self._sanma_friend_kita_rearmed = was_rearmed
+                                        self._sanma_friend_kita_rearmed_twice = was_rearmed_twice
                                         if only_unconfirmed_kita:
                                             prior_kita_targets = targets
                                 kita_preclick_rejections += 1
