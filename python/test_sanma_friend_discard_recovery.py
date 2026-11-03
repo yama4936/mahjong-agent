@@ -16,6 +16,40 @@ from sanma_friend_freshness import check_friend_recovery_guard
 ROOT = Path('/home/yama1/server/data/dev-work/jantama/evidence139')
 
 class RecoveryGuardTest(unittest.TestCase):
+    @unittest.skipUnless(Path('/home/yama1/server/data/dev-work/jantama/evidence152/artifacts/frames').exists(),
+                         'saved ordinary 5s match unavailable')
+    def test_saved_hand_with_ordinary_5s_reaches_recovery(self):
+        root=Path('/home/yama1/server/data/dev-work/jantama/evidence152/artifacts/frames')
+        prefixes=('2026-11-03T17-49-36','2026-11-03T17-49-56','2026-11-03T17-50-02')
+        with tempfile.TemporaryDirectory() as directory:
+            receipts=[]
+            for i,prefix in enumerate(prefixes):
+                receipt=json.loads(next(root.glob(prefix+'*.sanma-self-turn.receipt.json')).read_text())
+                source=Path(receipt['screenshot']); folder=Path(directory)/str(i);folder.mkdir()
+                target=folder/source.name;shutil.copyfile(source,target);receipt['screenshot']=str(target)
+                target.with_suffix('.receipt.json').write_text(json.dumps(receipt));receipts.append(receipt)
+            event={'tile':'C','clickIndex':12,'clickPoint':{'x':1407,'y':996.5},'frameSha256':receipts[0]['digest']}
+            journal=[dict(event,status='attempted',timestamp='2026-11-03T17:49:41.039791+00:00'),
+                     dict(event,status='selection_confirmed',result='discard_not_verified',
+                          timestamp='2026-11-03T17:49:42.536845+00:00')]
+            watch=Mock();watch.alive.return_value=True
+            self.assertTrue(candidate(receipts[0],receipts[1:],journal,continuity=watch,
+                                      active=lambda:True,started=time.monotonic(),deadline_ms=300000))
+            # Substituting an actual different pin tile under a false 7p
+            # label must still fail the supporting visual conservation.
+            from sanma_concealed_conservation import consistent
+            altered=dict(receipts[1]); path=Path(directory)/'wrong.png'
+            g=altered['sourceObservation']['report']['handGeometry']['value']; slots=[*g['handSlots'],g['drawSlot']]
+            tiles=altered['sourceObservation']['report']['hand']['value']['tiles']
+            a,b=slots[tiles.index('6p')],slots[tiles.index('7p')]
+            with Image.open(altered['screenshot']) as source:
+                image=source.convert('RGB')
+                box=lambda s:(s['x'],s['y'],s['x']+s['width'],s['y']+s['height'])
+                image.paste(image.crop(box(a)).resize((b['width'],b['height'])),(b['x'],b['y']))
+                image.save(path)
+            altered['screenshot']=str(path)
+            self.assertFalse(consistent(receipts[0],altered,12))
+
     def test_revocation_reconnect_and_original_deadline_block_click(self):
         op=Mock()
         op.verified_friend_300_active=True

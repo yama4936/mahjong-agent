@@ -64,16 +64,26 @@ def candidate(before, posts, journal, *, continuity, active, started, deadline_m
         if len(posts) != 2 or not valid():
             return False
         receipts = [before, *posts]
-        # Keep red-five identity out of this first recovery path: the recorded
-        # low-saturation counterexample defeats the existing candidate matcher.
+        # A five-sou may occur in the retained hand only when its separate
+        # face check supports the ordinary tile in every frame. Other fives
+        # remain excluded: conservation alone cannot establish red identity.
         for receipt in receipts:
             data = Path(receipt['screenshot']).read_bytes()
             digest = hashlib.sha256(data).hexdigest()
             if digest != receipt['digest'] or digest != receipt['sourceObservation']['digest']:
                 return False
             hand = receipt['sourceObservation']['report']['hand']['value']
-            if (hand.get('candidateMelds') != 0 or any(t in {'0p','5p','0s','5s'} for t in hand.get('tiles', []))):
+            tiles = hand.get('tiles', [])
+            if (hand.get('candidateMelds') != 0 or any(t in {'0p','5p','0s'} for t in tiles)):
                 return False
+            if '5s' in tiles:
+                from sanma_five_sou_candidate import ordinary_five_sou_face_candidate
+                geometry = receipt['sourceObservation']['report']['handGeometry']['value']
+                slots = [*geometry['handSlots'], geometry['drawSlot']]
+                if len(tiles) != 14 or len(slots) != 14 or any(
+                    not ordinary_five_sou_face_candidate(data, slots[i]) for i,tile in enumerate(tiles) if tile == '5s'
+                ):
+                    return False
         paths = [str(Path(r['screenshot']).with_suffix('.receipt.json')) for r in receipts]
         if any(json.loads(Path(path).read_text()) != receipt for path, receipt in zip(paths, receipts)):
             return False

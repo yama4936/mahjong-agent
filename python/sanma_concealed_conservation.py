@@ -35,12 +35,13 @@ def consistent(before, after, selected_index, limit=5.0):
                         raise ValueError('bad face rectangle')
                     face = image.crop(box).resize((60,100))
                     mask = face.convert('L').point(lambda v: 255 if v < 120 else 0)
+                    dark_mask = face.convert('L').point(lambda v: 255 if v < 100 else 0)
                     # Supporting color-change rejection for red/ordinary fives;
                     # this does not independently identify either tile.
                     pixels = list(face.getdata())
                     red_fraction = sum(r > 80 and r-g > 30 and r-b > 30
                                        for r,g,b in pixels) / len(pixels)
-                    faces.append((mask, red_fraction))
+                    faces.append((mask, red_fraction, dark_mask))
             return tiles, faces
         bt,bf = parts(before)
         at,af = parts(after)
@@ -57,7 +58,11 @@ def consistent(before, after, selected_index, limit=5.0):
                 return False
             def matches(x,y):
                 glyph = ImageStat.Stat(ImageChops.difference(x[0],y[0])).mean[0] / 255 * 100
-                return glyph <= limit and (tile not in {'0p','5p','0s','5s'} or abs(x[1]-y[1]) <= .20)
+                dark = ImageStat.Stat(ImageChops.difference(x[2],y[2])).mean[0] / 255 * 100
+                # Seven pin's red ink can cross the 120 grayscale boundary
+                # under lighting changes; preserve the same spatial limit on
+                # a second, darker rendering for this one observed tile.
+                return (glyph <= limit or (tile == '7p' and dark <= limit)) and (tile not in {'0p','5p','0s','5s'} or abs(x[1]-y[1]) <= .20)
             if not any(all(matches(x,y) for x,y in zip(a,arrangement))
                        for arrangement in permutations(b)):
                 return False

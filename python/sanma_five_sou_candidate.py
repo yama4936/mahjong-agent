@@ -24,6 +24,14 @@ def ordinary_five_sou_candidate(frame, hand, geometry, draw):
             or evidence.get('detectedTiles') != 14 or not .98 <= gc <= 1
             or gap < median + 10 or not 0 <= spread <= 2):
             return False
+        return ordinary_five_sou_face_candidate(frame, slot)
+    except (KeyError,TypeError,ValueError,IndexError,OSError):
+        return False
+
+
+def ordinary_five_sou_face_candidate(frame, slot):
+    """Color and glyph check at a supplied calibrated hand slot, not identity proof."""
+    try:
         x,y,w,h=(slot[k] for k in ('x','y','width','height'))
         if any(type(v) is not int for v in (x,y,w,h)) or not (0 <= x and 0 <= y and 70 <= w <= 110 and 120 <= h <= 180 and x+w <= 1920 and y+h <= 1080):
             return False
