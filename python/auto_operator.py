@@ -57,6 +57,18 @@ class SanmaKitaPreclickChanged(RetryableSafetyAbort):
     """A kita screenshot changed before any input was attempted."""
 
 
+def may_reobserve_unsent_kita(operator, frame_digest, unconfirmed_input_seen, started_at, now):
+    """Only reobserve a known-unsent candidate within the original deadline."""
+    return (operator.verified_friend_300_active is True
+            and unconfirmed_input_seen is False
+            and isinstance(frame_digest, str)
+            and frame_digest not in getattr(operator, '_sanma_friend_attempted_frames', set())
+            and not getattr(operator, '_sanma_friend_attempted_targets', set())
+            and type(started_at) in (int, float) and isfinite(started_at)
+            and type(now) in (int, float) and isfinite(now)
+            and 0 <= (now - started_at) * 1000 < operator.args.action_deadline_ms)
+
+
 class ReactionWinPromptChangedAbort(RetryableSafetyAbort):
     """A streamed win candidate vanished or became ambiguous before input."""
 
@@ -9061,6 +9073,7 @@ class PythonAutoOperator:
         changed_streak = 0
         changed_since = None
         kita_preclick_rejections = 0
+        kita_reobserve_actions = None
         discard_preclick_rejections = 0
         startup_unknown_polls = 0
         match_seen = False
@@ -9091,6 +9104,13 @@ class PythonAutoOperator:
             except Exception as error:
                 self.log("sanma_friend_stopped", reason="screen_observation_failed", error=str(error),
                          screenshot=preserve(last_frame))
+                return
+            # A pre-click mismatch proves no input was sent, but a different
+            # screen cannot establish a new turn or a new action deadline.
+            if kita_preclick_rejections and (state != "match" or confidence < 0.95):
+                self.log("sanma_friend_stopped", reason="kita_reobserve_screen_changed",
+                         screenState=state, confidence=confidence, screenshot=preserve(frame),
+                         operationAuthorized=False)
                 return
             if white_candidate:
                 self.log("sanma_friend_stopped", reason="white_screen_unobservable",
@@ -9243,6 +9263,13 @@ class PythonAutoOperator:
                         self.log("sanma_friend_stopped", reason="unsupported_or_unknown_action", screenshot=receipt.get("screenshot"),
                                  digest=receipt.get("digest"), candidates=candidates, operationAuthorized=False)
                         return
+                    candidate_actions = (tuple(sorted(item["action"] for item in actions))
+                                         if all(isinstance(item, dict) and isinstance(item.get("action"), str)
+                                                for item in actions) else None)
+                    if kita_preclick_rejections and (candidate_actions is None or candidate_actions != kita_reobserve_actions):
+                        self.log("sanma_friend_stopped", reason="kita_reobserve_candidate_changed",
+                                 screenshot=receipt.get("screenshot"), operationAuthorized=False)
+                        return
                     freshness = receipt.get("freshness")
                     if isinstance(freshness, dict) and freshness.get("status") == "changed":
                         if changed_since is None:
@@ -9289,13 +9316,13 @@ class PythonAutoOperator:
                             result = self.execute_sanma_friend_kita_candidate(page, receipt)
                         except SanmaKitaPreclickChanged as error:
                             kita_preclick_rejections += 1
+                            kita_reobserve_actions = candidate_actions
                             self.log("sanma_friend_wait", reason="kita_preclick_reobserve",
                                      screenshot=receipt.get("screenshot"), digest=frame_digest,
                                      streak=kita_preclick_rejections, clicked=False, error=str(error))
-                            if (kita_preclick_rejections >= 3 or unconfirmed_input_seen
-                                    or frame_digest in getattr(self, "_sanma_friend_attempted_frames", set())
-                                    or self.verified_friend_300_active is not True
-                                    or not 0 <= time.monotonic() - action_observed_at < 300):
+                            if not may_reobserve_unsent_kita(
+                                    self, frame_digest, unconfirmed_input_seen,
+                                    action_observed_at, time.monotonic()):
                                 self.log("sanma_friend_stopped", reason="kita_preclick_reobserve_limit",
                                          streak=kita_preclick_rejections, clicked=False)
                                 return

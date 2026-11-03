@@ -493,12 +493,12 @@ class ExperimentalSanmaFriendLoopTest(unittest.TestCase):
 
     def test_kita_preclick_change_is_bounded(self):
         from auto_operator import SanmaKitaPreclickChanged
-        self.op.args.max_iterations = 0
+        self.op.args.max_iterations = 5
         self.receipt['candidates'] = {'candidates': [{'action':'kita'}]}
         self.op.execute_sanma_friend_kita_candidate.side_effect = SanmaKitaPreclickChanged('changed')
         self.run_room()
-        self.assertEqual(self.op.execute_sanma_friend_kita_candidate.call_count, 3)
-        self.assertTrue(any(c.kwargs.get('reason')=='kita_preclick_reobserve_limit' for c in self.op.log.call_args_list))
+        self.assertEqual(self.op.execute_sanma_friend_kita_candidate.call_count, 5)
+        self.assertTrue(any(c.kwargs.get('reason')=='friend_monitor_limit' for c in self.op.log.call_args_list))
 
     def test_kita_changed_after_unconfirmed_action_does_not_retry(self):
         from auto_operator import SanmaKitaPreclickChanged
@@ -520,7 +520,7 @@ class ExperimentalSanmaFriendLoopTest(unittest.TestCase):
         self.op.execute_sanma_friend_kita_candidate.side_effect = SanmaKitaPreclickChanged('changed')
         self.run_room()
         self.op.execute_sanma_friend_kita_candidate.assert_called_once()
-        self.assertTrue(any(c.kwargs.get('reason')=='unsupported_or_unknown_action' for c in self.op.log.call_args_list))
+        self.assertTrue(any(c.kwargs.get('reason')=='kita_reobserve_candidate_changed' for c in self.op.log.call_args_list))
 
     def test_preclick_exception_after_attempt_latch_never_retries(self):
         from auto_operator import SanmaKitaPreclickChanged
