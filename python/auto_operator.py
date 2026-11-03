@@ -2145,8 +2145,10 @@ def _experimental_draw_glyph_stability_decoded(before: bytes, after: bytes, repo
                 if max(ImageStat.Stat(delta).mean) > 1: return False
             if diagnostic is not None: diagnostic.update(stage='binary_frame')
             diff = ImageChops.difference(*(im.convert('L').point(lambda v: 255 if v < 120 else 0) for im in (a,b)))
-            # The illuminated self-turn indicator flickers independently of the board.
-            for rect in ((1425,755,1650,870),(920,510,992,516)):
+            # Ignore the observed extent of the self-turn lamp flicker only.
+            # This cannot prove a turn: all other regions and action/deadline
+            # checks remain mandatory, including the other players' lamps.
+            for rect in ((1425,755,1650,870),(890,495,1015,516)):
                 diff.paste(0, rect)
             # Mask only actual hand and action rectangles already compared.
             # Gaps between buttons and beside the hand remain observable.

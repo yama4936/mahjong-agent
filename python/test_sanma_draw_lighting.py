@@ -19,6 +19,16 @@ class TestFriendDrawLighting(unittest.TestCase):
     def test_real_frames_and_lamp_flicker(self):
         self.assertTrue(experimental_draw_glyph_stability(self.a, self.b, self.report))
 
+    def test_self_lamp_flicker_is_ignored_but_other_lamps_are_not(self):
+        for rect, accepted in (((890,495,1014,515), True),
+                               ((1060,380,1089,459), False),
+                               ((830,380,859,459), False)):
+            with self.subTest(rect=rect):
+                image = Image.open(io.BytesIO(self.a)).convert('RGB')
+                ImageDraw.Draw(image).rectangle(rect, fill='white')
+                out = io.BytesIO(); image.save(out, format='PNG')
+                self.assertEqual(experimental_draw_glyph_stability(self.a, out.getvalue(), self.report), accepted)
+
     def test_reject_hand_button_and_board_changes(self):
         for rect in [(1490,930,1550,990), (900,800,1000,850), (900,400,970,450), (920,540,970,570)]:
             with self.subTest(rect=rect):
