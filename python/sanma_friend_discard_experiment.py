@@ -282,8 +282,17 @@ def execute_friend_draw_candidate(operator, page, receipt):
     partial_row = (friend_visible_row_with_north_overlap(baseline, row_slots)
                    or friend_visible_empty_row_candidate(baseline, row_slots))
     draw_only = hand_value.get("safe") is not True and experimental_draw_only_candidate(hand_value, geo_value, draw)
+    five_sou_only = False
+    if hand_value.get("safe") is not True and not draw_only:
+        from sanma_five_sou_candidate import ordinary_five_sou_candidate
+        five_sou_only = draw_only = ordinary_five_sou_candidate(baseline, hand_value, geo_value, draw)
+        if draw_only:
+            operator.log('sanma_friend_five_sou_candidate', digest=receipt['digest'], confirmed=False,
+                         operationAuthorized=False, reason='ordinary five sou color and shape hypothesis')
     defensive = (friend_genbutsu_candidate(source, receipt['digest'], threats, tiles, hand_value.get('matches'))
                  if threats and isinstance(tiles, list) and isinstance(points, list) and len(points) == len(tiles) else None)
+    if five_sou_only:
+        defensive = None
     if defensive is not None and defensive['index'] != draw.get('index'):
         from sanma_friend_shape_candidate import friend_hand_click_geometry, friend_clear_riichi_rail
         calibrated = operator.layout if isinstance(operator.layout,dict) else {}
@@ -333,7 +342,8 @@ def execute_friend_draw_candidate(operator, page, receipt):
     calibrated_points = operator.layout.get("clickPoints", []) if isinstance(operator.layout, dict) else []
     calibrated_slots = ([*operator.layout.get("handSlots", []), operator.layout.get("drawSlot")]
                         if isinstance(operator.layout, dict) else [])
-    shape_choice = (getattr(operator, "sanma_friend_riichi_attempted", False) is False
+    shape_choice = (not five_sou_only
+                    and getattr(operator, "sanma_friend_riichi_attempted", False) is False
                     and shape.get("status") == "candidate"
                     and (all(slot.get("status") == "empty_candidate" for slot in row_slots)
                          or friend_visible_full_empty_row_candidate(baseline, row_slots))
