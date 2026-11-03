@@ -4447,9 +4447,13 @@ class PythonAutoOperator:
             draw_glyph_candidate = (changes['fullFrame'] and not kita_glyph_candidate and not wall_errors
                                     and experimental_sanma_friend_allowed(getattr(self, "args", None))
                                     and timed_guard('draw', experimental_draw_glyph_stability))
+            from sanma_friend_pon_stability import pon_pass_stability
+            pon_candidate = (changes['fullFrame'] and not kita_glyph_candidate and not draw_glyph_candidate
+                             and not wall_errors and experimental_sanma_friend_allowed(getattr(self, "args", None))
+                             and timed_guard('pon', pon_pass_stability))
             latest_path = self.frames / f"{utc_stamp()}.{uuid.uuid4().hex}.sanma-freshness.png"
             latest_path.write_bytes(latest)
-            freshness = {"status": "unknown" if wall_errors else "stable_kita_glyph_candidate" if kita_glyph_candidate else "stable_draw_glyph_candidate" if draw_glyph_candidate else "changed" if changes['fullFrame'] else
+            freshness = {"status": "unknown" if wall_errors else "stable_kita_glyph_candidate" if kita_glyph_candidate else "stable_draw_glyph_candidate" if draw_glyph_candidate else "stable_pon_pass_candidate" if pon_candidate else "changed" if changes['fullFrame'] else
                          "stable_except_clock_candidate" if clock_changed else "identical_pixels_candidate",
                          "operationAuthorized": False, "elapsedMs": round((time.monotonic() - capture_started) * 1000),
                          "regionsChanged": changes, "clockChanged": clock_changed, "digest": hashlib.sha256(latest).hexdigest(),
@@ -4462,7 +4466,7 @@ class PythonAutoOperator:
                          "guards": guard_diagnostics,
                          "screenshot": str(latest_path),
                          "reason": ("wall guard execution failed" if wall_errors else "glyph structure is a lighting-tolerant hypothesis; colors, concealed content and turn are unverified"
-                                    if kita_glyph_candidate or draw_glyph_candidate else "visible pixel stability does not verify turn, state, or action; clock area unobserved")}
+                                    if kita_glyph_candidate or draw_glyph_candidate or pon_candidate else "visible pixel stability does not verify turn, state, or action; clock area unobserved")}
         except Exception as error:
             freshness = {"status": "unknown", "operationAuthorized": False,
                          "reason": f"freshness observation failed: {error}",

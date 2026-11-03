@@ -27,7 +27,7 @@ def execute_friend_pon_pass(operator, page, receipt, *, declare_riichi=False):
     if (receipt.get('scope') != 'sanma_self_turn_observation' or receipt.get('status') != 'blocked'
             or receipt.get('operationAuthorized') is not False or source.get('operationAuthorized') is not False
             or source.get('digest') != receipt.get('digest') or report.get('digest') != receipt.get('digest')
-            or freshness.get('status') not in ('identical_pixels_candidate','stable_except_clock_candidate')
+            or freshness.get('status') not in ('identical_pixels_candidate','stable_except_clock_candidate','stable_pon_pass_candidate')
             or freshness.get('operationAuthorized') is not False
             or type(freshness.get('elapsedMs')) not in (int,float) or not 0 <= freshness['elapsedMs'] <= 20000
             or row.get('status') != 'candidate' or (row.get('value') or {}).get('ronReferenceCompared') is not True
@@ -55,7 +55,12 @@ def execute_friend_pon_pass(operator, page, receipt, *, declare_riichi=False):
         raise RuntimeError('baseline changed')
     fresh = page.screenshot(animations='disabled')
     require_sanma_observable_frame(fresh)
-    if not friend_frame_stable(baseline, fresh):
+    if freshness.get('status') == 'stable_pon_pass_candidate':
+        from sanma_friend_pon_stability import pon_pass_stability
+        stable = pon_pass_stability(baseline, fresh, report)
+    else:
+        stable = friend_frame_stable(baseline, fresh)
+    if not stable:
         raise RuntimeError('screen changed outside clock area')
     state, confidence = classify_screen(fresh, operator.screen_references)
     if state != 'match' or confidence < .95:
