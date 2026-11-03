@@ -16,6 +16,25 @@ from sanma_friend_freshness import check_friend_recovery_guard
 ROOT = Path('/home/yama1/server/data/dev-work/jantama/evidence139')
 
 class RecoveryGuardTest(unittest.TestCase):
+    @unittest.skipUnless(Path('/home/yama1/server/data/dev-work/jantama/evidence160/artifacts/frames').exists(),
+                         'saved ordinary 5p match unavailable')
+    def test_two_ordinary_five_pin_saved_match_reaches_candidate(self):
+        root=Path('/home/yama1/server/data/dev-work/jantama/evidence160/artifacts/frames')
+        prefixes=('2026-11-03T21-38-49','2026-11-03T21-39-13','2026-11-03T21-39-19')
+        with tempfile.TemporaryDirectory() as directory:
+            receipts=[]
+            for i,prefix in enumerate(prefixes):
+                receipt=json.loads(next(root.glob(prefix+'*.sanma-self-turn.receipt.json')).read_text())
+                source=Path(receipt['screenshot']);folder=Path(directory)/str(i);folder.mkdir()
+                target=folder/source.name;shutil.copyfile(source,target);receipt['screenshot']=str(target)
+                target.with_suffix('.receipt.json').write_text(json.dumps(receipt));receipts.append(receipt)
+            event={'tile':'F','clickIndex':13,'clickPoint':{'x':1532,'y':996.5},'frameSha256':receipts[0]['digest']}
+            journal=[dict(event,status='attempted',timestamp='2026-11-03T21:38:54.550798+00:00'),
+                     dict(event,status='selection_confirmed',result='discard_not_verified',
+                          timestamp='2026-11-03T21:38:55.839931+00:00')]
+            watch=Mock();watch.alive.return_value=True
+            self.assertTrue(candidate(receipts[0],receipts[1:],journal,continuity=watch,
+                                      active=lambda:True,started=time.monotonic(),deadline_ms=300000))
     @unittest.skipUnless(Path('/home/yama1/server/data/dev-work/jantama/evidence158/artifacts/frames').exists(),
                          'saved two opposite north match unavailable')
     def test_two_opposite_norths_support_saved_later_turn(self):
