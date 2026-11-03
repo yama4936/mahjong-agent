@@ -1,0 +1,335 @@
+{
+  "digest": "bdf6081d0f4400680c21b4ef4aa8678f78e4f945bcd1b9a034e08078b57032fc",
+  "screenshot": "2026-11-03T08-26-20.664177+00-00.anon.png",
+  "sourceObservation": {
+    "digest": "bdf6081d0f4400680c21b4ef4aa8678f78e4f945bcd1b9a034e08078b57032fc",
+    "board": {
+      "candidate": {
+        "seat": "west",
+        "round": "east_1",
+        "scores": {
+          "west": 35000,
+          "south": 35000,
+          "east": 35000
+        },
+        "riichiSticks": 0,
+        "honba": 0,
+        "remainingTiles": 50
+      }
+    },
+    "ownRiver": {
+      "scope": "offline_untrusted_sanma_own_river",
+      "frameSha256": "bdf6081d0f4400680c21b4ef4aa8678f78e4f945bcd1b9a034e08078b57032fc",
+      "status": "unknown",
+      "verified": false,
+      "complete": false,
+      "operationAuthorized": false,
+      "candidates": [],
+      "note": "Screen-position candidates only; order, seat, tile identity and completeness are unverified."
+    },
+    "report": {
+      "hand": {
+        "status": "candidate",
+        "value": {
+          "tiles": [
+            "1m",
+            "9m",
+            "1p",
+            "1p",
+            "2p",
+            "3p",
+            "6p",
+            "1s",
+            "3s",
+            "6s",
+            "7s",
+            "7s",
+            "8s",
+            "S"
+          ],
+          "matches": [
+            {
+              "tile": "1m",
+              "confidence": 0.9899454984118203,
+              "runnerUpConfidence": 0.7782271379437169
+            },
+            {
+              "tile": "9m",
+              "confidence": 0.9990923392294311,
+              "runnerUpConfidence": 0.7493803520108027
+            },
+            {
+              "tile": "1p",
+              "confidence": 0.9872607529949697,
+              "runnerUpConfidence": 0.5889602310797477
+            },
+            {
+              "tile": "1p",
+              "confidence": 0.9783726107334428,
+              "runnerUpConfidence": 0.5943063552273158
+            },
+            {
+              "tile": "2p",
+              "confidence": 0.9950557465397962,
+              "runnerUpConfidence": 0.6183583250679914
+            },
+            {
+              "tile": "3p",
+              "confidence": 0.9961609600086608,
+              "runnerUpConfidence": 0.630429272530745
+            },
+            {
+              "tile": "6p",
+              "confidence": 0.9919409133401954,
+              "runnerUpConfidence": 0.7437125378653036
+            },
+            {
+              "tile": "1s",
+              "confidence": 0.9906248822181252,
+              "runnerUpConfidence": 0.6138467326224544
+            },
+            {
+              "tile": "3s",
+              "confidence": 0.9932462683777622,
+              "runnerUpConfidence": 0.5439086123978332
+            },
+            {
+              "tile": "6s",
+              "confidence": 0.9657050203899158,
+              "runnerUpConfidence": 0.74474732284373
+            },
+            {
+              "tile": "7s",
+              "confidence": 0.9755419882451039,
+              "runnerUpConfidence": 0.7524678702868527
+            },
+            {
+              "tile": "7s",
+              "confidence": 0.9821103689171538,
+              "runnerUpConfidence": 0.752115061756101
+            },
+            {
+              "tile": "8s",
+              "confidence": 0.9843260807428206,
+              "runnerUpConfidence": 0.6789268414210811
+            },
+            {
+              "tile": "S",
+              "confidence": 0.9917359974053978,
+              "runnerUpConfidence": 0.629294130317592
+            }
+          ],
+          "confidence": 0.9657050203899158,
+          "ambiguityMargin": 0.21171836046810344,
+          "presenceFractions": [
+            0.8789951050964584,
+            0.8552303638823613,
+            0.803745638396354,
+            0.80403047781813,
+            0.8350129570976101,
+            0.8742441693060754,
+            0.7944860351281313,
+            0.856608119781169,
+            0.8869899594103824,
+            0.7984761090934985,
+            0.8560848821476892,
+            0.8506729331339458,
+            0.8011805355600345,
+            0.8263748920241866
+          ],
+          "safe": false,
+          "turnReady": true,
+          "slotClassificationSafe": false,
+          "candidateMelds": 0
+        }
+      },
+      "handGeometry": {
+        "status": "candidate",
+        "value": {
+          "viewport": {
+            "width": 1920,
+            "height": 1080
+          },
+          "handSlots": [
+            {
+              "x": 223,
+              "y": 921,
+              "width": 92,
+              "height": 151
+            },
+            {
+              "x": 317,
+              "y": 921,
+              "width": 93,
+              "height": 151
+            },
+            {
+              "x": 412,
+              "y": 921,
+              "width": 93,
+              "height": 151
+            },
+            {
+              "x": 507,
+              "y": 921,
+              "width": 93,
+              "height": 151
+            },
+            {
+              "x": 602,
+              "y": 921,
+              "width": 92,
+              "height": 151
+            },
+            {
+              "x": 697,
+              "y": 921,
+              "width": 92,
+              "height": 151
+            },
+            {
+              "x": 792,
+              "y": 921,
+              "width": 92,
+              "height": 151
+            },
+            {
+              "x": 887,
+              "y": 921,
+              "width": 92,
+              "height": 151
+            },
+            {
+              "x": 981,
+              "y": 921,
+              "width": 93,
+              "height": 151
+            },
+            {
+              "x": 1076,
+              "y": 921,
+              "width": 93,
+              "height": 151
+            },
+            {
+              "x": 1171,
+              "y": 921,
+              "width": 93,
+              "height": 151
+            },
+            {
+              "x": 1266,
+              "y": 921,
+              "width": 93,
+              "height": 151
+            },
+            {
+              "x": 1361,
+              "y": 921,
+              "width": 92,
+              "height": 151
+            }
+          ],
+          "drawSlot": {
+            "x": 1486,
+            "y": 921,
+            "width": 92,
+            "height": 151
+          },
+          "clickPoints": [
+            {
+              "x": 269,
+              "y": 996.5
+            },
+            {
+              "x": 363.5,
+              "y": 996.5
+            },
+            {
+              "x": 458.5,
+              "y": 996.5
+            },
+            {
+              "x": 553.5,
+              "y": 996.5
+            },
+            {
+              "x": 648,
+              "y": 996.5
+            },
+            {
+              "x": 743,
+              "y": 996.5
+            },
+            {
+              "x": 838,
+              "y": 996.5
+            },
+            {
+              "x": 933,
+              "y": 996.5
+            },
+            {
+              "x": 1027.5,
+              "y": 996.5
+            },
+            {
+              "x": 1122.5,
+              "y": 996.5
+            },
+            {
+              "x": 1217.5,
+              "y": 996.5
+            },
+            {
+              "x": 1312.5,
+              "y": 996.5
+            },
+            {
+              "x": 1407,
+              "y": 996.5
+            },
+            {
+              "x": 1532,
+              "y": 996.5
+            }
+          ],
+          "evidence": {
+            "detectedTiles": 14,
+            "luminanceThreshold": 120,
+            "medianWidth": 92.5,
+            "medianHeight": 151,
+            "medianGap": 2,
+            "drawGap": 33,
+            "rowBottomSpread": 0
+          },
+          "confidence": 0.99,
+          "requiresHoldoutValidation": true
+        }
+      }
+    }
+  },
+  "drawCandidate": {
+    "status": "candidate",
+    "scope": "unverified_sanma_physical_draw",
+    "verified": false,
+    "operationAuthorized": false,
+    "digest": "bdf6081d0f4400680c21b4ef4aa8678f78e4f945bcd1b9a034e08078b57032fc",
+    "index": 13,
+    "tile": "S",
+    "rectangle": {
+      "x": 1486,
+      "y": 921,
+      "width": 92,
+      "height": 151
+    },
+    "point": {
+      "x": 1532,
+      "y": 996.5
+    },
+    "reasons": [
+      "hand and geometry are unverified",
+      "self turn, action priority, and riichi state are unknown"
+    ]
+  }
+}

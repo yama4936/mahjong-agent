@@ -1,0 +1,5 @@
+# Anonymized evidence-chain fixture
+
+The three PNGs preserve only hand `(220,920)-(1580,1080)` and self-river `(760,540)-(1150,760)` pixels on otherwise black 1920×1080 canvases. They are derived from CPU friend run 123, not generated tile art. Receipt JSON keeps selected hand/geometry, own-river and board candidates, and draw candidates from the source observations; screenshot paths and SHA-256 values were rewritten to bind the cropped images. Board metadata and action journal are retained candidate/log data, not recognition run on the anonymized image. Private screen areas, OCR tokens and source paths are omitted. The journal's screenshot digests were rewritten; timestamps and action fields are from the recorded events.
+
+The fixture evaluates correlations, not a ground-truth discard confirmation, turn detection, action causation, recognition accuracy or glyph threshold. It is one match, and the two after-images are correlated. Additional examples and a holdout set are needed before considering any action authorization.

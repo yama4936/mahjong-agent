@@ -15,7 +15,10 @@ from PIL import Image, ImageChops, ImageStat
 
 def _read_receipt(path):
     receipt = json.loads(Path(path).read_text())
-    frame = Path(receipt['screenshot']).read_bytes()
+    screenshot = Path(receipt['screenshot'])
+    if not screenshot.is_absolute():
+        screenshot = Path(path).parent / screenshot
+    frame = screenshot.read_bytes()
     digest = hashlib.sha256(frame).hexdigest()
     source = receipt['sourceObservation']
     river = source['ownRiver']

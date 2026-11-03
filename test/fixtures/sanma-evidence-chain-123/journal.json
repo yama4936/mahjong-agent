@@ -1,0 +1,35 @@
+[
+  {
+    "timestamp": "2026-11-03T08:26:25.229479+00:00",
+    "event": "sanma_friend_discard_experiment",
+    "kind": "sanma_friend_discard",
+    "status": "attempted",
+    "tile": "1m",
+    "clickIndex": 0,
+    "clickPoint": {
+      "x": 269,
+      "y": 996.5
+    },
+    "frameSha256": "bdf6081d0f4400680c21b4ef4aa8678f78e4f945bcd1b9a034e08078b57032fc"
+  },
+  {
+    "timestamp": "2026-11-03T08:26:26.536942+00:00",
+    "event": "sanma_friend_discard_experiment",
+    "kind": "sanma_friend_discard",
+    "status": "selection_confirmed",
+    "tile": "1m",
+    "clickIndex": 0,
+    "clickPoint": {
+      "x": 269,
+      "y": 996.5
+    },
+    "frameSha256": "bdf6081d0f4400680c21b4ef4aa8678f78e4f945bcd1b9a034e08078b57032fc",
+    "selectionReceipt": {
+      "x": 269.0,
+      "y": 948.5,
+      "lift": 48.0,
+      "faceStructureDelta": 1.438
+    },
+    "result": "discard_not_verified"
+  }
+]
