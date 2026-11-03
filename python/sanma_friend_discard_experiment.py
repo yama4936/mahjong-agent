@@ -108,7 +108,7 @@ def friend_empty_first_two_pixels(image):
     if empty.size != (825,90):return False
     for x in (600,890):
         difference=ImageChops.difference(image.crop((x,785,x+245,875)),empty.crop((x-600,0,x-600+245,90)))
-        if max(channel[1] for channel in difference.getextrema()) > 30:return False
+        if max(channel[1] for channel in difference.getextrema()) > 40:return False
         if any(sum(ImageStat.Stat(difference.crop((xx,yy,min(xx+16,245),min(yy+16,90)))).mean)/3 > 3
                for yy in range(0,90,16) for xx in range(0,245,16)):return False
     return True
