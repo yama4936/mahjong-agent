@@ -210,6 +210,9 @@ def friend_visible_full_empty_row_candidate(frame, row_slots):
         return False
 
 
+SANMA_FRIEND_DRAW_MIN_CONFIDENCE = 0.98
+
+
 def experimental_draw_only_candidate(hand, geometry, draw):
     """Only the separated draw label is used; other labels remain uncertain."""
     try:
@@ -230,7 +233,7 @@ def experimental_draw_only_candidate(hand, geometry, draw):
                 and type(match.get("runnerUpConfidence")) in (int,float)
                 and math.isfinite(match['confidence']) and math.isfinite(match['runnerUpConfidence'])
                 and 0 <= match['confidence'] <= 1 and 0 <= match['runnerUpConfidence'] <= 1
-                and match["confidence"] >= .98 and match["confidence"] - match["runnerUpConfidence"] >= .1)
+                and match["confidence"] >= SANMA_FRIEND_DRAW_MIN_CONFIDENCE and match["confidence"] - match["runnerUpConfidence"] >= .1)
     except (TypeError, KeyError, IndexError):
         return False
 
@@ -298,6 +301,22 @@ def execute_friend_draw_candidate(operator, page, receipt):
             or not isinstance(tiles, list) or len(tiles) != 14 or not isinstance(points, list) or len(tiles) != len(points)
             or draw.get("index") != len(tiles) - 1 or draw.get("tile") != tiles[-1]
             or draw.get("point") != points[-1]):
+        matches = hand_value.get("matches")
+        last_match = matches[-1] if isinstance(matches, list) and matches and isinstance(matches[-1], dict) else {}
+        operator.log("sanma_friend_discard_guard_rejected", digest=receipt.get("digest"),
+                     safeHand=hand_value.get("safe") is True, drawOnlyCandidate=bool(draw_only),
+                     defensiveCandidate=defensive is not None, turnReady=hand_value.get("turnReady") is True,
+                     partialOrEmptyRowCandidate=bool(partial_row) or (isinstance(row_slots, list) and len(row_slots) == 3
+                                                           and all(isinstance(slot, dict) and slot.get("status") == "empty_candidate" for slot in row_slots)),
+                     handTileCount=len(tiles) if isinstance(tiles, list) else None,
+                     clickPointCount=len(points) if isinstance(points, list) else None,
+                     drawIndex=draw.get("index"), drawTile=draw.get("tile"),
+                     lastHandSlotConfidence=last_match.get("confidence"),
+                     lastHandSlotRunnerUpConfidence=last_match.get("runnerUpConfidence"),
+                     drawIndexMatchesLastSlot=(isinstance(tiles, list) and bool(tiles)
+                                               and type(draw.get("index")) is int and draw.get("index") == len(tiles) - 1),
+                     drawOnlyMinimumConfidence=SANMA_FRIEND_DRAW_MIN_CONFIDENCE,
+                     confirmed=False, operationAuthorized=False)
         raise ValueError("unsafe hand, uncertain prompt or draw mismatch")
     slots = [{"tile": tile, **point} for tile, point in zip(tiles, points)]
     if threats:
