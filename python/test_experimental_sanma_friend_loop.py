@@ -647,6 +647,68 @@ class ExperimentalSanmaFriendLoopTest(unittest.TestCase):
         discard.assert_called_once()
         self.assertTrue(any(c.kwargs.get('reason')=='discard_preclick_reobserve_limit' for c in self.op.log.call_args_list))
 
+    def test_kita_then_unsent_discard_reobserves_without_new_deadline(self):
+        from sanma_friend_discard_experiment import DiscardPreclickChanged
+        self.op.args.max_iterations = 3
+        self.receipt["candidates"] = {"candidates": [{"action": "kita"}]}
+        one = dict(self.receipt, digest="after-kita", candidates={"candidates": []}, drawCandidate={"status": "candidate"})
+        two = dict(one, digest="fresh-discard")
+        self.op.inspect_sanma_self_turn.side_effect = [self.receipt, one, two]
+        self.op.observe_sanma_friend_transition.return_value = {"status": "visual_change_unconfirmed", "confirmed": False}
+        with patch("sanma_friend_discard_experiment.execute_friend_draw_candidate", side_effect=[DiscardPreclickChanged("changed"), {"clicked": True, "confirmation": "unknown"}]) as discard:
+            self.run_room()
+        self.assertEqual(discard.call_count, 2)
+        self.assertIs(discard.call_args_list[1].args[2], two)
+        self.assertEqual(sum(c.args[0] == "sanma_friend_action_clock_started" for c in self.op.log.call_args_list), 1)
+        self.op.execute_sanma_friend_kita_candidate.assert_called_once()
+
+    def test_kita_discard_retry_respects_expiry_and_revocation(self):
+        from sanma_friend_discard_experiment import DiscardPreclickChanged
+        for reason in ("expired", "revoked"):
+            with self.subTest(reason=reason):
+                self.setUp()
+                self.op.args.max_iterations = 0
+                self.receipt["candidates"] = {"candidates": [{"action": "kita"}]}
+                discard_receipt = dict(self.receipt, digest="discard", candidates={"candidates": []}, drawCandidate={"status": "candidate"})
+                self.op.inspect_sanma_self_turn.side_effect = [self.receipt, discard_receipt]
+                self.op.observe_sanma_friend_transition.return_value = {"status": "visual_change_unconfirmed", "confirmed": False}
+                now = [1000.0]
+                def reject(*_):
+                    if reason == "expired": now[0] += 300.0
+                    else: self.op.verified_friend_300_active = False
+                    raise DiscardPreclickChanged("changed")
+                with patch("auto_operator.time.monotonic", side_effect=lambda: now[0]), patch("sanma_friend_discard_experiment.execute_friend_draw_candidate", side_effect=reject) as discard:
+                    self.run_room()
+                discard.assert_called_once()
+                self.assertTrue(any(c.kwargs.get("reason") == "discard_preclick_reobserve_limit" for c in self.op.log.call_args_list))
+
+    def test_kita_after_rejected_discard_still_requires_rearm(self):
+        from sanma_friend_discard_experiment import DiscardPreclickChanged
+        self.op.args.max_iterations = 0
+        self.receipt["candidates"] = {"candidates": [{"action": "kita"}]}
+        discard_receipt = dict(self.receipt, digest="discard", candidates={"candidates": []}, drawCandidate={"status": "candidate"})
+        again = dict(self.receipt, digest="kita-again")
+        self.op.inspect_sanma_self_turn.side_effect = [self.receipt, discard_receipt, again]
+        self.op.observe_sanma_friend_transition.return_value = {"status": "visual_change_unconfirmed", "confirmed": False}
+        with patch("sanma_friend_discard_experiment.execute_friend_draw_candidate", side_effect=DiscardPreclickChanged("changed")), patch("sanma_friend_kita_rearm.rearm_friend_kita_candidate", return_value=False) as rearm:
+            self.run_room()
+        rearm.assert_called_once()
+        self.op.execute_sanma_friend_kita_candidate.assert_called_once()
+        self.assertTrue(any(c.kwargs.get("reason") == "previous_kita_unconfirmed" for c in self.op.log.call_args_list))
+
+    def test_prior_unconfirmed_pass_then_kita_does_not_allow_discard_retry(self):
+        from sanma_friend_discard_experiment import DiscardPreclickChanged
+        self.op.args.max_iterations = 0
+        self.receipt["candidates"] = {"candidates": [{"action": "pon"}]}
+        kita = dict(self.receipt, digest="kita", candidates={"candidates": [{"action": "kita"}]})
+        discard_receipt = dict(self.receipt, digest="discard", candidates={"candidates": []}, drawCandidate={"status": "candidate"})
+        self.op.inspect_sanma_self_turn.side_effect = [self.receipt, kita, discard_receipt]
+        self.op.observe_sanma_friend_transition.return_value = {"status": "visual_change_unconfirmed", "confirmed": False}
+        with patch("sanma_friend_pass_experiment.execute_friend_pon_pass", return_value={"confirmation": "unknown"}), patch("sanma_friend_discard_experiment.execute_friend_draw_candidate", side_effect=DiscardPreclickChanged("changed")) as discard:
+            self.run_room()
+        discard.assert_called_once()
+        self.assertTrue(any(c.kwargs.get("reason") == "discard_preclick_reobserve_limit" for c in self.op.log.call_args_list))
+
     def test_pon_routes_to_pass_and_stops_unconfirmed(self):
         self.receipt['candidates'] = {'candidates': [{'action':'pon'}]}
         with patch('sanma_friend_pass_experiment.execute_friend_pon_pass', return_value={'confirmation':'unknown'}) as skip:

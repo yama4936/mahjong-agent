@@ -9054,6 +9054,7 @@ class PythonAutoOperator:
         attempted_frames: set[str] = set()
         last_unconfirmed_action: str | None = None
         unconfirmed_input_seen = False
+        only_unconfirmed_kita = False
         last_kita_receipt = None
         unknown_streak = 0
         unknown_since = None
@@ -9306,6 +9307,7 @@ class PythonAutoOperator:
                         from sanma_friend_pass_experiment import execute_friend_pon_pass
                         result = execute_friend_pon_pass(self, page, receipt)
                         unconfirmed_input_seen = True
+                        only_unconfirmed_kita = False
                         self.log("sanma_friend_action_unconfirmed", action="pass_optional", result=result, confirmed=False)
                         transition = self.observe_sanma_friend_transition(page, receipt, "pass_pon")
                         self.log("sanma_friend_transition", **transition)
@@ -9343,8 +9345,11 @@ class PythonAutoOperator:
                             # No input was sent on this specific path. Permit fresh
                             # observations until the original action deadline, with a
                             # poll cap as a second bound if the clock stalls. A prior
-                            # uncertain input still forbids any retry.
-                            if (discard_preclick_rejections >= 120 or unconfirmed_input_seen
+                            # uncertain input forbids retry, except a lone kita: its
+                            # replacement draw retains the same deadline and its
+                            # separate rearm guard remains in force.
+                            if (discard_preclick_rejections >= 120
+                                    or (unconfirmed_input_seen and not only_unconfirmed_kita)
                                     or self.verified_friend_300_active is not True
                                     or not 0 <= (time.monotonic() - action_observed_at) * 1000 < self.args.action_deadline_ms):
                                 self.log("sanma_friend_stopped", reason="discard_preclick_reobserve_limit",
@@ -9359,6 +9364,7 @@ class PythonAutoOperator:
                     kita_preclick_rejections = 0
                     discard_preclick_rejections = 0
                     attempted_frames.add(frame_digest)
+                    only_unconfirmed_kita = action == "kita" and not unconfirmed_input_seen
                     unconfirmed_input_seen = True
                     last_unconfirmed_action = action
                     last_kita_receipt = receipt if action == "kita" else None
