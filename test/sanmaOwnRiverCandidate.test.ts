@@ -5,6 +5,7 @@ import {createHash} from 'node:crypto';
 import sharp from 'sharp';
 import {layoutSchema} from '../src/recognition/layout.js';
 import {inspectSanmaOwnRiverCandidate} from '../src/recognition/sanmaOwnRiverCandidate.js';
+import {recognizeConfiguredPublicTilesWithVit} from '../src/recognition/publicTileRecognizer.js';
 
 const layout = layoutSchema.parse(JSON.parse(await readFile('config/layout-runtime.json','utf8')));
 const classifier = {async classifyTileImages(images:Buffer[]) {return images.map(() => ({tile:'8p' as const, confidence:.99,runnerUpTile:'2s' as const,runnerUpConfidence:.001}));}};
@@ -26,6 +27,48 @@ test('image and recognizer errors cannot become an empty candidate',async()=>{
  const broken={async classifyTileImages():Promise<never>{throw new Error('classifier unavailable')}};
  await assert.rejects(inspectSanmaOwnRiverCandidate(await frame('after'),layout,broken));
  await assert.rejects(inspectSanmaOwnRiverCandidate(await frame('after'),{...layout,publicTileRegions:{}},classifier));
+});
+test('hybrid details follow the accepted retry and never certify the candidate',async()=>{
+ const predictions=[
+  {tile:'8m' as const,confidence:.6,runnerUpTile:'2m' as const,runnerUpConfidence:.3,selectedBy:'normal' as const,
+   normalPrediction:{tile:'8m' as const,label:'8m',confidence:.6,runnerUpLabel:'2m',runnerUpConfidence:.3},
+   redPrediction:{label:'x',confidence:.99,runnerUpLabel:'5p-',runnerUpConfidence:.01}},
+  {tile:'2m' as const,confidence:.99,runnerUpTile:'8m' as const,runnerUpConfidence:.001,selectedBy:'normal' as const,
+   normalPrediction:{tile:'2m' as const,label:'2m',confidence:.99,runnerUpLabel:'8m',runnerUpConfidence:.001},
+   redPrediction:{label:'x',confidence:.98,runnerUpLabel:'5s-',runnerUpConfidence:.02}},
+ ];
+ let calls=0;
+ const hybrid={backend:'hybrid' as const,async classifyTileImages(images:Buffer[]){return images.map(()=>predictions[Math.min(calls++,1)]!);}};
+ const result=await inspectSanmaOwnRiverCandidate(await frame('after'),layout,hybrid);
+ assert.ok(calls>=2);
+ assert.equal(result.candidates.length,1);
+ assert.equal(result.candidates[0]!.tile,'2m');
+ assert.deepEqual(result.candidates[0]!.hybridPrediction,predictions[1]);
+ assert.equal(result.candidates[0]!.verified,false);
+ assert.equal(result.operationAuthorized,false);
+});
+test('malformed auxiliary values remain untrusted and JSON nonfinite scores become null',async()=>{
+ const hybrid={backend:'hybrid' as const,async classifyTileImages(images:Buffer[]){return images.map(()=>({
+  tile:'8p' as const, confidence:.99, runnerUpTile:'2s' as const, runnerUpConfidence:.001, selectedBy:'normal' as const,
+  normalPrediction:{tile:'8p' as const,label:'8p',confidence:.99,runnerUpLabel:'invalid',runnerUpConfidence:NaN},
+  redPrediction:{label:'invalid',confidence:Infinity,runnerUpLabel:'x',runnerUpConfidence:0},
+ }));}};
+ const result=await inspectSanmaOwnRiverCandidate(await frame('after'),layout,hybrid);
+ const serialized=JSON.parse(JSON.stringify(result));
+ assert.equal(serialized.candidates[0].hybridPrediction.normalPrediction.runnerUpConfidence,null);
+ assert.equal(serialized.candidates[0].hybridPrediction.redPrediction.confidence,null);
+ assert.equal(serialized.candidates[0].hybridPrediction.redPrediction.label,'invalid');
+ assert.equal(serialized.candidates[0].verified,false);
+ assert.equal(serialized.operationAuthorized,false);
+});
+test('ordinary public recognition does not expose diagnostic model details',async()=>{
+ const hybrid={backend:'hybrid' as const,async classifyTileImages(images:Buffer[]){return images.map(()=>({
+  tile:'8p' as const, confidence:.99, runnerUpTile:'2s' as const, runnerUpConfidence:.001, selectedBy:'normal' as const,
+  normalPrediction:{tile:'8p' as const,label:'8p',confidence:.99},redPrediction:{label:'x',confidence:.99},
+ }));}};
+ const result=await recognizeConfiguredPublicTilesWithVit(await frame('after'),layout,hybrid,{sanmaBlueFaces:true});
+ assert.ok(result.ownDiscards!.recognized.length);
+ assert.equal('ownRiverHybridPrediction' in result.ownDiscards!.recognized[0]!,false);
 });
 test('same tile appearing twice, moving, or disappearing never proves action',async()=>{
  const empty=await frame('before'), full=await frame('after');

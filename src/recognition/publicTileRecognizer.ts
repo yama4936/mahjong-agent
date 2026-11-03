@@ -6,6 +6,7 @@ import { classifyTile, loadTemplates } from "./templateMatcher.js";
 import { detectConfiguredPublicRegions, type RegionCandidate, type RegionDetectionOptions } from "./regionDetector.js";
 import type { VitTilePrediction } from "./vitRecognizer.js";
 import { isKnownSixSevenPinConfusion } from "./hybridTileRecognizer.js";
+import type { HybridTilePrediction } from "./hybridTileRecognizer.js";
 import { normalizeRedManNumeral, type RedManNumeralEvidence } from "./redManNumeral.js";
 
 export interface RecognizedPublicTile extends RegionCandidate {
@@ -14,6 +15,8 @@ export interface RecognizedPublicTile extends RegionCandidate {
   runnerUpConfidence: number;
   ambiguityMargin: number;
   safe: boolean;
+  /** Unverified model details for the selected own-river crop, including retries. */
+  ownRiverHybridPrediction?: HybridTilePrediction;
   /** The prediction names a tile absent from the explicitly selected sanma set. */
   sanmaUnavailableTile?: true;
   redNumeralEvidence?: RedManNumeralEvidence;
@@ -35,6 +38,8 @@ export interface PublicTileRecognitionRegion {
 }
 
 export interface PublicTileRecognitionOptions extends RegionDetectionOptions {
+  /** Include unverified model details only in the dedicated sanma diagnostic. */
+  includeOwnRiverHybridPrediction?: boolean;
   retryDiscardBoundaries?: boolean;
   retryRightRedMeld?: boolean;
   retryRightChiMeld?: boolean;
@@ -501,6 +506,9 @@ export async function recognizeConfiguredPublicTilesWithVit(
     const recognized: RecognizedPublicTile = {
       ...job.candidate,
       tile: prediction.tile,
+      ...(options.includeOwnRiverHybridPrediction === true && job.name === "ownDiscards" && classifier.backend === "hybrid"
+        && "normalPrediction" in prediction && "redPrediction" in prediction && "selectedBy" in prediction
+        ? { ownRiverHybridPrediction: prediction as HybridTilePrediction } : {}),
       confidence: prediction.confidence,
       runnerUpConfidence: prediction.runnerUpConfidence,
       ambiguityMargin,
