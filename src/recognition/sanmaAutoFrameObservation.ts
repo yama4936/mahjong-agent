@@ -102,7 +102,10 @@ export async function observeSanmaFrameAutomatically(input: {
   // them explicitly unverified and separate from publicTiles and decisions.
   let ownRiver: Awaited<ReturnType<typeof inspectSanmaOwnRiverCandidate>> | undefined;
   let ownRiverError: string | undefined;
-  if (board.reason === "unsupported_opposite_right_layout" || board.reason === "unsupported_right_opponent_layout") {
+  if (board.reason === "unsupported_opposite_right_layout" || board.reason === "unsupported_right_opponent_layout"
+      || board.reason === "expected_total_points_unknown") {
+    // A missing expected-score total does not change the physical bottom
+    // region. This is still incomplete, unverified image-position evidence.
     try { ownRiver = await inspectSanmaOwnRiverCandidate(frame, input.layout, input.publicClassifier); }
     catch (error) { ownRiverError = error instanceof Error ? error.message : String(error); }
   }

@@ -34,3 +34,31 @@ test('failed own-river classifier is not reported as an empty river',async()=>{
  assert.equal(result.ownRiverError,'unavailable');
  assert.equal(result.operationAuthorized,false);
 });
+
+test('score-total uncertainty does not suppress the physical own-river candidate',async()=>{
+ const region=await readFile('test/fixtures/sanma-own-river-121/own-river.png');
+ const image=await sharp({create:{width:1920,height:1080,channels:3,background:'black'}})
+  .composite([{input:region,left:750,top:535}]).png().toBuffer();
+ const imageDigest=createHash('sha256').update(image).digest('hex');
+ const uncertainBoard={async observe(){return {frame_sha256:imageDigest,
+  board:{verified:false,reason:'expected_total_points_unknown',candidate:{seat:'west'}},
+  north:{status:'unknown',verified:false,complete:false}};}};
+ const nine={async classifyTileImages(images:Buffer[]){return images.map(()=>({tile:'9m' as const,confidence:.924,runnerUpTile:'1m' as const,runnerUpConfidence:.02}));}};
+ const result=await observeSanmaFrameAutomatically({frame:image,layout,buttonTemplates,publicClassifier:nine,templates:'templates/bootstrap',boardObserver:uncertainBoard});
+ assert.equal(result.board.reason,'expected_total_points_unknown');
+ assert.ok('ownRiver' in result);
+ assert.equal(result.ownRiver?.frameSha256,imageDigest);
+ assert.deepEqual(result.ownRiver?.candidates.map(c=>c.tile),['9m']);
+ assert.deepEqual(result.ownRiver?.candidates.map(c=>[c.x,c.y]),[[769,545]]);
+ assert.equal(result.ownRiver?.status,'unknown');
+ assert.equal(result.ownRiver?.verified,false);
+ assert.equal(result.ownRiver?.complete,false);
+ assert.equal(result.ownRiver?.operationAuthorized,false);
+ assert.equal(result.operationAuthorized,false);
+ const broken={async classifyTileImages():Promise<never>{throw new Error('classifier unavailable')}};
+ const failed=await observeSanmaFrameAutomatically({frame:image,layout,buttonTemplates,publicClassifier:broken,templates:'templates/bootstrap',boardObserver:uncertainBoard});
+ assert.equal('ownRiver' in failed,false);
+ assert.ok('ownRiverError' in failed);
+ assert.equal(failed.ownRiverError,'classifier unavailable');
+ assert.equal(failed.operationAuthorized,false);
+});
