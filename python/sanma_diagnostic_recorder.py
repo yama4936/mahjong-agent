@@ -29,6 +29,7 @@ class Session:
    os.close(directory_fd)
   self.q=queue.Queue(maxsize=2); self.mu=threading.Lock(); self.closed=False; self.failed=False
   self.accepted=0; self.dropped=0; self.total=0; self.results=[]; self.error=None; self.serial=0
+  self.drop_reasons={key:0 for key in ('failed','transition_closed','invalid_frame','frame_size','count_limit','byte_limit','invalid_timing','time_limit','queue_full')}
   self.worker=threading.Thread(target=self._run,daemon=True); self.worker.start()
  def _atomic(self,name,value):
   p=self.path/(name+'.partial')
@@ -42,14 +43,20 @@ class Session:
  def _offer(self,t,data,start,end):
   with self.mu:
    if self.closed: return False
-   if (self.failed or t.closed or not isinstance(data,bytes) or not data or len(data)>self.MAX_FRAME or
-       self.accepted>=self.MAX_COUNT or self.total+len(data)>self.MAX_TOTAL or
-       not isinstance(start,int) or not isinstance(end,int) or start<t.start or end<start or
-       end>t.start+self.MAX_SECONDS*1000000000):
-    self.dropped+=1; return False
+   reason=None
+   if self.failed: reason='failed'
+   elif t.closed: reason='transition_closed'
+   elif not isinstance(data,bytes) or not data: reason='invalid_frame'
+   elif len(data)>self.MAX_FRAME: reason='frame_size'
+   elif self.accepted>=self.MAX_COUNT: reason='count_limit'
+   elif self.total+len(data)>self.MAX_TOTAL: reason='byte_limit'
+   elif not isinstance(start,int) or not isinstance(end,int) or start<t.start or end<start: reason='invalid_timing'
+   elif end>t.start+self.MAX_SECONDS*1000000000: reason='time_limit'
+   if reason:
+    self.dropped+=1; self.drop_reasons[reason]+=1; return False
    item=(self.accepted,t.serial,t.action,data,start,end)
    try: self.q.put_nowait(item)
-   except queue.Full: self.dropped+=1; return False
+   except queue.Full: self.dropped+=1; self.drop_reasons['queue_full']+=1; return False
    self.accepted+=1; self.total+=len(data); return True
  def _run(self):
   try:
@@ -74,7 +81,7 @@ class Session:
   finally:
    try:
     written={x['index'] for x in self.results}
-    self._atomic('final.json',dict(version=1,confirmed=False,timingMeaning='screenshot call interval, not render time',accepted=self.accepted,dropped=self.dropped,written=len(self.results),missingAccepted=[i for i in range(self.accepted) if i not in written],error=self.error,frames=self.results))
+    self._atomic('final.json',dict(version=1,confirmed=False,timingMeaning='screenshot call interval, not render time',accepted=self.accepted,dropped=self.dropped,dropReasons=self.drop_reasons,written=len(self.results),missingAccepted=[i for i in range(self.accepted) if i not in written],error=self.error,frames=self.results))
    except Exception: self.failed=True
  def close(self):
   with self.mu: self.closed=True

@@ -95,6 +95,31 @@ class HookTests(unittest.TestCase):
   op.sanma_transition_recorder.begin.assert_not_called();self.assertIs(op._observe_sanma_friend_transition.call_args.args[0],page)
 
 class BoundaryTests(unittest.TestCase):
+ def test_drop_reasons_distinguish_queue_quota_and_expiry_without_blocking(self):
+  with tempfile.TemporaryDirectory() as d:
+   s=make(d);t=s.begin('discard',True);ready=threading.Event();release=threading.Event();original=Path.open
+   def delayed(path,*args,**kwargs):
+    if str(path).endswith('.png.partial'):
+     ready.set();release.wait(3)
+    return original(path,*args,**kwargs)
+   try:
+    with patch.object(Path,'open',delayed):
+     n=time.monotonic_ns();self.assertTrue(s._offer(t,b'data',n,n));self.assertTrue(ready.wait(1))
+     start=time.monotonic()
+     for _ in range(2):
+      n=time.monotonic_ns();self.assertTrue(s._offer(t,b'data',n,n))
+     n=time.monotonic_ns();self.assertFalse(s._offer(t,b'data',n,n))
+     with patch.object(s,'MAX_TOTAL',s.total):
+      n=time.monotonic_ns();self.assertFalse(s._offer(t,b'data',n,n))
+     t.start-=31_000_000_000
+     n=time.monotonic_ns();self.assertFalse(s._offer(t,b'data',n,n))
+     s.close();self.assertLess(time.monotonic()-start,.1)
+     release.set();s.worker.join(3)
+   finally: release.set();s.close();s.worker.join(3)
+   f=json.loads((s.path/'final.json').read_text())
+   self.assertEqual((f['accepted'],f['dropped'],f['written']),(3,3,3))
+   self.assertEqual({k:v for k,v in f['dropReasons'].items() if v},{'queue_full':1,'byte_limit':1,'time_limit':1})
+   self.assertEqual(f['missingAccepted'],[])
  def test_untrusted_root_and_lock(self):
   with tempfile.TemporaryDirectory() as d:
    root=Path(d)/'root';root.mkdir(mode=0o700);alias=Path(d)/'alias';alias.symlink_to(root,target_is_directory=True)
