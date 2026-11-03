@@ -7,11 +7,30 @@ from PIL import Image
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 from sanma_friend_kita_rearm import rearm_friend_kita_candidate
 from sanma_friend_freshness import friend_action_target_key
 
 REPLAY=Path('/home/yama1/projects/jantama-test-tmp/kita-observe-replay.jsonl')
+DATA88=Path('/home/yama1/server/data/dev-work/jantama/data88-run3/frames')
+
+@unittest.skipUnless(DATA88.exists(), 'independent live capture unavailable')
+class Data88GuardReplayTests(unittest.TestCase):
+    def test_real_guard_accepts_recorded_north_change_but_rejects_same_and_reversed(self):
+        paths=sorted(DATA88.glob('*.sanma-self-turn.receipt.json'))
+        self.assertGreaterEqual(len(paths), 2)
+        before, after=(json.loads(p.read_text()) for p in paths[-2:])
+        def operator():
+            op=Mock()
+            op.args=SimpleNamespace(experimental_sanma_friend=True,rules='sanma',mode='force-auto',action_deadline_ms=300000,ranked_loop=False)
+            op.verified_friend_300_active=True
+            op._sanma_friend_kita_rearmed=False
+            op._sanma_friend_attempted_targets={friend_action_target_key(Path(before['screenshot']).read_bytes(),'kita')}
+            return op
+        self.assertTrue(rearm_friend_kita_candidate(operator(), before, after))
+        self.assertFalse(rearm_friend_kita_candidate(operator(), before, before))
+        self.assertFalse(rearm_friend_kita_candidate(operator(), after, before))
+
 @unittest.skipUnless(REPLAY.exists(), 'recorded friend replay missing')
 class KitaRearmTests(unittest.TestCase):
     def setUp(self):
@@ -93,6 +112,39 @@ class SyntheticFreshnessReceiptTests(unittest.TestCase):
     def test_fabricated_receipts_are_consistent_without_claiming_live_confirmation(self):
         self.assertTrue(rearm_friend_kita_candidate(self.op,*self.receipts))
         self.assertFalse(self.op.log.call_args.kwargs['confirmed'])
+
+    def test_non_friend_deadline_rejected_before_rearm(self):
+        self.op.args.action_deadline_ms = 299999
+        self.assertFalse(rearm_friend_kita_candidate(self.op, *self.receipts))
+
+    def test_unchanged_receipt_cannot_rearm(self):
+        before = self.receipts[0]
+        self.assertFalse(rearm_friend_kita_candidate(self.op, before, copy.deepcopy(before)))
+
+    def test_reversed_candidate_cannot_rearm(self):
+        self.assertFalse(rearm_friend_kita_candidate(self.op, self.receipts[1], self.receipts[0]))
+
+    def test_glyph_status_rechecks_pixels_and_does_not_trust_receipt(self):
+        before, after = copy.deepcopy(self.receipts)
+        f = after['freshness']
+        with Image.open(f['screenshot']) as original:
+            image = original.convert('RGB')
+        image.putpixel((800, 600), (255, 255, 255))
+        path = Path(self.tmp.name) / 'fresh-changed.png'
+        image.save(path)
+        f['screenshot'] = str(path)
+        f['digest'] = hashlib.sha256(path.read_bytes()).hexdigest()
+        from sanma_friend_freshness import friend_frame_changes
+        changes = friend_frame_changes(Path(after['screenshot']).read_bytes(), path.read_bytes())
+        f['status'] = 'stable_kita_glyph_candidate'
+        f['clockChanged'] = changes['clock']
+        f['regionsChanged'] = {k: v for k, v in changes.items() if k != 'clock'}
+        with patch('auto_operator.experimental_kita_glyph_stability', return_value=False) as guard:
+            self.assertFalse(rearm_friend_kita_candidate(self.op, before, after))
+            guard.assert_called_once()
+        with patch('auto_operator.experimental_kita_glyph_stability', return_value=True) as guard:
+            self.assertTrue(rearm_friend_kita_candidate(self.op, before, after))
+            guard.assert_called_once()
 
     def test_fabricated_receipts_reject_missing_swapped_and_contradictory_freshness(self):
         for case in ('missing','digest','swapped','pixels','status','regions','clock'):

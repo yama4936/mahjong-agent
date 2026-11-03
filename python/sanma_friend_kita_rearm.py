@@ -23,7 +23,7 @@ def rearm_friend_kita_candidate(operator, before, after):
         for receipt in (before,after):
             if receipt.get('scope') != 'sanma_self_turn_observation' or receipt.get('operationAuthorized') is not False: return False
             fresh=receipt.get('freshness') or {}
-            if (fresh.get('status') not in ('identical_pixels_candidate','stable_except_clock_candidate')
+            if (fresh.get('status') not in ('identical_pixels_candidate','stable_except_clock_candidate','stable_kita_glyph_candidate')
                     or fresh.get('operationAuthorized') is not False
                     or type(fresh.get('elapsedMs')) not in (int,float) or not 0 <= fresh['elapsedMs'] <= 20000): return False
             source=receipt.get('sourceObservation') or {};report=source.get('report') or {};digest=receipt.get('digest')
@@ -34,8 +34,12 @@ def rearm_friend_kita_candidate(operator, before, after):
             latest=Path(fresh['screenshot']).read_bytes()
             if hashlib.sha256(latest).hexdigest() != fresh.get('digest'): return False
             changes=friend_frame_changes(frame, latest)
-            if changes['fullFrame']: return False
-            expected='stable_except_clock_candidate' if changes['clock'] else 'identical_pixels_candidate'
+            if changes['fullFrame']:
+                from auto_operator import experimental_kita_glyph_stability
+                if not experimental_kita_glyph_stability(frame, latest, report): return False
+                expected='stable_kita_glyph_candidate'
+            else:
+                expected='stable_except_clock_candidate' if changes['clock'] else 'identical_pixels_candidate'
             if fresh['status'] != expected: return False
             if fresh.get('clockChanged') is not changes['clock']: return False
             if fresh.get('regionsChanged') != {k:v for k,v in changes.items() if k != 'clock'}: return False
