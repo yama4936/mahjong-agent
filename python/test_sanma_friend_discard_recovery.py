@@ -230,6 +230,35 @@ class RecoveryGuardTest(unittest.TestCase):
             altered['screenshot']=str(path)
             self.assertFalse(consistent(receipts[0],altered,12))
 
+    @unittest.skipUnless(Path('/home/yama1/server/data/dev-work/jantama/evidence169/artifacts/frames').exists(),
+                         'saved 6p lighting match unavailable')
+    def test_saved_six_pin_lighting_and_wrong_tile(self):
+        from sanma_concealed_conservation import consistent
+        root=Path('/home/yama1/server/data/dev-work/jantama/evidence169/artifacts/frames')
+        prefixes=('2026-11-04T02-38-20.599','2026-11-04T02-38-43.602','2026-11-04T02-38-55.663')
+        receipts=[json.loads(next(root.glob(p+'*.sanma-self-turn.receipt.json')).read_text()) for p in prefixes]
+        self.assertTrue(all(consistent(receipts[0],r,0) for r in receipts[1:]))
+        journal=[dict(tile='1m',clickIndex=0,clickPoint={'x':269,'y':996.5},frameSha256=receipts[0]['digest'],status='attempted',timestamp='2026-11-04T02:38:25.551397+00:00'),
+                 dict(tile='1m',clickIndex=0,clickPoint={'x':269,'y':996.5},frameSha256=receipts[0]['digest'],status='selection_confirmed',result='discard_not_verified',timestamp='2026-11-04T02:38:26.808426+00:00')]
+        watch=Mock(); watch.alive.return_value=True
+        self.assertTrue(candidate(receipts[0],receipts[1:],journal,continuity=watch,
+                                  active=lambda:True,started=time.monotonic(),deadline_ms=300000))
+        with tempfile.TemporaryDirectory() as directory:
+            post=receipts[1]; g=post['sourceObservation']['report']['handGeometry']['value']
+            slots=[*g['handSlots'],g['drawSlot']]
+            tiles=post['sourceObservation']['report']['hand']['value']['tiles']
+            destination=slots[tiles.index('6p')]
+            box=lambda s:(s['x'],s['y'],s['x']+s['width'],s['y']+s['height'])
+            for i,tile in enumerate(tiles):
+                if tile=='6p': continue
+                with self.subTest(substituted=tile):
+                    with Image.open(post['screenshot']) as source:
+                        image=source.convert('RGB'); origin=slots[i]
+                        image.paste(image.crop(box(origin)).resize((destination['width'],destination['height'])),(destination['x'],destination['y']))
+                        path=Path(directory)/'wrong.png'; image.save(path)
+                    altered=dict(post,screenshot=str(path))
+                    self.assertFalse(consistent(receipts[0],altered,0))
+
     def test_revocation_reconnect_and_original_deadline_block_click(self):
         op=Mock()
         op.verified_friend_300_active=True

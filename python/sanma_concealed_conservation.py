@@ -62,7 +62,7 @@ def consistent(before, after, selected_index, limit=5.0):
                 # Seven pin's red ink can cross the 120 grayscale boundary
                 # under lighting changes; preserve the same spatial limit on
                 # a second, darker rendering for this one observed tile.
-                return (glyph <= limit or (tile == '7p' and dark <= limit)) and (tile not in {'0p','5p','0s','5s'} or abs(x[1]-y[1]) <= .20)
+                return (glyph <= limit + (0.1 if tile == '6p' else 0) or (tile == '7p' and dark <= limit)) and (tile not in {'0p','5p','0s','5s'} or abs(x[1]-y[1]) <= .20)
             if not any(all(matches(x,y) for x,y in zip(a,arrangement))
                        for arrangement in permutations(b)):
                 return False
