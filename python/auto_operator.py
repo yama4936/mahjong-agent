@@ -9781,6 +9781,10 @@ class PythonAutoOperator:
                         transition = self.observe_sanma_friend_transition(page, receipt, action)
                         self.log("sanma_friend_transition", **transition)
                         if transition.get("status") not in {"visual_change_unconfirmed", "terminal", "round_end_candidate"}:
+                            if (action == "discard" and discard_recovery is not None
+                                    and transition.get("reason") == "transition_not_observed"):
+                                from sanma_transition_diagnostics import capture_unresolved_discard
+                                capture_unresolved_discard(self, page, discard_recovery)
                             self.log("sanma_friend_stopped", reason="transition_requires_review", transition=transition)
                             return
                         if transition.get("status") == "round_end_candidate":

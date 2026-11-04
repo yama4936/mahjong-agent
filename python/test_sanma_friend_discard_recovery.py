@@ -396,6 +396,24 @@ class RecoveryTest(unittest.TestCase):
         self.assertEqual(discard.call_count,2)
         self.assertTrue(any(c.args[0]=='sanma_friend_discard_recovery_candidate' for c in case.op.log.call_args_list))
 
+    def test_unresolved_transition_records_twice_and_still_stops(self):
+        from test_experimental_sanma_friend_loop import ExperimentalSanmaFriendLoopTest
+        case=ExperimentalSanmaFriendLoopTest('runTest');case.setUp();self.addCleanup(case.doCleanups)
+        case.op.args.max_iterations=3
+        for receipt in self.receipts:
+            receipt['candidates']={'candidates':[]};receipt['freshness']={'status':'identical_pixels_candidate'}
+        case.op.inspect_sanma_self_turn.side_effect=self.receipts
+        case.op.observe_sanma_friend_transition.return_value={'status':'unresolved','reason':'transition_not_observed','confirmed':False}
+        with patch('sanma_friend_discard_recovery.MatchContinuity',return_value=self.watch), \
+             patch('sanma_friend_discard_experiment.execute_friend_draw_candidate',return_value=self.journal[1]) as discard:
+            case.run_room()
+        self.assertEqual(discard.call_count,1)
+        self.assertEqual(case.op.inspect_sanma_self_turn.call_count,3)
+        events=case.op.log.call_args_list
+        self.assertEqual(sum(c.args[0]=='sanma_friend_transition_diagnostic_observed' for c in events),2)
+        self.assertTrue(any(c.kwargs.get('reason')=='transition_requires_review' for c in events))
+        self.assertFalse(any(c.args[0]=='sanma_friend_discard_recovery_candidate' for c in events))
+
     def test_session_change_logs_monitor_reason_and_stops_before_new_input(self):
         from test_experimental_sanma_friend_loop import ExperimentalSanmaFriendLoopTest
         case=ExperimentalSanmaFriendLoopTest('runTest');case.setUp();self.addCleanup(case.doCleanups)
