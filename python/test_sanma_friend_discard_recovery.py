@@ -31,6 +31,20 @@ class ContinuityDiagnosticsTest(unittest.TestCase):
                 self.assertIsInstance(result['elapsedMs'],int);self.assertNotIn('private',str(result))
                 self.callbacks['Page.frameDetached']({})
                 self.assertEqual(self.watch.diagnostic()['reason'],name)
+    def test_websocket_close_is_identified_without_secret_and_still_stops(self):
+        request='private-request-id'
+        self.callbacks['Network.webSocketClosed']({'requestId':request,'timestamp':123.0,'payload':'secret'})
+        self.assertFalse(self.watch.alive())
+        result=self.watch.diagnostic()
+        self.assertEqual(result['network'],{'requestIdSha256':hashlib.sha256(request.encode()).hexdigest()})
+        self.assertNotIn(request,str(result));self.assertNotIn('secret',str(result))
+        self.assertNotIn('hostname',result['network'])
+    def test_websocket_created_exposes_only_hostname_and_still_stops(self):
+        self.callbacks['Network.webSocketCreated']({'requestId':'rid','url':'wss://user:pass@example.test/path?token=secret'})
+        self.assertFalse(self.watch.alive())
+        result=self.watch.diagnostic();self.assertEqual(result['network']['hostname'],'example.test')
+        self.assertNotIn('secret',str(result));self.assertNotIn('pass',str(result));self.assertNotIn('/path',str(result))
+
     def test_page_change_close_and_exception_remain_fail_closed(self):
         for reason in ('page_url_changed','page_closed','observation_exception:RuntimeError'):
             with self.subTest(reason=reason):
@@ -491,7 +505,9 @@ class RecoveryTest(unittest.TestCase):
                 case.op._sanma_friend_resume_guard=(watch,time.monotonic()-301,limit)
         case.page.screenshot.side_effect=screenshot
         case.page.mouse.click.side_effect=click
-        def inspect(_):
+        def inspect(_, *, classified_frame=None, classified_started=None):
+            self.assertIsInstance(classified_frame, bytes)
+            self.assertIsInstance(classified_started, float)
             index=inspect.index; inspect.index+=1
             state['index']=index; state['selected']=False
             source=self.receipts[index].copy()
@@ -506,7 +522,7 @@ class RecoveryTest(unittest.TestCase):
         case.op.observe_sanma_friend_transition.return_value={'status':'visual_change_unconfirmed','confirmed':False}
         with patch('auto_operator.classify_screen',return_value=('match',1.0)):
             case.op.run_experimental_sanma_friend(case.page)
-        self.assertEqual(len(state['clicks']),3 if expire else 4)
+        self.assertEqual(len(state['clicks']),3 if expire else 4, repr(case.op.log.call_args_list[-5:]))
         self.assertEqual(len(case.op._sanma_friend_attempted_targets),2)
         self.assertGreaterEqual(case.page.context.new_cdp_session.return_value.detach.call_count,2)
         events=[c for c in case.op.log.call_args_list if c.args[0]=='sanma_friend_discard_experiment']

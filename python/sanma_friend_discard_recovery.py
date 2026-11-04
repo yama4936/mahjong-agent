@@ -7,6 +7,7 @@ import sys
 import time
 import uuid
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from sanma_discard_evidence_chain import evaluate
 from sanma_concealed_conservation import consistent
@@ -24,12 +25,13 @@ class MatchContinuity:
         self.started_at = time.monotonic()
         self.invalid_reason = None
         self.invalid_at = None
+        self.invalid_network = None
         self.url = page.url
         self.session = None
         try:
             self.session = page.context.new_cdp_session(page)
             for name in self.EVENTS:
-                self.session.on(name, lambda _event, event_name=name: self.invalidate(event_name))
+                self.session.on(name, lambda event, event_name=name: self.invalidate(event_name, event))
             self.session.send('Network.enable')
             self.session.send('Page.enable')
             if not self.alive():
@@ -38,16 +40,33 @@ class MatchContinuity:
             self.close()
             raise
 
-    def invalidate(self, reason='unknown'):
+    def invalidate(self, reason='unknown', event=None):
         if not self.invalid:
             self.invalid_reason = reason
             self.invalid_at = time.monotonic()
+            if reason.startswith('Network.webSocket') and isinstance(event, dict):
+                metadata = {}
+                request = event.get('requestId')
+                if isinstance(request, str) and request:
+                    metadata['requestIdSha256'] = hashlib.sha256(request.encode()).hexdigest()
+                url = event.get('url')
+                if isinstance(url, str):
+                    try:
+                        parsed = urlsplit(url)
+                        if parsed.scheme in ('ws', 'wss') and parsed.hostname:
+                            metadata['hostname'] = parsed.hostname
+                    except ValueError:
+                        pass
+                self.invalid_network = metadata
         self.invalid = True
 
     def diagnostic(self):
-        return {'monitorId': self.monitor_id, 'invalid': self.invalid,
-                'reason': self.invalid_reason,
-                'elapsedMs': round((self.invalid_at-self.started_at)*1000) if self.invalid_at is not None else None}
+        result = {'monitorId': self.monitor_id, 'invalid': self.invalid,
+                  'reason': self.invalid_reason,
+                  'elapsedMs': round((self.invalid_at-self.started_at)*1000) if self.invalid_at is not None else None}
+        if self.invalid_network is not None:
+            result['network'] = self.invalid_network.copy()
+        return result
 
     def alive(self):
         try:
