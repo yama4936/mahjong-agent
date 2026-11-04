@@ -47,6 +47,35 @@ def _right_north_additions(before, posts):
         return 0
 
 
+def _left_second_north_additions(before, posts):
+    """One newly visible left north after an independently observed first."""
+    import cv2
+    import hashlib
+    import numpy as np
+    from PIL import Image
+    from sanma_left_kita_experiment import left_north_candidate
+    root=Path(__file__).resolve().parents[1]/'test/fixtures/sanma-left-kita'
+    template=cv2.imread(str(Path(__file__).parent/'fixtures/sanma-left-second-north-167.png'),cv2.IMREAD_GRAYSCALE)
+    try:
+        if template is None or template.shape != (48,85) or template.std() < 5:return 0
+        frames=[before,*posts]; observed=[];light=[];images=[]
+        for receipt in frames:
+            path=Path(receipt['screenshot']);data=path.read_bytes()
+            if hashlib.sha256(data).hexdigest()!=receipt['digest']:return 0
+            result=left_north_candidate(path,root/'left-north-reference.png',glare_template_path=root/'left-north-glare-reference.png')
+            observed.append(result.get('candidate'))
+            with Image.open(path) as src:
+                img=src.convert('RGB');images.append(cv2.cvtColor(np.asarray(img),cv2.COLOR_RGB2GRAY))
+                light.append(sum(min(p)>180 for p in img.crop((319,663,404,711)).getdata()))
+        if any(not isinstance(x,dict) for x in observed):return 0
+        if light[0]>100 or any(n<1500 for n in light[1:]):return 0
+        for image in images[1:]:
+            roi=image[661:713,317:406]
+            if float(cv2.matchTemplate(roi,template,cv2.TM_CCOEFF_NORMED).max())<.97:return 0
+        return 1
+    except (KeyError,TypeError,ValueError,OSError,IndexError,ImportError):return 0
+
+
 def _opposite_north_additions(before, posts):
     """Newly visible opposite norths in two later frame candidates."""
     from PIL import Image
@@ -195,7 +224,7 @@ def evaluate(before_path, after_paths, journal, *, recheck_round=False, unknown_
             if boards[0].get(key) is None or any(board.get(key) != boards[0][key] for board in boards[1:]):
                 return reject('board candidate changed or missing')
         remaining = [x.get('remainingTiles') for x in boards]
-        extra = (_right_north_additions(before, posts) + _opposite_north_additions(before, posts)) if all(type(x) is int for x in remaining) and remaining[0] - remaining[1] > 3 else 0
+        extra = (_right_north_additions(before, posts) + _opposite_north_additions(before, posts) + _left_second_north_additions(before, posts)) if all(type(x) is int for x in remaining) and remaining[0] - remaining[1] > 3 else 0
         if (any(type(x) is not int for x in remaining) or not all(0 <= x <= 70 for x in remaining)
                 or not all(0 < remaining[0] - x <= 3 + extra for x in remaining[1:])
                 or len(set(remaining[1:])) != 1):

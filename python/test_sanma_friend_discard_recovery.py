@@ -42,6 +42,41 @@ class ContinuityDiagnosticsTest(unittest.TestCase):
                 self.assertNotIn('private',str(self.watch.diagnostic()))
 
 class RecoveryGuardTest(unittest.TestCase):
+    @unittest.skipUnless(Path('/home/yama1/server/data/dev-work/jantama/evidence167/artifacts2/frames').exists(),
+                         'saved second left north unavailable')
+    def test_saved_second_left_north_supports_recovery(self):
+        from sanma_discard_evidence_chain import _left_second_north_additions
+        root=Path('/home/yama1/server/data/dev-work/jantama/evidence167/artifacts2/frames')
+        prefixes=('2026-11-04T01-42-36','2026-11-04T01-43-09','2026-11-04T01-43-20')
+        with tempfile.TemporaryDirectory() as directory:
+            receipts=[]
+            for i,prefix in enumerate(prefixes):
+                receipt=json.loads(next(root.glob(prefix+'*.sanma-self-turn.receipt.json')).read_text())
+                src=Path(receipt['screenshot']);folder=Path(directory)/str(i);folder.mkdir()
+                target=folder/src.name;shutil.copyfile(src,target);receipt['screenshot']=str(target)
+                target.with_suffix('.receipt.json').write_text(json.dumps(receipt));receipts.append(receipt)
+            self.assertEqual(_left_second_north_additions(receipts[0],receipts[1:]),1)
+            self.assertEqual(_left_second_north_additions(receipts[1],receipts[1:]),0)
+            self.assertEqual(_left_second_north_additions(receipts[0],[receipts[1],receipts[0]]),0)
+            self.assertEqual(_left_second_north_additions(receipts[0],[receipts[1],dict(receipts[2],digest='0'*64)]),0)
+            event={'tile':'1m','clickIndex':13,'clickPoint':{'x':1532,'y':996.5},'frameSha256':receipts[0]['digest']}
+            journal=[dict(event,status='attempted',timestamp='2026-11-04T01:42:41.246709+00:00'),
+                     dict(event,status='selection_confirmed',result='discard_not_verified',
+                          timestamp='2026-11-04T01:42:42.570686+00:00')]
+            watch=Mock();watch.alive.return_value=True
+            check=lambda:candidate(receipts[0],receipts[1:],journal,continuity=watch,
+                                   active=lambda:True,started=time.monotonic(),deadline_ms=300000)
+            self.assertTrue(check())
+            for post in receipts[1:]:
+                post['sourceObservation']['board']['candidate']['remainingTiles']=45
+                Path(post['screenshot']).with_suffix('.receipt.json').write_text(json.dumps(post))
+            self.assertFalse(check())
+            broken=json.loads(json.dumps(receipts[2]));path=Path(directory)/'blank-north.png'
+            with Image.open(broken['screenshot']) as source:
+                image=source.convert('RGB');image.paste((240,240,240),(317,661,406,713));image.save(path)
+            broken['screenshot']=str(path);broken['digest']=hashlib.sha256(path.read_bytes()).hexdigest()
+            self.assertEqual(_left_second_north_additions(receipts[0],[receipts[1],broken]),0)
+
     @unittest.skipUnless(Path('/home/yama1/server/data/dev-work/jantama/evidence160/artifacts/frames').exists(),
                          'saved ordinary 5p match unavailable')
     def test_two_ordinary_five_pin_saved_match_reaches_candidate(self):
