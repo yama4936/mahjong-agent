@@ -9448,6 +9448,8 @@ class PythonAutoOperator:
                                 return
                             draw = receipt.get('drawCandidate')
                             if not isinstance(draw, dict) or draw.get('status') != 'candidate':
+                                from sanma_intermediate_diagnostic import record as record_intermediate
+                                record_intermediate(self, discard_recovery, receipt, observation_started)
                                 # A pon prompt can interrupt the later-turn
                                 # observation after our uncertain discard. A
                                 # guarded skip is distinct from retrying that
