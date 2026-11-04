@@ -28,18 +28,23 @@ class Session:
   finally:
    os.close(directory_fd)
   self.q=queue.Queue(maxsize=2); self.mu=threading.Lock(); self.closed=False; self.failed=False
-  self.accepted=0; self.dropped=0; self.total=0; self.results=[]; self.error=None; self.serial=0
+  self.accepted=0; self.dropped=0; self.total=0; self.results=[]; self.error=None; self.serial=0; self.transitions=[]; self.status_error=None
   self.drop_reasons={key:0 for key in ('failed','transition_closed','invalid_frame','frame_size','count_limit','byte_limit','invalid_timing','time_limit','queue_full')}
   self.worker=threading.Thread(target=self._run,daemon=True); self.worker.start()
  def _atomic(self,name,value):
   p=self.path/(name+'.partial')
   with p.open('xb') as f: f.write(json.dumps(value,separators=(',',':')).encode())
   os.replace(p,self.path/name)
- def begin(self,action,verified_friend):
+ def begin(self,action,verified_friend,selection_observed_ns=None):
   if action not in ('kita','discard','pass_pon','riichi','ron','tsumo') or verified_friend is not True: raise ValueError('transition')
+  if selection_observed_ns is not None and (action!='discard' or type(selection_observed_ns) is not int or selection_observed_ns<=0): raise ValueError('selection timing')
   with self.mu:
    if self.closed or self.failed: raise RuntimeError('closed')
-   self.serial+=1; return Transition(self,self.serial,action,time.monotonic_ns())
+   start=time.monotonic_ns()
+   if selection_observed_ns is not None and selection_observed_ns>start: raise ValueError('selection timing')
+   self.serial+=1
+   self.transitions.append(dict(transition=self.serial,action=action,selectionObservedNs=selection_observed_ns,startedNs=start))
+   return Transition(self,self.serial,action,start)
  def _offer(self,t,data,start,end):
   with self.mu:
    if self.closed: return False
@@ -71,7 +76,12 @@ class Session:
     i,serial,action,data,start,end=item; name=f'{i:02}.png'; temp=self.path/(name+'.partial')
     with temp.open('xb') as f: f.write(data)
     os.replace(temp,self.path/name)
-    self.results.append(dict(index=i,transition=serial,action=action,image=name,bytes=len(data),sha256=hashlib.sha256(data).hexdigest(),captureStartNs=start,captureEndNs=end,confirmed=False))
+    persisted=time.monotonic_ns()
+    with self.mu:
+     self.results.append(dict(index=i,transition=serial,action=action,image=name,bytes=len(data),sha256=hashlib.sha256(data).hexdigest(),captureStartNs=start,captureEndNs=end,persistedNs=persisted,confirmed=False))
+     status=dict(version=1,confirmed=False,operationAuthorized=False,accepted=self.accepted,dropped=self.dropped,transitions=list(self.transitions),frames=list(self.results),persistenceMeaning='atomic rename completed; no fsync guarantee')
+    try: self._atomic('status.json',status)
+    except Exception as e: self.status_error=f'{type(e).__name__}: {e}'
   except Exception as e:
    with self.mu: self.failed=True; self.error=f'{type(e).__name__}: {e}'
    while True:
@@ -81,7 +91,7 @@ class Session:
   finally:
    try:
     written={x['index'] for x in self.results}
-    self._atomic('final.json',dict(version=1,confirmed=False,timingMeaning='screenshot call interval, not render time',accepted=self.accepted,dropped=self.dropped,dropReasons=self.drop_reasons,written=len(self.results),missingAccepted=[i for i in range(self.accepted) if i not in written],error=self.error,frames=self.results))
+    self._atomic('final.json',dict(version=1,confirmed=False,timingMeaning='screenshot call interval, not render time',accepted=self.accepted,dropped=self.dropped,dropReasons=self.drop_reasons,written=len(self.results),missingAccepted=[i for i in range(self.accepted) if i not in written],error=self.error,statusError=self.status_error,transitions=self.transitions,frames=self.results,persistenceMeaning='atomic rename completed; no fsync guarantee'))
    except Exception: self.failed=True
  def close(self):
   with self.mu: self.closed=True

@@ -6,6 +6,44 @@ from sanma_diagnostic_recorder import Session,PageProxy
 def make(d,**kw):
  x=dict(opt_in=True,verified_friend=True,ranked=False,deadline_ms=300000,clock='300+0',commit='a'*40);x.update(kw);return Session(d,'run',**x)
 class Tests(unittest.TestCase):
+ def test_running_status_selection_and_persistence_timing(self):
+  with tempfile.TemporaryDirectory() as d:
+   s=make(d); selected=time.monotonic_ns(); t=s.begin('discard',True,selection_observed_ns=selected)
+   n=time.monotonic_ns();self.assertTrue(s._offer(t,b'data',n,n))
+   for _ in range(100):
+    if (s.path/'status.json').exists():break
+    time.sleep(.01)
+   f=json.loads((s.path/'status.json').read_text());self.assertFalse(f['operationAuthorized'])
+   self.assertEqual(f['transitions'][0]['selectionObservedNs'],selected)
+   frame=f['frames'][0];self.assertLessEqual(selected,frame['captureStartNs']);self.assertLessEqual(frame['captureEndNs'],frame['persistedNs'])
+   self.assertTrue((s.path/frame['image']).exists());self.assertFalse((s.path/'final.json').exists())
+   s.close();s.worker.join(3)
+ def test_invalid_selection_and_status_failure_are_diagnostic_only(self):
+  with tempfile.TemporaryDirectory() as d:
+   s=make(d)
+   for action,ts in [('kita',1),('discard',True),('discard',time.monotonic_ns()+10**12)]:
+    with self.assertRaises(ValueError):s.begin(action,True,selection_observed_ns=ts)
+   t=s.begin('discard',True,selection_observed_ns=time.monotonic_ns());original=s._atomic
+   def fail_status(name,value):
+    if name=='status.json':raise OSError('status disk failure')
+    return original(name,value)
+   with patch.object(s,'_atomic',fail_status):
+    n=time.monotonic_ns();self.assertTrue(s._offer(t,b'data',n,n));s.close();s.worker.join(3)
+   f=json.loads((s.path/'final.json').read_text());self.assertEqual(f['written'],1);self.assertFalse(s.failed);self.assertIn('status disk failure',f['statusError'])
+ def test_slow_status_write_never_blocks_observation_or_close(self):
+  with tempfile.TemporaryDirectory() as d:
+   s=make(d);t=s.begin('discard',True,selection_observed_ns=time.monotonic_ns())
+   ready=threading.Event();release=threading.Event();original=s._atomic
+   def slow(name,value):
+    if name=='status.json':ready.set();release.wait(3)
+    return original(name,value)
+   try:
+    with patch.object(s,'_atomic',slow):
+     n=time.monotonic_ns();self.assertTrue(s._offer(t,b'data',n,n));self.assertTrue(ready.wait(1))
+     start=time.monotonic();n=time.monotonic_ns();self.assertTrue(s._offer(t,b'data',n,n));t.close();s.close()
+     self.assertLess(time.monotonic()-start,.1);release.set();s.worker.join(3)
+   finally:release.set();s.close();s.worker.join(3)
+   self.assertFalse(s.worker.is_alive())
  def test_gates(self):
   with tempfile.TemporaryDirectory() as d:
    for k,v in [('opt_in',False),('verified_friend',False),('ranked',True),('deadline_ms',2600),('clock','5+20')]:

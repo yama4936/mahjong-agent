@@ -9115,13 +9115,13 @@ class PythonAutoOperator:
             return None
         return min(original_gate_captured_at, gate_processing_started_at)
 
-    def observe_sanma_friend_transition(self, page: Page, receipt: dict[str, Any], action: str) -> dict[str, Any]:
+    def observe_sanma_friend_transition(self, page: Page, receipt: dict[str, Any], action: str, selection_observed_ns: int | None = None) -> dict[str, Any]:
         recorder = getattr(self, "sanma_transition_recorder", None)
         if recorder is None or self.verified_friend_300_active is not True:
             return self._observe_sanma_friend_transition(page, receipt, action)
         try:
             from sanma_diagnostic_recorder import PageProxy
-            transition = recorder.begin(action, self.verified_friend_300_active)
+            transition = recorder.begin(action, self.verified_friend_300_active, selection_observed_ns=selection_observed_ns)
         except Exception as error:
             self.log("sanma_recording_unavailable", error=str(error))
             return self._observe_sanma_friend_transition(page, receipt, action)
@@ -9778,7 +9778,9 @@ class PythonAutoOperator:
                         unknown_streak = 0
                         unknown_since = None
                         self.log("sanma_friend_action_unconfirmed", action=action, result=result, confirmed=False)
-                        transition = self.observe_sanma_friend_transition(page, receipt, action)
+                        selection_ns = (int(discard_recovery['selected_monotonic'] * 1_000_000_000)
+                                        if action == "discard" and discard_recovery is not None else None)
+                        transition = self.observe_sanma_friend_transition(page, receipt, action, selection_ns)
                         self.log("sanma_friend_transition", **transition)
                         if transition.get("status") not in {"visual_change_unconfirmed", "terminal", "round_end_candidate"}:
                             if (action == "discard" and discard_recovery is not None
