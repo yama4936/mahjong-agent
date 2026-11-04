@@ -3625,6 +3625,10 @@ class PythonAutoOperator:
             raise RetryableSafetyAbort("five-second action deadline expired before safe click")
 
     def close(self) -> None:
+        audit = getattr(self, 'sanma_socket_audit', None)
+        if audit is not None:
+            audit.close()
+            self.sanma_socket_audit = None
         if self.screencast_session is not None:
             try:
                 self.screencast_session.send("Page.stopScreencast")
@@ -9896,6 +9900,13 @@ class PythonAutoOperator:
             self._sanma_friend_resume_guard = None
 
     def run(self, page: Page) -> None:
+        if experimental_sanma_friend_allowed(self.args):
+            try:
+                from sanma_socket_audit import SocketAudit
+                self.sanma_socket_audit = SocketAudit(page, self.log)
+            except Exception as error:
+                self.sanma_socket_audit = None
+                self.log('sanma_socket_audit_unavailable', errorType=type(error).__name__, operationAuthorized=False)
         self.ensure_viewport(page, force=True)
         startup_turn_guard = StartupTurnGuard()
         self.verified_friend_300_active = False
