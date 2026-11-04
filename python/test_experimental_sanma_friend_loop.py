@@ -349,7 +349,7 @@ class ExperimentalSanmaFriendLoopTest(unittest.TestCase):
                     if frame==b'fresh' and not deadline_during_recognition:
                         now[0]=401.0
                     return frame
-                def recognize(page):
+                def recognize(page, **kwargs):
                     now[0]=401.0
                     return {'screenshot':'recognition.png', 'candidates':{'candidates':[]}}
                 self.page.screenshot.side_effect=capture
@@ -866,7 +866,7 @@ class ExperimentalSanmaFriendLoopTest(unittest.TestCase):
         self.op.verified_friend_300_active = True
         self.receipt['candidates'] = {'candidates': []}
         observed = []
-        def inspect(_page):
+        def inspect(_page, **kwargs):
             observed.append(self.op.sanma_friend_action_observed_at)
             return self.receipt
         self.op.inspect_sanma_self_turn.side_effect = inspect

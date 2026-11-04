@@ -4367,7 +4367,7 @@ class PythonAutoOperator:
                 raise RuntimeError("resident sanma own river is not matching unverified evidence")
         return result
 
-    def inspect_sanma_self_turn(self, page: Page) -> dict[str, Any]:
+    def inspect_sanma_self_turn(self, page: Page, *, classified_frame: bytes | None = None, classified_started: float | None = None) -> dict[str, Any]:
         """Capture the resident sanma observation and decision blockers, without clicking.
 
         No returned candidate is authorized as an action. This method is not
@@ -4379,7 +4379,16 @@ class PythonAutoOperator:
             # This bound covers the complete Playwright preparation, CDP
             # request and cleanup path. A timeout cannot authorize an action.
             capture_options['timeout'] = 3000
-        image = page.screenshot(**capture_options)
+        if classified_frame is not None:
+            if (not experimental_sanma_friend_allowed(self.args) or self.verified_friend_300_active is not True
+                    or not isinstance(classified_frame, bytes) or not classified_frame
+                    or not isinstance(classified_started, (int, float)) or isinstance(classified_started, bool)
+                    or not 0 <= capture_started - classified_started <= 3):
+                raise RuntimeError('classified frame cannot be reused')
+            image = classified_frame
+            capture_started = classified_started
+        else:
+            image = page.screenshot(**capture_options)
         capture_finished = time.monotonic()
         capture_ms = round((capture_finished - capture_started) * 1000)
         require_sanma_observable_frame(image)
@@ -9432,7 +9441,7 @@ class PythonAutoOperator:
                         self.result_screen_advanced = None
                         result_latched = None
                     try:
-                        receipt = self.inspect_sanma_self_turn(page)
+                        receipt = self.inspect_sanma_self_turn(page, classified_frame=frame, classified_started=observation_started)
                         if last_unconfirmed_action == "discard":
                             if discard_recovery is None:
                                 self.log("sanma_friend_stopped", reason="discard_recovery_unavailable", operationAuthorized=False)
