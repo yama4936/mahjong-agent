@@ -100,6 +100,13 @@ def verified_friend_room(frame: bytes, reviewed_preflight: bytes, *, sanma: bool
         for box in regions:
             left = current.crop(box)
             right = reviewed.crop(box)
+            if sanma and box == (1610, 175, 1870, 900):
+                # The 35000-point panel has two narrow, text-free background
+                # areas where animated petals were captured in reviewed
+                # friend frames. Leave all score/rule glyphs compared.
+                for x1,y1,x2,y2 in ((1642,367,1674,395),(1834,335,1866,351)):
+                    masked=(x1-box[0],y1-box[1],x2-box[0],y2-box[1])
+                    left.paste((0,0,0),masked);right.paste((0,0,0),masked)
             # Text changes occupy only a small portion of a panel. Compare
             # tightly tiled patches so a changed digit cannot be averaged out
             # across the surrounding dark background.

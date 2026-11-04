@@ -36,6 +36,7 @@ def pon_pass_stability(before, after, report, *, on_wall_error=None, diagnostic=
                             if diagnostic is not None: diagnostic.update(reason='row_block',frame=frame_index,blockX=x+600,blockY=y+785,value=value,threshold=10)
                             return False
             from auto_operator import experimental_kita_wall_color_stable, experimental_kita_color_stable
+            opposite_offered=False
             if diagnostic is not None: diagnostic.update(stage='wall_color')
             if not experimental_kita_wall_color_stable(before,after,on_error=on_wall_error):return False
             if slots[2].get('evidence') == 'partially_occluded_skip':
@@ -53,6 +54,35 @@ def pon_pass_stability(before, after, report, *, on_wall_error=None, diagnostic=
                 for im in (a,b):
                     output=_io.BytesIO();im.save(output,format='PNG');encoded.append(output.getvalue())
                 before,after=encoded
+            else:
+                # A pon offered by the opposite player pulses around the
+                # discarded tile and top turn indicator. Retain and check
+                # the complete visible tile face; mask just the halo and
+                # indicator after confirming that face stayed unchanged.
+                tile_a=a.crop((1068,240,1120,296));tile_b=b.crop((1068,240,1120,296))
+                bright=lambda im:sum(min(p)>150 for p in im.getdata())
+                def active_indicator(im):
+                    return sum(r>180 and g>110 and blue<170 for r,g,blue in im.crop((910,322,1008,350)).getdata())
+                if (bright(tile_a) >= 1000 and bright(tile_b) >= 1000
+                        and max(ImageStat.Stat(ImageChops.difference(tile_a,tile_b)).mean) <= 3
+                        and active_indicator(a)>=100 and active_indicator(b)>=100):
+                    opposite_offered=True
+                    a=a.copy();b=b.copy()
+                    # Suppress only pixels that actually have the green
+                    # highlight in either frame. Other content around the
+                    # tile remains part of the full-frame comparison.
+                    for y in range(210,320):
+                        for x in range(1044,1145):
+                            if 1068 <= x < 1120 and 240 <= y < 296:continue
+                            def glow(p):
+                                r,g,blue=p;return g>r+20 and g>blue+15 and g>70
+                            if glow(a.getpixel((x,y))) or glow(b.getpixel((x,y))):
+                                a.putpixel((x,y),(0,0,0));b.putpixel((x,y),(0,0,0))
+                    for im in (a,b):im.paste((0,0,0),(890,320,1010,352))
+                    encoded=[]
+                    for im in (a,b):
+                        out=io.BytesIO();im.save(out,format='PNG');encoded.append(out.getvalue())
+                    before,after=encoded
             if diagnostic is not None: diagnostic.update(stage='hand_color')
             if not experimental_kita_color_stable(before,after,[{'x':220,'y':921,'width':1235,'height':151},
                                                                  {'x':650,'y':210,'width':600,'height':420}]):return False
@@ -65,6 +95,9 @@ def pon_pass_stability(before, after, report, *, on_wall_error=None, diagnostic=
                     if changed>14:
                         if slots[2].get('evidence') == 'partially_occluded_skip' and (x,y)==(320,128) and changed <= 20:
                             continue
+                        if opposite_offered and (x,y)==(320,96) and changed <= 24:
+                            seam=delta.crop((x,y,x+32,y+32));seam.paste(0,(0,21,21,23))
+                            if seam.histogram()[255] <= 14:continue
                         if diagnostic is not None: diagnostic.update(blockX=x,blockY=y,changedPixels=changed)
                         return False
             return True
