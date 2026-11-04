@@ -20,6 +20,10 @@ def pon_pass_stability(before, after, report, *, on_wall_error=None, diagnostic=
             if a.size!=(1920,1080) or b.size!=a.size or ref.size!=(824,90):return False
             for frame_index, im in enumerate((a,b)):
                 delta=ImageChops.difference(im.crop((600,785,1424,875)),ref)
+                # In the reviewed template, the countdown's edge intrudes
+                # into this 8x8 background block outside the skip glyph. The
+                # full-frame pair comparison below remains unchanged.
+                delta.paste((0,0,0),(816,72,824,80))
                 # A previously extracted own north can cover the right edge
                 # of the skip label. Only use the unoccluded part when the
                 # row recognizer independently marked that exact condition.
