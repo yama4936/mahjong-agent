@@ -5,6 +5,7 @@ import math
 import subprocess
 import sys
 import time
+import uuid
 from pathlib import Path
 
 from sanma_discard_evidence_chain import evaluate
@@ -19,12 +20,16 @@ class MatchContinuity:
     def __init__(self, page):
         self.page = page
         self.invalid = False
+        self.monitor_id = uuid.uuid4().hex
+        self.started_at = time.monotonic()
+        self.invalid_reason = None
+        self.invalid_at = None
         self.url = page.url
         self.session = None
         try:
             self.session = page.context.new_cdp_session(page)
             for name in self.EVENTS:
-                self.session.on(name, lambda _event: self.invalidate())
+                self.session.on(name, lambda _event, event_name=name: self.invalidate(event_name))
             self.session.send('Network.enable')
             self.session.send('Page.enable')
             if not self.alive():
@@ -33,15 +38,26 @@ class MatchContinuity:
             self.close()
             raise
 
-    def invalidate(self):
+    def invalidate(self, reason='unknown'):
+        if not self.invalid:
+            self.invalid_reason = reason
+            self.invalid_at = time.monotonic()
         self.invalid = True
+
+    def diagnostic(self):
+        return {'monitorId': self.monitor_id, 'invalid': self.invalid,
+                'reason': self.invalid_reason,
+                'elapsedMs': round((self.invalid_at-self.started_at)*1000) if self.invalid_at is not None else None}
 
     def alive(self):
         try:
             self.page.wait_for_timeout(1)
             self.session.send('Runtime.evaluate', {'expression': '1', 'returnByValue': True})
-            return not self.invalid and not self.page.is_closed() and self.page.url == self.url
-        except Exception:
+            if self.page.is_closed(): self.invalidate('page_closed')
+            elif self.page.url != self.url: self.invalidate('page_url_changed')
+            return not self.invalid
+        except Exception as error:
+            self.invalidate('observation_exception:' + type(error).__name__)
             return False
 
     def close(self):

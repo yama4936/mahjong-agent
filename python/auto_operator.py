@@ -9248,6 +9248,12 @@ class PythonAutoOperator:
             path = self.frames / f"{utc_stamp()}.{uuid.uuid4().hex}.sanma-friend-stop.png"
             path.write_bytes(frame)
             return str(path)
+        def continuity_diagnostic(watch):
+            try:
+                detail=watch.diagnostic()
+                return detail if isinstance(detail,dict) else None
+            except Exception:
+                return None
         try:
             while time.monotonic() - started < 3600:
                 polls += 1
@@ -9434,8 +9440,11 @@ class PythonAutoOperator:
                             watch = discard_recovery['watch']
                             if (not watch.alive() or self.verified_friend_300_active is not True
                                     or not 0 <= (time.monotonic() - discard_recovery['started']) * 1000 < 300000):
+                                detail=continuity_diagnostic(watch)
                                 watch.close()
-                                self.log("sanma_friend_stopped", reason="discard_recovery_session_or_deadline", operationAuthorized=False)
+                                self.log("sanma_friend_stopped", reason="discard_recovery_session_or_deadline", operationAuthorized=False,
+                                         continuity=detail, friendSessionActive=self.verified_friend_300_active is True,
+                                         deadlineElapsedMs=round((time.monotonic()-discard_recovery['started'])*1000))
                                 return
                             draw = receipt.get('drawCandidate')
                             if not isinstance(draw, dict) or draw.get('status') != 'candidate':
@@ -9570,8 +9579,10 @@ class PythonAutoOperator:
                             unknown_streak = 0
                             unknown_since = None
                         if resumed_watch is not None and not resumed_watch.alive():
+                            detail=continuity_diagnostic(resumed_watch)
                             resumed_watch.close()
-                            self.log("sanma_friend_stopped", reason="discard_recovery_session_changed", operationAuthorized=False)
+                            self.log("sanma_friend_stopped", reason="discard_recovery_session_changed", operationAuthorized=False,
+                                     screenshot=receipt.get('screenshot'), digest=receipt.get('digest'), continuity=detail)
                             return
                         if resumed_watch is not None and actions:
                             resumed_watch.close()
@@ -9681,6 +9692,8 @@ class PythonAutoOperator:
                             from sanma_friend_discard_recovery import MatchContinuity
                             try:
                                 watch = MatchContinuity(page)
+                                self.log('sanma_friend_continuity_started', screenshot=receipt.get('screenshot'),
+                                         digest=frame_digest, continuity=continuity_diagnostic(watch))
                             except Exception:
                                 watch = None
                             attempted_at = datetime.now(timezone.utc).isoformat()

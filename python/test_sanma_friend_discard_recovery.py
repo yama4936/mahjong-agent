@@ -10,10 +10,36 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 from PIL import Image
 
-from sanma_friend_discard_recovery import candidate
+from sanma_friend_discard_recovery import candidate, MatchContinuity
 from sanma_friend_freshness import check_friend_recovery_guard
 
 ROOT = Path('/home/yama1/server/data/dev-work/jantama/evidence139')
+
+class ContinuityDiagnosticsTest(unittest.TestCase):
+    def setUp(self):
+        self.page=Mock();self.page.url='https://example.invalid/game';self.page.is_closed.return_value=False
+        self.session=Mock();self.page.context.new_cdp_session.return_value=self.session
+        self.watch=MatchContinuity(self.page)
+        self.callbacks={call.args[0]:call.args[1] for call in self.session.on.call_args_list}
+    def test_every_interrupt_event_records_only_its_type(self):
+        for name in MatchContinuity.EVENTS:
+            with self.subTest(name=name):
+                self.setUp();self.callbacks[name]({'url':'private', 'payload':'private'})
+                self.assertFalse(self.watch.alive())
+                result=self.watch.diagnostic()
+                self.assertEqual(result['reason'],name);self.assertTrue(result['invalid'])
+                self.assertIsInstance(result['elapsedMs'],int);self.assertNotIn('private',str(result))
+                self.callbacks['Page.frameDetached']({})
+                self.assertEqual(self.watch.diagnostic()['reason'],name)
+    def test_page_change_close_and_exception_remain_fail_closed(self):
+        for reason in ('page_url_changed','page_closed','observation_exception:RuntimeError'):
+            with self.subTest(reason=reason):
+                self.setUp()
+                if reason=='page_url_changed':self.page.url='https://other.invalid/'
+                elif reason=='page_closed':self.page.is_closed.return_value=True
+                else:self.session.send.side_effect=RuntimeError('private detail')
+                self.assertFalse(self.watch.alive());self.assertEqual(self.watch.diagnostic()['reason'],reason)
+                self.assertNotIn('private',str(self.watch.diagnostic()))
 
 class RecoveryGuardTest(unittest.TestCase):
     @unittest.skipUnless(Path('/home/yama1/server/data/dev-work/jantama/evidence160/artifacts/frames').exists(),
@@ -305,6 +331,26 @@ class RecoveryTest(unittest.TestCase):
             case.run_room()
         self.assertEqual(discard.call_count,2)
         self.assertTrue(any(c.args[0]=='sanma_friend_discard_recovery_candidate' for c in case.op.log.call_args_list))
+
+    def test_session_change_logs_monitor_reason_and_stops_before_new_input(self):
+        from test_experimental_sanma_friend_loop import ExperimentalSanmaFriendLoopTest
+        case=ExperimentalSanmaFriendLoopTest('runTest');case.setUp();self.addCleanup(case.doCleanups)
+        case.op.args.max_iterations=3
+        for receipt in self.receipts:
+            receipt['candidates']={'candidates':[]};receipt['freshness']={'status':'identical_pixels_candidate'}
+        case.op.inspect_sanma_self_turn.side_effect=self.receipts
+        case.op.observe_sanma_friend_transition.return_value={'status':'visual_change_unconfirmed','confirmed':False}
+        self.watch.alive.side_effect=[True,True,False]
+        detail={'monitorId':'test-monitor','invalid':True,'reason':'Network.webSocketClosed','elapsedMs':10}
+        self.watch.diagnostic.return_value=detail
+        with patch('sanma_friend_discard_recovery.MatchContinuity',return_value=self.watch), \
+             patch('sanma_friend_discard_recovery.candidate',return_value=True), \
+             patch('sanma_friend_discard_experiment.execute_friend_draw_candidate',return_value=self.journal[1]) as discard:
+            case.run_room()
+        self.assertEqual(discard.call_count,1)
+        event=next(c for c in case.op.log.call_args_list if c.kwargs.get('reason')=='discard_recovery_session_changed')
+        self.assertEqual(event.kwargs['continuity'],detail)
+        self.assertEqual(event.kwargs['digest'],self.receipts[2]['digest'])
 
     def test_reobserve_is_bounded_and_does_not_repeat_uncertain_input(self):
         from test_experimental_sanma_friend_loop import ExperimentalSanmaFriendLoopTest
