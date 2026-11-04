@@ -9458,10 +9458,27 @@ class PythonAutoOperator:
                                         and isinstance(actions,list) and len(actions)==1
                                         and isinstance(actions[0],dict) and actions[0].get('action')=='pon'
                                         and fresh.get('status') in {'stable_pon_pass_candidate','identical_pixels_candidate','stable_except_clock_candidate'}):
-                                    from sanma_friend_pass_experiment import execute_friend_pon_pass
+                                    from sanma_friend_pass_experiment import execute_friend_pon_pass, PassPreclickChanged, pass_was_not_sent, may_reobserve_unsent_pass
                                     self._sanma_friend_resume_guard = (watch,discard_recovery['started'],300000)
                                     try:
-                                        result=execute_friend_pon_pass(self,page,receipt)
+                                        try:
+                                            result=execute_friend_pon_pass(self,page,receipt)
+                                        except PassPreclickChanged as error:
+                                            if not pass_was_not_sent(error):
+                                                raise RuntimeError('pass outcome unknown; retry forbidden') from error
+                                            failures = discard_recovery.get('pon_preclick_rejections', 0) + 1
+                                            discard_recovery['pon_preclick_rejections'] = failures
+                                            self.log('sanma_friend_wait', reason='recovery_pon_preclick_reobserve',
+                                                     screenshot=receipt.get('screenshot'), streak=failures,
+                                                     clicked=False, error=str(error))
+                                            if not may_reobserve_unsent_pass(error, failures, watch,
+                                                                             self.verified_friend_300_active,
+                                                                             discard_recovery['started'], time.monotonic()):
+                                                self.log('sanma_friend_stopped', reason='recovery_pon_preclick_reobserve_not_permitted',
+                                                         streak=failures, operationAuthorized=False)
+                                                return
+                                            page.wait_for_timeout(500)
+                                            continue
                                     finally:
                                         self._sanma_friend_resume_guard = None
                                     discard_recovery['pon_pass_attempted']=True

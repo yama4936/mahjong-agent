@@ -2,10 +2,35 @@
 import hashlib
 import math
 import time
+import uuid
 from pathlib import Path
 
 from sanma_friend_freshness import friend_action_started_at, friend_frame_stable, latch_friend_action_target
 from screen_state import classify_screen, require_sanma_observable_frame
+
+
+_UNSENT_PASS = object()
+
+
+class PassPreclickChanged(RuntimeError):
+    """The frame was rejected before any skip input was attempted."""
+    def __init__(self, message, token=None):
+        super().__init__(message)
+        self._token = token
+
+
+def pass_was_not_sent(error):
+    return isinstance(error, PassPreclickChanged) and error._token is _UNSENT_PASS
+
+
+def may_reobserve_unsent_pass(error, failures, watch, active, started, now):
+    try:
+        return (pass_was_not_sent(error) and type(failures) is int and 0 < failures < 30
+                and active is True and watch.alive() is True
+                and type(started) in (int, float) and math.isfinite(started)
+                and type(now) in (int, float) and math.isfinite(now) and 0 <= now-started < 300)
+    except Exception:
+        return False
 
 
 def execute_friend_pon_pass(operator, page, receipt, *, declare_riichi=False):
@@ -55,13 +80,25 @@ def execute_friend_pon_pass(operator, page, receipt, *, declare_riichi=False):
         raise RuntimeError('baseline changed')
     fresh = page.screenshot(animations='disabled')
     require_sanma_observable_frame(fresh)
+    diagnostic = {'stage': 'strict_frame'}
     if freshness.get('status') == 'stable_pon_pass_candidate':
         from sanma_friend_pon_stability import pon_pass_stability
-        stable = pon_pass_stability(baseline, fresh, report)
+        diagnostic = {}
+        stable = pon_pass_stability(baseline, fresh, report, diagnostic=diagnostic)
     else:
         stable = friend_frame_stable(baseline, fresh)
     if not stable:
-        raise RuntimeError('screen changed outside clock area')
+        # Only this pre-input path may be retried; evidence or logging errors
+        # remain ordinary failures and can never trigger the retry path.
+        path = operator.frames / f'{uuid.uuid4().hex}.sanma-pass-preclick-rejected.png'
+        try:
+            path.write_bytes(fresh)
+            operator.log('sanma_friend_pass_preclick_rejected', screenshot=str(path),
+                         digest=hashlib.sha256(fresh).hexdigest(), baselineScreenshot=receipt['screenshot'],
+                         baselineDigest=receipt['digest'], diagnostic=diagnostic, confirmed=False)
+        except Exception as error:
+            raise RuntimeError(f'pass rejection evidence unavailable: {error}') from error
+        raise PassPreclickChanged('screen changed outside clock area', _UNSENT_PASS)
     state, confidence = classify_screen(fresh, operator.screen_references)
     if state != 'match' or confidence < .95:
         raise RuntimeError('game screen not recognized')

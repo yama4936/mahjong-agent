@@ -18,16 +18,23 @@ def pon_pass_stability(before, after, report, *, on_wall_error=None, diagnostic=
         with Image.open(io.BytesIO(before)) as aa, Image.open(io.BytesIO(after)) as bb, Image.open(Path(__file__).parent/'fixtures'/'sanma-pon-skip-156-row.png') as rr:
             a,b=aa.convert('RGB'),bb.convert('RGB');ref=rr.convert('RGB').crop((0,0,824,90))
             if a.size!=(1920,1080) or b.size!=a.size or ref.size!=(824,90):return False
-            for im in (a,b):
+            for frame_index, im in enumerate((a,b)):
                 delta=ImageChops.difference(im.crop((600,785,1424,875)),ref)
                 # A previously extracted own north can cover the right edge
                 # of the skip label. Only use the unoccluded part when the
                 # row recognizer independently marked that exact condition.
                 if slots[2].get('evidence') == 'partially_occluded_skip':
                     delta.paste((0,0,0),(747,0,824,90))
-                if max(ImageStat.Stat(delta).mean)>.1:return False
-                if any(max(ImageStat.Stat(delta.crop((x,y,min(x+8,824),min(y+8,90)))).mean)>10
-                       for y in range(0,90,8) for x in range(0,824,8)):return False
+                mean=max(ImageStat.Stat(delta).mean)
+                if mean>.1:
+                    if diagnostic is not None: diagnostic.update(reason='row_mean',frame=frame_index,value=mean,threshold=.1)
+                    return False
+                for y in range(0,90,8):
+                    for x in range(0,824,8):
+                        value=max(ImageStat.Stat(delta.crop((x,y,min(x+8,824),min(y+8,90)))).mean)
+                        if value>10:
+                            if diagnostic is not None: diagnostic.update(reason='row_block',frame=frame_index,blockX=x+600,blockY=y+785,value=value,threshold=10)
+                            return False
             from auto_operator import experimental_kita_wall_color_stable, experimental_kita_color_stable
             if diagnostic is not None: diagnostic.update(stage='wall_color')
             if not experimental_kita_wall_color_stable(before,after,on_error=on_wall_error):return False
