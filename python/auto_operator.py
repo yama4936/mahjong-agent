@@ -389,7 +389,7 @@ def _closed_hand_face_mismatches_decoded(first, second, slots, threshold):
     return mismatches
 
 
-def raised_closed_hand_slots(screenshot: bytes, layout: dict[str, Any]) -> list[int]:
+def raised_closed_hand_slots(screenshot: bytes, layout: dict[str, Any], *, strict: bool = False) -> list[int]:
     """Return closed-row slots whose physical top rim is materially raised.
 
     Recognition crops are calibrated to a neutral row.  A selected or hovered
@@ -400,15 +400,28 @@ def raised_closed_hand_slots(screenshot: bytes, layout: dict[str, Any]) -> list[
     slot's calibrated top.  It deliberately reports uncertainty rather than
     attempting to translate and re-recognize the tile.
     """
-    slots = [*layout.get("handSlots", [])]
-    draw_slot = layout.get("drawSlot")
-    if draw_slot:
-        slots.append(draw_slot)
-    if len(slots) != 14:
-        return []
     try:
+        slots = [*layout.get("handSlots", [])]
+        draw_slot = layout.get("drawSlot")
+        if draw_slot:
+            slots.append(draw_slot)
+        if len(slots) != 14:
+            if strict: raise ValueError("fourteen calibrated slots required")
+            return []
         with Image.open(io.BytesIO(screenshot)) as source:
             image = source.convert("RGB")
+        if strict and image.size != (1920,1080):
+            raise ValueError("calibrated screenshot geometry required")
+        if strict:
+            for slot in slots:
+                x,y,w,h=(slot[k] for k in ("x","y","width","height"))
+                if (any(type(v) not in (int,float) or not isfinite(v) for v in (x,y,w,h))
+                        or w < 60 or h < 100 or x < 0 or y < 80
+                        or x+w > image.width or y+h > image.height):
+                    raise ValueError("invalid calibrated slot geometry")
+            if (any(a['x']+a['width'] > b['x'] for a,b in zip(slots,slots[1:]))
+                    or max(slot['y'] for slot in slots)-min(slot['y'] for slot in slots) > 5):
+                raise ValueError("invalid calibrated slot ordering")
         raised: list[int] = []
         for index, slot in enumerate(slots):
             top = int(slot["y"])
@@ -433,8 +446,9 @@ def raised_closed_hand_slots(screenshot: bytes, layout: dict[str, Any]) -> list[
                 raised.append(index)
         return raised
     except Exception:
-        # This gate only adds a fail-closed delay when positive evidence is
-        # available; an unreadable frame follows the existing checks.
+        if strict:
+            raise
+        # Legacy callers only stop when positive evidence is available.
         return []
 
 

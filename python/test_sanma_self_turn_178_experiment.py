@@ -37,7 +37,7 @@ class TestSelfTurn178(unittest.TestCase):
   obs={'status':'candidate','phase':'self_turn','promptStatus':'none','handStatus':'candidate','layoutStatus':'candidate','slots':slots,'frameSha256':hashlib.sha256(self.a).hexdigest(),'referenceFrame':self.a,'experimentalDrawReport':self.report}
   session={'mode':'cpu_friend','rules':'sanma','clock':'300+0','actionDeadlineMs':300000,'ranked':False,'cpuCount':2,'roomVerified':True}
   page=Mock();page.screenshot.return_value=self.b
-  kwargs={'session':session,'observation':obs,'plan':plan,'layout':{'viewport':{'width':1920,'height':1080}},'log':lambda e:None,'turn_started_monotonic':100,'clock':lambda:101}
+  kwargs={'session':session,'observation':obs,'plan':plan,'layout':{'viewport':{'width':1920,'height':1080},'handSlots':self.report['handGeometry']['value']['handSlots'],'drawSlot':self.report['handGeometry']['value']['drawSlot']},'log':lambda e:None,'turn_started_monotonic':100,'clock':lambda:101}
   with patch('sanma_friend_discard_experiment.send_discard_click') as send:
    with self.assertRaises(DiscardPreclickChanged):execute_friend_discard(page,**kwargs)
    send.assert_not_called()

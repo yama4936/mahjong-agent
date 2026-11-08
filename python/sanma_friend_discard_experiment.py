@@ -493,7 +493,7 @@ def execute_friend_discard(page, *, session, observation, plan, layout, log,
         # Apply this after every matching path and before any click, including
         # byte-identical frames and the opt-in lighting fallback.
         from auto_operator import raised_closed_hand_slots
-        raised = raised_closed_hand_slots(before, layout)
+        raised = raised_closed_hand_slots(before, layout, strict=True)
         if raised:
             event['raisedSlots'] = raised
             raise ValueError('selected or hovered tile before discard')

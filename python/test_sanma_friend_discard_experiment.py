@@ -26,7 +26,9 @@ class FriendDiscardExperimentTests(unittest.TestCase):
                      "tile": "1m", "clickIndex": 0, "clickPoint": self.point}
         self.logs = []
         self.kwargs = dict(session=self.session, observation=self.observation, plan=self.plan,
-                           layout={"viewport": {"width": 1920, "height": 1080}}, log=self.logs.append,
+                           layout={"viewport": {"width": 1920, "height": 1080},
+                                   "handSlots":[{"x":220+94*i,"y":921,"width":93,"height":151} for i in range(13)],
+                                   "drawSlot":{"x":1485,"y":921,"width":93,"height":151}}, log=self.logs.append,
                            turn_started_monotonic=100, clock=lambda: 101)
 
     @patch("sanma_friend_discard_experiment.send_discard_click")
@@ -165,6 +167,25 @@ class FriendDiscardExperimentTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FriendRaisedInspectionFailureTests(FriendDiscardExperimentTests):
+    @patch("sanma_friend_discard_experiment.send_discard_click")
+    def test_missing_invalid_geometry_and_internal_exception_fail_closed(self, send):
+        import copy
+        layouts=[]
+        layouts.append({"viewport":{"width":1920,"height":1080}})
+        bad=copy.deepcopy(self.kwargs['layout']);bad['drawSlot']['width']=0;layouts.append(bad)
+        bad=copy.deepcopy(self.kwargs['layout']);bad['handSlots'][0]['x']=float('nan');layouts.append(bad)
+        bad=copy.deepcopy(self.kwargs['layout']);bad['handSlots'][1]['x']=bad['handSlots'][0]['x'];layouts.append(bad)
+        for layout in layouts:
+            with self.subTest(layout=layout), self.assertRaises((ValueError,TypeError,KeyError)):
+                execute_friend_discard(self.page,**{**self.kwargs,'layout':layout})
+            send.assert_not_called()
+        with patch('auto_operator.raised_closed_hand_slots',side_effect=RuntimeError('inspection failed')):
+            with self.assertRaisesRegex(RuntimeError,'inspection failed'):
+                execute_friend_discard(self.page,**self.kwargs)
+        send.assert_not_called()
 
 
 class FriendDrawBridgeTests(unittest.TestCase):
