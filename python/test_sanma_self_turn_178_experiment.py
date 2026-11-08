@@ -1,0 +1,51 @@
+import io,json,unittest
+from pathlib import Path
+from PIL import Image,ImageDraw
+from sanma_friend_self_turn_stability import self_turn_stability
+BASE=Path('/home/yama1/server/data/dev-work/jantama/evidence178/artifacts2')
+@unittest.skipUnless(BASE.exists(),'retained 178 evidence unavailable')
+class TestSelfTurn178(unittest.TestCase):
+ @classmethod
+ def setUpClass(cls):
+  cls.events=[x for x in map(json.loads,(BASE/'python-operator.jsonl').read_text().splitlines()) if x['event']=='sanma_friend_discard_preclick_rejected']
+  e=cls.events[0];path=Path(e['referenceScreenshot']);cls.a=path.read_bytes();cls.b=Path(e['screenshot']).read_bytes();cls.report=json.loads(path.with_suffix('.receipt.json').read_text())['sourceObservation']['report']
+ def test_actual_pair_and_fail_closed(self):
+  self.assertTrue(self_turn_stability(self.a,self.b,self.report))
+  for box in ((904,496,1016,516),(1485,920,1578,1075),(900,785,1135,875),(905,375,1010,465),(650,300,780,380),(170,190,375,620),(250,280,310,330),(320,100,375,160)):
+   with self.subTest(box=box):
+    image=Image.open(io.BytesIO(self.b)).convert('RGB');ImageDraw.Draw(image).rectangle(box,fill='black');out=io.BytesIO();image.save(out,format='PNG')
+    self.assertFalse(self_turn_stability(self.a,out.getvalue(),self.report))
+ def test_recorded_pon_and_other_turn_are_rejected(self):
+  events=[x for x in map(json.loads,(BASE/'python-operator.jsonl').read_text().splitlines()) if x.get('event')=='sanma_self_turn_observed']
+  pon=next(x for x in events if '10-23-36.001478' in x.get('screenshot',''))
+  self.assertFalse(self_turn_stability(self.a,Path(pon['screenshot']).read_bytes(),self.report))
+  self.assertFalse(self_turn_stability(self.a,Path(pon['freshness']['screenshot']).read_bytes(),self.report))
+  # Matching a later prompt to itself must not be mistaken for our turn.
+  prompt=Path(pon['screenshot']).read_bytes()
+  self.assertFalse(self_turn_stability(prompt,prompt,self.report))
+ def test_existing_draw_path_and_opt_in_are_distinct(self):
+  import inspect
+  from sanma_friend_discard_experiment import execute_friend_discard
+  self.assertFalse(inspect.signature(execute_friend_discard).parameters['self_turn_wall_opt_in'].default)
+ def test_actual_preclick_fallback_is_opt_in_and_draw_only(self):
+  import hashlib
+  from unittest.mock import Mock,patch
+  from sanma_friend_discard_experiment import execute_friend_discard,DiscardPreclickChanged
+  tiles=self.report['hand']['value']['tiles'];points=self.report['handGeometry']['value']['clickPoints']
+  slots=[{'tile':tile,**point} for tile,point in zip(tiles,points)]
+  plan={'scope':'offline_untrusted_sanma_discard_plan','operationAuthorized':False,'tile':tiles[-1],'clickIndex':len(slots)-1,'clickPoint':points[-1]}
+  obs={'status':'candidate','phase':'self_turn','promptStatus':'none','handStatus':'candidate','layoutStatus':'candidate','slots':slots,'frameSha256':hashlib.sha256(self.a).hexdigest(),'referenceFrame':self.a,'experimentalDrawReport':self.report}
+  session={'mode':'cpu_friend','rules':'sanma','clock':'300+0','actionDeadlineMs':300000,'ranked':False,'cpuCount':2,'roomVerified':True}
+  page=Mock();page.screenshot.return_value=self.b
+  kwargs={'session':session,'observation':obs,'plan':plan,'layout':{'viewport':{'width':1920,'height':1080}},'log':lambda e:None,'turn_started_monotonic':100,'clock':lambda:101}
+  with patch('sanma_friend_discard_experiment.send_discard_click') as send:
+   with self.assertRaises(DiscardPreclickChanged):execute_friend_discard(page,**kwargs)
+   send.assert_not_called()
+   result=execute_friend_discard(page,**kwargs,self_turn_wall_opt_in=True)
+   send.assert_called_once();self.assertEqual(result['result'],'discard_not_verified')
+   send.reset_mock()
+   other={**plan,'tile':tiles[0],'clickIndex':0,'clickPoint':points[0]}
+   with self.assertRaises(DiscardPreclickChanged):execute_friend_discard(page,**{**kwargs,'plan':other},self_turn_wall_opt_in=True)
+   send.assert_not_called()
+   with self.assertRaises(ValueError):execute_friend_discard(page,**{**kwargs,'session':{**session,'ranked':True}},self_turn_wall_opt_in=True)
+   send.assert_not_called()

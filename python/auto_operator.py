@@ -11313,6 +11313,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--cdp", default="http://127.0.0.1:9222")
     parser.add_argument("--rules", choices=("yonma", "sanma"), default="yonma",
                         help="game rules; sanma requires the experimental friend-only opt-in")
+    parser.add_argument("--experimental-sanma-self-turn-wall", action="store_true", help="experimental CPU friend only: check animated left wall after self turn checks")
     parser.add_argument("--experimental-sanma-png-stream", action="store_true",
                         help="experimental friend-only PNG stream for post-recognition freshness")
     parser.add_argument("--experimental-sanma-fast-png", action="store_true",
@@ -11395,6 +11396,8 @@ def parse_args() -> argparse.Namespace:
          and explicit_args[index + 1] == "300000") for index, value in enumerate(explicit_args))
     if (args.rules == "sanma" or mentions_sanma) and not (experimental_sanma_friend_allowed(args) and explicit_deadline):
         parser.error("sanma automatic decisions and screen operation are not implemented; startup stopped")
+    if args.experimental_sanma_self_turn_wall and not (experimental_sanma_friend_allowed(args) and explicit_deadline):
+        parser.error("experimental self-turn wall requires reviewed sanma friend 300+0")
     if args.experimental_sanma_png_stream and not (experimental_sanma_friend_allowed(args) and explicit_deadline):
         parser.error("experimental sanma PNG stream requires a reviewed 300+0 non-ranked force-auto friend room")
     if args.experimental_sanma_fast_png and not (experimental_sanma_friend_allowed(args) and explicit_deadline):

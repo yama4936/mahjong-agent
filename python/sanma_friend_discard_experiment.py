@@ -402,6 +402,7 @@ def execute_friend_draw_candidate(operator, page, receipt):
                                   layout=operator.layout, log=record,
                                   turn_started_monotonic=friend_action_started_at(operator),
                                   session_check=session_check,
+                                  self_turn_wall_opt_in=getattr(operator.args, 'experimental_sanma_self_turn_wall', False) is True,
                                   save_rejected_frame=save_rejected_frame,
                                   before_click=lambda: latch_friend_action_target(operator, baseline, "discard"))
     if blank_only:
@@ -411,7 +412,7 @@ def execute_friend_draw_candidate(operator, page, receipt):
 
 def execute_friend_discard(page, *, session, observation, plan, layout, log,
                            turn_started_monotonic, clock=time.monotonic, session_check=None,
-                           save_rejected_frame=None, before_click=None):
+                           save_rejected_frame=None, before_click=None, self_turn_wall_opt_in=False):
     """Map a supplied TS plan to the existing select/confirm routine.
 
     This experimental entry point depends on a caller that establishes the
@@ -464,9 +465,19 @@ def execute_friend_discard(page, *, session, observation, plan, layout, log,
                 matched = friend_frame_stable(reference, before)
                 if not matched and observation.get("experimentalDrawReport") is not None:
                     diagnostic = {}
+                    wall_errors = []
+                    def wall_error(data):
+                        wall_errors.append(data)
+                        log({"kind":"sanma_wall_guard_error", **data})
                     matched = __import__("auto_operator").experimental_draw_glyph_stability(
                         reference, before, observation["experimentalDrawReport"], diagnostic=diagnostic,
-                        on_wall_error=lambda data: log({"kind":"sanma_wall_guard_error", **data}))
+                        on_wall_error=wall_error)
+                    if (not matched and not wall_errors and self_turn_wall_opt_in is True
+                            and index == len(slots)-1):
+                        matched = __import__("sanma_friend_self_turn_stability").self_turn_stability(
+                            reference, before, observation["experimentalDrawReport"])
+                        if matched:
+                            log({"kind":"sanma_self_turn_wall_candidate", "confirmed":False})
         if not matched:
             event['preclickDiagnostic'] = diagnostic
             if isinstance(before, bytes) and save_rejected_frame is not None:
