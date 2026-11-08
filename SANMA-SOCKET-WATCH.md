@@ -8,6 +8,6 @@
 /home/yama1/.local/bin/jantama-dev run -- /home/yama1/projects/jantama-auto/.runtime/python-auto-venv/bin/python python/sanma_socket_watch.py --cdp http://127.0.0.1:9222 --output /home/yama1/server/data/dev-work/jantama/socket-audit/session.jsonl
 ```
 
-`socket_watch_attached` と `sanma_socket_audit_started` が記録されたことを確認してから、別の操作担当がログインまたは再接続を行います。ページの追加・移動・クリックやブラウザの起動・終了は行いません。既に存在する接続について CDP は作成イベントを遡及しないため、そのホストは不明です。送受信があれば ID と回数は記録できますが、ゲーム用接続である証明にはなりません。監視開始後に新たに開いた接続だけは、作成と閉鎖を ID で対応付けられます。ページが閉じられたら監視も終了します。
+`socket_watch_attached` と `sanma_socket_audit_started` が記録されたことを確認してから、別の操作担当がログインまたは再接続を行います。ページの追加・移動・クリックやブラウザの起動・終了は行いません。既に存在する接続について CDP は作成イベントを遡及しないため、そのホストは不明です。送受信があれば ID と回数は記録できますが、ゲーム用接続である証明にはなりません。監視開始後に新たに開いた接続だけは、作成と閉鎖を ID で対応付けられます。ページが閉じられるか雀魂以外のホストに移動した場合、監視は異常終了します。記録への書き込みが失敗した場合も異常終了し、終了コードは非0です。
 
 同時に起動できる監視は1つです。監視を終了する際は監視プロセスへ SIGTERM または Ctrl-C を送ります。監視終了は既存ブラウザの終了を意図しません。ログがなければ監視できたとは扱わず、確認済みの停止条件を維持します。

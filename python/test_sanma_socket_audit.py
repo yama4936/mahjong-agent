@@ -55,6 +55,7 @@ class SocketAuditTest(unittest.TestCase):
         self.log.side_effect=RuntimeError('sensitive')
         self.callbacks['Network.webSocketCreated']({'requestId':'1','url':'wss://bad.invalid:broken'})
         self.callbacks['Network.webSocketClosed']({'requestId':'1'})
+        self.assertTrue(self.audit.logging_failed)
         self.audit.close();self.audit.close();self.session.detach.assert_called_once()
         self.page.mouse.click.assert_not_called()
     def test_bounded_memory(self):

@@ -10,6 +10,7 @@ class SocketAudit:
         self.log = log
         self.hosts = OrderedDict()
         self.activity = OrderedDict()
+        self.logging_failed = False
         try:
             self.session = page.context.new_cdp_session(page)
             self.session.on('Network.webSocketCreated', self.created)
@@ -26,7 +27,7 @@ class SocketAudit:
         try:
             self.log(event, **fields)
         except Exception:
-            pass
+            self.logging_failed = True
 
     @staticmethod
     def _key(event):

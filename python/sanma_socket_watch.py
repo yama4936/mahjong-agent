@@ -18,16 +18,20 @@ from sanma_socket_audit import SocketAudit
 
 LOCK = Path('/home/yama1/server/data/dev-work/jantama/socket-watch.lock')
 
+def is_game_page(page):
+    try:
+        url = urlsplit(page.url)
+        return not page.is_closed() and url.scheme == 'https' and url.hostname == 'game.mahjongsoul.com'
+    except Exception:
+        return False
+
+
 def game_page(browser):
     pages = []
     for context in browser.contexts:
         for page in context.pages:
-            try:
-                url = urlsplit(page.url)
-                if not page.is_closed() and url.scheme == 'https' and url.hostname == 'game.mahjongsoul.com':
-                    pages.append(page)
-            except Exception:
-                continue
+            if is_game_page(page):
+                pages.append(page)
     if len(pages) != 1:
         raise RuntimeError('exactly one live Mahjong Soul page is required')
     return pages[0]
@@ -37,7 +41,11 @@ def watch(page, log, *, interval=30, stop=lambda: False, max_seconds=None):
     audit = SocketAudit(page, log)
     started = last = time.monotonic()
     try:
-        while not stop() and not page.is_closed():
+        while not stop():
+            if audit.logging_failed:
+                raise RuntimeError('socket audit logging failed')
+            if not is_game_page(page):
+                raise RuntimeError('game page closed or navigated away')
             now=time.monotonic()
             if max_seconds is not None and now-started >= max_seconds: break
             if now-last >= interval:
@@ -46,6 +54,8 @@ def watch(page, log, *, interval=30, stop=lambda: False, max_seconds=None):
     finally:
         audit.snapshot('watch_stopping')
         audit.close()
+        if audit.logging_failed:
+            raise RuntimeError('socket audit logging failed')
 
 
 def main():
