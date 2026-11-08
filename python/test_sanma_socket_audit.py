@@ -24,6 +24,33 @@ class SocketAuditTest(unittest.TestCase):
         self.assertIsNone(self.log.call_args.kwargs['hostnameSha256'])
         self.assertFalse(self.log.call_args.kwargs['creationObserved'])
         self.assertFalse(self.log.call_args.kwargs['operationAuthorized'])
+    def test_preexisting_socket_frame_counts_and_close_without_payload(self):
+        event = {'requestId': 'old-private', 'response': {'payloadData': 'sensitive secret'}}
+        self.callbacks['Network.webSocketFrameSent'](event)
+        self.callbacks['Network.webSocketFrameReceived'](event)
+        self.callbacks['Network.webSocketFrameReceived'](event)
+        self.audit.snapshot('before_discard')
+        snapshot = self.log.call_args.kwargs
+        self.assertEqual(snapshot['sockets'], [{'requestIdSha256': hashlib.sha256(b'old-private').hexdigest(),
+                                               'sent': 1, 'received': 2, 'creationObserved': False}])
+        self.assertFalse(snapshot['operationAuthorized'])
+        self.callbacks['Network.webSocketClosed']({'requestId': 'old-private'})
+        closed = self.log.call_args.kwargs
+        self.assertFalse(closed['creationObserved'])
+        self.assertEqual(closed['frameCounts'], {'sent': 1, 'received': 2})
+        self.assertNotIn('sensitive secret', str(self.log.call_args_list))
+        self.assertNotIn('old-private', str(self.log.call_args_list))
+
+    def test_frame_activity_is_bounded_and_malformed_events_are_ignored(self):
+        for i in range(140):
+            self.callbacks['Network.webSocketFrameReceived']({'requestId': str(i)})
+        self.callbacks['Network.webSocketFrameReceived']({})
+        self.assertEqual(len(self.audit.activity), 128)
+        self.audit.snapshot('test')
+        self.assertEqual(len(self.log.call_args.kwargs['sockets']), 128)
+        self.audit.close()
+        self.assertEqual(len(self.audit.activity), 0)
+
     def test_independent_of_action_and_callback_errors_are_silent(self):
         self.log.side_effect=RuntimeError('sensitive')
         self.callbacks['Network.webSocketCreated']({'requestId':'1','url':'wss://bad.invalid:broken'})
