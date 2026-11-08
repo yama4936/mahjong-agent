@@ -489,6 +489,14 @@ def execute_friend_discard(page, *, session, observation, plan, layout, log,
                 raise ValueError("recognition frame changed before click")
             precheck_rejected = True
             raise DiscardPreclickChanged("recognition frame changed before click")
+        # A lifted tile may be discarded immediately by the first click.
+        # Apply this after every matching path and before any click, including
+        # byte-identical frames and the opt-in lighting fallback.
+        from auto_operator import raised_closed_hand_slots
+        raised = raised_closed_hand_slots(before, layout)
+        if raised:
+            event['raisedSlots'] = raised
+            raise ValueError('selected or hovered tile before discard')
         def deadline():
             if session_check is not None and session_check() is not True:
                 raise RuntimeError("friend session revoked")

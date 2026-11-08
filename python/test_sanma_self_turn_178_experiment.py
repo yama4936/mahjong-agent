@@ -72,3 +72,26 @@ class SyntheticWallSafetyTests(unittest.TestCase):
     with self.subTest(box=box):
      changed=image.copy();ImageDraw.Draw(changed).rectangle(box,fill=color)
      self.assertFalse(self_turn_stability(base,encode(changed),report))
+
+@unittest.skipUnless(Path('/home/yama1/server/data/dev-work/jantama/evidence177/progress3.png').exists(), 'retained raised-tile evidence unavailable')
+class RaisedFriendDiscardTests(unittest.TestCase):
+ def test_raised_tile_stops_all_preclick_match_paths(self):
+  import hashlib
+  from unittest.mock import Mock, patch
+  from auto_operator import raised_closed_hand_slots
+  from sanma_friend_discard_experiment import execute_friend_discard
+  events=[x for x in map(json.loads,(BASE/'python-operator.jsonl').read_text().splitlines()) if x['event']=='sanma_friend_discard_preclick_rejected']
+  p=Path(events[0]['referenceScreenshot']);rep=json.loads(p.with_suffix('.receipt.json').read_text())['sourceObservation']['report'];geo=rep['handGeometry']['value'];tiles=rep['hand']['value']['tiles'];points=geo['clickPoints'];layout={'viewport':{'width':1920,'height':1080},'handSlots':geo['handSlots'],'drawSlot':geo['drawSlot']}
+  self.assertEqual(raised_closed_hand_slots(p.read_bytes(),layout),[])
+  frame=Path('/home/yama1/server/data/dev-work/jantama/evidence177/progress3.png').read_bytes()
+  self.assertIn(13,raised_closed_hand_slots(frame,layout))
+  slots=[{'tile':t,**q} for t,q in zip(tiles,points)];plan={'scope':'offline_untrusted_sanma_discard_plan','operationAuthorized':False,'tile':tiles[-1],'clickIndex':13,'clickPoint':points[-1]}
+  session={'mode':'cpu_friend','rules':'sanma','clock':'300+0','actionDeadlineMs':300000,'ranked':False,'cpuCount':2,'roomVerified':True}
+  page=Mock();page.screenshot.return_value=frame
+  for matching in ('identical','friend','fallback'):
+   with self.subTest(matching=matching),patch('sanma_friend_discard_experiment.send_discard_click') as send,patch('sanma_friend_discard_experiment.friend_frame_stable',return_value=matching=='friend'),patch('sanma_friend_self_turn_stability.self_turn_stability',return_value=True):
+    ref=frame if matching=='identical' else p.read_bytes()
+    obs={'status':'candidate','phase':'self_turn','promptStatus':'none','handStatus':'candidate','layoutStatus':'candidate','slots':slots,'frameSha256':hashlib.sha256(ref).hexdigest(),'referenceFrame':ref,'experimentalDrawReport':rep}
+    with self.assertRaisesRegex(ValueError,'selected or hovered tile'):
+     execute_friend_discard(page,session=session,observation=obs,plan=plan,layout=layout,log=lambda _:None,turn_started_monotonic=100,clock=lambda:101,self_turn_wall_opt_in=True)
+    send.assert_not_called()
