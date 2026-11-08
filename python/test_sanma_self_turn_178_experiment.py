@@ -49,3 +49,26 @@ class TestSelfTurn178(unittest.TestCase):
    send.assert_not_called()
    with self.assertRaises(ValueError):execute_friend_discard(page,**{**kwargs,'session':{**session,'ranked':True}},self_turn_wall_opt_in=True)
    send.assert_not_called()
+ def test_other_round_and_real_kan_prompt(self):
+  root=Path('/home/yama1/server/data/dev-work/jantama/evidence177')
+  if not root.exists():self.skipTest('retained evidence177 unavailable')
+  for name in ('progress1.png','progress2.png','progress3.png'):
+   with self.subTest(image=name):
+    frame=(root/name).read_bytes()
+    self.assertFalse(self_turn_stability(frame,frame,self.report))
+    self.assertFalse(self_turn_stability(self.a,frame,self.report))
+
+class SyntheticWallSafetyTests(unittest.TestCase):
+ def test_portable_lamp_and_wall_fences(self):
+  from unittest.mock import patch
+  image=Image.new('RGB',(1920,1080),(20,30,60));ImageDraw.Draw(image).rectangle((904,496,1015,515),fill=(250,200,50))
+  output=io.BytesIO();image.save(output,format='PNG');base=output.getvalue()
+  report={'handGeometry':{'value':{'drawSlot':{'x':1485,'y':921,'width':93,'height':151}}}}
+  def encode(im):
+   output=io.BytesIO();im.save(output,format='PNG');return output.getvalue()
+  with patch('auto_operator.experimental_draw_glyph_stability',return_value=True):
+   self.assertTrue(self_turn_stability(base,base,report))
+   for box,color in (((904,496,1015,515),(0,0,0)),((170,190,375,620),(0,0,0)),((1495,880,1565,915),(255,255,255))):
+    with self.subTest(box=box):
+     changed=image.copy();ImageDraw.Draw(changed).rectangle(box,fill=color)
+     self.assertFalse(self_turn_stability(base,encode(changed),report))

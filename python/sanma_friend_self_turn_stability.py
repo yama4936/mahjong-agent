@@ -15,6 +15,16 @@ def self_turn_stability(before, after, report):
             pixels=image.crop((904,496,1016,516)).getdata()
             return sum(r>180 and g>110 and blue<170 for r,g,blue in pixels)
         if min(self_lamp(a),self_lamp(b)) < 1000: return False
+        draw=report['handGeometry']['value']['drawSlot']
+        x,y,w,h=(draw[k] for k in ('x','y','width','height'))
+        if any(type(v) not in (int,float) for v in (x,y,w,h)) or not (1480 <= x <= 1490 and 918 <= y <= 924 and 88 <= w <= 100 and 140 <= h <= 158):
+            return False
+        # An already lifted tile can be discarded on the first click, which
+        # bypasses selection confirmation. Refuse any bright surface above
+        # the draw slot in either frame; overlays also fail closed.
+        box=(int(x+10),int(y-41),int(x+w-10),int(y-6))
+        if any(sum(min(pixel)>160 for pixel in im.crop(box).getdata()) > 50 for im in (a,b)):
+            return False
         # Opponent's tile backs have animated illumination. They do not affect
         # the identity of the self draw, whose rectangle and every hand face,
         # prompt, table center and all other pixels remain checked below.
