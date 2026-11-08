@@ -35,7 +35,7 @@ def _cell(image, box):
     return {'state': state, 'brightFraction': round(bright, 5), 'blueFraction': round(blue, 5)}
 
 
-def compare(before_path, after_path):
+def compare(before_path, after_path, *, allow_second_row_overlap=False):
     before, before_digest = _load(before_path)
     after, after_digest = _load(after_path)
     old = [_cell(before, box) for box in SLOTS]
@@ -45,7 +45,23 @@ def compare(before_path, after_path):
     old_states = [c['state'] for c in old]
     new_states = [c['state'] for c in new]
     appended = [i for i, (a, b) in enumerate(zip(old_states, new_states)) if a == 'empty' and b == 'tile']
-    existing_unchanged = all(differences[i] <= 5 for i, a in enumerate(old_states) if a == 'tile')
+    comparison_differences = differences.copy()
+    overlap_candidate = False
+    if (allow_second_row_overlap is True and appended == [6]
+            and all(state == 'tile' for state in old_states[:6])
+            and all(a == b for i,(a,b) in enumerate(zip(old_states,new_states)) if i != 6)):
+        # A second-row tile begins at y~600 and occludes the bottom 14px of
+        # cell 0. Keep checking its visible 56px, including its glyph, and
+        # the complete remaining cells. This is only a pixel hypothesis;
+        # it cannot establish what lies behind the new tile.
+        box=SLOTS[0]
+        delta=ImageChops.difference(before.crop(box),after.crop(box))
+        # The visible overlap ends at x=827 in this calibration; preserve
+        # the rightmost two columns of the upper cell as well.
+        delta.paste((0,0,0),(0,56,60,70))
+        comparison_differences[0] = round(sum(ImageStat.Stat(delta).mean)/3,5)
+        overlap_candidate = True
+    existing_unchanged = all(comparison_differences[i] <= 5 for i, a in enumerate(old_states) if a == 'tile')
     exact = (before_digest != after_digest and len(appended) == 1
              and 'unknown' not in old_states and 'unknown' not in new_states
              and all(a == b for i, (a, b) in enumerate(zip(old_states, new_states)) if i != appended[0])
@@ -54,6 +70,7 @@ def compare(before_path, after_path):
             'operationAuthorized': False, 'beforeSha256': before_digest, 'afterSha256': after_digest,
             'beforeCells': old, 'afterCells': new, 'cellMeanPixelDelta': differences,
             'emptyToTileIndices': appended, 'existingTilesUnchangedCandidate': existing_unchanged,
+            'secondRowOverlapCandidate': overlap_candidate,
             'singlePhysicalAppendCandidate': exact,
             'limitations': ['fixed geometry and experimental color thresholds', 'no tile identity or selection matching',
                             'same round, timing, calls and action causality not established',

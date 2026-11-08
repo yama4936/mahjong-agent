@@ -140,7 +140,7 @@ def _frame_time(path):
     return datetime.fromisoformat(f'{date}T{hour}:{minute}:{second}{zone_hour}:{zone_minute}')
 
 
-def evaluate(before_path, after_paths, journal, *, recheck_round=False, unknown_draw=False):
+def evaluate(before_path, after_paths, journal, *, recheck_round=False, unknown_draw=False, friend_second_row_overlap=False):
     """Cross-check retained evidence; caller must preserve provenance and order."""
     result = {'scope': 'offline_untrusted_sanma_discard_evidence_chain',
               'state': 'pending', 'confirmed': False, 'operationAuthorized': False,
@@ -204,7 +204,9 @@ def evaluate(before_path, after_paths, journal, *, recheck_round=False, unknown_
                     not blank_draw_candidate(Path(before['screenshot']).read_bytes(), hand_value,
                                         geometry_value, before['drawCandidate'])):
                 return reject('unclassified blank physical draw unavailable')
-        physical = [compare_cells(before['screenshot'], p['screenshot']) for p in posts]
+        physical = [compare_cells(before['screenshot'], p['screenshot'], allow_second_row_overlap=True)
+                    if friend_second_row_overlap is True else compare_cells(before['screenshot'], p['screenshot'])
+                    for p in posts]
         if any(x['beforeSha256'] != before['digest'] or x['afterSha256'] != p['digest']
                for x, p in zip(physical, posts)):
             return reject('image hash mismatch')

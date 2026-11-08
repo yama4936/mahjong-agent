@@ -154,7 +154,8 @@ if __name__ == '__main__':
     paths, journal = request['paths'], request['journal']
     receipts = [json.loads(Path(path).read_text()) for path in paths]
     unknown_draw = all(event.get('blankDrawIdentityUnknown') is True for event in journal)
-    result = evaluate(paths[0], paths[1:], journal, recheck_round=True, unknown_draw=unknown_draw)
+    result = evaluate(paths[0], paths[1:], journal, recheck_round=True, unknown_draw=unknown_draw,
+                      friend_second_row_overlap=True)
     ok = (result.get('state') == 'later_turn_evidence_candidate'
           and all(consistent(receipts[0], post, journal[0]['clickIndex']) for post in receipts[1:]))
     print(json.dumps({'candidate': ok}))
