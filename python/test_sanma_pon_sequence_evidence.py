@@ -28,7 +28,7 @@ class SequenceTest(unittest.TestCase):
     samples=self.samples();samples[1]['frame']=out.getvalue()
     self.assertEqual(compare_sequence(samples,self.report)['status'],'rejected')
  def test_changed_hand_offer_round_and_action(self):
-  for box in ((300,950,335,995),(715,295,745,325),(910,400,950,430),(950,800,990,845),(768,544,830,614),(40,45,100,120),(680,370,740,430),(850,240,910,300)):
+  for box in ((300,950,335,995),(715,295,745,325),(910,400,950,430),(950,800,990,845),(768,544,830,614),(40,45,100,120),(680,370,740,430),(850,240,910,300),(790,335,825,365),(24,135,82,180),(290,225,350,280)):
    with self.subTest(box=box):
     image=Image.open(io.BytesIO(self.frame)).convert('RGB');ImageDraw.Draw(image).rectangle(box,fill='white');out=io.BytesIO();image.save(out,format='PNG');s=self.samples();s[2]['frame']=out.getvalue()
     self.assertEqual(compare_sequence(s,self.report)['status'],'rejected')
@@ -45,3 +45,8 @@ class RealSequenceTest(unittest.TestCase):
   image=Image.open(paths[1]).convert('RGB');ImageDraw.Draw(image).rectangle((768,544,829,613),fill='white');out=io.BytesIO();image.save(out,format='PNG')
   altered=[dict(x) for x in samples];altered[1]['frame']=out.getvalue()
   self.assertEqual(compare_sequence(altered,r['sourceObservation']['report'])['status'],'rejected')
+  for box in ((790,335,825,365),(24,135,82,180),(290,225,350,280)):
+   with self.subTest(box=box):
+    image=Image.open(paths[1]).convert('RGB');ImageDraw.Draw(image).rectangle(box,fill='white');out=io.BytesIO();image.save(out,format='PNG')
+    altered=[dict(x) for x in samples];altered[1]['frame']=out.getvalue()
+    self.assertEqual(compare_sequence(altered,r['sourceObservation']['report'])['status'],'rejected')
