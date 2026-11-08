@@ -11,7 +11,11 @@ from pathlib import Path
 from functools import lru_cache
 
 # Fixed client geometry: self hand, table/round metadata, left offered tile.
-REGIONS = ((220,925,1455,1072), (870,355,1030,495), (707,292,775,333))
+REGIONS = ((220,925,1455,1072), (870,355,1030,495), (707,292,775,333),
+           (22,40,304,130),       # dora indicators
+           (680,370,780,550),    # left river outside offered-tile halo
+           (850,240,1125,312),   # opposite river
+           (768,544,1140,754))   # own river
 
 @lru_cache(maxsize=16)
 def _describe(data):

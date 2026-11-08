@@ -70,6 +70,29 @@ class Pon159Tests(unittest.TestCase):
         with patch('sanma_friend_pass_experiment.classify_screen',return_value=('match',1)):
             execute_friend_pon_pass(op,page,receipt)
         page.mouse.click.assert_called_once_with(1300,830)
+    def test_stream_monitor_integrates_after_unconfirmed_discard_once(self):
+        from test_experimental_sanma_friend_loop import ExperimentalSanmaFriendLoopTest
+        case=ExperimentalSanmaFriendLoopTest('runTest');case.setUp();self.addCleanup(case.doCleanups)
+        case.op.args.max_iterations=4;case.op.args.experimental_sanma_pon_monitor=True
+        first=copy.deepcopy(self.receipt);first['candidates']={'candidates':[]};first['drawCandidate']={'status':'candidate'}
+        first['freshness']={'status':'identical_pixels_candidate'}
+        pon=copy.deepcopy(self.receipt);pon['freshness']['status']='changed'
+        case.op.inspect_sanma_self_turn.side_effect=[first,pon,pon,pon]
+        case.op.observe_sanma_friend_transition.return_value={'status':'visual_change_unconfirmed','confirmed':False}
+        watch=Mock();watch.alive.return_value=True;monitor=Mock();monitor.matches.return_value=True
+        output={'status':'selection_confirmed','result':'discard_not_verified','tile':'E','clickIndex':0,
+                'clickPoint':{'x':1,'y':1},'frameSha256':first['digest']}
+        with patch('sanma_pon_sequence_evidence._describe',side_effect=[None,True,True,True]), \
+             patch('sanma_friend_pon_monitor.FriendPonMonitor',return_value=monitor) as constructor, \
+             patch('sanma_friend_discard_recovery.MatchContinuity',return_value=watch), \
+             patch('sanma_friend_discard_experiment.execute_friend_draw_candidate',return_value=output) as discard, \
+             patch('sanma_friend_pass_experiment.execute_friend_pon_pass',return_value={'clicked':True}) as skip:
+            case.run_room()
+        self.assertEqual(discard.call_count,1);self.assertEqual(skip.call_count,1)
+        self.assertIs(skip.call_args.kwargs['pon_monitor'],monitor)
+        self.assertTrue(all(c.kwargs['deadline_ms']==300000 for c in constructor.call_args_list))
+        self.assertTrue(any(c.args[0]=='sanma_friend_recovery_pon_pass' for c in case.op.log.call_args_list))
+
     def test_discard_recovery_passes_pon_at_most_once(self):
         from test_experimental_sanma_friend_loop import ExperimentalSanmaFriendLoopTest
         case=ExperimentalSanmaFriendLoopTest('runTest');case.setUp();self.addCleanup(case.doCleanups)

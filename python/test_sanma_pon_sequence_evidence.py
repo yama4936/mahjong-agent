@@ -28,7 +28,7 @@ class SequenceTest(unittest.TestCase):
     samples=self.samples();samples[1]['frame']=out.getvalue()
     self.assertEqual(compare_sequence(samples,self.report)['status'],'rejected')
  def test_changed_hand_offer_round_and_action(self):
-  for box in ((300,950,335,995),(715,295,745,325),(910,400,950,430),(950,800,990,845)):
+  for box in ((300,950,335,995),(715,295,745,325),(910,400,950,430),(950,800,990,845),(768,544,830,614),(40,45,100,120),(680,370,740,430),(850,240,910,300)):
    with self.subTest(box=box):
     image=Image.open(io.BytesIO(self.frame)).convert('RGB');ImageDraw.Draw(image).rectangle(box,fill='white');out=io.BytesIO();image.save(out,format='PNG');s=self.samples();s[2]['frame']=out.getvalue()
     self.assertEqual(compare_sequence(s,self.report)['status'],'rejected')
@@ -40,3 +40,8 @@ class RealSequenceTest(unittest.TestCase):
   events=[e for e in map(json.loads,(ROOT/'python-operator.jsonl').read_text().splitlines()) if e.get('event')=='sanma_self_turn_observed'];r=json.loads(Path(events[0]['receiptPath']).read_text());paths=[r['screenshot'],r['freshness']['screenshot'],events[1]['screenshot']]
   samples=[{'frame':Path(p).read_bytes(),'sequence':i,'capturedAt':float(i)} for i,p in enumerate(paths)]
   self.assertEqual(compare_sequence(samples,r['sourceObservation']['report'])['status'],'candidate')
+  # A white-tile-shaped change in our river followed by the original image
+  # must not be hidden by identical first and last frames.
+  image=Image.open(paths[1]).convert('RGB');ImageDraw.Draw(image).rectangle((768,544,829,613),fill='white');out=io.BytesIO();image.save(out,format='PNG')
+  altered=[dict(x) for x in samples];altered[1]['frame']=out.getvalue()
+  self.assertEqual(compare_sequence(altered,r['sourceObservation']['report'])['status'],'rejected')

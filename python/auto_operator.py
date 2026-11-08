@@ -9461,12 +9461,28 @@ class PythonAutoOperator:
                         result_latched = None
                     try:
                         if getattr(self.args, 'experimental_sanma_pon_monitor', False):
-                            from sanma_friend_pon_monitor import FriendPonMonitor
-                            pon_monitor = FriendPonMonitor(page, enabled=True,
-                                friend_active=lambda: self.verified_friend_300_active is True,
-                                ranked=self.args.ranked_loop, deadline_ms=self.args.action_deadline_ms,
-                                started=action_observed_at)
-                            pon_monitor.start()
+                            try:
+                                # Quick positive-only filter prevents the monitor
+                                # from delaying or interrupting unrelated turns.
+                                from sanma_pon_sequence_evidence import _describe
+                                if _describe(frame) is not None:
+                                    from sanma_friend_pon_monitor import FriendPonMonitor
+                                    pon_monitor = FriendPonMonitor(page, enabled=True,
+                                        friend_active=lambda: self.verified_friend_300_active is True,
+                                        ranked=self.args.ranked_loop, deadline_ms=self.args.action_deadline_ms,
+                                        started=min(action_observed_at, discard_recovery['started']) if discard_recovery else action_observed_at)
+                                    pon_monitor.start()
+                                    # Only this capture, made after monitoring starts,
+                                    # can serve as the recognition baseline.
+                                    monitored_started = time.monotonic()
+                                    monitored_frame = page.screenshot(animations='disabled')
+                                    frame, observation_started = monitored_frame, monitored_started
+                            except Exception as error:
+                                self.log('sanma_friend_pon_monitor_unavailable', errorType=type(error).__name__, operationAuthorized=False)
+                                if pon_monitor is not None:
+                                    try: pon_monitor.close()
+                                    except Exception: pass
+                                pon_monitor = None
                         receipt = self.inspect_sanma_self_turn(page, classified_frame=frame, classified_started=observation_started)
                         if pon_monitor is not None:
                             # Allow queued CDP events to be processed and gather fresh frames.
@@ -9494,15 +9510,23 @@ class PythonAutoOperator:
                                 # discard; retain its watch and old deadline.
                                 actions = (receipt.get('candidates') or {}).get('candidates')
                                 fresh = receipt.get('freshness') or {}
+                                recovery_monitored_pon = (pon_monitor is not None
+                                    and fresh.get('status') == 'changed'
+                                    and isinstance(actions,list) and len(actions)==1
+                                    and isinstance(actions[0],dict) and actions[0].get('action')=='pon'
+                                    and pon_monitor.matches(receipt.get('sourceObservation',{}).get('report') or {},
+                                        Path(receipt['screenshot']).read_bytes(),Path(fresh['screenshot']).read_bytes()))
                                 if (not discard_recovery.get('pon_pass_attempted')
                                         and isinstance(actions,list) and len(actions)==1
                                         and isinstance(actions[0],dict) and actions[0].get('action')=='pon'
-                                        and fresh.get('status') in {'stable_pon_pass_candidate','identical_pixels_candidate','stable_except_clock_candidate'}):
+                                        and (fresh.get('status') in {'stable_pon_pass_candidate','identical_pixels_candidate','stable_except_clock_candidate'}
+                                             or recovery_monitored_pon)):
                                     from sanma_friend_pass_experiment import execute_friend_pon_pass, PassPreclickChanged, pass_was_not_sent, may_reobserve_unsent_pass
                                     self._sanma_friend_resume_guard = (watch,discard_recovery['started'],300000)
                                     try:
                                         try:
-                                            result=execute_friend_pon_pass(self,page,receipt)
+                                            result=(execute_friend_pon_pass(self,page,receipt,pon_monitor=pon_monitor)
+                                                    if recovery_monitored_pon else execute_friend_pon_pass(self,page,receipt))
                                         except PassPreclickChanged as error:
                                             if not pass_was_not_sent(error):
                                                 raise RuntimeError('pass outcome unknown; retry forbidden') from error

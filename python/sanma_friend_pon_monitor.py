@@ -27,6 +27,9 @@ class FriendPonMonitor:
   self.session=self.page.context.new_cdp_session(self.page)
   try:
    self.session.on('Page.screencastFrame',self.receive)
+   for name in ('Network.webSocketCreated','Network.webSocketClosed','Network.webSocketFrameError'):
+    self.session.on(name,lambda event,name=name:self.fail(name))
+   self.session.send('Network.enable')
    for name in ('Page.frameStartedLoading','Page.frameDetached','Inspector.detached','Inspector.targetCrashed'):
     self.session.on(name,lambda event,name=name:self.fail(name))
    self.session.send('Page.enable');self.session.send('Page.startScreencast',{'format':'png','everyNthFrame':1})

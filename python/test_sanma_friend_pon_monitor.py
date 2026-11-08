@@ -40,5 +40,12 @@ class MonitorTest(unittest.TestCase):
   self.session.send.side_effect=RuntimeError('detached')
   self.assertEqual(self.m.candidate(self.report)['status'],'rejected')
   self.session.send.side_effect=None;self.m.close()
+ def test_all_socket_lifecycle_events_invalidate(self):
+  for name in ('Network.webSocketCreated','Network.webSocketClosed','Network.webSocketFrameError'):
+   self.setUp();self.start();[self.send() for _ in range(3)]
+   handlers={call.args[0]:call.args[1] for call in self.session.on.call_args_list}
+   handlers[name]({'requestId':'opaque'})
+   self.assertEqual(self.m.candidate(self.report)['status'],'rejected');self.assertEqual(self.m.invalid,name)
+   self.m.close()
  def test_session_revoked(self):
   self.start();[self.send() for _ in range(3)];self.active=False;self.assertEqual(self.m.candidate(self.report)['status'],'rejected');self.m.close()
