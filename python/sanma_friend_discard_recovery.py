@@ -112,8 +112,16 @@ def candidate(before, posts, journal, *, continuity, active, started, deadline_m
                 return False
             hand = receipt['sourceObservation']['report']['hand']['value']
             tiles = hand.get('tiles', [])
-            if (hand.get('candidateMelds') != 0 or any(t == '0p' for t in tiles)):
+            if hand.get('candidateMelds') != 0:
                 return False
+            if '0p' in tiles:
+                from sanma_five_pin_candidate import red_five_pin_face_candidate
+                geometry = receipt['sourceObservation']['report']['handGeometry']['value']
+                slots = [*geometry['handSlots'], geometry['drawSlot']]
+                if len(tiles) != 14 or len(slots) != 14 or any(
+                    not red_five_pin_face_candidate(data,slots[i]) for i,tile in enumerate(tiles) if tile == '0p'
+                ):
+                    return False
             if '5p' in tiles:
                 from sanma_five_pin_candidate import ordinary_five_pin_face_candidate
                 geometry = receipt['sourceObservation']['report']['handGeometry']['value']
