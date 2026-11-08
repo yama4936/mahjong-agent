@@ -33,7 +33,7 @@ def may_reobserve_unsent_pass(error, failures, watch, active, started, now):
         return False
 
 
-def execute_friend_pon_pass(operator, page, receipt, *, declare_riichi=False):
+def execute_friend_pon_pass(operator, page, receipt, *, declare_riichi=False, pon_monitor=None):
     args = operator.args
     if (getattr(args, 'rules', None) != 'sanma' or getattr(args, 'mode', None) != 'force-auto'
             or getattr(args, 'action_deadline_ms', None) != 300000
@@ -49,10 +49,13 @@ def execute_friend_pon_pass(operator, page, receipt, *, declare_riichi=False):
     row = report.get('buttonRow') or {}
     slots = (row.get('value') or {}).get('slots')
     freshness = receipt.get('freshness') or {}
+    monitored = (pon_monitor is not None and getattr(args, 'experimental_sanma_pon_monitor', False) is True
+                 and not declare_riichi)
     if (receipt.get('scope') != 'sanma_self_turn_observation' or receipt.get('status') != 'blocked'
             or receipt.get('operationAuthorized') is not False or source.get('operationAuthorized') is not False
             or source.get('digest') != receipt.get('digest') or report.get('digest') != receipt.get('digest')
-            or freshness.get('status') not in ('identical_pixels_candidate','stable_except_clock_candidate','stable_pon_pass_candidate')
+            or (freshness.get('status') not in ('identical_pixels_candidate','stable_except_clock_candidate','stable_pon_pass_candidate')
+                and not (monitored and freshness.get('status') == 'changed'))
             or freshness.get('operationAuthorized') is not False
             or type(freshness.get('elapsedMs')) not in (int,float) or not 0 <= freshness['elapsedMs'] <= 20000
             or row.get('status') != 'candidate' or (row.get('value') or {}).get('ronReferenceCompared') is not True
@@ -81,7 +84,13 @@ def execute_friend_pon_pass(operator, page, receipt, *, declare_riichi=False):
     fresh = page.screenshot(animations='disabled')
     require_sanma_observable_frame(fresh)
     diagnostic = {'stage': 'strict_frame'}
-    if freshness.get('status') == 'stable_pon_pass_candidate':
+    if monitored and freshness.get('status') == 'changed':
+        # All stream frames and the baseline/fresh capture are checked.
+        # No source-level frame counter exists; an omitted intermediate frame
+        # remains a documented limitation of this experimental friend path.
+        stable = pon_monitor.matches(report, baseline, fresh)
+        diagnostic = {'stage':'resident_pon_monitor'}
+    elif freshness.get('status') == 'stable_pon_pass_candidate':
         from sanma_friend_pon_stability import pon_pass_stability
         diagnostic = {}
         stable = pon_pass_stability(baseline, fresh, report, diagnostic=diagnostic)
@@ -116,5 +125,7 @@ def execute_friend_pon_pass(operator, page, receipt, *, declare_riichi=False):
         raise RuntimeError('friend session or timing expired before click')
     from sanma_friend_freshness import check_friend_recovery_guard
     check_friend_recovery_guard(operator)
+    if monitored and not pon_monitor.matches(report, baseline, fresh):
+        raise RuntimeError('pon monitor changed before click')
     page.mouse.click(point['x'],point['y'])
     return {'clicked':True,'action':action,'confirmation':'unknown','stopped':True}

@@ -9251,6 +9251,7 @@ class PythonAutoOperator:
         discard_recovery = None
         resumed_watch = None
         watch = None
+        pon_monitor = None
         unconfirmed_input_seen = False
         only_unconfirmed_kita = False
         last_kita_receipt = None
@@ -9459,7 +9460,17 @@ class PythonAutoOperator:
                         self.result_screen_advanced = None
                         result_latched = None
                     try:
+                        if getattr(self.args, 'experimental_sanma_pon_monitor', False):
+                            from sanma_friend_pon_monitor import FriendPonMonitor
+                            pon_monitor = FriendPonMonitor(page, enabled=True,
+                                friend_active=lambda: self.verified_friend_300_active is True,
+                                ranked=self.args.ranked_loop, deadline_ms=self.args.action_deadline_ms,
+                                started=action_observed_at)
+                            pon_monitor.start()
                         receipt = self.inspect_sanma_self_turn(page, classified_frame=frame, classified_started=observation_started)
+                        if pon_monitor is not None:
+                            # Allow queued CDP events to be processed and gather fresh frames.
+                            page.wait_for_timeout(400)
                         if last_unconfirmed_action == "discard":
                             if discard_recovery is None:
                                 self.log("sanma_friend_stopped", reason="discard_recovery_unavailable", operationAuthorized=False)
@@ -9598,7 +9609,11 @@ class PythonAutoOperator:
                                      screenshot=receipt.get("screenshot"), operationAuthorized=False)
                             return
                         freshness = receipt.get("freshness")
-                        if isinstance(freshness, dict) and freshness.get("status") == "changed":
+                        monitored_pon = (pon_monitor is not None and candidate_actions == ('pon',)
+                            and pon_monitor.matches(receipt.get('sourceObservation', {}).get('report') or {},
+                                Path(receipt['screenshot']).read_bytes(),
+                                Path(freshness['screenshot']).read_bytes()) if isinstance(freshness, dict) and freshness.get('status') == 'changed' else False)
+                        if isinstance(freshness, dict) and freshness.get("status") == "changed" and not monitored_pon:
                             if changed_since is None:
                                 changed_since = time.monotonic()
                             changed_streak += 1
@@ -9702,7 +9717,8 @@ class PythonAutoOperator:
                             result = execute_friend_riichi(self, page, receipt)
                         elif actions and all(isinstance(item, dict) and item.get("action") in {"pon", "kan", "riichi"} for item in actions):
                             from sanma_friend_pass_experiment import execute_friend_pon_pass
-                            result = execute_friend_pon_pass(self, page, receipt)
+                            result = (execute_friend_pon_pass(self, page, receipt, pon_monitor=pon_monitor)
+                                      if monitored_pon else execute_friend_pon_pass(self, page, receipt))
                             if resumed_watch is not None:
                                 resumed_watch.close()
                                 resumed_watch = None
@@ -9839,6 +9855,10 @@ class PythonAutoOperator:
                         self.log("sanma_friend_stopped", reason="observation_or_action_failed", error=str(error),
                                  screenshot=preserve(last_frame), operationAuthorized=False)
                         return
+                    finally:
+                        if pon_monitor is not None:
+                            pon_monitor.close()
+                            pon_monitor = None
                 if (round_end_started is None and match_seen and state in {"away", "unknown", "lobby", "round_result"}
                         and experimental_friend_score_transfer_candidate(frame)):
                     round_end_started = time.monotonic()
@@ -11327,6 +11347,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--cdp", default="http://127.0.0.1:9222")
     parser.add_argument("--rules", choices=("yonma", "sanma"), default="yonma",
                         help="game rules; sanma requires the experimental friend-only opt-in")
+    parser.add_argument("--experimental-sanma-pon-monitor", action="store_true", help="experimental friend-only resident pon evidence")
     parser.add_argument("--experimental-sanma-self-turn-wall", action="store_true", help="experimental CPU friend only: check animated left wall after self turn checks")
     parser.add_argument("--experimental-sanma-png-stream", action="store_true",
                         help="experimental friend-only PNG stream for post-recognition freshness")
@@ -11410,6 +11431,8 @@ def parse_args() -> argparse.Namespace:
          and explicit_args[index + 1] == "300000") for index, value in enumerate(explicit_args))
     if (args.rules == "sanma" or mentions_sanma) and not (experimental_sanma_friend_allowed(args) and explicit_deadline):
         parser.error("sanma automatic decisions and screen operation are not implemented; startup stopped")
+    if args.experimental_sanma_pon_monitor and not (experimental_sanma_friend_allowed(args) and explicit_deadline):
+        parser.error("experimental pon monitor requires reviewed sanma friend 300+0")
     if args.experimental_sanma_self_turn_wall and not (experimental_sanma_friend_allowed(args) and explicit_deadline):
         parser.error("experimental self-turn wall requires reviewed sanma friend 300+0")
     if args.experimental_sanma_png_stream and not (experimental_sanma_friend_allowed(args) and explicit_deadline):
