@@ -410,6 +410,186 @@ def execute_friend_draw_candidate(operator, page, receipt):
     return result
 
 
+# Fix B (timing) support: regions whose animation is already bounded by a
+# dedicated semantic guard in experimental_draw_glyph_stability. The wall
+# region is the crop of experimental_kita_wall_color_stable; the centre box
+# is compared structurally as the final glyph stage. Binary changes anywhere
+# else can never justify adopting a fresh baseline.
+_REFRESH_WALL_REGION = (150, 80, 390, 700)
+_REFRESH_CENTER_BOX = (905, 375, 1010, 465)
+
+
+def _binary_frame_change_blocks(reference, frame, report):
+    """Replicate the binary_frame scan of the draw glyph guard.
+
+    Returns the 32-pixel blocks whose thresholded (<120) pixel changes exceed
+    the guard's existing threshold of 14, using the same clock, self-lamp,
+    hand, draw and button masks. No threshold or mask is altered. Returns
+    None when the scan cannot be performed; callers must fail closed.
+    """
+    try:
+        geometry = report["handGeometry"]["value"]
+        boxes = list(geometry["handSlots"]) + [geometry["drawSlot"]] + [
+            {"x": 600, "y": 785, "width": 245, "height": 90},
+            {"x": 890, "y": 785, "width": 245, "height": 90},
+            {"x": 1180, "y": 785, "width": 245, "height": 90}]
+        with Image.open(io.BytesIO(reference)) as a, Image.open(io.BytesIO(frame)) as b:
+            if a.size != (1920, 1080) or b.size != a.size:
+                return None
+            first = a.convert("L").point(lambda v: 255 if v < 120 else 0)
+            second = b.convert("L").point(lambda v: 255 if v < 120 else 0)
+            diff = ImageChops.difference(first, second)
+            for rect in ((1425, 755, 1650, 870), (890, 495, 1015, 516)):
+                diff.paste(0, rect)
+            for box in boxes:
+                x, y, w, h = (int(box[k]) for k in ("x", "y", "width", "height"))
+                if x < 0 or y < 0 or w <= 0 or h <= 0 or x + w > 1920 or y + h > 1080:
+                    return None
+                diff.paste(0, (x, y, x + w, y + h))
+            blocks = []
+            for y in range(0, 1080, 32):
+                for x in range(0, 1920, 32):
+                    changed = diff.crop((x, y, min(x + 32, 1920), min(y + 32, 1080))).histogram()[255]
+                    if changed > 14:
+                        blocks.append({"x": x, "y": y, "changedPixels": changed})
+            return blocks
+    except (KeyError, TypeError, ValueError, OSError, IndexError):
+        return None
+
+
+def _blocks_confined_to_animation_regions(blocks):
+    regions = (_REFRESH_WALL_REGION, _REFRESH_CENTER_BOX)
+    def confined(block):
+        return any(block["x"] < rx2 and block["x"] + 32 > rx1
+                   and block["y"] < ry2 and block["y"] + 32 > ry1
+                   for rx1, ry1, rx2, ry2 in regions)
+    return bool(blocks) and all(confined(block) for block in blocks)
+
+
+def _refresh_discard_baseline(page, *, reference, candidate, candidate_captured_at,
+                              report, diagnostic, wall_errors, self_turn_wall_opt_in,
+                              draw_index, clock, log):
+    """Adopt a fresh preclick capture as the comparison baseline, or return None.
+
+    The recognised reference is already seconds old when the preclick capture
+    is compared with it (recognition, freshness guards and candidate work run
+    in between), so animation phase drift alone can trip the binary_frame
+    guard and force a full reobservation cycle. A candidate is adopted only
+    when every one of these holds; any other outcome returns None and the
+    caller rejects exactly as before (fail closed):
+
+    1. The original comparison failed solely at the binary_frame stage, so
+       wall colour, hand faces, button glyphs, protected colour and button
+       RGB stages all already passed against the reference, and the wall
+       guard reported no execution error.
+    2. The opt-in self-turn lighting hypothesis does not already explain
+       the pair; pairs it explains stay behind that opt-in, draw-only gate.
+    3. Every binary change block against the reference is confined to the
+       wall or centre regions those semantic guards cover.
+    4. The physical hand faces, including the planned slot, still match the
+       reference under the same check and threshold the glyph guard uses.
+    5. An immediate confirmation capture matches the candidate under the
+       same stability chain (identity, clock-masked stability, glyph
+       stability, and the opt-in self-turn fallback) with the same report.
+
+    No guard threshold, mask or rescue condition is changed by this path.
+    The returned record identifies the adopted baseline frame and when it
+    was captured; failures after eligibility are logged the same way.
+    """
+    if wall_errors or diagnostic.get("stage") != "binary_frame":
+        return None
+    # The reviewed self-turn lighting hypothesis is opt-in and draw-only.
+    # A pair that hypothesis already explains must stay behind that gate;
+    # refreshing the baseline must never become a default-on substitute for
+    # it. (The evidence184 rejections are exactly the pairs it does not
+    # explain, e.g. the self lamp caught mid-blink.)
+    if __import__("sanma_friend_self_turn_stability").self_turn_stability(reference, candidate, report):
+        return None
+    detail = {"kind": "sanma_discard_baseline_refresh_failed", "confirmed": False,
+              "operationAuthorized": False,
+              "referenceSha256": hashlib.sha256(reference).hexdigest(),
+              "candidateSha256": hashlib.sha256(candidate).hexdigest(),
+              "candidateCapturedAtMonotonic": candidate_captured_at,
+              "originalDiagnostic": dict(diagnostic)}
+    blocks = _binary_frame_change_blocks(reference, candidate, report)
+    detail["binaryChangeBlocks"] = blocks
+    if blocks is None:
+        detail["reason"] = "binary change scan unavailable"
+        log(detail)
+        return None
+    if not _blocks_confined_to_animation_regions(blocks):
+        detail["reason"] = "binary changes outside wall/centre animation regions"
+        log(detail)
+        return None
+    try:
+        geometry = report["handGeometry"]["value"]
+        hand_layout = {"handSlots": geometry["handSlots"], "drawSlot": geometry["drawSlot"]}
+        mismatches = __import__("auto_operator").closed_hand_face_mismatches(
+            reference, candidate, hand_layout, .5)
+    except Exception as error:
+        detail["reason"] = f"hand face verification unavailable: {type(error).__name__}"
+        log(detail)
+        return None
+    detail["handFaceMismatches"] = mismatches
+    if mismatches:
+        detail["reason"] = "hand faces differ from reference"
+        log(detail)
+        return None
+    try:
+        confirmation = page.screenshot(animations="disabled")
+        confirmation_captured_at = clock()
+        require_sanma_observable_frame(confirmation)
+        if not isinstance(confirmation, bytes):
+            raise ValueError("confirmation capture unavailable")
+    except Exception as error:
+        detail["reason"] = f"confirmation capture unavailable: {type(error).__name__}"
+        log(detail)
+        return None
+    detail["confirmationSha256"] = hashlib.sha256(confirmation).hexdigest()
+    detail["confirmationCapturedAtMonotonic"] = confirmation_captured_at
+    confirmed = detail["confirmationSha256"] == detail["candidateSha256"]
+    if not confirmed:
+        confirmed = friend_frame_stable(candidate, confirmation)
+    if not confirmed:
+        confirm_diagnostic = {}
+        confirm_wall_errors = []
+        def confirm_wall_error(data):
+            confirm_wall_errors.append(data)
+            log({"kind": "sanma_wall_guard_error", **data})
+        confirmed = __import__("auto_operator").experimental_draw_glyph_stability(
+            candidate, confirmation, report, diagnostic=confirm_diagnostic,
+            on_wall_error=confirm_wall_error)
+        if (not confirmed and not confirm_wall_errors and self_turn_wall_opt_in is True
+                and draw_index):
+            confirmed = __import__("sanma_friend_self_turn_stability").self_turn_stability(
+                candidate, confirmation, report)
+            if confirmed:
+                log({"kind": "sanma_self_turn_wall_candidate", "confirmed": False})
+        detail["confirmationDiagnostic"] = confirm_diagnostic
+        if confirm_wall_errors:
+            detail["reason"] = "wall guard error during baseline confirmation"
+            log(detail)
+            return None
+    if not confirmed:
+        detail["reason"] = "candidate baseline not confirmed by immediate capture"
+        log(detail)
+        return None
+    adopted = {"kind": "sanma_discard_baseline_refreshed", "confirmed": False,
+               "operationAuthorized": False,
+               "referenceSha256": detail["referenceSha256"],
+               "baselineSha256": detail["candidateSha256"],
+               "confirmationSha256": detail["confirmationSha256"],
+               "baselineCapturedAtMonotonic": candidate_captured_at,
+               "confirmationCapturedAtMonotonic": confirmation_captured_at,
+               "originalDiagnostic": dict(diagnostic),
+               "binaryChangeBlocks": blocks,
+               "reason": "reference aged across recognition and freshness; candidate "
+                         "re-verified against reference hand faces and confirmed by "
+                         "an immediate capture under the same stability chain"}
+    log(adopted)
+    return adopted
+
+
 def execute_friend_discard(page, *, session, observation, plan, layout, log,
                            turn_started_monotonic, clock=time.monotonic, session_check=None,
                            save_rejected_frame=None, before_click=None, self_turn_wall_opt_in=False):
@@ -447,6 +627,7 @@ def execute_friend_discard(page, *, session, observation, plan, layout, log,
                 or not 0 <= started - turn_started_monotonic < 300):
             raise ValueError("invalid or expired turn clock")
         before = page.screenshot(animations="disabled")
+        before_captured_at = clock()
         try:
             require_sanma_observable_frame(before)
         except Exception:
@@ -457,6 +638,7 @@ def execute_friend_discard(page, *, session, observation, plan, layout, log,
                     pass  # Failed evidence never permits input.
             raise
         reference = observation.get("referenceFrame")
+        baseline_refresh = None
         matched = isinstance(before, bytes) and hashlib.sha256(before).hexdigest() == observation.get("frameSha256")
         diagnostic = {"stage": "frame_identity"}
         if not matched and isinstance(before, bytes) and isinstance(reference, bytes):
@@ -478,6 +660,20 @@ def execute_friend_discard(page, *, session, observation, plan, layout, log,
                             reference, before, observation["experimentalDrawReport"])
                         if matched:
                             log({"kind":"sanma_self_turn_wall_candidate", "confirmed":False})
+                    if not matched:
+                        # Fix B (timing): the reference is already seconds old
+                        # here, so animation drift alone can trip the binary
+                        # guard. Try to adopt this fresh capture as a verified
+                        # new baseline instead of forcing a full reobservation.
+                        baseline_refresh = _refresh_discard_baseline(
+                            page, reference=reference, candidate=before,
+                            candidate_captured_at=before_captured_at,
+                            report=observation["experimentalDrawReport"],
+                            diagnostic=diagnostic, wall_errors=wall_errors,
+                            self_turn_wall_opt_in=self_turn_wall_opt_in,
+                            draw_index=index == len(slots) - 1,
+                            clock=clock, log=log)
+                        matched = baseline_refresh is not None
         if not matched:
             event['preclickDiagnostic'] = diagnostic
             if isinstance(before, bytes) and save_rejected_frame is not None:
@@ -507,6 +703,10 @@ def execute_friend_discard(page, *, session, observation, plan, layout, log,
             before_click()
         event.update(status="attempted", tile=plan["tile"], clickIndex=index, clickPoint=point,
                      frameSha256=observation["frameSha256"])
+        if baseline_refresh is not None:
+            event.update(baselineRefreshed=True,
+                         baselineSha256=baseline_refresh["baselineSha256"],
+                         referenceSha256=baseline_refresh["referenceSha256"])
         log(dict(event))
         def checked_selection(_):
             frame = page.screenshot(animations="disabled")

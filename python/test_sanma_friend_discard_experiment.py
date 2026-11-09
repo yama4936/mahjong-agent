@@ -270,3 +270,155 @@ class FriendDrawBridgeTests(unittest.TestCase):
         self.assertEqual(event.kwargs['error'],'recognition frame changed before click')
         self.assertIn('FileNotFoundError',event.kwargs['evidenceSaveError'])
         send.assert_not_called()
+
+
+class FriendDiscardBaselineRefreshTests(unittest.TestCase):
+    """Fix B (timing): a verified fresh capture may replace the aged reference.
+
+    The reference below is seconds old by preclick time; only animation in
+    the wall seam differs. Adoption still requires the hand faces to match
+    the reference and an immediate confirmation capture to match the new
+    baseline under the same stability chain.
+    """
+
+    def setUp(self):
+        import io
+        from PIL import Image, ImageDraw
+
+        def frame(patches=()):
+            image = Image.new("RGB", (1920, 1080), (190, 195, 205))
+            draw = ImageDraw.Draw(image)
+            for box in patches:
+                draw.rectangle(box, fill=(5, 5, 5))
+            output = io.BytesIO()
+            image.save(output, format="PNG")
+            return output.getvalue()
+
+        self.frame = frame
+        self.reference = frame()
+        # Animation-only drift confined to one left-wall seam block.
+        self.candidate = frame([(320, 96, 351, 127)])
+        # The same candidate one capture later; only the clock area moved.
+        self.confirmation = frame([(320, 96, 351, 127), (1500, 800, 1531, 831)])
+        self.page = Mock()
+        self.session = {"mode": "cpu_friend", "rules": "sanma", "clock": "300+0",
+                        "actionDeadlineMs": 300000, "ranked": False, "cpuCount": 2, "roomVerified": True}
+        self.point = {"x": 200, "y": 1000}
+        hand_slots = [{"x": 220 + 94 * i, "y": 921, "width": 93, "height": 151} for i in range(13)]
+        draw_slot = {"x": 1485, "y": 921, "width": 93, "height": 151}
+        report = {"handGeometry": {"value": {"handSlots": hand_slots, "drawSlot": draw_slot}}}
+        self.observation = {"status": "candidate", "phase": "self_turn", "promptStatus": "none",
+                            "handStatus": "candidate", "layoutStatus": "candidate",
+                            "slots": [{"tile": "1m", **self.point}],
+                            "frameSha256": hashlib.sha256(self.reference).hexdigest(),
+                            "referenceFrame": self.reference,
+                            "experimentalDrawReport": report}
+        self.plan = {"scope": "offline_untrusted_sanma_discard_plan", "operationAuthorized": False,
+                     "tile": "1m", "clickIndex": 0, "clickPoint": self.point}
+        self.logs = []
+        self.kwargs = dict(session=self.session, observation=self.observation, plan=self.plan,
+                           layout={"viewport": {"width": 1920, "height": 1080},
+                                   "handSlots": hand_slots, "drawSlot": draw_slot},
+                           log=self.logs.append, turn_started_monotonic=100, clock=lambda: 101)
+
+    @staticmethod
+    def _fail_at_binary_frame(diagnostic):
+        diagnostic.update(stage='binary_frame', blockX=320, blockY=96, changedPixels=1024, threshold=14)
+        return False
+
+    @patch('sanma_friend_self_turn_stability.self_turn_stability', return_value=False)
+    @patch('auto_operator.raised_closed_hand_slots', return_value=[])
+    @patch('auto_operator.closed_hand_face_mismatches', return_value=[])
+    @patch('auto_operator.experimental_draw_glyph_stability')
+    @patch("sanma_friend_discard_experiment.send_discard_click")
+    def test_verified_candidate_becomes_baseline_and_click_proceeds(self, send, glyph, faces, raised, wall_gate):
+        def stability(before, after, report, diagnostic=None, **kwargs):
+            if before == self.reference:
+                return self._fail_at_binary_frame(diagnostic)
+            return True
+        glyph.side_effect = stability
+        send.return_value = {"lift": 48}
+        self.page.screenshot.side_effect = [self.candidate, self.confirmation]
+        result = execute_friend_discard(self.page, **self.kwargs)
+        send.assert_called_once()
+        self.assertEqual(result["status"], "selection_confirmed")
+        self.assertEqual(result["frameSha256"], hashlib.sha256(self.reference).hexdigest())
+        self.assertIs(result["baselineRefreshed"], True)
+        self.assertEqual(result["baselineSha256"], hashlib.sha256(self.candidate).hexdigest())
+        refreshed = next(item for item in self.logs if item.get("kind") == "sanma_discard_baseline_refreshed")
+        self.assertEqual(refreshed["baselineSha256"], hashlib.sha256(self.candidate).hexdigest())
+        self.assertEqual(refreshed["confirmationSha256"], hashlib.sha256(self.confirmation).hexdigest())
+        self.assertEqual(refreshed["baselineCapturedAtMonotonic"], 101)
+
+    @patch('sanma_friend_self_turn_stability.self_turn_stability', return_value=True)
+    @patch('auto_operator.raised_closed_hand_slots', return_value=[])
+    @patch('auto_operator.closed_hand_face_mismatches', return_value=[])
+    @patch('auto_operator.experimental_draw_glyph_stability')
+    @patch("sanma_friend_discard_experiment.send_discard_click")
+    def test_pair_explained_by_opt_in_wall_hypothesis_is_not_refreshed(self, send, glyph, faces, raised, wall_gate):
+        def stability(before, after, report, diagnostic=None, **kwargs):
+            return self._fail_at_binary_frame(diagnostic)
+        glyph.side_effect = stability
+        self.page.screenshot.side_effect = [self.candidate, self.confirmation]
+        with self.assertRaises(DiscardPreclickChanged):
+            execute_friend_discard(self.page, **self.kwargs)
+        send.assert_not_called()
+        self.assertEqual(self.page.screenshot.call_count, 1)
+        self.assertFalse(any(item.get("kind") == "sanma_discard_baseline_refresh_failed" for item in self.logs))
+
+    @patch('sanma_friend_self_turn_stability.self_turn_stability', return_value=False)
+    @patch('auto_operator.raised_closed_hand_slots', return_value=[])
+    @patch('auto_operator.closed_hand_face_mismatches', return_value=[])
+    @patch('auto_operator.experimental_draw_glyph_stability')
+    @patch("sanma_friend_discard_experiment.send_discard_click")
+    def test_unconfirmed_candidate_is_not_adopted(self, send, glyph, faces, raised, wall_gate):
+        unstable = self.frame([(320, 96, 351, 127), (700, 300, 731, 331)])
+        def stability(before, after, report, diagnostic=None, **kwargs):
+            return self._fail_at_binary_frame(diagnostic)
+        glyph.side_effect = stability
+        self.page.screenshot.side_effect = [self.candidate, unstable]
+        saved = Mock()
+        with self.assertRaises(DiscardPreclickChanged):
+            execute_friend_discard(self.page, **{**self.kwargs, 'save_rejected_frame': saved})
+        send.assert_not_called()
+        saved.assert_called_once_with(self.candidate)
+        failed = next(item for item in self.logs if item.get("kind") == "sanma_discard_baseline_refresh_failed")
+        self.assertEqual(failed["reason"], "candidate baseline not confirmed by immediate capture")
+
+    @patch('sanma_friend_self_turn_stability.self_turn_stability', return_value=False)
+    @patch('auto_operator.raised_closed_hand_slots', return_value=[])
+    @patch('auto_operator.closed_hand_face_mismatches', return_value=[{"index": 13, "faceStructureDelta": 0.9}])
+    @patch('auto_operator.experimental_draw_glyph_stability')
+    @patch("sanma_friend_discard_experiment.send_discard_click")
+    def test_hand_face_mismatch_blocks_refresh_before_confirmation_capture(self, send, glyph, faces, raised, wall_gate):
+        def stability(before, after, report, diagnostic=None, **kwargs):
+            return self._fail_at_binary_frame(diagnostic)
+        glyph.side_effect = stability
+        self.page.screenshot.side_effect = [self.candidate]
+        with self.assertRaises(DiscardPreclickChanged):
+            execute_friend_discard(self.page, **self.kwargs)
+        send.assert_not_called()
+        self.assertEqual(self.page.screenshot.call_count, 1)
+        failed = next(item for item in self.logs if item.get("kind") == "sanma_discard_baseline_refresh_failed")
+        self.assertEqual(failed["reason"], "hand faces differ from reference")
+
+    @patch('sanma_friend_self_turn_stability.self_turn_stability', return_value=False)
+    @patch('auto_operator.raised_closed_hand_slots', return_value=[])
+    @patch('auto_operator.closed_hand_face_mismatches', return_value=[])
+    @patch('auto_operator.experimental_draw_glyph_stability')
+    @patch("sanma_friend_discard_experiment.send_discard_click")
+    def test_binary_change_outside_animation_regions_blocks_refresh(self, send, glyph, faces, raised, wall_gate):
+        changed = self.frame([(700, 300, 731, 331)])
+        def stability(before, after, report, diagnostic=None, **kwargs):
+            return self._fail_at_binary_frame(diagnostic)
+        glyph.side_effect = stability
+        self.page.screenshot.side_effect = [changed, changed]
+        with self.assertRaises(DiscardPreclickChanged):
+            execute_friend_discard(self.page, **{**self.kwargs,
+                                                'observation': {**self.observation,
+                                                                'experimentalDrawReport':
+                                                                self.observation['experimentalDrawReport']}})
+        send.assert_not_called()
+        self.assertEqual(self.page.screenshot.call_count, 1)
+        failed = next(item for item in self.logs if item.get("kind") == "sanma_discard_baseline_refresh_failed")
+        self.assertEqual(failed["reason"], "binary changes outside wall/centre animation regions")
