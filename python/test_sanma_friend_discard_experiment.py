@@ -422,3 +422,95 @@ class FriendDiscardBaselineRefreshTests(unittest.TestCase):
         self.assertEqual(self.page.screenshot.call_count, 1)
         failed = next(item for item in self.logs if item.get("kind") == "sanma_discard_baseline_refresh_failed")
         self.assertEqual(failed["reason"], "binary changes outside wall/centre animation regions")
+
+    @patch('sanma_friend_self_turn_stability.self_turn_stability', return_value=False)
+    @patch('auto_operator.raised_closed_hand_slots', return_value=[])
+    @patch('auto_operator.closed_hand_face_mismatches', return_value=[])
+    @patch('auto_operator.experimental_draw_glyph_stability')
+    @patch("sanma_friend_discard_experiment.send_discard_click")
+    def test_block_straddling_wall_edge_with_pixels_outside_is_not_refreshed(self, send, glyph, faces, raised, wall_gate):
+        # Block (128, 96) intersects the wall crop (x >= 150), but every
+        # changed pixel sits left of it. Block intersection alone must not
+        # confine them (evidence185 boundary review, reproduction 1).
+        changed = self.frame([(128, 96, 149, 127)])
+        def stability(before, after, report, diagnostic=None, **kwargs):
+            return self._fail_at_binary_frame(diagnostic)
+        glyph.side_effect = stability
+        self.page.screenshot.side_effect = [changed]
+        with self.assertRaises(DiscardPreclickChanged):
+            execute_friend_discard(self.page, **self.kwargs)
+        send.assert_not_called()
+        self.assertEqual(self.page.screenshot.call_count, 1)
+        failed = next(item for item in self.logs if item.get("kind") == "sanma_discard_baseline_refresh_failed")
+        self.assertEqual(failed["reason"], "binary changes outside wall/centre animation regions")
+        self.assertIs(failed["binaryChangesConfined"], False)
+
+    @patch('sanma_friend_self_turn_stability.self_turn_stability', return_value=False)
+    @patch('auto_operator.raised_closed_hand_slots', return_value=[])
+    @patch('auto_operator.closed_hand_face_mismatches', return_value=[])
+    @patch('auto_operator.experimental_draw_glyph_stability')
+    @patch("sanma_friend_discard_experiment.send_discard_click")
+    def test_block_straddling_centre_edge_with_pixels_outside_is_not_refreshed(self, send, glyph, faces, raised, wall_gate):
+        # Block (896, 352) intersects the centre box (905, 375), but the
+        # changed pixels sit left of / above it (evidence185, reproduction 2).
+        changed = self.frame([(896, 352, 904, 383)])
+        def stability(before, after, report, diagnostic=None, **kwargs):
+            return self._fail_at_binary_frame(diagnostic)
+        glyph.side_effect = stability
+        self.page.screenshot.side_effect = [changed]
+        with self.assertRaises(DiscardPreclickChanged):
+            execute_friend_discard(self.page, **self.kwargs)
+        send.assert_not_called()
+        self.assertEqual(self.page.screenshot.call_count, 1)
+        failed = next(item for item in self.logs if item.get("kind") == "sanma_discard_baseline_refresh_failed")
+        self.assertEqual(failed["reason"], "binary changes outside wall/centre animation regions")
+        self.assertIs(failed["binaryChangesConfined"], False)
+
+    @patch('sanma_friend_self_turn_stability.self_turn_stability', return_value=False)
+    @patch('auto_operator.raised_closed_hand_slots', return_value=[])
+    @patch('auto_operator.closed_hand_face_mismatches', return_value=[])
+    @patch('auto_operator.experimental_draw_glyph_stability')
+    @patch("sanma_friend_discard_experiment.send_discard_click")
+    def test_blacked_out_centre_is_not_refreshed_despite_pixel_confinement(self, send, glyph, faces, raised, wall_gate):
+        # The whole centre display is blacked out. Its changed pixels are
+        # pixel-confined to the centre box, so only the original guard's
+        # final centre-structure stage (candidate vs the reference, never
+        # candidate vs itself) can reject it (evidence185 synthetic case).
+        changed = self.frame([(906, 376, 1008, 463)])
+        def stability(before, after, report, diagnostic=None, **kwargs):
+            return self._fail_at_binary_frame(diagnostic)
+        glyph.side_effect = stability
+        self.page.screenshot.side_effect = [changed, changed]
+        with self.assertRaises(DiscardPreclickChanged):
+            execute_friend_discard(self.page, **self.kwargs)
+        send.assert_not_called()
+        self.assertEqual(self.page.screenshot.call_count, 1)
+        failed = next(item for item in self.logs if item.get("kind") == "sanma_discard_baseline_refresh_failed")
+        self.assertEqual(failed["reason"], "centre structure differs from reference")
+        self.assertGreater(failed["centreStructureDelta"], .5)
+        self.assertIs(failed["binaryChangesConfined"], True)
+
+    @patch('sanma_friend_self_turn_stability.self_turn_stability', return_value=False)
+    @patch('auto_operator.raised_closed_hand_slots', return_value=[])
+    @patch('auto_operator.closed_hand_face_mismatches', return_value=[])
+    @patch('auto_operator.experimental_draw_glyph_stability')
+    @patch("sanma_friend_discard_experiment.send_discard_click")
+    def test_change_just_inside_wall_right_edge_is_still_refreshed(self, send, glyph, faces, raised, wall_gate):
+        # Positive boundary case: every changed pixel is just inside the
+        # wall crop's right edge (x <= 389 < 390). Pixel-level confinement
+        # and the centre check must not change this adoption.
+        candidate = self.frame([(358, 96, 389, 127)])
+        confirmation = self.frame([(358, 96, 389, 127), (1500, 800, 1531, 831)])
+        def stability(before, after, report, diagnostic=None, **kwargs):
+            if before == self.reference:
+                return self._fail_at_binary_frame(diagnostic)
+            return True
+        glyph.side_effect = stability
+        send.return_value = {"lift": 48}
+        self.page.screenshot.side_effect = [candidate, confirmation]
+        result = execute_friend_discard(self.page, **self.kwargs)
+        send.assert_called_once()
+        self.assertIs(result["baselineRefreshed"], True)
+        self.assertEqual(result["baselineSha256"], hashlib.sha256(candidate).hexdigest())
+        refreshed = next(item for item in self.logs if item.get("kind") == "sanma_discard_baseline_refreshed")
+        self.assertEqual(refreshed["centreStructureDelta"], 0)

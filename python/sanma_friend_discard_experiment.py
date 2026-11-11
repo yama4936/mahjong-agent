@@ -419,13 +419,13 @@ _REFRESH_WALL_REGION = (150, 80, 390, 700)
 _REFRESH_CENTER_BOX = (905, 375, 1010, 465)
 
 
-def _binary_frame_change_blocks(reference, frame, report):
-    """Replicate the binary_frame scan of the draw glyph guard.
+def _masked_binary_difference(reference, frame, report):
+    """Replicate the binary_frame mask of the draw glyph guard.
 
-    Returns the 32-pixel blocks whose thresholded (<120) pixel changes exceed
-    the guard's existing threshold of 14, using the same clock, self-lamp,
-    hand, draw and button masks. No threshold or mask is altered. Returns
-    None when the scan cannot be performed; callers must fail closed.
+    Returns the thresholded (<120) difference image after the guard's own
+    clock, self-lamp, hand, draw and button masks. No threshold or mask is
+    altered. Returns None when the scan cannot be performed; callers must
+    fail closed.
     """
     try:
         geometry = report["handGeometry"]["value"]
@@ -446,24 +446,50 @@ def _binary_frame_change_blocks(reference, frame, report):
                 if x < 0 or y < 0 or w <= 0 or h <= 0 or x + w > 1920 or y + h > 1080:
                     return None
                 diff.paste(0, (x, y, x + w, y + h))
-            blocks = []
-            for y in range(0, 1080, 32):
-                for x in range(0, 1920, 32):
-                    changed = diff.crop((x, y, min(x + 32, 1920), min(y + 32, 1080))).histogram()[255]
-                    if changed > 14:
-                        blocks.append({"x": x, "y": y, "changedPixels": changed})
-            return blocks
+            return diff
     except (KeyError, TypeError, ValueError, OSError, IndexError):
         return None
 
 
-def _blocks_confined_to_animation_regions(blocks):
+def _binary_frame_change_blocks(reference, frame, report):
+    """32-pixel blocks whose masked binary changes exceed the guard's 14."""
+    diff = _masked_binary_difference(reference, frame, report)
+    if diff is None:
+        return None
+    blocks = []
+    for y in range(0, 1080, 32):
+        for x in range(0, 1920, 32):
+            changed = diff.crop((x, y, min(x + 32, 1920), min(y + 32, 1080))).histogram()[255]
+            if changed > 14:
+                blocks.append({"x": x, "y": y, "changedPixels": changed})
+    return blocks
+
+
+def _changed_pixels_confined_to_animation_regions(reference, frame, report, blocks):
+    """Pixel-level containment of the flagged binary changes.
+
+    Every changed pixel inside a flagged block must lie within the wall
+    crop or the centre box. A block that merely intersects a region while
+    its changed pixels sit outside it confines nothing. Changed pixels in
+    unflagged blocks stay under the guard's own 14-pixel block threshold,
+    exactly as in the original scan. Returns None when the scan cannot be
+    performed; callers must fail closed.
+    """
+    if not blocks:
+        return False
+    diff = _masked_binary_difference(reference, frame, report)
+    if diff is None:
+        return None
     regions = (_REFRESH_WALL_REGION, _REFRESH_CENTER_BOX)
-    def confined(block):
-        return any(block["x"] < rx2 and block["x"] + 32 > rx1
-                   and block["y"] < ry2 and block["y"] + 32 > ry1
-                   for rx1, ry1, rx2, ry2 in regions)
-    return bool(blocks) and all(confined(block) for block in blocks)
+    pixels = diff.load()
+    for block in blocks:
+        for yy in range(block["y"], min(block["y"] + 32, 1080)):
+            for xx in range(block["x"], min(block["x"] + 32, 1920)):
+                if pixels[xx, yy] and not any(
+                        rx1 <= xx < rx2 and ry1 <= yy < ry2
+                        for rx1, ry1, rx2, ry2 in regions):
+                    return False
+    return True
 
 
 def _refresh_discard_baseline(page, *, reference, candidate, candidate_captured_at,
@@ -484,11 +510,15 @@ def _refresh_discard_baseline(page, *, reference, candidate, candidate_captured_
        guard reported no execution error.
     2. The opt-in self-turn lighting hypothesis does not already explain
        the pair; pairs it explains stay behind that opt-in, draw-only gate.
-    3. Every binary change block against the reference is confined to the
-       wall or centre regions those semantic guards cover.
+    3. Every changed pixel inside the flagged binary change blocks lies
+       within the wall or centre regions those semantic guards cover
+       (pixel-level containment, not block intersection).
     4. The physical hand faces, including the planned slot, still match the
        reference under the same check and threshold the glyph guard uses.
-    5. An immediate confirmation capture matches the candidate under the
+    5. The centre display still matches the original reference under the
+       glyph guard's own final stage (structure delta <= .5 against the
+       reference, never against the candidate itself).
+    6. An immediate confirmation capture matches the candidate under the
        same stability chain (identity, clock-masked stability, glyph
        stability, and the opt-in self-turn fallback) with the same report.
 
@@ -517,7 +547,14 @@ def _refresh_discard_baseline(page, *, reference, candidate, candidate_captured_
         detail["reason"] = "binary change scan unavailable"
         log(detail)
         return None
-    if not _blocks_confined_to_animation_regions(blocks):
+    confined = _changed_pixels_confined_to_animation_regions(
+        reference, candidate, report, blocks)
+    detail["binaryChangesConfined"] = confined
+    if confined is None:
+        detail["reason"] = "binary change pixel scan unavailable"
+        log(detail)
+        return None
+    if not confined:
         detail["reason"] = "binary changes outside wall/centre animation regions"
         log(detail)
         return None
@@ -533,6 +570,21 @@ def _refresh_discard_baseline(page, *, reference, candidate, candidate_captured_
     detail["handFaceMismatches"] = mismatches
     if mismatches:
         detail["reason"] = "hand faces differ from reference"
+        log(detail)
+        return None
+    try:
+        operator_module = __import__("auto_operator")
+        centre_box = {"x": 905, "y": 375, "width": 105, "height": 90}
+        centre_delta = operator_module.tile_face_structure_delta(
+            operator_module.crop_screenshot(reference, centre_box),
+            operator_module.crop_screenshot(candidate, centre_box))
+    except Exception as error:
+        detail["reason"] = f"centre structure verification unavailable: {type(error).__name__}"
+        log(detail)
+        return None
+    detail["centreStructureDelta"] = centre_delta
+    if centre_delta > .5:
+        detail["reason"] = "centre structure differs from reference"
         log(detail)
         return None
     try:
@@ -583,6 +635,7 @@ def _refresh_discard_baseline(page, *, reference, candidate, candidate_captured_
                "confirmationCapturedAtMonotonic": confirmation_captured_at,
                "originalDiagnostic": dict(diagnostic),
                "binaryChangeBlocks": blocks,
+               "centreStructureDelta": centre_delta,
                "reason": "reference aged across recognition and freshness; candidate "
                          "re-verified against reference hand faces and confirmed by "
                          "an immediate capture under the same stability chain"}
