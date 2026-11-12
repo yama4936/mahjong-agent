@@ -41,6 +41,24 @@ def friend_discard_budget_guard(capture_started, click_budget, log, clock=time.m
         raise FriendDiscardBudgetExpired("friend discard click budget expired")
 
 
+# Reserve time for a selected-tile screenshot and the confirmation input.
+# This is a minimum, not a guarantee: the ordinary absolute guard continues
+# to apply after selection and withholds confirmation if the budget expires.
+FRIEND_DISCARD_SELECTION_RESERVE_MS = 2000
+
+
+def friend_discard_reserve_guard(capture_started, click_budget, log, clock=time.monotonic):
+    friend_discard_budget_guard(capture_started, click_budget, log, clock=clock)
+    age = (clock() - capture_started) * 1000
+    if not math.isfinite(age) or age < 0:
+        raise RuntimeError('friend discard capture timestamp invalid')
+    if click_budget - age <= FRIEND_DISCARD_SELECTION_RESERVE_MS:
+        log('sanma_friend_click_budget_reserve_insufficient', captureAgeMs=round(age),
+            clickBudgetMs=click_budget, reserveMs=FRIEND_DISCARD_SELECTION_RESERVE_MS,
+            operationAuthorized=False)
+        raise FriendDiscardBudgetExpired('insufficient time for selection and confirmation')
+
+
 def require_friend_discard_timing_binding(operator, receipt, capture_started):
     bound = getattr(operator, '_sanma_friend_discard_observation', None)
     if (not isinstance(bound, tuple) or len(bound) != 3 or bound[0] is not receipt
@@ -434,6 +452,9 @@ def execute_friend_draw_candidate(operator, page, receipt):
         click_budget_guard()
     except FriendDiscardBudgetExpired as error:
         raise DiscardPreclickBudgetExpired(str(error)) from error
+    def preclick_budget_reserve_guard():
+        require_friend_discard_timing_binding(operator, receipt, capture_started)
+        friend_discard_reserve_guard(capture_started, click_budget, operator.log)
     def record(event):
         operator.log("sanma_friend_discard_experiment", **event)
     def save_rejected_frame(frame):
@@ -454,6 +475,7 @@ def execute_friend_draw_candidate(operator, page, receipt):
                                   self_turn_wall_opt_in=getattr(operator.args, 'experimental_sanma_self_turn_wall', False) is True,
                                   save_rejected_frame=save_rejected_frame, evidence_directory=operator.frames,
                                   click_budget_guard=click_budget_guard,
+                                  preclick_budget_reserve_guard=preclick_budget_reserve_guard,
                                   before_click=lambda: latch_friend_action_target(operator, baseline, "discard"))
     if blank_only:
         result['blankDrawIdentityUnknown'] = True
@@ -813,7 +835,8 @@ def _refresh_discard_baseline(page, *, reference, candidate, candidate_captured_
 def execute_friend_discard(page, *, session, observation, plan, layout, log,
                            turn_started_monotonic, clock=time.monotonic, session_check=None,
                            save_rejected_frame=None, before_click=None, self_turn_wall_opt_in=False,
-                           evidence_directory=None, click_budget_guard=None):
+                           evidence_directory=None, click_budget_guard=None,
+                           preclick_budget_reserve_guard=None):
     """Map a supplied TS plan to the existing select/confirm routine.
 
     This experimental entry point depends on a caller that establishes the
@@ -937,6 +960,11 @@ def execute_friend_discard(page, *, session, observation, plan, layout, log,
             _require_discard_capture_fresh(
                 clock, before_capture_started_at, input_capture_started_at)
         input_guard()
+        # Avoid selecting a tile if the same observation lacks enough time to
+        # verify selection and send a confirmation. This runs before latching
+        # or any input, so rejection can safely return to fresh observation.
+        if preclick_budget_reserve_guard is not None:
+            preclick_budget_reserve_guard()
         # Latching modifies the duplicate-input guard. Once begun, any error
         # is conservatively terminal even if the mouse was not yet invoked.
         input_may_have_started = True
