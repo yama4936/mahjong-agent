@@ -104,26 +104,35 @@ def cdp_ready(port):
 def terminal_event(log):
     if log is None or not log.exists():
         return None
-    with log.open("rb") as stream:
-        stream.seek(max(0, log.stat().st_size - 262144))
-        lines = stream.read().decode(errors="replace").splitlines()
     terminal = None
-    for line in lines:
-        try:
-            row = json.loads(line)
-        except ValueError:
-            continue
-        event = row.get("event")
-        if event == "started":
-            terminal = None
-        # Intentional exits include ranked navigation, login and dialog stops,
-        # not just the original four stop names. Unknown future stop events
-        # must also hold rather than silently becoming crash recovery.
-        if isinstance(event, str) and event.endswith(("_stop", "_stopped")):
-            # A browser-close error during cleanup cannot erase an earlier
-            # intentional stop in this same operator run.
-            if terminal is None or restart_allowed(terminal) or not restart_allowed(row):
-                terminal = row
+    # Read the entire run, not a suffix: a stop followed by verbose cleanup
+    # must still hold. Bound memory even when output contains a corrupt line.
+    with log.open("rb") as stream:
+        while True:
+            line = stream.readline(1048577)
+            if not line:
+                break
+            if len(line) > 1048576 or not line.endswith(b"\n"):
+                return {"event": "safety_stop", "error": "operator log contains oversized or incomplete line"}
+            try:
+                row = json.loads(line)
+            except (ValueError, UnicodeDecodeError):
+                if line.lstrip().startswith(b"{"):
+                    return {"event": "safety_stop", "error": "operator log contains malformed JSON object"}
+                continue
+            if not isinstance(row, dict):
+                continue
+            event = row.get("event")
+            if event == "started":
+                terminal = None
+            # Intentional exits include ranked navigation, login and dialog stops,
+            # not just the original four stop names. Unknown future stop events
+            # must also hold rather than silently becoming crash recovery.
+            if isinstance(event, str) and event.endswith(("_stop", "_stopped")):
+                # A browser-close error during cleanup cannot erase an earlier
+                # intentional stop in this same operator run.
+                if terminal is None or restart_allowed(terminal) or not restart_allowed(row):
+                    terminal = row
     return terminal
 
 

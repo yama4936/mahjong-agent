@@ -137,6 +137,44 @@ class SupervisorTest(unittest.TestCase):
                 self.supervisor.hold_file.unlink()
                 self.supervisor = self.make_supervisor()
 
+    def test_old_stop_in_long_log_prevents_restart(self):
+        log = self.adopt()
+        log.write_text(json.dumps({"event": "started"}) + "\n" +
+                       json.dumps({"event": "future_guard_stop"}) + "\n" +
+                       (json.dumps({"event": "cleanup", "data": "x" * 1024}) + "\n") * 300 +
+                       json.dumps({"event": "safety_stop", "error":
+                           "Target page, context or browser has been closed"}) + "\n")
+        self.assertEqual(terminal_event(log)["event"], "future_guard_stop")
+        self.state["operator"] = []
+        self.supervisor.tick()
+        self.now += 11
+        self.supervisor = self.make_supervisor()
+        self.supervisor.tick()
+        self.assertTrue(self.supervisor.held)
+        self.assertEqual(self.launches, [])
+
+    def test_new_started_resets_old_stop_across_long_log(self):
+        log = self.root / "long.log"
+        log.write_text(json.dumps({"event": "future_guard_stop"}) + "\n" +
+                       (json.dumps({"event": "cleanup", "data": "x" * 1024}) + "\n") * 300 +
+                       json.dumps({"event": "started"}) + "\n" +
+                       json.dumps({"event": "safety_stop", "error":
+                           "Target page, context or browser has been closed"}) + "\n")
+        self.assertTrue(restart_allowed(terminal_event(log)))
+
+    def test_truncated_or_oversized_line_fails_closed(self):
+        log = self.root / "bad.log"
+        for suffix in (b'{"event":"future_guard_stop"', b'x' * 1048577 + b'\n',
+                       b'{"event":"future_guard_stop",}\n'):
+            with self.subTest(length=len(suffix)):
+                log.write_bytes(b'{"event":"started"}\n' + suffix)
+                self.assertFalse(restart_allowed(terminal_event(log)))
+
+    def test_plain_text_is_not_treated_as_malformed_json(self):
+        log = self.root / "plain.log"
+        log.write_bytes(b'normal launcher output\n{"event":"started"}\n')
+        self.assertIsNone(terminal_event(log))
+
     def test_cdp_timeout_does_not_duplicate_existing_browser(self):
         self.healthy = False
         for kind in ("browser", "profile"):
