@@ -9632,6 +9632,25 @@ class PythonAutoOperator:
                             self.log("sanma_friend_stopped", reason="kita_reobserve_candidate_changed",
                                      screenshot=receipt.get("screenshot"), operationAuthorized=False)
                             return
+                        # Recovery retains the old turn's bounds until the next
+                        # input. Check before freshness can reobserve indefinitely;
+                        # the new visible countdown does not replace that bound.
+                        if resumed_watch is not None:
+                            guard = self._sanma_friend_resume_guard
+                            continuity_alive = resumed_watch.alive()
+                            elapsed_ms = (time.monotonic() - guard[1]) * 1000
+                            session_active = self.verified_friend_300_active is True
+                            if not continuity_alive or not session_active or not 0 <= elapsed_ms < guard[2]:
+                                detail = continuity_diagnostic(resumed_watch)
+                                reason = ("discard_recovery_session_changed" if not continuity_alive
+                                          else "discard_recovery_session_or_deadline")
+                                self.log("sanma_friend_stopped", reason=reason, operationAuthorized=False,
+                                         screenshot=receipt.get('screenshot'), digest=receipt.get('digest'),
+                                         continuity=detail, friendSessionActive=session_active,
+                                         originalStart=guard[1], deadlineElapsedMs=round(elapsed_ms),
+                                         actionDeadlineMs=guard[2], stage="before_freshness_reobserve",
+                                         candidateActions=candidate_actions)
+                                return
                         freshness = receipt.get("freshness")
                         monitored_pon = (pon_monitor is not None and candidate_actions == ('pon',)
                             and pon_monitor.matches(receipt.get('sourceObservation', {}).get('report') or {},
@@ -9663,12 +9682,6 @@ class PythonAutoOperator:
                         if actions:
                             unknown_streak = 0
                             unknown_since = None
-                        if resumed_watch is not None and not resumed_watch.alive():
-                            detail=continuity_diagnostic(resumed_watch)
-                            resumed_watch.close()
-                            self.log("sanma_friend_stopped", reason="discard_recovery_session_changed", operationAuthorized=False,
-                                     screenshot=receipt.get('screenshot'), digest=receipt.get('digest'), continuity=detail)
-                            return
                         if resumed_watch is not None and actions:
                             resumed_watch.close()
                             self._sanma_friend_resume_guard = None
