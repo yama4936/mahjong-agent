@@ -4,7 +4,7 @@ from pathlib import Path
 from PIL import Image, ImageChops, ImageStat
 
 
-def pon_pass_stability(before, after, report, *, on_wall_error=None, diagnostic=None):
+def _pon_pass_stability_impl(before, after, report, *, on_wall_error=None, diagnostic=None, left_candidate=False):
     try:
         if diagnostic is not None: diagnostic.update(stage='pon_row')
         row=report['buttonRow']; value=row['value']; slots=value['slots']
@@ -36,7 +36,7 @@ def pon_pass_stability(before, after, report, *, on_wall_error=None, diagnostic=
                 for y in range(0,90,8):
                     for x in range(0,824,8):
                         value=max(ImageStat.Stat(delta.crop((x,y,min(x+8,824),min(y+8,90)))).mean)
-                        if value>10:
+                        if value>(30 if left_candidate else 10):
                             if diagnostic is not None: diagnostic.update(reason='row_block',frame=frame_index,blockX=x+600,blockY=y+785,value=value,threshold=10)
                             return False
             from auto_operator import experimental_kita_wall_color_stable, experimental_kita_color_stable
@@ -136,6 +136,41 @@ def pon_pass_stability(before, after, report, *, on_wall_error=None, diagnostic=
                     for im in (a,b):
                         out=io.BytesIO();im.save(out,format='PNG');encoded.append(out.getvalue())
                     before,after=encoded
+            if left_candidate:
+                # Friend-only, first left discard: preserve and compare the entire
+                # witnessed face and remove only its surrounding animation.
+                import numpy as np
+                from auto_operator import _kita_color_labels
+                def active_left_indicator(image):
+                    return sum(r>180 and g>110 and blue<170 for r,g,blue in image.crop((832,380,856,466)).getdata())
+                if active_left_indicator(a)<100 or active_left_indicator(b)<100:return False
+                tile_a=a.crop((705,290,771,349));tile_b=b.crop((705,290,771,349))
+                colors_a=_kita_color_labels(np.asarray(tile_a),np);colors_b=_kita_color_labels(np.asarray(tile_b),np)
+                if (max(ImageStat.Stat(ImageChops.difference(tile_a,tile_b)).mean)>3
+                        or np.count_nonzero(colors_a!=colors_b)>5):return False
+                # Reject strong red color changes anywhere in the masked
+                # halo/indicator. Red may encode tile or UI information.
+                for box in ((680,250,800,370),(832,380,856,466)):
+                    def strong_red(image):
+                        arr=np.asarray(image.crop(box));return (arr[:,:,0]>200)&(arr[:,:,1]<70)&(arr[:,:,2]<70)
+                    if np.count_nonzero(strong_red(a)!=strong_red(b))>3:return False
+                # Suppress only pixels identified as green glow in either
+                # frame; retain all other pixels, including tile face.
+                aa=np.asarray(a).copy();bb=np.asarray(b).copy()
+                for x,y,X,Y in ((680,250,800,370),(832,380,856,466)):
+                    p=aa[y:Y,x:X].astype('int16');q=bb[y:Y,x:X].astype('int16')
+                    def glow(z):
+                        if x == 680:
+                            return (z[:,:,1]>z[:,:,0]+20)&(z[:,:,2]>z[:,:,0]+10)&(z[:,:,1]>70)
+                        return (z[:,:,0]>z[:,:,1]+20)&(z[:,:,1]>z[:,:,2]+10)&(z[:,:,0]>100)
+                    selected=glow(p)&glow(q)
+                    if x == 680: selected[40:99,25:91]=False
+                    aa[y:Y,x:X][selected]=0;bb[y:Y,x:X][selected]=0
+                a=Image.fromarray(aa);b=Image.fromarray(bb)
+                encoded=[]
+                for im in (a,b):
+                    out=io.BytesIO();im.save(out,format='PNG');encoded.append(out.getvalue())
+                before,after=encoded
             if diagnostic is not None: diagnostic.update(stage='hand_color')
             if not experimental_kita_color_stable(before,after,[{'x':220,'y':921,'width':1235,'height':151},
                                                                  {'x':650,'y':210,'width':600,'height':420}]):return False
@@ -159,3 +194,25 @@ def pon_pass_stability(before, after, report, *, on_wall_error=None, diagnostic=
                         return False
             return True
     except (AttributeError,KeyError,TypeError,ValueError,OSError,IndexError):return False
+
+
+def pon_pass_stability(before, after, report, *, on_wall_error=None, diagnostic=None):
+    if _pon_pass_stability_impl(before,after,report,on_wall_error=on_wall_error,diagnostic=diagnostic):
+        return True
+    # Fall back only when both frames show the independently witnessed left
+    # arrow in its first-discard position. Unknown positions fail closed.
+    try:
+        import cv2
+        import numpy as np
+        template=np.asarray(Image.open(Path(__file__).parent/'fixtures'/'sanma-left-pon-arrow-192.png').convert('L'))
+        for frame in (before,after):
+            with Image.open(io.BytesIO(frame)) as image:
+                if image.size != (1920,1080):return False
+                crop=np.asarray(image.convert('L').crop((710,250,760,285)))
+            response=cv2.matchTemplate(crop,template,cv2.TM_CCOEFF_NORMED)
+            _,score,_,pos=cv2.minMaxLoc(response)
+            if score < .98 or pos != (7,7):return False
+        if diagnostic is not None: diagnostic.clear()
+        return _pon_pass_stability_impl(before,after,report,on_wall_error=on_wall_error,diagnostic=diagnostic,left_candidate=True)
+    except Exception:
+        return False
