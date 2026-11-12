@@ -9282,6 +9282,7 @@ class PythonAutoOperator:
         unconfirmed_input_seen = False
         only_unconfirmed_kita = False
         last_kita_receipt = None
+        kita_continuity = None
         unknown_streak = 0
         unknown_since = None
         changed_streak = 0
@@ -9738,20 +9739,50 @@ class PythonAutoOperator:
                                 if isinstance(prior_targets, set) and isinstance(prior_frames, set):
                                     rearm_snapshot = (frozenset(prior_targets), frozenset(prior_frames),
                                                       getattr(self, "_sanma_friend_kita_rearmed", False),
-                                                      getattr(self, "_sanma_friend_kita_rearmed_twice", False))
+                                                      getattr(self, "_sanma_friend_kita_rearmed_twice", False),
+                                                      getattr(self, "_sanma_friend_kita_rearmed_thrice", False))
                                 from sanma_friend_kita_rearm import rearm_friend_kita_candidate
-                                if not rearm_friend_kita_candidate(self, last_kita_receipt, receipt):
+                                third_rearm = (getattr(self, '_sanma_friend_kita_rearmed', False) is True
+                                               and getattr(self, '_sanma_friend_kita_rearmed_twice', False) is True)
+                                rearmed = (rearm_friend_kita_candidate(self, last_kita_receipt, receipt, continuity=kita_continuity)
+                                           if third_rearm else rearm_friend_kita_candidate(self, last_kita_receipt, receipt))
+                                if not rearmed:
                                     self.log("sanma_friend_stopped", reason="previous_kita_unconfirmed",
                                              screenshot=receipt.get("screenshot"), digest=frame_digest,
                                              previousActionConfirmed=False)
                                     return
                             action = "kita"
+                            # Track the session beginning before the third input;
+                            # a fourth action requires continuous observation.
+                            new_kita_watch = None
+                            if (getattr(self, '_sanma_friend_kita_rearmed_twice', False) is True
+                                    and getattr(self, '_sanma_friend_kita_rearmed_thrice', False) is not True):
+                                from sanma_friend_discard_recovery import MatchContinuity
+                                try:
+                                    new_kita_watch = MatchContinuity(page)
+                                except Exception:
+                                    new_kita_watch = None  # fourth input stays blocked
+                            fourth_kita = (getattr(self, '_sanma_friend_kita_rearmed_thrice', False) is True
+                                           and kita_continuity is not None)
+                            if fourth_kita:
+                                self._sanma_friend_resume_guard = (kita_continuity, action_observed_at, 300000)
                             try:
                                 result = self.execute_sanma_friend_kita_candidate(page, receipt)
+                                if fourth_kita:
+                                    self._sanma_friend_resume_guard = None
+                                    kita_continuity.close()
+                                    kita_continuity = None
+                                if new_kita_watch is not None:
+                                    kita_continuity = new_kita_watch
+
                             except SanmaKitaPreclickChanged as error:
+                                if fourth_kita:
+                                    self._sanma_friend_resume_guard = None
+                                if new_kita_watch is not None:
+                                    new_kita_watch.close()
                                 prior_kita_targets = None
                                 if rearm_snapshot is not None:
-                                    targets, frames, was_rearmed, was_rearmed_twice = rearm_snapshot
+                                    targets, frames, was_rearmed, was_rearmed_twice, was_rearmed_thrice = rearm_snapshot
                                     current_targets = getattr(self, "_sanma_friend_attempted_targets", None)
                                     current_frames = getattr(self, "_sanma_friend_attempted_frames", None)
                                     removed = targets - current_targets if isinstance(current_targets, set) else set()
@@ -9759,7 +9790,9 @@ class PythonAutoOperator:
                                     # neither frame nor any other target was latched.
                                     changed_rearm = ((was_rearmed is False and self._sanma_friend_kita_rearmed is True)
                                                      or (was_rearmed is True and was_rearmed_twice is False
-                                                         and getattr(self, '_sanma_friend_kita_rearmed_twice', False) is True))
+                                                         and getattr(self, '_sanma_friend_kita_rearmed_twice', False) is True)
+                                                     or (was_rearmed_twice is True and was_rearmed_thrice is False
+                                                         and getattr(self, '_sanma_friend_kita_rearmed_thrice', False) is True))
                                     if (changed_rearm
                                             and isinstance(current_targets, set) and len(removed) == 1
                                             and current_targets == targets - removed
@@ -9767,6 +9800,7 @@ class PythonAutoOperator:
                                         current_targets.update(removed)
                                         self._sanma_friend_kita_rearmed = was_rearmed
                                         self._sanma_friend_kita_rearmed_twice = was_rearmed_twice
+                                        self._sanma_friend_kita_rearmed_thrice = was_rearmed_thrice
                                         if only_unconfirmed_kita:
                                             prior_kita_targets = targets
                                 kita_preclick_rejections += 1

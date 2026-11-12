@@ -7,7 +7,7 @@ from PIL import Image, ImageChops, ImageStat
 from sanma_friend_freshness import friend_action_target_key, friend_frame_changes
 
 
-def rearm_friend_kita_candidate(operator, before, after):
+def rearm_friend_kita_candidate(operator, before, after, *, continuity=None):
     """Rearm once on consistent hand, draw, and visible first-north changes.
 
     The unseen clock area, actual operation and replacement remain unverified.
@@ -19,7 +19,9 @@ def rearm_friend_kita_candidate(operator, before, after):
                 or args.mode != 'force-auto' or args.action_deadline_ms != 300000
                 or args.ranked_loop is not False or operator.verified_friend_300_active is not True): return False
         second = getattr(operator,'_sanma_friend_kita_rearmed',False) is True
-        if second and getattr(operator,'_sanma_friend_kita_rearmed_twice',False) is True: return False
+        third = second and getattr(operator,'_sanma_friend_kita_rearmed_twice',False) is True
+        if third and (getattr(operator,'_sanma_friend_kita_rearmed_thrice',False) is True
+                      or continuity is None or continuity.alive() is not True): return False
         frames=[]; hands=[]
         for receipt in (before,after):
             if receipt.get('scope') != 'sanma_self_turn_observation' or receipt.get('operationAuthorized') is not False: return False
@@ -55,11 +57,23 @@ def rearm_friend_kita_candidate(operator, before, after):
             if any(m['confidence'] < .9 for m in matches if m['tile']=='N'):return False
             frames.append(frame);hands.append(h)
         pre,post=(Counter(h['tiles']) for h in hands)
-        if pre['N'] < 2 or post['N'] != pre['N']-1 or pre-post != Counter({'N':1}): return False
-        added=post-pre
-        if sum(added.values()) != 1:return False
-        tile=next(iter(added)); match=hands[1]['matches'][-1]
-        if tile == 'N' or hands[1]['tiles'][-1] != tile or match['confidence'] < .95 or match['confidence']-match['runnerUpConfidence'] < .1:return False
+        if third:
+            # Third extraction may draw the fourth north: full hand multiset
+            # remains unchanged, while a non-north draw moves into the hand.
+            if pre != post or pre['N'] != 1 or hands[0]['tiles'][-1] == 'N' or hands[1]['tiles'][-1] != 'N': return False
+            if Counter(hands[0]['tiles'][:-1]) - Counter({'N':1}) + Counter({hands[0]['tiles'][-1]:1}) != Counter(hands[1]['tiles'][:-1]): return False
+            old_board=before['sourceObservation']['board']['candidate'];new_board=after['sourceObservation']['board']['candidate']
+            if (old_board.get('round') != new_board.get('round') or old_board.get('seat') != new_board.get('seat')
+                    or old_board.get('scores') != new_board.get('scores')
+                    or type(old_board.get('remainingTiles')) is not int or new_board.get('remainingTiles') != old_board['remainingTiles']-1): return False
+            tile='N'
+        else:
+            if pre['N'] < 2 or post['N'] != pre['N']-1 or pre-post != Counter({'N':1}): return False
+            added=post-pre
+            if sum(added.values()) != 1:return False
+            tile=next(iter(added))
+        match=hands[1]['matches'][-1]
+        if (tile == 'N' and not third) or hands[1]['tiles'][-1] != tile or match['confidence'] < .95 or match['confidence']-match['runnerUpConfidence'] < .1:return False
         draw=after.get('drawCandidate') or {}
         if draw.get('status') != 'candidate' or draw.get('index') != 13 or draw.get('tile') != tile or draw.get('digest') != after.get('digest'):return False
         with Image.open(Path(__file__).parent/'fixtures'/'sanma-friend-first-north-visible.png') as reference:
@@ -70,7 +84,20 @@ def rearm_friend_kita_candidate(operator, before, after):
                 if image.size != (1920,1080):return False
                 part=image.convert('RGB').crop((1390,765,1425,850))
             similarities.append(1-sum(ImageStat.Stat(ImageChops.difference(part,ref)).mean)/765)
-        if second:
+        if third:
+            # The first two physical north glyphs remain, and the third
+            # emerges at the next slot; a new round or different board fails.
+            if min(similarities) < .98:return False
+            for x, threshold in ((1324,.985), (1258,.985)):
+                values=[]
+                for frame in frames:
+                    with Image.open(io.BytesIO(frame)) as image:
+                        part=image.convert('RGB').crop((x,765,x+35,790))
+                    values.append(1-sum(ImageStat.Stat(ImageChops.difference(part,ref.crop((0,0,35,25)))).mean)/765)
+                if x == 1324 and min(values) < threshold:return False
+                if x == 1258 and (values[0] >= .95 or values[1] < threshold):return False
+            if continuity.alive() is not True:return False
+        elif second:
             # In this layout the second extracted north appears 66 pixels to
             # the left; its lower portion is covered by the skip control.
             # Require the first visible north to remain and a newly matching
@@ -88,6 +115,7 @@ def rearm_friend_kita_candidate(operator, before, after):
         attempts.remove(key)
         operator._sanma_friend_kita_rearmed=True
         if second: operator._sanma_friend_kita_rearmed_twice=True
+        if third: operator._sanma_friend_kita_rearmed_thrice=True
         operator.log('sanma_friend_kita_rearm_candidate', beforeDigest=before['digest'],afterDigest=after['digest'],
                      addedDraw=tile, visibleNorthSimilarities=similarities, confirmed=False,
                      risk='visual change and labels unverified; clock hides part of north; input success unknown')

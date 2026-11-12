@@ -215,3 +215,35 @@ class SyntheticFreshnessReceiptTests(unittest.TestCase):
                 elif case=='regions': f['regionsChanged']['hand']=True
                 elif case=='clock': f['clockChanged']=True
                 self.assertFalse(rearm_friend_kita_candidate(self.op,before,after))
+
+class Evidence195FourthNorthTests(unittest.TestCase):
+    def setUp(self):
+        root=Path('/home/yama1/server/data/dev-work/jantama/evidence195/attempt/artifacts/frames')
+        receipts=list(root.glob('*.sanma-self-turn.receipt.json'))
+        wanted=('a1d83a810a8fc9f0904ac3a905b8f4020b3760bed9333c46d7ff9b0f6cc5be55','26be72a73f501e59b4b05099e890aabdd15d379d972d9672f4f8559771eb009a')
+        records={}
+        for path in receipts:
+            receipt=json.loads(path.read_text())
+            if receipt.get('digest') in wanted: records[receipt['digest']]=receipt
+        if any(k not in records for k in wanted):self.skipTest('195 screenshots unavailable')
+        self.before,self.after=[records[k] for k in wanted]
+        if any(not Path(r['screenshot']).is_file() or not Path(r['freshness']['screenshot']).is_file() for r in (self.before,self.after)):
+            self.skipTest('195 screenshots unavailable')
+        self.op=Mock();self.op.args=SimpleNamespace(experimental_sanma_friend=True,rules='sanma',mode='force-auto',action_deadline_ms=300000,ranked_loop=False)
+        self.op.verified_friend_300_active=True;self.op._sanma_friend_kita_rearmed=True;self.op._sanma_friend_kita_rearmed_twice=True;self.op._sanma_friend_kita_rearmed_thrice=False
+        self.op._sanma_friend_attempted_targets={friend_action_target_key(Path(self.before['screenshot']).read_bytes(),'kita')}
+        self.watch=Mock();self.watch.alive.return_value=True
+    def test_real_fourth_north_and_no_duplicate(self):
+        self.assertTrue(rearm_friend_kita_candidate(self.op,self.before,self.after,continuity=self.watch))
+        self.assertFalse(rearm_friend_kita_candidate(self.op,self.before,self.after,continuity=self.watch))
+    def test_no_connection_different_round_or_hand_fail(self):
+        for case in ('disconnect','round','count','different_tile','same','reversed'):
+            with self.subTest(case=case):
+                self.setUp();before=copy.deepcopy(self.before);after=copy.deepcopy(self.after)
+                if case=='disconnect':self.watch.alive.return_value=False
+                if case=='round':after['sourceObservation']['board']['candidate']['round']='east_2'
+                if case=='count':after['sourceObservation']['board']['candidate']['remainingTiles']-=1
+                if case=='different_tile':after['sourceObservation']['report']['hand']['value']['tiles'][-1]='S'
+                if case=='same':after=before
+                if case=='reversed':before,after=after,before
+                self.assertFalse(rearm_friend_kita_candidate(self.op,before,after,continuity=self.watch))
