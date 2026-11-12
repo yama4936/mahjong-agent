@@ -35,8 +35,11 @@ class FreshnessDiagnosticsTest(unittest.TestCase):
  def test_retained_192_unresolved_report_rejects_without_keyerror(self):
   root=Path('/home/yama1/server/data/dev-work/jantama/evidence192/attempt/artifacts/frames')
   if not root.exists():self.skipTest('optional friend-match evidence unavailable')
-  path=next(root.glob('*11-36-48*.sanma-self-turn.receipt.json'))
-  receipt=json.loads(path.read_text());frame=Path(receipt['screenshot']).read_bytes();report=receipt['sourceObservation']['report']
+  path=next(root.glob('*11-36-48*.sanma-self-turn.receipt.json'),None)
+  if path is None:self.skipTest('optional friend-match receipt unavailable')
+  receipt=json.loads(path.read_text());screenshot=Path(receipt['screenshot'])
+  if not screenshot.exists():self.skipTest('optional friend-match screenshot unavailable')
+  frame=screenshot.read_bytes();report=receipt['sourceObservation']['report']
   for guard in (experimental_draw_glyph_stability,experimental_kita_glyph_stability):
    detail={};self.assertFalse(guard(frame,frame,report,diagnostic=detail))
    self.assertEqual(detail.get('reason'),'recognition_unresolved');self.assertNotEqual(detail.get('outcome'),'exception')
