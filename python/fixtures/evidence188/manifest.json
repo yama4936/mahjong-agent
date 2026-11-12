@@ -1,0 +1,570 @@
+{
+  "sourceRootDefault": "/home/yama1/server/data/dev-work/jantama/evidence188",
+  "sourceLog": {
+    "path": "attempt2/artifacts/python-operator.jsonl",
+    "sha256": "e4ecdac5b6901c8e842a2f554993b47bf3992e7003c9b399379dce3f6820c938"
+  },
+  "sourceSettings": {
+    "room": "sanma friend",
+    "clock": "300+0",
+    "actionDeadlineMs": 300000,
+    "matchEndConfirmed": false
+  },
+  "cases": [
+    {
+      "line": 18,
+      "before": {
+        "path": "attempt2/artifacts/frames/2026-11-12T05-08-17.428636+00-00.e38bc441c0de4ae68165f632f09e78be.sanma-self-turn.png",
+        "sha256": "8151e13c115c78bb928b8a89740b7fe73eff7a1a6473f3c43c4f6bed685b7f7d"
+      },
+      "after": {
+        "path": "attempt2/artifacts/frames/2026-11-12T05-08-23.779291+00-00.08b17745cc484432bb0b1f76278b77ee.sanma-freshness.png",
+        "sha256": "ab828ca3a42d58f9061310684c377e0fe9a2ca445277ddeb3d292a18e90f4dfe"
+      },
+      "receipt": {
+        "path": "attempt2/artifacts/frames/2026-11-12T05-08-17.428636+00-00.e38bc441c0de4ae68165f632f09e78be.sanma-self-turn.receipt.json",
+        "sha256": "972fe0950f36654a6929bb3a9d4772c3c91005af861ba68bbdf5808cc8b77702"
+      },
+      "expectedChanges": {
+        "hand": true,
+        "actions": true,
+        "fullFrame": true,
+        "clock": true
+      },
+      "expectedDiagnostic": {
+        "geometryStatus": "unreviewed_fallback",
+        "handEnvelopeChanged": true,
+        "handTilesChanged": null,
+        "handOutsideTilesChanged": null,
+        "handRectangles": [],
+        "comparison": "exact_rgb",
+        "operationAuthorized": false
+      },
+      "expectedPonDiagnostic": {
+        "stage": "hand_color"
+      }
+    },
+    {
+      "line": 20,
+      "before": {
+        "path": "attempt2/artifacts/frames/2026-11-12T05-08-27.971306+00-00.75b4fae108af458d88848f386fd0319b.sanma-self-turn.png",
+        "sha256": "ecf69ff0944df9842c88a2199fe3d7c8d959153ce89133c748db053f79c0233f"
+      },
+      "after": {
+        "path": "attempt2/artifacts/frames/2026-11-12T05-08-32.120826+00-00.d3cc75ceb8a3426b833283b5df6a9c1d.sanma-freshness.png",
+        "sha256": "3c584e066df44a9b62530bd984b225bcecf05622596809f53edfa062f50ddbfd"
+      },
+      "receipt": {
+        "path": "attempt2/artifacts/frames/2026-11-12T05-08-27.971306+00-00.75b4fae108af458d88848f386fd0319b.sanma-self-turn.receipt.json",
+        "sha256": "73e73f2d7d51d9ca7a8cf45cd7a5d2470cabac3c32146d640bd24ac6870e94f8"
+      },
+      "expectedChanges": {
+        "hand": true,
+        "actions": true,
+        "fullFrame": true,
+        "clock": true
+      },
+      "expectedDiagnostic": {
+        "geometryStatus": "unreviewed_fallback",
+        "handEnvelopeChanged": true,
+        "handTilesChanged": null,
+        "handOutsideTilesChanged": null,
+        "handRectangles": [],
+        "comparison": "exact_rgb",
+        "operationAuthorized": false
+      },
+      "expectedPonDiagnostic": {
+        "stage": "hand_color"
+      }
+    },
+    {
+      "line": 22,
+      "before": {
+        "path": "attempt2/artifacts/frames/2026-11-12T05-08-36.460047+00-00.002fa7bc0e81494dab4cb85fc69b6460.sanma-self-turn.png",
+        "sha256": "96392d90751355a14d30d8cf29e5bd328c8ddde757d8d476ca92789da9b374c8"
+      },
+      "after": {
+        "path": "attempt2/artifacts/frames/2026-11-12T05-08-40.487308+00-00.864b43c0a61f4d17b32ce745ba5066f3.sanma-freshness.png",
+        "sha256": "53d1f0d7b4bfb3f21528a5a08cf00d31f0e4deacf5efb729516002f0136a372d"
+      },
+      "receipt": {
+        "path": "attempt2/artifacts/frames/2026-11-12T05-08-36.460047+00-00.002fa7bc0e81494dab4cb85fc69b6460.sanma-self-turn.receipt.json",
+        "sha256": "fa975012ff0991789dd81392353f3802d1e0d7b0165f55f108dc9c3abc93b3e0"
+      },
+      "expectedChanges": {
+        "hand": true,
+        "actions": true,
+        "fullFrame": true,
+        "clock": true
+      },
+      "expectedDiagnostic": {
+        "geometryStatus": "unreviewed_fallback",
+        "handEnvelopeChanged": true,
+        "handTilesChanged": null,
+        "handOutsideTilesChanged": null,
+        "handRectangles": [],
+        "comparison": "exact_rgb",
+        "operationAuthorized": false
+      },
+      "expectedPonDiagnostic": {
+        "stage": "hand_color"
+      }
+    },
+    {
+      "line": 24,
+      "before": {
+        "path": "attempt2/artifacts/frames/2026-11-12T05-08-45.004696+00-00.0bc7aa617bb54d35909b4c877f2ad83d.sanma-self-turn.png",
+        "sha256": "b046c67b9be1abef365365d7cddf9112dd8418d8bd426a51b25788633dfc8c25"
+      },
+      "after": {
+        "path": "attempt2/artifacts/frames/2026-11-12T05-08-48.993236+00-00.661c80f779f240d19beac5df0fa83240.sanma-freshness.png",
+        "sha256": "16c24a7073ff36e39e5a2fdffebe5ab357de57a56196bf6db2a115baf33b99e8"
+      },
+      "receipt": {
+        "path": "attempt2/artifacts/frames/2026-11-12T05-08-45.004696+00-00.0bc7aa617bb54d35909b4c877f2ad83d.sanma-self-turn.receipt.json",
+        "sha256": "e5561b007b8bbbefc83134f94b94d9ca813fc7f9f6665f72210566a89b2d7245"
+      },
+      "expectedChanges": {
+        "hand": true,
+        "actions": false,
+        "fullFrame": true,
+        "clock": true
+      },
+      "expectedDiagnostic": {
+        "geometryStatus": "unreviewed_fallback",
+        "handEnvelopeChanged": true,
+        "handTilesChanged": null,
+        "handOutsideTilesChanged": null,
+        "handRectangles": [],
+        "comparison": "exact_rgb",
+        "operationAuthorized": false
+      },
+      "expectedPonDiagnostic": {
+        "stage": "hand_color"
+      }
+    },
+    {
+      "line": 26,
+      "before": {
+        "path": "attempt2/artifacts/frames/2026-11-12T05-08-53.610927+00-00.fa7fd817a3af4c60ba9928b777423bb5.sanma-self-turn.png",
+        "sha256": "65911092b00332b3e3e5c48520049ac7bb916e27fa2e8f1b154b784fc34ce668"
+      },
+      "after": {
+        "path": "attempt2/artifacts/frames/2026-11-12T05-08-57.537399+00-00.6c8da823f2f2419d8b3ee6536ecafb81.sanma-freshness.png",
+        "sha256": "4be83e75b583fb7c2f776bbf2fc2d0d89bb89d691c0749a33638ff6198a02860"
+      },
+      "receipt": {
+        "path": "attempt2/artifacts/frames/2026-11-12T05-08-53.610927+00-00.fa7fd817a3af4c60ba9928b777423bb5.sanma-self-turn.receipt.json",
+        "sha256": "816046f79a5a3a3ff2266a8cc04213158b19c0ef3db4b3a8b4c0d68afd4ce21b"
+      },
+      "expectedChanges": {
+        "hand": true,
+        "actions": true,
+        "fullFrame": true,
+        "clock": true
+      },
+      "expectedDiagnostic": {
+        "geometryStatus": "unreviewed_fallback",
+        "handEnvelopeChanged": true,
+        "handTilesChanged": null,
+        "handOutsideTilesChanged": null,
+        "handRectangles": [],
+        "comparison": "exact_rgb",
+        "operationAuthorized": false
+      },
+      "expectedPonDiagnostic": {
+        "stage": "hand_color"
+      }
+    },
+    {
+      "line": 28,
+      "before": {
+        "path": "attempt2/artifacts/frames/2026-11-12T05-09-01.889072+00-00.c91df435516645d4b5b1037012f0118e.sanma-self-turn.png",
+        "sha256": "df66e97873f613c68363cebcd222515506522ad81dba8443306028dd553d3d50"
+      },
+      "after": {
+        "path": "attempt2/artifacts/frames/2026-11-12T05-09-05.932130+00-00.d6cd3ba62c00472aa67636ebc06fd506.sanma-freshness.png",
+        "sha256": "2117664b05169c0fcc9b72637c8736725b3f07aa7ab1327f140031a4c34e1110"
+      },
+      "receipt": {
+        "path": "attempt2/artifacts/frames/2026-11-12T05-09-01.889072+00-00.c91df435516645d4b5b1037012f0118e.sanma-self-turn.receipt.json",
+        "sha256": "4f5a85ad3f395fda49612f54174058d7b8bd76f489327b55c2c654a614c2e146"
+      },
+      "expectedChanges": {
+        "hand": true,
+        "actions": true,
+        "fullFrame": true,
+        "clock": true
+      },
+      "expectedDiagnostic": {
+        "geometryStatus": "unreviewed_fallback",
+        "handEnvelopeChanged": true,
+        "handTilesChanged": null,
+        "handOutsideTilesChanged": null,
+        "handRectangles": [],
+        "comparison": "exact_rgb",
+        "operationAuthorized": false
+      },
+      "expectedPonDiagnostic": {
+        "stage": "pon_row",
+        "reason": "row_block",
+        "frame": 1,
+        "blockX": 760,
+        "blockY": 865,
+        "value": 15.5,
+        "threshold": 10
+      }
+    },
+    {
+      "line": 30,
+      "before": {
+        "path": "attempt2/artifacts/frames/2026-11-12T05-09-10.375048+00-00.6d737135827f4995bebade5f4ed3aeeb.sanma-self-turn.png",
+        "sha256": "8ed12e3cb0153ef3d2f21a697fd1d0763679ecbf1c51f77492faadb100a5f354"
+      },
+      "after": {
+        "path": "attempt2/artifacts/frames/2026-11-12T05-09-14.704726+00-00.d642e39f30e34f30bce446c8c8fffc42.sanma-freshness.png",
+        "sha256": "f795e4893e343e0fc34a345689ed8c899448ad9a57155d3b4cf65dca4185cfa8"
+      },
+      "receipt": {
+        "path": "attempt2/artifacts/frames/2026-11-12T05-09-10.375048+00-00.6d737135827f4995bebade5f4ed3aeeb.sanma-self-turn.receipt.json",
+        "sha256": "d6f67aa48356898d7e76518551e8502f64e3e3f48e2d84a5be6bcddeb1bdc80f"
+      },
+      "expectedChanges": {
+        "hand": true,
+        "actions": true,
+        "fullFrame": true,
+        "clock": true
+      },
+      "expectedDiagnostic": {
+        "geometryStatus": "unreviewed_fallback",
+        "handEnvelopeChanged": true,
+        "handTilesChanged": null,
+        "handOutsideTilesChanged": null,
+        "handRectangles": [],
+        "comparison": "exact_rgb",
+        "operationAuthorized": false
+      },
+      "expectedPonDiagnostic": {
+        "stage": "hand_color"
+      }
+    },
+    {
+      "line": 32,
+      "before": {
+        "path": "attempt2/artifacts/frames/2026-11-12T05-09-17.196080+00-00.0a8b4120523046e5b2ddf7163f22d33d.sanma-self-turn.png",
+        "sha256": "8b968c3cc786cc3a504a9f7122d2e23d0e8ba408ada85c74b2a717798b0db698"
+      },
+      "after": {
+        "path": "attempt2/artifacts/frames/2026-11-12T05-09-19.925498+00-00.b2f076e5e34745528483880f04d15c52.sanma-freshness.png",
+        "sha256": "8a8019008f6460223b2bdcbee7c35c6cf22afcd45404b35ab4158aa6a54625f1"
+      },
+      "receipt": {
+        "path": "attempt2/artifacts/frames/2026-11-12T05-09-17.196080+00-00.0a8b4120523046e5b2ddf7163f22d33d.sanma-self-turn.receipt.json",
+        "sha256": "b4f5f37380a5edf7e6791e62109d91a0c50cf8b51660a3a9d5de763f17186c1b"
+      },
+      "expectedChanges": {
+        "hand": true,
+        "actions": true,
+        "fullFrame": true,
+        "clock": true
+      },
+      "expectedDiagnostic": {
+        "geometryStatus": "unreviewed_fallback",
+        "handEnvelopeChanged": true,
+        "handTilesChanged": null,
+        "handOutsideTilesChanged": null,
+        "handRectangles": [],
+        "comparison": "exact_rgb",
+        "operationAuthorized": false
+      },
+      "expectedPonDiagnostic": {
+        "stage": "pon_row",
+        "reason": "row_block",
+        "frame": 0,
+        "blockX": 1168,
+        "blockY": 873,
+        "value": 14.25,
+        "threshold": 10
+      }
+    },
+    {
+      "line": 34,
+      "before": {
+        "path": "attempt2/artifacts/frames/2026-11-12T05-09-23.803545+00-00.bc30481179c2457782d383b645ca6fe7.sanma-self-turn.png",
+        "sha256": "f1fe8baec576f21969415670c57f40c6f79c102a7f17ac99edcdc694c7ebd4f7"
+      },
+      "after": {
+        "path": "attempt2/artifacts/frames/2026-11-12T05-09-27.907882+00-00.80497a62453545b3a73421e251aaf92a.sanma-freshness.png",
+        "sha256": "8874b3812198b10df15418a014f7ffccbb4be4751d22132812d8f91cca5d0e97"
+      },
+      "receipt": {
+        "path": "attempt2/artifacts/frames/2026-11-12T05-09-23.803545+00-00.bc30481179c2457782d383b645ca6fe7.sanma-self-turn.receipt.json",
+        "sha256": "12c9765e12e672f491aa8b96dc79bf1d7402b575490257312e8a69ba74404b6f"
+      },
+      "expectedChanges": {
+        "hand": true,
+        "actions": true,
+        "fullFrame": true,
+        "clock": true
+      },
+      "expectedDiagnostic": {
+        "geometryStatus": "unreviewed_fallback",
+        "handEnvelopeChanged": true,
+        "handTilesChanged": null,
+        "handOutsideTilesChanged": null,
+        "handRectangles": [],
+        "comparison": "exact_rgb",
+        "operationAuthorized": false
+      },
+      "expectedPonDiagnostic": {
+        "stage": "binary_frame",
+        "blockX": 768,
+        "blockY": 288,
+        "changedPixels": 52
+      }
+    },
+    {
+      "line": 36,
+      "before": {
+        "path": "attempt2/artifacts/frames/2026-11-12T05-09-32.294744+00-00.2afbb9f1dfdf4c4cae5d66a6269ef8c2.sanma-self-turn.png",
+        "sha256": "72d83b3200e10f4a1fb7ff87d632c62842257078bc38a0cb5b5647054759bca1"
+      },
+      "after": {
+        "path": "attempt2/artifacts/frames/2026-11-12T05-09-36.121283+00-00.7e0f4c9382b743bb8d1c466fb0a38452.sanma-freshness.png",
+        "sha256": "dd25b6a31ff18f18051b0861b6124e8265847ee161d6be7c0e3256df41a331fc"
+      },
+      "receipt": {
+        "path": "attempt2/artifacts/frames/2026-11-12T05-09-32.294744+00-00.2afbb9f1dfdf4c4cae5d66a6269ef8c2.sanma-self-turn.receipt.json",
+        "sha256": "8729638c714318305bb28aa0233a2459748fc4b3f7bcc2a314f188c88cddd91e"
+      },
+      "expectedChanges": {
+        "hand": true,
+        "actions": true,
+        "fullFrame": true,
+        "clock": true
+      },
+      "expectedDiagnostic": {
+        "geometryStatus": "unreviewed_fallback",
+        "handEnvelopeChanged": true,
+        "handTilesChanged": null,
+        "handOutsideTilesChanged": null,
+        "handRectangles": [],
+        "comparison": "exact_rgb",
+        "operationAuthorized": false
+      },
+      "expectedPonDiagnostic": {
+        "stage": "hand_color"
+      }
+    },
+    {
+      "line": 38,
+      "before": {
+        "path": "attempt2/artifacts/frames/2026-11-12T05-09-40.665147+00-00.029693ef67914016a8ee72b48091b51f.sanma-self-turn.png",
+        "sha256": "8c04d2e4bb1ff48fd000c9cc3f225911be42434c145870ed54172584206b1170"
+      },
+      "after": {
+        "path": "attempt2/artifacts/frames/2026-11-12T05-09-44.543070+00-00.1645ec5f44ea40219f25352372cc62f5.sanma-freshness.png",
+        "sha256": "713a92978d245129273dd612a152fd3f16e999c2b024085216e8b90788f06cf1"
+      },
+      "receipt": {
+        "path": "attempt2/artifacts/frames/2026-11-12T05-09-40.665147+00-00.029693ef67914016a8ee72b48091b51f.sanma-self-turn.receipt.json",
+        "sha256": "81de90437683b76da788cad8c63bf0e0a47320eacf6bbfcb488b1edcd88ac8e9"
+      },
+      "expectedChanges": {
+        "hand": true,
+        "actions": true,
+        "fullFrame": true,
+        "clock": true
+      },
+      "expectedDiagnostic": {
+        "geometryStatus": "unreviewed_fallback",
+        "handEnvelopeChanged": true,
+        "handTilesChanged": null,
+        "handOutsideTilesChanged": null,
+        "handRectangles": [],
+        "comparison": "exact_rgb",
+        "operationAuthorized": false
+      },
+      "expectedPonDiagnostic": {
+        "stage": "pon_row",
+        "reason": "row_block",
+        "frame": 1,
+        "blockX": 1320,
+        "blockY": 793,
+        "value": 13.609375,
+        "threshold": 10
+      }
+    },
+    {
+      "line": 40,
+      "before": {
+        "path": "attempt2/artifacts/frames/2026-11-12T05-09-48.972882+00-00.68e8e27e5b5941219255451d5d59577d.sanma-self-turn.png",
+        "sha256": "a0a13b9d78badb96e9fc77895c14caf89cd0e816f23a7636a2f2d17e5ff47510"
+      },
+      "after": {
+        "path": "attempt2/artifacts/frames/2026-11-12T05-09-53.118757+00-00.0f5b91a144974e318732dd84da49f697.sanma-freshness.png",
+        "sha256": "9bde6982823ec7632e3a399a682292726fb8014cd8bd66c510a9c0b71390a6d3"
+      },
+      "receipt": {
+        "path": "attempt2/artifacts/frames/2026-11-12T05-09-48.972882+00-00.68e8e27e5b5941219255451d5d59577d.sanma-self-turn.receipt.json",
+        "sha256": "fdbb4e7b41fc5c1aebe751a5543c02e7b48e46e5f9d85ff17a432e515317cf9d"
+      },
+      "expectedChanges": {
+        "hand": true,
+        "actions": true,
+        "fullFrame": true,
+        "clock": true
+      },
+      "expectedDiagnostic": {
+        "geometryStatus": "unreviewed_fallback",
+        "handEnvelopeChanged": true,
+        "handTilesChanged": null,
+        "handOutsideTilesChanged": null,
+        "handRectangles": [],
+        "comparison": "exact_rgb",
+        "operationAuthorized": false
+      },
+      "expectedPonDiagnostic": {
+        "stage": "hand_color"
+      }
+    },
+    {
+      "line": 42,
+      "before": {
+        "path": "attempt2/artifacts/frames/2026-11-12T05-09-57.601710+00-00.4d8a6b7e3dbc4084a31150c39ff92beb.sanma-self-turn.png",
+        "sha256": "433c87b3c73cf5bffa8c6317a5938e21fae842188b49d70e7b86d5c320526e58"
+      },
+      "after": {
+        "path": "attempt2/artifacts/frames/2026-11-12T05-10-01.424017+00-00.aa7667c6534541faaddd94df88f7d86c.sanma-freshness.png",
+        "sha256": "59f33ce787ca747a769eec1f960f8d2b61c9a59445c69d1cda679fe462ebbf2f"
+      },
+      "receipt": {
+        "path": "attempt2/artifacts/frames/2026-11-12T05-09-57.601710+00-00.4d8a6b7e3dbc4084a31150c39ff92beb.sanma-self-turn.receipt.json",
+        "sha256": "50da7b1d51de53f3613aca142f64ea3fb50127617239a60c4c66ce888b7065c1"
+      },
+      "expectedChanges": {
+        "hand": true,
+        "actions": true,
+        "fullFrame": true,
+        "clock": true
+      },
+      "expectedDiagnostic": {
+        "geometryStatus": "unreviewed_fallback",
+        "handEnvelopeChanged": true,
+        "handTilesChanged": null,
+        "handOutsideTilesChanged": null,
+        "handRectangles": [],
+        "comparison": "exact_rgb",
+        "operationAuthorized": false
+      },
+      "expectedPonDiagnostic": {
+        "stage": "wall_color"
+      }
+    },
+    {
+      "line": 44,
+      "before": {
+        "path": "attempt2/artifacts/frames/2026-11-12T05-10-05.834538+00-00.af72078d8981427dacef5f5b6adf4fb0.sanma-self-turn.png",
+        "sha256": "fbac854e47d204449ca109ec545abdeaa30890361d283cf7f54837f0f090a89f"
+      },
+      "after": {
+        "path": "attempt2/artifacts/frames/2026-11-12T05-10-10.228760+00-00.b2c8b67410084a799130a8496f19e059.sanma-freshness.png",
+        "sha256": "bf48cd6130148790ea443f3b35772b1d20b323516afe5c2cdf2f7a67a7deb453"
+      },
+      "receipt": {
+        "path": "attempt2/artifacts/frames/2026-11-12T05-10-05.834538+00-00.af72078d8981427dacef5f5b6adf4fb0.sanma-self-turn.receipt.json",
+        "sha256": "3ac342aeaf01ad6066e182e9cc3b74a7713b2804a28e7d0aa71381413725bde3"
+      },
+      "expectedChanges": {
+        "hand": true,
+        "actions": true,
+        "fullFrame": true,
+        "clock": true
+      },
+      "expectedDiagnostic": {
+        "geometryStatus": "unreviewed_fallback",
+        "handEnvelopeChanged": true,
+        "handTilesChanged": null,
+        "handOutsideTilesChanged": null,
+        "handRectangles": [],
+        "comparison": "exact_rgb",
+        "operationAuthorized": false
+      },
+      "expectedPonDiagnostic": {
+        "stage": "hand_color"
+      }
+    },
+    {
+      "line": 46,
+      "before": {
+        "path": "attempt2/artifacts/frames/2026-11-12T05-10-15.046356+00-00.5c1520e822894d4299f7d71d00c06e24.sanma-self-turn.png",
+        "sha256": "a55355bc64b12f6b4d8fbf2b1ae6ecf145f430de455e28fa301aa33bab5e1e64"
+      },
+      "after": {
+        "path": "attempt2/artifacts/frames/2026-11-12T05-10-18.956932+00-00.af4f363aac6b410d9a2ca9a030a49a1c.sanma-freshness.png",
+        "sha256": "0328c8310f2d47d41222166a4b753517dd40c3873a6209df114efb847207ee6d"
+      },
+      "receipt": {
+        "path": "attempt2/artifacts/frames/2026-11-12T05-10-15.046356+00-00.5c1520e822894d4299f7d71d00c06e24.sanma-self-turn.receipt.json",
+        "sha256": "d6ddd62f68552ef074c0ef94317646831cfe6389a7886689c0799b93bbd446ca"
+      },
+      "expectedChanges": {
+        "hand": true,
+        "actions": true,
+        "fullFrame": true,
+        "clock": true
+      },
+      "expectedDiagnostic": {
+        "geometryStatus": "unreviewed_fallback",
+        "handEnvelopeChanged": true,
+        "handTilesChanged": null,
+        "handOutsideTilesChanged": null,
+        "handRectangles": [],
+        "comparison": "exact_rgb",
+        "operationAuthorized": false
+      },
+      "expectedPonDiagnostic": {
+        "stage": "hand_color"
+      }
+    },
+    {
+      "line": 48,
+      "before": {
+        "path": "attempt2/artifacts/frames/2026-11-12T05-10-23.295847+00-00.23038cb236044d7baa6710ee0db65ae4.sanma-self-turn.png",
+        "sha256": "13baa2ca5d5725ad123af7a6b9e927e063befaf4109b2232698c9d1df8ce48cb"
+      },
+      "after": {
+        "path": "attempt2/artifacts/frames/2026-11-12T05-10-27.089501+00-00.11027418f2f64b4c8321b1811e5f89ac.sanma-freshness.png",
+        "sha256": "fbe62fe92692bf564578c20cb3e851912a533b5878be02aff993dc4e76f99163"
+      },
+      "receipt": {
+        "path": "attempt2/artifacts/frames/2026-11-12T05-10-23.295847+00-00.23038cb236044d7baa6710ee0db65ae4.sanma-self-turn.receipt.json",
+        "sha256": "6c1968118093727b25eb69049fbd1aa9962f68727c4f67d561e8460af47a9716"
+      },
+      "expectedChanges": {
+        "hand": true,
+        "actions": true,
+        "fullFrame": true,
+        "clock": true
+      },
+      "expectedDiagnostic": {
+        "geometryStatus": "unreviewed_fallback",
+        "handEnvelopeChanged": true,
+        "handTilesChanged": null,
+        "handOutsideTilesChanged": null,
+        "handRectangles": [],
+        "comparison": "exact_rgb",
+        "operationAuthorized": false
+      },
+      "expectedPonDiagnostic": {
+        "stage": "pon_row",
+        "reason": "row_block",
+        "frame": 1,
+        "blockX": 888,
+        "blockY": 833,
+        "value": 10.59375,
+        "threshold": 10
+      }
+    }
+  ]
+}
