@@ -15,6 +15,7 @@ from PIL import Image
 import math
 import time
 import uuid
+import tempfile
 from pathlib import Path
 
 from auto_operator import send_discard_click
@@ -504,15 +505,31 @@ def _save_refresh_frame(directory, refresh_id, role, frame, *, captured_at=None,
         raise ValueError("baseline refresh evidence directory required")
     path = Path(directory).resolve() / f"{refresh_id}.sanma-refresh-{role}.png"
     digest = hashlib.sha256(frame).hexdigest()
-    with path.open("xb") as stream:
-        stream.write(frame)
-        stream.flush()
-        os.fsync(stream.fileno())
-    if hashlib.sha256(path.read_bytes()).hexdigest() != digest:
-        raise OSError("baseline refresh evidence read-back hash mismatch")
+    # Private staging plus link() publishes atomically without clobbering a winner.
     directory_fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+    temporary = None
+    published = False
     try:
+        fd, name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".pending", dir=path.parent)
+        temporary = Path(name)
+        with os.fdopen(fd, "wb") as stream:
+            stream.write(frame)
+            stream.flush()
+            os.fsync(stream.fileno())
+        if hashlib.sha256(temporary.read_bytes()).hexdigest() != digest:
+            raise OSError("baseline refresh evidence read-back hash mismatch")
+        os.link(temporary, path)
+        published = True
+        temporary.unlink()
+        temporary = None
         os.fsync(directory_fd)
+    except Exception:
+        # A failed publication must not remove a pre-existing winning file.
+        if published:
+            path.unlink()
+        if temporary is not None:
+            temporary.unlink()
+        raise
     finally:
         os.close(directory_fd)
     return {"screenshot": str(path), "sha256": digest, "byteLength": len(frame),
@@ -520,10 +537,21 @@ def _save_refresh_frame(directory, refresh_id, role, frame, *, captured_at=None,
             "savedAtUnix": time.time(), "sourceScreenshot": source_screenshot}
 
 
+# Separate from the 300+0 turn budget: blocking work never renews evidence.
+_DISCARD_FRAME_MAX_AGE_SECONDS = 5.0
+
+
+def _require_discard_capture_fresh(clock, *captured_times):
+    now = clock()
+    if any(not 0 <= now - captured < _DISCARD_FRAME_MAX_AGE_SECONDS
+           for captured in captured_times):
+        raise RuntimeError("discard image freshness expired")
+
+
 def _refresh_discard_baseline(page, *, reference, candidate, candidate_captured_at,
                               report, diagnostic, wall_errors, self_turn_wall_opt_in,
                               draw_index, clock, log, evidence_directory=None,
-                              candidate_captured_at_unix=None, reference_screenshot=None):
+                              candidate_captured_at_unix=None, reference_screenshot=None, input_guard=None):
     """Adopt a fresh preclick capture as the comparison baseline, or return None.
 
     The recognised reference is already seconds old when the preclick capture
@@ -571,13 +599,25 @@ def _refresh_discard_baseline(page, *, reference, candidate, candidate_captured_
               "candidateCapturedAtMonotonic": candidate_captured_at,
               "originalDiagnostic": dict(diagnostic), "refreshId": uuid.uuid4().hex,
               "evidence": {}}
+    def save_role(role, frame, captured=None, unix=None, source=None):
+        detail["evidence"][role] = {
+            "status": "failed", "sha256": hashlib.sha256(frame).hexdigest(),
+            "byteLength": len(frame), "capturedAtMonotonic": captured,
+            "capturedAtUnix": unix, "sourceScreenshot": source, "screenshot": None}
+        try:
+            saved = _save_refresh_frame(
+                evidence_directory, detail["refreshId"], role, frame,
+                captured_at=captured, captured_at_unix=unix, source_screenshot=source)
+        except Exception as error:
+            detail["evidence"][role]["error"] = f"{type(error).__name__}: {error}"
+            raise
+        detail["evidence"][role] = {"status": "saved", **saved}
+
     try:
         for role, frame, captured, unix, source in (
                 ("reference", reference, None, None, reference_screenshot),
                 ("candidate", candidate, candidate_captured_at, candidate_captured_at_unix, None)):
-            detail["evidence"][role] = _save_refresh_frame(
-                evidence_directory, detail["refreshId"], role, frame,
-                captured_at=captured, captured_at_unix=unix, source_screenshot=source)
+            save_role(role, frame, captured, unix, source)
     except Exception as error:
         detail["reason"] = f"refresh evidence unavailable: {type(error).__name__}: {error}"
         log(detail)
@@ -640,9 +680,7 @@ def _refresh_discard_baseline(page, *, reference, candidate, candidate_captured_
         log(detail)
         return None
     try:
-        detail["evidence"]["confirmation"] = _save_refresh_frame(
-            evidence_directory, detail["refreshId"], "confirmation", confirmation,
-            captured_at=confirmation_captured_at, captured_at_unix=confirmation_captured_at_unix)
+        save_role("confirmation", confirmation, confirmation_captured_at, confirmation_captured_at_unix)
     except Exception as error:
         detail["reason"] = f"confirmation evidence unavailable: {type(error).__name__}: {error}"
         log(detail)
@@ -676,6 +714,17 @@ def _refresh_discard_baseline(page, *, reference, candidate, candidate_captured_
         detail["reason"] = "candidate baseline not confirmed by immediate capture"
         log(detail)
         return None
+    def require_current_evidence():
+        try:
+            if input_guard is not None:
+                input_guard()
+            _require_discard_capture_fresh(clock, candidate_captured_at, confirmation_captured_at)
+        except Exception as error:
+            detail["reason"] = f"refresh input gate rejected: {type(error).__name__}: {error}"
+            log(detail)
+            raise
+
+    require_current_evidence()
     adopted = {"kind": "sanma_discard_baseline_refreshed", "confirmed": False,
                "refreshId": detail["refreshId"], "evidence": detail["evidence"],
                "operationAuthorized": False,
@@ -691,6 +740,7 @@ def _refresh_discard_baseline(page, *, reference, candidate, candidate_captured_
                          "re-verified against reference hand faces and confirmed by "
                          "an immediate capture under the same stability chain"}
     log(adopted)
+    require_current_evidence()
     return adopted
 
 
@@ -731,6 +781,12 @@ def execute_friend_discard(page, *, session, observation, plan, layout, log,
         if (type(turn_started_monotonic) not in (int, float) or not math.isfinite(turn_started_monotonic)
                 or not 0 <= started - turn_started_monotonic < 300):
             raise ValueError("invalid or expired turn clock")
+        def deadline():
+            if session_check is not None and session_check() is not True:
+                raise RuntimeError("friend session revoked")
+            if not 0 <= clock() - turn_started_monotonic < 300:
+                raise RuntimeError("action deadline expired")
+
         before = page.screenshot(animations="disabled")
         before_captured_at = clock()
         before_captured_at_unix = time.time()
@@ -780,7 +836,7 @@ def execute_friend_discard(page, *, session, observation, plan, layout, log,
                             draw_index=index == len(slots) - 1,
                             clock=clock, log=log, evidence_directory=evidence_directory,
                             candidate_captured_at_unix=before_captured_at_unix,
-                            reference_screenshot=observation.get("referenceScreenshot"))
+                            reference_screenshot=observation.get("referenceScreenshot"), input_guard=deadline)
                         matched = baseline_refresh is not None
         if not matched:
             event['preclickDiagnostic'] = diagnostic
@@ -801,12 +857,11 @@ def execute_friend_discard(page, *, session, observation, plan, layout, log,
         if raised:
             event['raisedSlots'] = raised
             raise ValueError('selected or hovered tile before discard')
-        def deadline():
-            if session_check is not None and session_check() is not True:
-                raise RuntimeError("friend session revoked")
-            if not 0 <= clock() - turn_started_monotonic < 300:
-                raise RuntimeError("action deadline expired")
-        deadline()
+        input_captured_at = before_captured_at
+        def input_guard():
+            deadline()
+            _require_discard_capture_fresh(clock, input_captured_at)
+        input_guard()
         if before_click is not None:
             before_click()
         event.update(status="attempted", tile=plan["tile"], clickIndex=index, clickPoint=point,
@@ -817,7 +872,9 @@ def execute_friend_discard(page, *, session, observation, plan, layout, log,
                          referenceSha256=baseline_refresh["referenceSha256"])
         log(dict(event))
         def checked_selection(_):
+            nonlocal input_captured_at
             frame = page.screenshot(animations="disabled")
+            input_captured_at = clock()
             try:
                 require_sanma_observable_frame(frame)
             except Exception:
@@ -830,10 +887,10 @@ def execute_friend_discard(page, *, session, observation, plan, layout, log,
             return frame
         # The attempted-event logger may block beyond the action deadline or
         # the friend session may be revoked while it writes.
-        deadline()
+        input_guard()
         receipt = send_discard_click(page.mouse, point, layout["viewport"], page.wait_for_timeout,
                                      before,
-                                     checked_selection, layout, index, 5, deadline)
+                                     checked_selection, layout, index, 5, input_guard)
         event.update(status="selection_confirmed", selectionReceipt=receipt,
                      result="discard_not_verified")
         log(dict(event))
