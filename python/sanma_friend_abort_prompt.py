@@ -61,6 +61,71 @@ def recognizable(receipt):
         return False
 
 
+def recovered_empty_pair(operator, baseline, original, observed, frame, captured, watch, started):
+    """Independently recognize the fresh image before continuing the same turn."""
+    try:
+        if (operator.verified_friend_300_active is not True or not watch.alive()
+                or not 0 <= time.monotonic()-started < 300): return False
+        source=observed['sourceObservation'];report=source['report'];row=report['buttonRow']['value']
+        hand=report['hand']['value'];geometry=report['handGeometry']['value']
+        board=source['board']['candidate'];original_board=original['sourceObservation']['board']['candidate']
+        before_tiles=original['sourceObservation']['report']['hand']['value']['tiles']
+        path=Path(observed['screenshot']);fresh_path=Path(observed['freshness']['screenshot'])
+        data=path.read_bytes();fresh=fresh_path.read_bytes()
+        from auto_operator import closed_hand_face_mismatches, experimental_draw_glyph_stability, sanma_draw_observation_candidate
+        from sanma_friend_discard_experiment import friend_visible_empty_row_candidate
+        keys=('seat','round','honba','scores','remainingTiles','riichiSticks')
+        if not (observed['captureStartedMonotonic']==captured
+                and hashlib.sha256(frame).hexdigest()==hashlib.sha256(data).hexdigest()==observed['digest']==report['digest']==source['digest']
+                and hashlib.sha256(fresh).hexdigest()==observed['freshness']['digest']
+                and observed['freshness']['status']=='stable_draw_glyph_candidate'
+                and observed['freshness']['operationAuthorized'] is False
+                and observed['scope']=='sanma_self_turn_observation' and observed['operationAuthorized'] is False
+                and source['operationAuthorized'] is False and observed['candidates']['candidates']==[]
+                and source['candidates']['candidates']==[]
+                and len(row['slots'])==3 and all(type(slot.get('slot')) is int and slot['slot']==i for i,slot in enumerate(row['slots']))
+                and report['buttonRow']['status']=='candidate' and report['hand']['status']=='candidate'
+                and report['handGeometry']['status']=='candidate' and row['ronReferenceCompared'] is True
+                and hand['turnReady'] is True and hand['candidateMelds']==0 and hand['tiles']==before_tiles
+                and len(before_tiles)==14 and all(original_board.get(k) is not None and board.get(k)==original_board[k] for k in keys)
+                and observed['drawCandidate']['status']=='candidate' and observed['drawCandidate']['digest']==observed['digest']
+                and observed['drawCandidate']['index']==13 and not prompt_matches(data)
+                and not closed_hand_face_mismatches(baseline,data,{'handSlots':geometry['handSlots'],'drawSlot':geometry['drawSlot']},.5)
+                and friend_visible_empty_row_candidate(data,row['slots'],allow_north_overlap=False)
+                and friend_visible_empty_row_candidate(fresh,row['slots'],allow_north_overlap=False)
+                and experimental_draw_glyph_stability(data,fresh,report)):
+            return False
+        # Each image has its own read-only recognition, tied to its exact hash.
+        fresh_source=operator.observe_sanma_resident(fresh_path)
+        fresh_report=fresh_source['report'];fresh_row=fresh_report['buttonRow']['value']
+        fresh_hand=fresh_report['hand']['value'];fresh_board=fresh_source['board']['candidate']
+        fresh_draw=sanma_draw_observation_candidate(fresh_source)
+        if not (fresh_source['scope']=='offline_untrusted_sanma_auto_observation'
+                and fresh_source['operationAuthorized'] is False
+                and fresh_source['candidates']['operationAuthorized'] is False
+                and fresh_source['assembly']['operationAuthorized'] is False
+                and fresh_source['assembly']['priority']['status']=='blocked'
+                and fresh_source['assembly']['evaluation']['status']=='blocked'
+                and hashlib.sha256(path.read_bytes()).hexdigest()==observed['digest']
+                and fresh_source['digest']==fresh_report['digest']==hashlib.sha256(fresh_path.read_bytes()).hexdigest()==observed['freshness']['digest']
+                and fresh_source['candidates']['candidates']==[] and fresh_report['buttonRow']['status']=='candidate'
+                and fresh_report['hand']['status']=='candidate' and fresh_report['handGeometry']['status']=='candidate'
+                and fresh_row['ronReferenceCompared'] is True
+                and len(fresh_row['slots'])==3 and all(type(slot.get('slot')) is int and slot['slot']==i for i,slot in enumerate(fresh_row['slots']))
+                and fresh_hand['turnReady'] is True
+                and fresh_hand['candidateMelds']==0 and fresh_hand['tiles']==before_tiles
+                and fresh_report['handGeometry']['value']==geometry
+                and all(fresh_board.get(k)==original_board[k] for k in keys)
+                and fresh_draw['status']=='candidate' and fresh_draw['digest']==fresh_source['digest'] and fresh_draw['index']==13
+                and friend_visible_empty_row_candidate(fresh,fresh_row['slots'],allow_north_overlap=False)
+                and experimental_draw_glyph_stability(data,fresh,fresh_report)):
+            return False
+        return (operator.verified_friend_300_active is True and watch.alive() is True
+                and 0 <= time.monotonic()-started < 300)
+    except (KeyError,TypeError,ValueError,OSError):
+        return False
+
+
 def execute(operator, page, receipt):
     """Return False if no input sent; an attempted input must not be repeated."""
     args=operator.args
@@ -146,6 +211,16 @@ def execute(operator, page, receipt):
                     and friend_frame_stable(data,fresh_data))
             except (KeyError,TypeError,ValueError,OSError):
                 good=False
+            if not good and recovered_empty_pair(operator, baseline, receipt, observed, frame, captured, with_watch, started):
+                operator.log('sanma_friend_nine_terminals_pass_recovery',
+                             screenshots=[observed['screenshot'],observed['freshness']['screenshot']],
+                             method='independent_recognition_of_fresh_capture',confirmed=False,
+                             originalStart=started,operationAuthorized=False)
+                if (operator.verified_friend_300_active is not True or not with_watch.alive()
+                        or not 0<=time.monotonic()-started<300):
+                    raise RuntimeError('friend continuity or deadline lost on pass recovery')
+                transferred=True
+                return with_watch
             if good:
                 if (previous is not None and captured > previous[1]
                         and friend_frame_stable(Path(previous[0]).read_bytes(),data)):

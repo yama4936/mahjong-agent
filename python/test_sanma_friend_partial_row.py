@@ -62,6 +62,10 @@ class PartialRowTests(unittest.TestCase):
             receipt={'scope':'sanma_self_turn_observation','digest':digest,'screenshot':str(path),
                      'sourceObservation':{'digest':digest,'report':report},'freshness':{'status':'identical_pixels_candidate'},
                      'drawCandidate':{'status':'candidate','digest':digest,'index':13,'tile':'E','point':point}}
+            import time
+            receipt['captureStartedMonotonic']=time.monotonic()
+            op._sanma_friend_discard_observation=(receipt,digest,receipt['captureStartedMonotonic'])
+            op.force_auto_click_budget_ms.return_value=8000
             with patch('sanma_friend_discard_experiment.execute_friend_discard') as execute:
                 execute_friend_draw_candidate(op,Mock(),receipt)
                 execute.assert_called_once()

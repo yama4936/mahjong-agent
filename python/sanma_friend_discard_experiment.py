@@ -204,7 +204,7 @@ def friend_visible_row_with_north_overlap(frame, row_slots):
         return False
 
 
-def friend_visible_empty_row_candidate(frame, row_slots):
+def friend_visible_empty_row_candidate(frame, row_slots, *, allow_north_overlap=True):
     """Unverified visible empty slot matching one reviewed CPU-friend capture."""
     if (not isinstance(row_slots,list) or len(row_slots)!=3
             or any(not isinstance(slot,dict) or slot.get('status')!='empty_candidate' for slot in row_slots[:2])
@@ -220,7 +220,9 @@ def friend_visible_empty_row_candidate(frame, row_slots):
         if not friend_empty_first_two_pixels(image):return False
         # Include an independently observed two-north/clock layout. It is a
         # visible-pixel hypothesis, not evidence about the obscured action.
-        for name in ('sanma-friend-empty-slot-bf.png', 'sanma-friend-two-north-slot-dd.png', 'sanma-friend-empty-slot-6c.png'):
+        names = (('sanma-friend-empty-slot-bf.png', 'sanma-friend-two-north-slot-dd.png', 'sanma-friend-empty-slot-6c.png')
+                 if allow_north_overlap else ('sanma-friend-empty-slot-bf.png', 'sanma-friend-empty-slot-6c.png'))
+        for name in names:
             with Image.open(Path(__file__).parent/'fixtures'/name) as source:
                 reference=source.convert('RGB')
             difference=ImageChops.difference(observed,reference)
