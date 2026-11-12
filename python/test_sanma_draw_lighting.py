@@ -94,7 +94,9 @@ class TestFriendDrawLighting(unittest.TestCase):
         plan = {'scope':'offline_untrusted_sanma_discard_plan','operationAuthorized':False,
                 'tile':'7p','clickIndex':0,'clickPoint':point}
         page=Mock();page.screenshot.return_value=self.b
-        kwargs=dict(session=session,observation=observation,plan=plan,layout={'viewport':{}},
+        geometry=self.report['handGeometry']['value']
+        layout={'viewport':{'width':1920,'height':1080},'handSlots':geometry['handSlots'],'drawSlot':geometry['drawSlot']}
+        kwargs=dict(session=session,observation=observation,plan=plan,layout=layout,
                     log=lambda event:None,turn_started_monotonic=100,clock=lambda:101)
         with patch('sanma_friend_discard_experiment.send_discard_click',return_value={}) as send:
             result=execute_friend_discard(page,**kwargs)

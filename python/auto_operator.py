@@ -4520,9 +4520,32 @@ class PythonAutoOperator:
                 pon_candidate = (changes['fullFrame'] and not kita_glyph_candidate and not draw_glyph_candidate
                                  and not wall_errors and experimental_sanma_friend_allowed(getattr(self, "args", None))
                                  and timed_guard('pon', pon_pass_stability))
+                wall_draw_candidate = False
+                if (changes['fullFrame'] and not kita_glyph_candidate and not draw_glyph_candidate
+                        and not pon_candidate and not wall_errors
+                        and experimental_sanma_friend_allowed(getattr(self, 'args', None))
+                        and getattr(self.args, 'experimental_sanma_self_turn_wall', False) is True
+                        and self.verified_friend_300_active is True
+                        and (result.get('candidates') or {}).get('candidates') == []
+                        and sanma_draw_observation_candidate(result).get('status') == 'candidate'):
+                    from sanma_friend_self_turn_stability import self_turn_stability
+                    from sanma_friend_discard_experiment import friend_visible_empty_row_candidate
+                    def wall_guard(first, second, report, *, on_wall_error=None, diagnostic=None):
+                        if diagnostic is not None: diagnostic['stage'] = 'self_turn_wall'
+                        try:
+                            slots = report['buttonRow']['value']['slots']
+                            # An obscured north-overlap row cannot establish
+                            # that a higher-priority action is absent.
+                            return (friend_visible_empty_row_candidate(first, slots, allow_north_overlap=False)
+                                    and friend_visible_empty_row_candidate(second, slots, allow_north_overlap=False)
+                                    and self_turn_stability(first, second, report))
+                        except (KeyError, TypeError, ValueError):
+                            return False
+                    wall_draw_candidate = timed_guard('wallSelfTurn', wall_guard)
+                    draw_glyph_candidate = wall_draw_candidate
             latest_path = self.frames / f"{utc_stamp()}.{uuid.uuid4().hex}.sanma-freshness.png"
             latest_path.write_bytes(latest)
-            freshness = {"status": "unknown" if wall_errors else "stable_kita_glyph_candidate" if kita_glyph_candidate else "stable_draw_glyph_candidate" if draw_glyph_candidate else "stable_pon_pass_candidate" if pon_candidate else "changed" if changes['fullFrame'] else
+            freshness = {"status": "unknown" if wall_errors else "stable_kita_glyph_candidate" if kita_glyph_candidate else "stable_self_turn_wall_draw_candidate" if wall_draw_candidate else "stable_draw_glyph_candidate" if draw_glyph_candidate else "stable_pon_pass_candidate" if pon_candidate else "changed" if changes['fullFrame'] else
                          "stable_except_clock_candidate" if clock_changed else "identical_pixels_candidate",
                          "operationAuthorized": False, "elapsedMs": round((time.monotonic() - capture_started) * 1000),
                          "handRegionDiagnostics": hand_region_diagnostics,

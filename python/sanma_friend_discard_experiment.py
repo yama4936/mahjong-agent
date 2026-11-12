@@ -325,11 +325,17 @@ def execute_friend_draw_candidate(operator, page, receipt):
     freshness = receipt.get("freshness") or {}
     if (source.get("digest") != receipt.get("digest") or report.get("digest") != receipt.get("digest")
             or draw.get("digest") != receipt.get("digest") or draw.get("status") != "candidate"
-            or freshness.get("status") not in ("identical_pixels_candidate", "stable_except_clock_candidate", "stable_draw_glyph_candidate")
+            or freshness.get("status") not in ("identical_pixels_candidate", "stable_except_clock_candidate", "stable_draw_glyph_candidate", "stable_self_turn_wall_draw_candidate")
             or hand.get("status") != "candidate" or geometry.get("status") != "candidate"
             or row.get("status") != "candidate"):
         raise ValueError("turn, frame, hand or action row unavailable")
-    if freshness.get("status") == "stable_draw_glyph_candidate" and (type(freshness.get("elapsedMs")) not in (int, float) or not 0 <= freshness["elapsedMs"] <= 20000):
+    if freshness.get('status') == 'stable_self_turn_wall_draw_candidate':
+        wall_guard = (freshness.get('guards') or {}).get('wallSelfTurn') or {}
+        if (getattr(args, 'experimental_sanma_self_turn_wall', False) is not True
+                or freshness.get('operationAuthorized') is not False
+                or wall_guard.get('outcome') != 'accepted'):
+            raise ValueError('self-turn wall evidence unavailable or not enabled')
+    if freshness.get("status") in ("stable_draw_glyph_candidate", "stable_self_turn_wall_draw_candidate") and (type(freshness.get("elapsedMs")) not in (int, float) or not 0 <= freshness["elapsedMs"] <= 20000):
         raise ValueError("draw lighting observation expired")
     hand_value, geo_value = hand.get("value") or {}, geometry.get("value") or {}
     row_slots = (row.get("value") or {}).get("slots")
@@ -419,6 +425,12 @@ def execute_friend_draw_candidate(operator, page, receipt):
                     and friend_hand_click_geometry(calibrated_slots, calibrated_points)
                     and calibrated_slots == [*geo_value.get("handSlots", []), geo_value.get("drawSlot")]
                     and friend_non_riichi_hypothesis(baseline, hand_value))
+    # The self-turn wall fallback is calibrated for the separated draw only;
+    # never turn it into a different tile choice, including a defensive one.
+    if freshness.get('status') == 'stable_self_turn_wall_draw_candidate':
+        shape_choice = False
+        if defensive is not None and defensive['index'] != draw['index']:
+            raise ValueError('self-turn wall observation permits draw-only plan')
     if defensive is not None:
         selected = {**defensive, 'point': points[defensive['index']]}
         shape_choice = False
@@ -442,7 +454,7 @@ def execute_friend_draw_candidate(operator, page, receipt):
     observation = {"status": "candidate", "phase": "self_turn", "promptStatus": "none",
                    "handStatus": "candidate", "layoutStatus": "candidate", "slots": slots,
                    "frameSha256": receipt["digest"], "referenceFrame": baseline, "referenceScreenshot": receipt["screenshot"],
-                   "experimentalDrawReport": report if freshness.get("status") == "stable_draw_glyph_candidate" else None}
+                   "experimentalDrawReport": report if freshness.get("status") in ("stable_draw_glyph_candidate", "stable_self_turn_wall_draw_candidate") else None}
     session = {"mode": "cpu_friend", "rules": "sanma", "clock": "300+0", "actionDeadlineMs": 300000,
                "ranked": False, "cpuCount": 2, "roomVerified": True}
     capture_started = receipt.get("captureStartedMonotonic")
