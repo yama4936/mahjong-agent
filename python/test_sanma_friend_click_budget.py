@@ -4,7 +4,8 @@ from unittest.mock import Mock, patch
 
 from auto_operator import SelectionStateUncertainAbort
 from sanma_friend_discard_experiment import (execute_friend_discard, friend_discard_budget_guard,
-                                              require_friend_discard_timing_binding)
+                                              require_friend_discard_timing_binding, DiscardPreclickBudgetExpired,
+                                              FriendDiscardBudgetExpired)
 
 
 class FriendDiscardBudgetTests(unittest.TestCase):
@@ -45,7 +46,7 @@ class FriendDiscardBudgetTests(unittest.TestCase):
 
     def test_original_observation_expired_never_latches_or_clicks(self):
         self.now = 108
-        with self.assertRaisesRegex(RuntimeError, 'budget expired'): self.run_discard()
+        with self.assertRaisesRegex(DiscardPreclickBudgetExpired, 'budget expired'): self.run_discard()
         self.page.mouse.click.assert_not_called()
         self.assertEqual(self.target, [])
 
@@ -53,7 +54,7 @@ class FriendDiscardBudgetTests(unittest.TestCase):
         self.now = 101
         def slow(**kw): self.now = 108; return self.frame
         self.page.screenshot.side_effect = slow
-        with self.assertRaisesRegex(RuntimeError, 'budget expired'): self.run_discard()
+        with self.assertRaisesRegex(DiscardPreclickBudgetExpired, 'budget expired'): self.run_discard()
         self.page.mouse.click.assert_not_called()
         self.assertEqual(self.target, [])
 
@@ -66,6 +67,13 @@ class FriendDiscardBudgetTests(unittest.TestCase):
         with self.assertRaises(SelectionStateUncertainAbort): self.run_discard()
         self.assertEqual(self.page.mouse.click.call_count, 1)
         self.assertEqual(self.target, ['latched'])
+
+    def test_error_from_sender_is_never_retried_even_if_budget_typed(self):
+        self.now = 101
+        with patch('sanma_friend_discard_experiment.send_discard_click', side_effect=FriendDiscardBudgetExpired('unknown input')):
+            with self.assertRaises(FriendDiscardBudgetExpired) as error:
+                self.run_discard()
+        self.assertNotIsInstance(error.exception, DiscardPreclickBudgetExpired)
 
     def test_missing_or_future_timestamp_rejected(self):
         for stamp in (None, float('nan'), True):
