@@ -142,17 +142,17 @@ export async function detectBrightTileCandidates(
       minY = Math.min(minY, y);
       maxX = Math.max(maxX, x);
       maxY = Math.max(maxY, y);
-      const neighbors = [
-        x > 0 ? index - 1 : -1,
-        x + 1 < info.width ? index + 1 : -1,
-        y > 0 ? index - info.width : -1,
-        y + 1 < info.height ? index + info.width : -1,
-      ];
-      for (const neighbor of neighbors) {
-        if (neighbor >= 0 && foreground[neighbor] && !visited[neighbor]) {
-          visited[neighbor] = 1;
-          queue[tail++] = neighbor;
-        }
+      if (x > 0 && foreground[index - 1] && !visited[index - 1]) {
+        visited[index - 1] = 1; queue[tail++] = index - 1;
+      }
+      if (x + 1 < info.width && foreground[index + 1] && !visited[index + 1]) {
+        visited[index + 1] = 1; queue[tail++] = index + 1;
+      }
+      if (y > 0 && foreground[index - info.width] && !visited[index - info.width]) {
+        visited[index - info.width] = 1; queue[tail++] = index - info.width;
+      }
+      if (y + 1 < info.height && foreground[index + info.width] && !visited[index + info.width]) {
+        visited[index + info.width] = 1; queue[tail++] = index + info.width;
       }
     }
     const width = maxX - minX + 1;

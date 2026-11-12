@@ -19,9 +19,10 @@ export async function normalizeTileFace(input: string | Buffer): Promise<Buffer>
     while (head < tail) {
       const i = queue[head++]!, x = i % info.width, y = Math.floor(i / info.width);
       area++; left = Math.min(left, x); right = Math.max(right, x); top = Math.min(top, y); bottom = Math.max(bottom, y);
-      for (const n of [x ? i - 1 : -1, x + 1 < info.width ? i + 1 : -1, y ? i - info.width : -1, y + 1 < info.height ? i + info.width : -1]) {
-        if (n >= 0 && !visited[n] && bright(n)) { visited[n] = 1; queue[tail++] = n; }
-      }
+      if (x && !visited[i - 1] && bright(i - 1)) { visited[i - 1] = 1; queue[tail++] = i - 1; }
+      if (x + 1 < info.width && !visited[i + 1] && bright(i + 1)) { visited[i + 1] = 1; queue[tail++] = i + 1; }
+      if (y && !visited[i - info.width] && bright(i - info.width)) { visited[i - info.width] = 1; queue[tail++] = i - info.width; }
+      if (y + 1 < info.height && !visited[i + info.width] && bright(i + info.width)) { visited[i + info.width] = 1; queue[tail++] = i + info.width; }
     }
     const width = right - left + 1, height = bottom - top + 1;
     if (area < visited.length * 0.18 || width < info.width * 0.4 || height < info.height * 0.4 || area / (width * height) < 0.35) continue;
