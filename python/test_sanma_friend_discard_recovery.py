@@ -613,8 +613,13 @@ class Evidence194LoopTest(unittest.TestCase):
         from datetime import datetime, timezone
         from test_experimental_sanma_friend_loop import ExperimentalSanmaFriendLoopTest
         root=Path('/home/yama1/server/data/dev-work/jantama/evidence194/attempt/artifacts/frames')
-        receipts=[json.loads(next(root.glob('*'+stamp+'*.sanma-self-turn.receipt.json')).read_text())
-                  for stamp in ('13-59-12','14-00-03','14-00-07')]
+        paths=[next(root.glob('*'+stamp+'*.sanma-self-turn.receipt.json'), None)
+               for stamp in ('13-59-12','14-00-03','14-00-07')]
+        if any(path is None for path in paths):
+            self.skipTest('individual evidence194 receipts unavailable')
+        receipts=[json.loads(path.read_text()) for path in paths]
+        if any(not Path(receipt.get('screenshot','')).is_file() for receipt in receipts):
+            self.skipTest('individual evidence194 images unavailable')
         case=ExperimentalSanmaFriendLoopTest('runTest');case.setUp();self.addCleanup(case.doCleanups)
         case.op.args.max_iterations=3
         case.op.inspect_sanma_self_turn.side_effect=receipts
