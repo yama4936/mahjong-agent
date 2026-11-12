@@ -311,15 +311,18 @@ class FriendDiscardBaselineRefreshTests(unittest.TestCase):
                             "handStatus": "candidate", "layoutStatus": "candidate",
                             "slots": [{"tile": "1m", **self.point}],
                             "frameSha256": hashlib.sha256(self.reference).hexdigest(),
-                            "referenceFrame": self.reference,
+                            "referenceFrame": self.reference, "referenceScreenshot": "original-observation.png",
                             "experimentalDrawReport": report}
         self.plan = {"scope": "offline_untrusted_sanma_discard_plan", "operationAuthorized": False,
                      "tile": "1m", "clickIndex": 0, "clickPoint": self.point}
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
         self.logs = []
         self.kwargs = dict(session=self.session, observation=self.observation, plan=self.plan,
                            layout={"viewport": {"width": 1920, "height": 1080},
                                    "handSlots": hand_slots, "drawSlot": draw_slot},
-                           log=self.logs.append, turn_started_monotonic=100, clock=lambda: 101)
+                           log=self.logs.append, turn_started_monotonic=100, clock=lambda: 101,
+                           evidence_directory=self.directory.name)
 
     @staticmethod
     def _fail_at_binary_frame(diagnostic):
@@ -349,6 +352,21 @@ class FriendDiscardBaselineRefreshTests(unittest.TestCase):
         self.assertEqual(refreshed["baselineSha256"], hashlib.sha256(self.candidate).hexdigest())
         self.assertEqual(refreshed["confirmationSha256"], hashlib.sha256(self.confirmation).hexdigest())
         self.assertEqual(refreshed["baselineCapturedAtMonotonic"], 101)
+        self.assertEqual(result["refreshId"], refreshed["refreshId"])
+        for role, original in (("reference", self.reference), ("candidate", self.candidate),
+                               ("confirmation", self.confirmation)):
+            evidence = refreshed["evidence"][role]
+            self.assertEqual(Path(evidence["screenshot"]).read_bytes(), original)
+            self.assertEqual(evidence["sha256"], hashlib.sha256(original).hexdigest())
+            self.assertEqual(evidence["byteLength"], len(original))
+            self.assertGreater(evidence["savedAtUnix"], 0)
+            if role == "reference":
+                self.assertEqual(evidence["sourceScreenshot"], "original-observation.png")
+                self.assertIsNone(evidence["capturedAtMonotonic"])
+                self.assertIsNone(evidence["capturedAtUnix"])
+            else:
+                self.assertEqual(evidence["capturedAtMonotonic"], 101)
+                self.assertLessEqual(evidence["capturedAtUnix"], evidence["savedAtUnix"])
 
     @patch('sanma_friend_self_turn_stability.self_turn_stability', return_value=True)
     @patch('auto_operator.raised_closed_hand_slots', return_value=[])
@@ -384,6 +402,8 @@ class FriendDiscardBaselineRefreshTests(unittest.TestCase):
         saved.assert_called_once_with(self.candidate)
         failed = next(item for item in self.logs if item.get("kind") == "sanma_discard_baseline_refresh_failed")
         self.assertEqual(failed["reason"], "candidate baseline not confirmed by immediate capture")
+        self.assertEqual(Path(failed["evidence"]["confirmation"]["screenshot"]).read_bytes(), unstable)
+        self.assertEqual(failed["evidence"]["confirmation"]["sha256"], hashlib.sha256(unstable).hexdigest())
 
     @patch('sanma_friend_self_turn_stability.self_turn_stability', return_value=False)
     @patch('auto_operator.raised_closed_hand_slots', return_value=[])
@@ -514,3 +534,62 @@ class FriendDiscardBaselineRefreshTests(unittest.TestCase):
         self.assertEqual(result["baselineSha256"], hashlib.sha256(candidate).hexdigest())
         refreshed = next(item for item in self.logs if item.get("kind") == "sanma_discard_baseline_refreshed")
         self.assertEqual(refreshed["centreStructureDelta"], 0)
+
+
+class FriendRefreshPersistenceFailureTests(unittest.TestCase):
+    setUp = FriendDiscardBaselineRefreshTests.setUp
+    _fail_at_binary_frame = staticmethod(FriendDiscardBaselineRefreshTests._fail_at_binary_frame)
+    @patch('sanma_friend_self_turn_stability.self_turn_stability', return_value=False)
+    @patch('auto_operator.closed_hand_face_mismatches', return_value=[])
+    @patch('auto_operator.experimental_draw_glyph_stability')
+    @patch('sanma_friend_discard_experiment.send_discard_click')
+    def test_save_failures_at_each_capture_prevent_click(self, send, glyph, faces, wall_gate):
+        import sanma_friend_discard_experiment as module
+        save = module._save_refresh_frame
+        glyph.side_effect = lambda *a, diagnostic=None, **kw: self._fail_at_binary_frame(diagnostic)
+        for failed_role in ('reference', 'candidate', 'confirmation'):
+            self.logs.clear()
+            self.page.screenshot.side_effect = [self.candidate, self.confirmation]
+            def save_or_fail(directory, refresh_id, role, frame, **kwargs):
+                if role == failed_role:
+                    raise OSError('simulated full evidence disk')
+                return save(directory, refresh_id, role, frame, **kwargs)
+            with self.subTest(role=failed_role), patch.object(module, '_save_refresh_frame', side_effect=save_or_fail):
+                with self.assertRaises(DiscardPreclickChanged):
+                    execute_friend_discard(self.page, **self.kwargs)
+            send.assert_not_called()
+            failed = next(e for e in self.logs if e.get('kind') == 'sanma_discard_baseline_refresh_failed')
+            self.assertIn('evidence unavailable', failed['reason'])
+            self.assertFalse(any(e.get('kind') == 'sanma_discard_baseline_refreshed' for e in self.logs))
+
+    def test_saved_hash_mismatch_fails_closed(self):
+        from sanma_friend_discard_experiment import _save_refresh_frame
+        with patch.object(Path, 'read_bytes', return_value=b'corrupted'):
+            with self.assertRaisesRegex(OSError, 'read-back hash mismatch'):
+                _save_refresh_frame(self.directory.name, 'hash-mismatch', 'candidate', self.candidate)
+
+    def test_missing_directory_does_not_create_evidence(self):
+        from sanma_friend_discard_experiment import _save_refresh_frame
+        with self.assertRaisesRegex(ValueError, 'evidence directory required'):
+            _save_refresh_frame(None, 'missing', 'candidate', self.candidate)
+
+
+    @patch('sanma_friend_self_turn_stability.self_turn_stability', return_value=False)
+    @patch('auto_operator.raised_closed_hand_slots', return_value=[])
+    @patch('auto_operator.closed_hand_face_mismatches', return_value=[])
+    @patch('auto_operator.experimental_draw_glyph_stability')
+    @patch('sanma_friend_discard_experiment.send_discard_click')
+    def test_slow_evidence_save_expires_deadline_before_input(self, send, glyph, faces, raised, wall_gate):
+        import sanma_friend_discard_experiment as module
+        save = module._save_refresh_frame
+        now = [101.0]
+        def slow_save(*args, **kwargs):
+            result = save(*args, **kwargs)
+            now[0] = 401.0
+            return result
+        glyph.side_effect = lambda *a, diagnostic=None, **kw: self._fail_at_binary_frame(diagnostic)
+        self.page.screenshot.side_effect = [self.candidate, self.candidate]
+        with patch.object(module, '_save_refresh_frame', side_effect=slow_save):
+            with self.assertRaisesRegex(RuntimeError, 'action deadline expired'):
+                execute_friend_discard(self.page, **{**self.kwargs, 'clock': lambda: now[0]})
+        send.assert_not_called()

@@ -1,0 +1,74 @@
+{
+  "sourceRootDefault": "/home/yama1/server/data/dev-work/jantama/evidence187",
+  "sourceLog": "attempt3/artifacts/python-operator.jsonl",
+  "sourceLogSha256": "886de66e47910c939488838a0cfd57132b72f1b36fd3efa50e701ed30f590da1",
+  "sourceSettings": {
+    "mode": "sanma friend east",
+    "time": "300+0",
+    "actionDeadlineMs": 300000
+  },
+  "frames": {
+    "line23-source": {
+      "path": "attempt3/artifacts/frames/2026-11-12T04-12-08.402559+00-00.c3131ecbb2ee40bc90334cf5a9f59adf.sanma-self-turn.png",
+      "sha256": "8be604e87c0944c43b40ea680917b7d6a5d58f254cfdbce1059f8d48a8cbc155",
+      "logLine": 23,
+      "logEventTimestamp": "2026-11-12T04:12:11.413714+00:00",
+      "report": "line23-source-report.json",
+      "receiptSha256": "106b8b5f26566b06c85f8a1a8af89143c3e55cdcd11e5f1b3f2035f0bf67cb78",
+      "reportSha256": "0ff8477d043cb0711e43a2a6b991b6d6ddd0a9587e88ec2266414e420cde78c5",
+      "captureTimestampFilename": "2026-11-12T04-12-08.402559+00-00"
+    },
+    "line28-source": {
+      "path": "attempt3/artifacts/frames/2026-11-12T04-12-21.129453+00-00.cc581a80557849ecbdd833a09d7ca6d4.sanma-self-turn.png",
+      "sha256": "0aa82595e7c947a6ec1d5ee4e89d43dc28971140e417e1465f167b380c5b9afd",
+      "logLine": 28,
+      "logEventTimestamp": "2026-11-12T04:12:24.559794+00:00",
+      "report": "line28-source-report.json",
+      "receiptSha256": "1513339b7df63ff74ce8f46fa95919319e847da840eca2becb781bef8c50d2ed",
+      "reportSha256": "482942e56946b01019b0f526dd548d813b5ff8d2a4cf6ee287402b6afa9eb72b",
+      "captureTimestampFilename": "2026-11-12T04-12-21.129453+00-00"
+    },
+    "line28-freshness": {
+      "path": "attempt3/artifacts/frames/2026-11-12T04-12-24.556086+00-00.b2f679b83abd47d689438e80799f2681.sanma-freshness.png",
+      "sha256": "fbab2b785ccc8bdd46f8789a8af3e94b9d1e4c8c9e92a543d16a302cdad3e9ed",
+      "logLine": 28,
+      "logEventTimestamp": "2026-11-12T04:12:24.559794+00:00",
+      "captureTimestampFilename": "2026-11-12T04-12-24.556086+00-00"
+    },
+    "line96-source": {
+      "path": "attempt3/artifacts/frames/2026-11-12T04-14-29.493767+00-00.543a50c279d14e0ab537911cec54ff2f.sanma-self-turn.png",
+      "sha256": "159632b0684b00ef7b6116c301e2b8e7d58ce6bdfc8ef425d5c41b4f8d7f1d55",
+      "logLine": 96,
+      "logEventTimestamp": "2026-11-12T04:14:32.663885+00:00",
+      "report": "line96-source-report.json",
+      "receiptSha256": "e859d6bd0637d14dc849f2a284163db744439e7ec16fe819f4dd7ea2aa216924",
+      "reportSha256": "4ee097fa7dec6fd3e0baf09812d997633bbb2b838516f1be1b5ab02856bb15ed",
+      "captureTimestampFilename": "2026-11-12T04-14-29.493767+00-00"
+    }
+  },
+  "cases": [
+    {
+      "name": "background-only-hand-envelope",
+      "before": "line28-source",
+      "after": "line28-freshness",
+      "kind": "unaltered-real-frames",
+      "expectedHand": false,
+      "expectedActions": true
+    },
+    {
+      "name": "real-hand-rearrangement-and-draw",
+      "before": "line28-source",
+      "after": "line96-source",
+      "kind": "unaltered-real-frames",
+      "expectedHand": true
+    },
+    {
+      "name": "real-kita-button-disappearance-and-tile-replacement",
+      "before": "line23-source",
+      "after": "line28-source",
+      "kind": "unaltered-real-frames",
+      "expectedHand": true,
+      "expectedActions": true
+    }
+  ]
+}

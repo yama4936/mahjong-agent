@@ -28,6 +28,21 @@ class ThirdNorthTests(unittest.TestCase):
         self.assertTrue(rearm_friend_kita_candidate(self.op,self.before,self.after))
         self.assertTrue(self.op._sanma_friend_kita_rearmed_twice)
         self.assertFalse(rearm_friend_kita_candidate(self.op,self.before,self.after))
+    def test_geometry_diagnostics_are_recomputed_and_tampering_rejected(self):
+        from sanma_friend_freshness import friend_frame_changes
+        for receipt in (self.before, self.after):
+            fresh = receipt['freshness']
+            details = {}
+            changes = friend_frame_changes(Path(receipt['screenshot']).read_bytes(),
+                Path(fresh['screenshot']).read_bytes(),
+                report=receipt['sourceObservation']['report'], diagnostic=details)
+            fresh['handRegionDiagnostics'] = details
+            fresh['regionsChanged'] = {k:v for k,v in changes.items() if k != 'clock'}
+        self.after['freshness']['handRegionDiagnostics']['operationAuthorized'] = True
+        self.assertFalse(rearm_friend_kita_candidate(self.op,self.before,self.after))
+        self.after['freshness']['handRegionDiagnostics']['operationAuthorized'] = False
+        self.assertTrue(rearm_friend_kita_candidate(self.op,self.before,self.after))
+
     def test_missing_changed_reversed_or_ranked_evidence_is_rejected(self):
         for kind in ('same','reversed','no_target','wrong_tile','ranked','already_twice'):
             with self.subTest(kind=kind):

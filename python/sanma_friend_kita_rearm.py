@@ -34,7 +34,12 @@ def rearm_friend_kita_candidate(operator, before, after):
             # Recompute, never trust a status without its exact image evidence.
             latest=Path(fresh['screenshot']).read_bytes()
             if hashlib.sha256(latest).hexdigest() != fresh.get('digest'): return False
-            changes=friend_frame_changes(frame, latest)
+            if 'handRegionDiagnostics' in fresh:
+                hand_diagnostics = {}
+                changes = friend_frame_changes(frame, latest, report=report, diagnostic=hand_diagnostics)
+                if fresh['handRegionDiagnostics'] != hand_diagnostics: return False
+            else:
+                changes = friend_frame_changes(frame, latest)
             if changes['fullFrame']:
                 from auto_operator import experimental_kita_glyph_stability
                 if not experimental_kita_glyph_stability(frame, latest, report): return False

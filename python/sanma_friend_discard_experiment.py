@@ -5,6 +5,7 @@ certified. A successful click receipt does not prove a discard reached the river
 """
 from contextlib import nullcontext
 import hashlib
+import os
 import io
 
 from PIL import Image, ImageChops, ImageStat
@@ -381,7 +382,7 @@ def execute_friend_draw_candidate(operator, page, receipt):
                      risk="unloaded tile faces may appear identical", digest=receipt["digest"])
     observation = {"status": "candidate", "phase": "self_turn", "promptStatus": "none",
                    "handStatus": "candidate", "layoutStatus": "candidate", "slots": slots,
-                   "frameSha256": receipt["digest"], "referenceFrame": baseline,
+                   "frameSha256": receipt["digest"], "referenceFrame": baseline, "referenceScreenshot": receipt["screenshot"],
                    "experimentalDrawReport": report if freshness.get("status") == "stable_draw_glyph_candidate" else None}
     session = {"mode": "cpu_friend", "rules": "sanma", "clock": "300+0", "actionDeadlineMs": 300000,
                "ranked": False, "cpuCount": 2, "roomVerified": True}
@@ -403,7 +404,7 @@ def execute_friend_draw_candidate(operator, page, receipt):
                                   turn_started_monotonic=friend_action_started_at(operator),
                                   session_check=session_check,
                                   self_turn_wall_opt_in=getattr(operator.args, 'experimental_sanma_self_turn_wall', False) is True,
-                                  save_rejected_frame=save_rejected_frame,
+                                  save_rejected_frame=save_rejected_frame, evidence_directory=operator.frames,
                                   before_click=lambda: latch_friend_action_target(operator, baseline, "discard"))
     if blank_only:
         result['blankDrawIdentityUnknown'] = True
@@ -492,9 +493,37 @@ def _changed_pixels_confined_to_animation_regions(reference, frame, report, bloc
     return True
 
 
+def _save_refresh_frame(directory, refresh_id, role, frame, *, captured_at=None,
+                        captured_at_unix=None, source_screenshot=None):
+    """Save exact bytes durably, with capture-completion (not shutter) times.
+
+    Unknown original capture times remain null. Directory fsync requires the
+    Linux filesystem used by the operator; unsupported storage fails closed.
+    """
+    if directory is None:
+        raise ValueError("baseline refresh evidence directory required")
+    path = Path(directory).resolve() / f"{refresh_id}.sanma-refresh-{role}.png"
+    digest = hashlib.sha256(frame).hexdigest()
+    with path.open("xb") as stream:
+        stream.write(frame)
+        stream.flush()
+        os.fsync(stream.fileno())
+    if hashlib.sha256(path.read_bytes()).hexdigest() != digest:
+        raise OSError("baseline refresh evidence read-back hash mismatch")
+    directory_fd = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(directory_fd)
+    finally:
+        os.close(directory_fd)
+    return {"screenshot": str(path), "sha256": digest, "byteLength": len(frame),
+            "capturedAtMonotonic": captured_at, "capturedAtUnix": captured_at_unix,
+            "savedAtUnix": time.time(), "sourceScreenshot": source_screenshot}
+
+
 def _refresh_discard_baseline(page, *, reference, candidate, candidate_captured_at,
                               report, diagnostic, wall_errors, self_turn_wall_opt_in,
-                              draw_index, clock, log):
+                              draw_index, clock, log, evidence_directory=None,
+                              candidate_captured_at_unix=None, reference_screenshot=None):
     """Adopt a fresh preclick capture as the comparison baseline, or return None.
 
     The recognised reference is already seconds old when the preclick capture
@@ -540,7 +569,19 @@ def _refresh_discard_baseline(page, *, reference, candidate, candidate_captured_
               "referenceSha256": hashlib.sha256(reference).hexdigest(),
               "candidateSha256": hashlib.sha256(candidate).hexdigest(),
               "candidateCapturedAtMonotonic": candidate_captured_at,
-              "originalDiagnostic": dict(diagnostic)}
+              "originalDiagnostic": dict(diagnostic), "refreshId": uuid.uuid4().hex,
+              "evidence": {}}
+    try:
+        for role, frame, captured, unix, source in (
+                ("reference", reference, None, None, reference_screenshot),
+                ("candidate", candidate, candidate_captured_at, candidate_captured_at_unix, None)):
+            detail["evidence"][role] = _save_refresh_frame(
+                evidence_directory, detail["refreshId"], role, frame,
+                captured_at=captured, captured_at_unix=unix, source_screenshot=source)
+    except Exception as error:
+        detail["reason"] = f"refresh evidence unavailable: {type(error).__name__}: {error}"
+        log(detail)
+        return None
     blocks = _binary_frame_change_blocks(reference, candidate, report)
     detail["binaryChangeBlocks"] = blocks
     if blocks is None:
@@ -590,11 +631,20 @@ def _refresh_discard_baseline(page, *, reference, candidate, candidate_captured_
     try:
         confirmation = page.screenshot(animations="disabled")
         confirmation_captured_at = clock()
+        confirmation_captured_at_unix = time.time()
         require_sanma_observable_frame(confirmation)
         if not isinstance(confirmation, bytes):
             raise ValueError("confirmation capture unavailable")
     except Exception as error:
         detail["reason"] = f"confirmation capture unavailable: {type(error).__name__}"
+        log(detail)
+        return None
+    try:
+        detail["evidence"]["confirmation"] = _save_refresh_frame(
+            evidence_directory, detail["refreshId"], "confirmation", confirmation,
+            captured_at=confirmation_captured_at, captured_at_unix=confirmation_captured_at_unix)
+    except Exception as error:
+        detail["reason"] = f"confirmation evidence unavailable: {type(error).__name__}: {error}"
         log(detail)
         return None
     detail["confirmationSha256"] = hashlib.sha256(confirmation).hexdigest()
@@ -627,6 +677,7 @@ def _refresh_discard_baseline(page, *, reference, candidate, candidate_captured_
         log(detail)
         return None
     adopted = {"kind": "sanma_discard_baseline_refreshed", "confirmed": False,
+               "refreshId": detail["refreshId"], "evidence": detail["evidence"],
                "operationAuthorized": False,
                "referenceSha256": detail["referenceSha256"],
                "baselineSha256": detail["candidateSha256"],
@@ -645,7 +696,8 @@ def _refresh_discard_baseline(page, *, reference, candidate, candidate_captured_
 
 def execute_friend_discard(page, *, session, observation, plan, layout, log,
                            turn_started_monotonic, clock=time.monotonic, session_check=None,
-                           save_rejected_frame=None, before_click=None, self_turn_wall_opt_in=False):
+                           save_rejected_frame=None, before_click=None, self_turn_wall_opt_in=False,
+                           evidence_directory=None):
     """Map a supplied TS plan to the existing select/confirm routine.
 
     This experimental entry point depends on a caller that establishes the
@@ -681,6 +733,7 @@ def execute_friend_discard(page, *, session, observation, plan, layout, log,
             raise ValueError("invalid or expired turn clock")
         before = page.screenshot(animations="disabled")
         before_captured_at = clock()
+        before_captured_at_unix = time.time()
         try:
             require_sanma_observable_frame(before)
         except Exception:
@@ -725,7 +778,9 @@ def execute_friend_discard(page, *, session, observation, plan, layout, log,
                             diagnostic=diagnostic, wall_errors=wall_errors,
                             self_turn_wall_opt_in=self_turn_wall_opt_in,
                             draw_index=index == len(slots) - 1,
-                            clock=clock, log=log)
+                            clock=clock, log=log, evidence_directory=evidence_directory,
+                            candidate_captured_at_unix=before_captured_at_unix,
+                            reference_screenshot=observation.get("referenceScreenshot"))
                         matched = baseline_refresh is not None
         if not matched:
             event['preclickDiagnostic'] = diagnostic
@@ -757,7 +812,7 @@ def execute_friend_discard(page, *, session, observation, plan, layout, log,
         event.update(status="attempted", tile=plan["tile"], clickIndex=index, clickPoint=point,
                      frameSha256=observation["frameSha256"])
         if baseline_refresh is not None:
-            event.update(baselineRefreshed=True,
+            event.update(baselineRefreshed=True, refreshId=baseline_refresh["refreshId"],
                          baselineSha256=baseline_refresh["baselineSha256"],
                          referenceSha256=baseline_refresh["referenceSha256"])
         log(dict(event))
