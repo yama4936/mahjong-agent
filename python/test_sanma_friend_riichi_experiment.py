@@ -55,6 +55,7 @@ class RiichiExperimentTests(unittest.TestCase):
    path=Path(d)/'before.png';path.write_bytes(before);receipt['screenshot']=str(path)
    op=Mock();op.layout=self.layout;op.frames=Path(d);op.verified_friend_300_active=True;op.sanma_friend_action_observed_at=time.monotonic()
    op.args=SimpleNamespace(experimental_sanma_friend=True,rules='sanma',mode='force-auto',action_deadline_ms=300000,ranked_loop=False)
+   op._sanma_friend_resume_guard=None  # No resumed action in this fixture.
    op.screen_references=load_references(Path('/home/yama1/projects/jantama-auto/artifacts/live'))
    # This historical receipt predates the ron-reference field and must fail closed.
    page=Mock();page.screenshot.return_value=before

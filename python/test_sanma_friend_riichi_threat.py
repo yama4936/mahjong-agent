@@ -86,6 +86,7 @@ class SanmaFriendRiichiThreat(unittest.TestCase):
            'drawCandidate':{'status':'candidate','digest':digest,'index':13,'tile':'1m','point':points[-1]},'freshness':{'status':'identical_pixels_candidate'}}
   op=Mock();op.args=SimpleNamespace(experimental_sanma_friend=True,rules='sanma',mode='force-auto',action_deadline_ms=300000,ranked_loop=False)
   op.verified_friend_300_active=True;op.verified_friend_300_started_at=time.monotonic();op.sanma_friend_riichi_attempted=False;op.layout=layout
+  op._sanma_friend_resume_guard=None  # No resumed action in this fixture.
   page=Mock();page.screenshot.return_value=baseline.read_bytes()
   with patch('sanma_friend_discard_experiment.send_discard_click',return_value={}) as send:
    result=execute_friend_draw_candidate(op,page,receipt)
@@ -114,7 +115,7 @@ class ResidentRiverCandidateTests(unittest.TestCase):
   try:
    self.assertTrue(json.loads(child.stdout.readline())['ready'])
    with tempfile.TemporaryDirectory(dir=Path(__file__).resolve().parent.parent) as d:
-    op=object.__new__(PythonAutoOperator);op.recognition_request_id=0;op.recognition_server=child;op.frames=Path(d);op.log=Mock();page=Mock()
+    op=object.__new__(PythonAutoOperator);op.args=SimpleNamespace(experimental_sanma_fast_png=False);op.recognition_request_id=0;op.recognition_server=child;op.frames=Path(d);op.log=Mock();page=Mock()
     for number in (15,21,23,42):
      page.screenshot.return_value=(ROOT/f'manual-{number:02}-before.png').read_bytes()
      receipt=op.inspect_sanma_self_turn(page);source=receipt['sourceObservation'];hand=source['report']['hand']['value']
