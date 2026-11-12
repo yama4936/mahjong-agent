@@ -444,6 +444,51 @@ class RecoveryTest(unittest.TestCase):
         discard.assert_called_once()
         self.assertTrue(any(c.kwargs.get('reason')=='discard_recovery_session_or_deadline' for c in case.op.log.call_args_list))
 
+    def test_unresolved_with_no_later_turn_never_retries_discard(self):
+        from test_experimental_sanma_friend_loop import ExperimentalSanmaFriendLoopTest
+        case=ExperimentalSanmaFriendLoopTest('runTest');case.setUp();self.addCleanup(case.doCleanups)
+        case.op.args.max_iterations=6
+        receipt=dict(self.receipts[0],candidates={'candidates':[]},
+                     drawCandidate={'status':'unresolved'},freshness={'status':'identical_pixels_candidate'})
+        first=dict(self.receipts[0],candidates={'candidates':[]},freshness={'status':'identical_pixels_candidate'})
+        case.op.inspect_sanma_self_turn.side_effect=[first]+[receipt]*5
+        case.op.observe_sanma_friend_transition.return_value={'status':'unresolved','reason':'transition_not_observed','confirmed':False}
+        with patch('sanma_friend_discard_recovery.MatchContinuity',return_value=self.watch), \
+             patch('sanma_friend_discard_experiment.execute_friend_draw_candidate',return_value=self.journal[1]) as discard:
+            case.run_room()
+        discard.assert_called_once()
+        self.assertFalse(any(c.args[0]=='sanma_friend_discard_recovery_candidate' for c in case.op.log.call_args_list))
+
+    def test_unresolved_ron_prompt_never_repeats_discard(self):
+        from test_experimental_sanma_friend_loop import ExperimentalSanmaFriendLoopTest
+        case=ExperimentalSanmaFriendLoopTest('runTest');case.setUp();self.addCleanup(case.doCleanups)
+        case.op.args.max_iterations=4
+        first=dict(self.receipts[0],candidates={'candidates':[]},freshness={'status':'identical_pixels_candidate'})
+        ron=dict(self.receipts[1],candidates={'candidates':[{'action':'ron'}]},
+                 drawCandidate={'status':'unresolved'},freshness={'status':'identical_pixels_candidate'})
+        case.op.inspect_sanma_self_turn.side_effect=[first]+[ron]*3
+        case.op.observe_sanma_friend_transition.return_value={'status':'unresolved','reason':'transition_not_observed','confirmed':False}
+        with patch('sanma_friend_discard_recovery.MatchContinuity',return_value=self.watch), \
+             patch('sanma_friend_discard_experiment.execute_friend_draw_candidate',return_value=self.journal[1]) as discard:
+            case.run_room()
+        discard.assert_called_once()
+        self.assertFalse(any(c.args[0]=='sanma_friend_discard_recovery_candidate' for c in case.op.log.call_args_list))
+
+    def test_transition_error_does_not_enter_recovery(self):
+        from test_experimental_sanma_friend_loop import ExperimentalSanmaFriendLoopTest
+        for reason in ('transition observation failed: disconnected', 'friend session revoked'):
+            with self.subTest(reason=reason):
+                case=ExperimentalSanmaFriendLoopTest('runTest');case.setUp();self.addCleanup(case.doCleanups)
+                case.op.args.max_iterations=3
+                case.op.inspect_sanma_self_turn.return_value=dict(self.receipts[0],candidates={'candidates':[]},freshness={'status':'identical_pixels_candidate'})
+                case.op.observe_sanma_friend_transition.return_value={'status':'unresolved','reason':reason,'confirmed':False}
+                with patch('sanma_friend_discard_recovery.MatchContinuity',return_value=self.watch), \
+                     patch('sanma_friend_discard_experiment.execute_friend_draw_candidate',return_value=self.journal[1]) as discard:
+                    case.run_room()
+                discard.assert_called_once()
+                self.assertTrue(any(c.kwargs.get('reason')=='transition_requires_review' for c in case.op.log.call_args_list))
+                self.assertFalse(any(c.kwargs.get('reason')=='discard_transition_recovery' for c in case.op.log.call_args_list))
+
     def test_session_change_logs_monitor_reason_and_stops_before_new_input(self):
         from test_experimental_sanma_friend_loop import ExperimentalSanmaFriendLoopTest
         case=ExperimentalSanmaFriendLoopTest('runTest');case.setUp();self.addCleanup(case.doCleanups)
@@ -528,7 +573,10 @@ class RecoveryTest(unittest.TestCase):
             state['index']=index; state['selected']=False
             source=self.receipts[index].copy()
             source.update(scope='sanma_self_turn_observation',candidates={'candidates':[]},
-                          freshness={'status':'identical_pixels_candidate'})
+                          freshness={'status':'identical_pixels_candidate'},
+                          captureStartedMonotonic=classified_started)
+            case.op._sanma_friend_discard_observation=(source,source['digest'],classified_started)
+            case.op.force_auto_click_budget_ms=Mock(return_value=8000)
             image=Path(case.temp.name)/f'{utc_stamp()}.e2e.png'
             image.write_bytes(cases[index][0]); source['screenshot']=str(image)
             image.with_suffix('.receipt.json').write_text(json.dumps(source))
@@ -558,3 +606,29 @@ class RecoveryTest(unittest.TestCase):
 
     def test_original_deadline_blocks_second_click_after_resume(self):
         self._real_executor_and_current_journal_with_simulated_page(expire=True)
+
+class Evidence194LoopTest(unittest.TestCase):
+    @unittest.skipUnless(Path('/home/yama1/server/data/dev-work/jantama/evidence194/attempt/artifacts/frames').exists(), 'evidence194 unavailable')
+    def test_unresolved_real_frames_pass_actual_generated_journal(self):
+        from datetime import datetime, timezone
+        from test_experimental_sanma_friend_loop import ExperimentalSanmaFriendLoopTest
+        root=Path('/home/yama1/server/data/dev-work/jantama/evidence194/attempt/artifacts/frames')
+        receipts=[json.loads(next(root.glob('*'+stamp+'*.sanma-self-turn.receipt.json')).read_text())
+                  for stamp in ('13-59-12','14-00-03','14-00-07')]
+        case=ExperimentalSanmaFriendLoopTest('runTest');case.setUp();self.addCleanup(case.doCleanups)
+        case.op.args.max_iterations=3
+        case.op.inspect_sanma_self_turn.side_effect=receipts
+        case.op.observe_sanma_friend_transition.return_value={'status':'unresolved','reason':'transition_not_observed','confirmed':False}
+        watch=Mock();watch.alive.return_value=True
+        output={'status':'selection_confirmed','result':'discard_not_verified','tile':'P','clickIndex':13,
+                'clickPoint':{'x':1532,'y':996.5},'frameSha256':receipts[0]['digest'],
+                'blankDrawIdentityUnknown':True}
+        times=[datetime(2026,11,12,13,59,17,637067,tzinfo=timezone.utc),
+               datetime(2026,11,12,13,59,18,989190,tzinfo=timezone.utc)]
+        with patch('auto_operator.datetime', wraps=datetime) as clock, \
+             patch('sanma_friend_discard_recovery.MatchContinuity',return_value=watch), \
+             patch('sanma_friend_discard_experiment.execute_friend_draw_candidate',return_value=output) as discard:
+            clock.now.side_effect=times+[times[-1]]*10
+            case.run_room()
+        self.assertEqual(discard.call_count,2)
+        self.assertTrue(any(c.args[0]=='sanma_friend_discard_recovery_candidate' for c in case.op.log.call_args_list))
