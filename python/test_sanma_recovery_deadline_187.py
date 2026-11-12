@@ -3,6 +3,9 @@ import unittest
 from unittest.mock import Mock, patch
 
 import test_experimental_sanma_friend_loop as fixtures
+# Load before patching time.monotonic: execute_friend_discard binds its default
+# clock at import time, and a mocked clock would otherwise leak into later tests.
+import sanma_friend_discard_experiment
 
 
 class RecoveryDeadline187Test(unittest.TestCase):
