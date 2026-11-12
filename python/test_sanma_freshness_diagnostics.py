@@ -32,6 +32,18 @@ class FreshnessDiagnosticsTest(unittest.TestCase):
     self.assertEqual(detail.get('reason'),'recognition_unresolved');self.assertNotEqual(detail.get('outcome'),'exception')
   for malformed in ({}, {'hand':None,'handGeometry':{},'buttonRow':{}}):
    detail={};self.assertFalse(experimental_draw_glyph_stability(self.frame,self.frame,malformed,diagnostic=detail))
+ def test_candidate_without_value_rejects_without_exception(self):
+  base={'hand':{'status':'candidate','value':{}},'handGeometry':{'status':'candidate','value':{}},'buttonRow':{'status':'candidate','value':{'slots':[]}}}
+  import copy
+  for key in base:
+   for value in ('missing',None,[]):
+    report=copy.deepcopy(base)
+    if value=='missing':del report[key]['value']
+    else:report[key]['value']=value
+    for guard in (experimental_draw_glyph_stability,experimental_kita_glyph_stability):
+     with self.subTest(key=key,value=value,guard=guard.__name__):
+      detail={};self.assertFalse(guard(self.frame,self.frame,report,diagnostic=detail))
+      self.assertEqual(detail.get('reason'),'recognition_value_missing_or_invalid');self.assertNotEqual(detail.get('outcome'),'exception')
  def test_retained_192_unresolved_report_rejects_without_keyerror(self):
   root=Path('/home/yama1/server/data/dev-work/jantama/evidence192/attempt/artifacts/frames')
   if not root.exists():self.skipTest('optional friend-match evidence unavailable')
