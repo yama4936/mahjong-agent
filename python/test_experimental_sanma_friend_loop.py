@@ -681,6 +681,19 @@ class ExperimentalSanmaFriendLoopTest(unittest.TestCase):
         self.op.execute_sanma_friend_tsumo_candidate.assert_called_once()
         self.assertTrue(any(c.kwargs.get('reason')=='transition_requires_review' for c in self.op.log.call_args_list))
 
+    def test_discard_budget_expiry_reobserves_and_prioritizes_new_tsumo(self):
+        from sanma_friend_discard_experiment import DiscardPreclickBudgetExpired
+        self.op.args.max_iterations = 3
+        self.receipt['candidates'] = {'candidates': []}
+        self.receipt['drawCandidate'] = {'status': 'candidate'}
+        fresh = dict(self.receipt, digest='fresh-tsumo', candidates={'candidates': [{'action': 'tsumo'}]})
+        self.op.inspect_sanma_self_turn.side_effect = [self.receipt, fresh]
+        with patch('sanma_friend_discard_experiment.execute_friend_draw_candidate', side_effect=DiscardPreclickBudgetExpired('budget expired')) as discard:
+            self.run_room()
+        discard.assert_called_once()
+        self.op.execute_sanma_friend_tsumo_candidate.assert_called_once()
+        self.assertTrue(any(c.kwargs.get('reason') == 'discard_preclick_reobserve' for c in self.op.log.call_args_list))
+
     def test_discard_preclick_reobserves_new_receipt(self):
         from sanma_friend_discard_experiment import DiscardPreclickChanged
         self.op.args.max_iterations = 3

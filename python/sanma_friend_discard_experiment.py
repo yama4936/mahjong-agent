@@ -23,6 +23,10 @@ from screen_state import require_sanma_observable_frame
 from sanma_friend_freshness import friend_action_started_at, friend_frame_stable, latch_friend_action_target
 
 
+class FriendDiscardBudgetExpired(RuntimeError):
+    """An individual observation can no longer authorize input."""
+
+
 def friend_discard_budget_guard(capture_started, click_budget, log, clock=time.monotonic):
     """Bound the original observation, without resetting it on recapture."""
     if (type(capture_started) not in (int, float) or not math.isfinite(capture_started)
@@ -32,7 +36,7 @@ def friend_discard_budget_guard(capture_started, click_budget, log, clock=time.m
     if not 0 <= age < click_budget:
         log("sanma_friend_click_budget_expired", captureAgeMs=round(age),
             clickBudgetMs=click_budget, operationAuthorized=False)
-        raise RuntimeError("friend discard click budget expired")
+        raise FriendDiscardBudgetExpired("friend discard click budget expired")
 
 
 def require_friend_discard_timing_binding(operator, receipt, capture_started):
@@ -272,6 +276,10 @@ class DiscardPreclickChanged(ValueError):
     """A comparison rejected the frame before any discard input."""
 
 
+class DiscardPreclickBudgetExpired(DiscardPreclickChanged, RuntimeError):
+    """The original observation expired before any input was attempted."""
+
+
 def execute_friend_draw_candidate(operator, page, receipt):
     """Experimental draw-only bridge from the resident observation to input.
 
@@ -420,7 +428,10 @@ def execute_friend_draw_candidate(operator, page, receipt):
     def click_budget_guard():
         require_friend_discard_timing_binding(operator, receipt, capture_started)
         friend_discard_budget_guard(capture_started, click_budget, operator.log)
-    click_budget_guard()
+    try:
+        click_budget_guard()
+    except FriendDiscardBudgetExpired as error:
+        raise DiscardPreclickBudgetExpired(str(error)) from error
     def record(event):
         operator.log("sanma_friend_discard_experiment", **event)
     def save_rejected_frame(frame):
@@ -810,6 +821,7 @@ def execute_friend_discard(page, *, session, observation, plan, layout, log,
     started = clock()
     event = {"kind": "sanma_friend_discard", "status": "blocked"}
     precheck_rejected = False
+    input_may_have_started = False
     try:
         if (not isinstance(session, dict) or session.get("mode") != "cpu_friend"
                 or session.get("rules") != "sanma" or session.get("clock") != "300+0"
@@ -923,6 +935,9 @@ def execute_friend_discard(page, *, session, observation, plan, layout, log,
             _require_discard_capture_fresh(
                 clock, before_capture_started_at, input_capture_started_at)
         input_guard()
+        # Latching modifies the duplicate-input guard. Once begun, any error
+        # is conservatively terminal even if the mouse was not yet invoked.
+        input_may_have_started = True
         if before_click is not None:
             before_click()
         event.update(status="attempted", tile=plan["tile"], clickIndex=index, clickPoint=point,
@@ -972,6 +987,8 @@ def execute_friend_discard(page, *, session, observation, plan, layout, log,
             log(dict(event))
         except Exception as log_error:
             raise RuntimeError(f"discard failure could not be recorded; outcome unknown: {error}") from log_error
+        if isinstance(error, FriendDiscardBudgetExpired) and not input_may_have_started:
+            raise DiscardPreclickBudgetExpired(str(error)) from error
         if isinstance(error, DiscardPreclickChanged) and not precheck_rejected:
             raise RuntimeError(f"discard input or verification failed; outcome unknown: {error}") from error
         raise
