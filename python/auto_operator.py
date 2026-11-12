@@ -2238,18 +2238,18 @@ def _sanma_draw_wall_edge_lighting(a, b, first_mask, second_mask, x, y, changed)
     return unmatched.crop((1, 1, 33, 33)).getbbox() is None
 
 
-def experimental_draw_glyph_stability(before: bytes, after: bytes, report: dict[str, Any], *, on_wall_error=None, diagnostic=None) -> bool:
+def experimental_draw_glyph_stability(before: bytes, after: bytes, report: dict[str, Any], *, on_wall_error=None, diagnostic=None, friend_prompt_guard=None) -> bool:
     """Compare the same full images after decoding each once."""
     try:
         with Image.open(io.BytesIO(before)) as a, Image.open(io.BytesIO(after)) as b:
             a.load(); b.load()
-            return _experimental_draw_glyph_stability_decoded(a, b, report, on_wall_error=on_wall_error, diagnostic=diagnostic)
+            return _experimental_draw_glyph_stability_decoded(a, b, report, on_wall_error=on_wall_error, diagnostic=diagnostic, friend_prompt_guard=friend_prompt_guard)
     except (KeyError, TypeError, ValueError, OSError, IndexError) as error:
         if diagnostic is not None: diagnostic.update(outcome="exception", errorType=type(error).__name__)
         return False
 
 
-def _experimental_draw_glyph_stability_decoded(before: bytes, after: bytes, report: dict[str, Any], *, on_wall_error=None, diagnostic=None) -> bool:
+def _experimental_draw_glyph_stability_decoded(before: bytes, after: bytes, report: dict[str, Any], *, on_wall_error=None, diagnostic=None, friend_prompt_guard=None) -> bool:
     """Friend-only lighting hypothesis; does not establish turn or legal actions."""
     try:
         if diagnostic is not None: diagnostic.update(stage='recognition_and_prompt')
@@ -2273,7 +2273,9 @@ def _experimental_draw_glyph_stability_decoded(before: bytes, after: bytes, repo
             from sanma_friend_discard_experiment import friend_visible_row_with_north_overlap, friend_visible_empty_row_candidate
             partial = lambda frame: (friend_visible_row_with_north_overlap(frame, slots)
                                      or friend_visible_empty_row_candidate(frame, slots))
-            if not partial(before) or not partial(after): return False
+            if not (partial(before) and partial(after)):
+                if friend_prompt_guard is None or not friend_prompt_guard(before) or not friend_prompt_guard(after):
+                    return False
         if diagnostic is not None: diagnostic.update(stage='wall_color')
         # The binary screen mask cannot detect same-luminance color changes
         # in the left tile backs. Use the existing conservative wall guard.
@@ -9697,6 +9699,28 @@ class PythonAutoOperator:
                             and pon_monitor.matches(receipt.get('sourceObservation', {}).get('report') or {},
                                 Path(receipt['screenshot']).read_bytes(),
                                 Path(freshness['screenshot']).read_bytes()) if isinstance(freshness, dict) and freshness.get('status') == 'changed' else False)
+                        # A reviewed nine-terminals prompt has its own tightly
+                        # bounded action path. It must never bypass a win or an
+                        # unresolved earlier input. Default to continuing the hand.
+                        if (candidate_actions == () and not unconfirmed_input_seen
+                                and last_unconfirmed_action is None and resumed_watch is None
+                                and isinstance(freshness, dict) and freshness.get('status') == 'changed'):
+                            from sanma_friend_abort_prompt import execute as execute_nine_terminals_pass
+                            try:
+                                passed = execute_nine_terminals_pass(self, page, receipt)
+                            except Exception as error:
+                                self.log('sanma_friend_stopped', reason='nine_terminals_pass_uncertain',
+                                         errorType=type(error).__name__, operationAuthorized=False)
+                                return
+                            if passed:
+                                resumed_watch = passed
+                                self._sanma_friend_resume_guard = (passed, action_observed_at, self.args.action_deadline_ms)
+                                # Recovery is image evidence, not a claim of server
+                                # confirmation. The same watch and deadline guard
+                                # the next action; the skipped prompt is not retried.
+                                changed_streak = 0
+                                changed_since = None
+                                continue
                         if isinstance(freshness, dict) and freshness.get("status") == "changed" and not monitored_pon:
                             if changed_since is None:
                                 changed_since = time.monotonic()
