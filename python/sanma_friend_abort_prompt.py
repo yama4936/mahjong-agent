@@ -48,10 +48,12 @@ def recognizable(receipt):
                 and receipt['operationAuthorized'] is False and source['operationAuthorized'] is False
                 and receipt['digest']==source['digest']==report['digest']
                 and row['status']=='candidate' and row['value']['ronReferenceCompared'] is True
-                and len(slots)==3 and slots[0]['status']=='empty_candidate'
+                and len(slots)==3 and all(type(slot.get('slot')) is int and slot['slot']==i for i,slot in enumerate(slots))
+                and slots[0]['status']=='empty_candidate'
                 and slots[1]['status']=='unresolved'
                 and slots[2]['status']=='candidate' and slots[2]['action']=='skip'
-                and slots[2]['confidence'] >= .99 and actions==[]
+                and type(slots[2]['confidence']) in (int,float) and .99<=slots[2]['confidence']<=1
+                and actions==[]
                 and hand['status']=='candidate' and hand['value']['turnReady'] is True
                 and hand['value']['candidateMelds']==0 and len(tiles)==14
                 and len(set(tiles)&_ORPHANS)>=9)
@@ -130,8 +132,10 @@ def execute(operator, page, receipt):
                     and report['buttonRow']['status']=='candidate' and report['hand']['status']=='candidate'
                     and report['handGeometry']['status']=='candidate'
                     and observed['candidates']['candidates']==[] and row['ronReferenceCompared'] is True
-                    and all(slot['status']=='empty_candidate' for slot in row['slots'])
-                    and len(row['slots'])==3 and hand['tiles']==before_tiles and hand['turnReady'] is True
+                    and len(row['slots'])==3
+                    and all(slot.get('status')=='empty_candidate' and type(slot.get('slot')) is int and slot['slot']==i
+                            for i,slot in enumerate(row['slots']))
+                    and hand['tiles']==before_tiles and hand['turnReady'] is True
                     and hand['candidateMelds']==0 and len(before_tiles)==14
                     and all(before_board.get(k) is not None and board.get(k)==before_board[k] for k in board_keys)
                     and observed['drawCandidate']['status']=='candidate'
