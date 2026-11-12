@@ -2,8 +2,8 @@ import os
 import unittest
 from pathlib import Path
 from unittest.mock import Mock
-from PIL import Image
-from sanma_ranked_preview import inspect_bronze_sanma_east
+from PIL import Image, ImageDraw
+from sanma_ranked_preview import inspect_bronze_sanma_east, _REGIONS
 from auto_operator import PythonAutoOperator
 
 ROOT = Path(os.environ.get('SANMA_PREFLIGHT_ROOT', '/nonexistent'))
@@ -37,3 +37,20 @@ class SanmaRankedPreviewTests(unittest.TestCase):
 
     def test_wrong_size_fails_closed(self):
         self.assertFalse(inspect_bronze_sanma_east(Image.new('RGB', (960, 540))).candidate)
+
+    def test_label_paste_on_black_and_target_overlay_are_rejected(self):
+        source = self.image(ROOT / 'jantama-bronze-menu.png')
+        fake = Image.new('RGB', source.size)
+        for name in ('bronze', 'yonma_east', 'sanma_east'):
+            box = _REGIONS[name][0]
+            fake.paste(source.crop(box), box[:2])
+        result = inspect_bronze_sanma_east(fake)
+        self.assertFalse(result.candidate, result.distances)
+        self.assertFalse(result.click_permitted)
+        for box in [(1130, 660, 1250, 815), (1270, 690, 1530, 770)]:
+            with self.subTest(box=box):
+                covered = source.copy()
+                ImageDraw.Draw(covered).rectangle(box, fill=(30, 30, 30))
+                result = inspect_bronze_sanma_east(covered)
+                self.assertFalse(result.candidate, result.distances)
+                self.assertFalse(result.click_permitted)

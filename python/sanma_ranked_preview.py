@@ -16,6 +16,7 @@ _REGIONS = {
     'bronze': ((1320, 245, 1490, 295), 'sanma-rank-bronze-label.png'),
     'yonma_east': ((1270, 360, 1530, 440), 'sanma-rank-yonma-east-label.png'),
     'sanma_east': ((1270, 690, 1530, 770), 'sanma-rank-sanma-east-label.png'),
+    'sanma_frame': ((1130, 660, 1250, 815), 'sanma-rank-sanma-east-frame.png'),
 }
 
 @dataclass(frozen=True)
