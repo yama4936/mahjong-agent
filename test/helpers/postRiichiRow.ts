@@ -1,0 +1,12 @@
+import { readFile } from 'node:fs/promises';
+import sharp from 'sharp';
+import { EXPERIMENTAL_BUTTONS, type ExperimentalTemplates } from '../../src/recognition/sanmaButtonExperiment.js';
+import { inspectSanmaButtonRow } from '../../src/recognition/sanmaButtonRowExperiment.js';
+const templates = Object.fromEntries(await Promise.all(EXPERIMENTAL_BUTTONS.map(async name => [name, await readFile(`test/fixtures/sanma-buttons/${name}.png`)]))) as ExperimentalTemplates;
+const skip = await sharp(await readFile('test/fixtures/sanma-button-rows/kita.png')).extract({left:580,top:0,width:245,height:90}).png().toBuffer();
+const empty = await readFile('test/fixtures/sanma-button-rows/empty.png');
+const ronRef = await sharp(await readFile('test/fixtures/ron-button-rows/ron1.png')).extract({left:290,top:0,width:245,height:90}).png().toBuffer();
+const framePath = process.argv[2];
+if (!framePath) throw new Error('frame path required');
+const row = await sharp(await readFile(framePath)).extract({left:600,top:785,width:825,height:90}).png().toBuffer();
+process.stdout.write(JSON.stringify(await inspectSanmaButtonRow(row,templates,skip,empty,ronRef)));
