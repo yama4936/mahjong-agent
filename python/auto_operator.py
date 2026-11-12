@@ -41,7 +41,7 @@ from analysis_recorder import AnalysisRecorder
 from startup_turn_guard import StartupTurnGuard
 from friend_start import await_reviewed_friend_room, reviewed_friend_clock_is_300_plus_zero
 from sanma_friend_navigation import inspect_sanma_friend_start
-from sanma_friend_freshness import friend_action_started_at, friend_frame_changes, friend_frame_stable, latch_friend_action_target
+from sanma_friend_freshness import friend_action_started_at, friend_frame_changes, friend_frame_stable, latch_friend_action_target, check_friend_recovery_guard
 from screencast_diagnostic import ScreencastDiagnostic
 
 
@@ -4724,6 +4724,7 @@ class PythonAutoOperator:
         if self.verified_friend_300_active is not True or not 0 <= time.monotonic() - started_at < 300:
             raise RuntimeError("experimental sanma friend session or timing expired")
         require_friend_observation_budget(self, receipt)
+        check_friend_recovery_guard(self)
         page.mouse.click(point["x"], point["y"])
         try:
             page.wait_for_timeout(200)
@@ -9525,6 +9526,14 @@ class PythonAutoOperator:
                                 self.log("sanma_friend_stopped", reason="discard_recovery_session_or_deadline", operationAuthorized=False,
                                          continuity=detail, friendSessionActive=self.verified_friend_300_active is True,
                                          deadlineElapsedMs=round((time.monotonic()-discard_recovery['started'])*1000))
+                                return
+                            # Ron has priority even if a stale draw candidate is
+                            # present. Keep the original discard's continuity and
+                            # deadline, and stop after the one terminal attempt.
+                            from sanma_friend_recovery_ron import execute_recovery_ron
+                            ron_result = execute_recovery_ron(self, page, discard_recovery, receipt, observation_started)
+                            if ron_result is not None:
+                                self.log('sanma_friend_recovery_ron', result=ron_result, confirmed=False)
                                 return
                             draw = receipt.get('drawCandidate')
                             if not isinstance(draw, dict) or draw.get('status') != 'candidate':
