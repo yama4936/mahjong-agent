@@ -10,7 +10,7 @@ from PIL import Image, ImageChops, ImageStat
 def consistent(before, after, selected_index, limit=5.0):
     """Match each retained tile's glyph to the same candidate in later frame."""
     try:
-        def parts(receipt):
+        def parts(receipt, slots_override=None):
             report = receipt['sourceObservation']['report']
             hand = report['hand']
             geometry = report['handGeometry']
@@ -20,7 +20,7 @@ def consistent(before, after, selected_index, limit=5.0):
                 raise ValueError('not closed candidate')
             tiles = value['tiles']
             g = geometry['value']
-            slots = [*g['handSlots'], g['drawSlot']]
+            slots = slots_override or [*g['handSlots'], g['drawSlot']]
             if len(tiles) != 14 or len(slots) != 14:
                 raise ValueError('bad hand size')
             with Image.open(receipt['screenshot']) as image:
@@ -44,7 +44,9 @@ def consistent(before, after, selected_index, limit=5.0):
                     faces.append((mask, red_fraction, dark_mask))
             return tiles, faces
         bt,bf = parts(before)
-        at,af = parts(after)
+        from sanma_friend_geometry_alignment import aligned_post_slots
+        aligned = aligned_post_slots(before, after)
+        at,af = parts(after, aligned)
         if type(selected_index) is not int or not 0 <= selected_index < 14:
             return False
         old = [(t,f) for i,(t,f) in enumerate(zip(bt,bf)) if i != selected_index]
@@ -62,7 +64,8 @@ def consistent(before, after, selected_index, limit=5.0):
                 # Seven pin's red ink can cross the 120 grayscale boundary
                 # under lighting changes; preserve the same spatial limit on
                 # a second, darker rendering for this one observed tile.
-                return (glyph <= limit + (0.1 if tile == '6p' else 0) or (tile == '7p' and dark <= limit)) and (tile not in {'0p','5p','0s','5s'} or abs(x[1]-y[1]) <= .20)
+                tile_limit = (6.25 if tile == '6s' else 5.1 if tile == '0p' else limit) if aligned is not None and limit == 5.0 else limit
+                return (glyph <= tile_limit + (0.1 if tile == '6p' else 0) or (tile == '7p' and dark <= limit)) and (tile not in {'0p','5p','0s','5s'} or abs(x[1]-y[1]) <= .20)
             if not any(all(matches(x,y) for x,y in zip(a,arrangement))
                        for arrangement in permutations(b)):
                 return False

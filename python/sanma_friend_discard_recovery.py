@@ -106,6 +106,8 @@ def candidate(before, posts, journal, *, continuity, active, started, deadline_m
         # every frame; other fives remain excluded because conservation alone
         # cannot establish red identity.
         for receipt in receipts:
+            from sanma_friend_geometry_alignment import aligned_post_slots
+            aligned = aligned_post_slots(before, receipt) if receipt is not before else None
             data = Path(receipt['screenshot']).read_bytes()
             digest = hashlib.sha256(data).hexdigest()
             if digest != receipt['digest'] or digest != receipt['sourceObservation']['digest']:
@@ -117,7 +119,7 @@ def candidate(before, posts, journal, *, continuity, active, started, deadline_m
             if '0p' in tiles:
                 from sanma_five_pin_candidate import red_five_pin_face_candidate
                 geometry = receipt['sourceObservation']['report']['handGeometry']['value']
-                slots = [*geometry['handSlots'], geometry['drawSlot']]
+                slots = aligned or [*geometry['handSlots'], geometry['drawSlot']]
                 if len(tiles) != 14 or len(slots) != 14 or any(
                     not red_five_pin_face_candidate(data,slots[i]) for i,tile in enumerate(tiles) if tile == '0p'
                 ):
