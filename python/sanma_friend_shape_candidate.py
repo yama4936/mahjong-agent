@@ -34,7 +34,12 @@ def friend_shape_candidate(receipt):
                 if (position.get('index')!=i or position.get('point')!=p or not isinstance(p,dict)
                         or set(p)!={'x','y'} or any(type(p[k]) not in (int,float) or not math.isfinite(p[k]) for k in ('x','y'))):
                     raise ValueError('physical position mismatch')
-        best=min(rows,key=lambda r:(r['shanten'],-r['maximumUnseenTotal'],r['tile']))
+        # Preserve an aka dora when shape and the hand-only upper bound are
+        # equal.  Lexicographic ordering alone ranks "0p" before "5p" and
+        # would discard a red five over an equally ranked non-red tile. This
+        # remains a heuristic: value, indicators and danger are not evaluated.
+        best=min(rows,key=lambda r:(r['shanten'],-r['maximumUnseenTotal'],
+                                    r['tile'] in ('0p','0s'),r['tile']))
         pos=best['positions'][0]
         return {'status':'candidate','tile':best['tile'],'index':pos['index'],'point':pos['point'],
                 'shanten':best['shanten'],'improvingDrawUpperBound':best['maximumUnseenTotal'],
