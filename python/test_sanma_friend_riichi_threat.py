@@ -87,6 +87,8 @@ class SanmaFriendRiichiThreat(unittest.TestCase):
   op=Mock();op.args=SimpleNamespace(experimental_sanma_friend=True,rules='sanma',mode='force-auto',action_deadline_ms=300000,ranked_loop=False)
   op.verified_friend_300_active=True;op.verified_friend_300_started_at=time.monotonic();op.sanma_friend_riichi_attempted=False;op.layout=layout
   op._sanma_friend_resume_guard=None  # No resumed action in this fixture.
+  receipt['captureStartedMonotonic']=time.monotonic();op.force_auto_click_budget_ms.return_value=8000
+  op._sanma_friend_discard_observation=(receipt,receipt['digest'],receipt['captureStartedMonotonic'])
   page=Mock();page.screenshot.return_value=baseline.read_bytes()
   with patch('sanma_friend_discard_experiment.send_discard_click',return_value={}) as send:
    result=execute_friend_draw_candidate(op,page,receipt)

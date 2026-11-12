@@ -4529,6 +4529,7 @@ class PythonAutoOperator:
                 or structural.get("digest") != result["digest"] or not isinstance(structural.get("candidates"), list)):
             raise RuntimeError("sanma structural positions missing or inconsistent")
         receipt = {"status": "blocked", "scope": "sanma_self_turn_observation", "operationAuthorized": False,
+                   "captureStartedMonotonic": capture_started,
                    "digest": result["digest"], "screenshot": str(path),
                    "priority": assembly["priority"], "evaluation": assembly["evaluation"],
                    "candidates": result.get("candidates"), "structuralPositions": structural,
@@ -4552,6 +4553,7 @@ class PythonAutoOperator:
                  evidence={"screenshot":str(path), "frameSha256":receipt["digest"],
                            "receipt":str(receipt_path), "receiptSha256":receipt_sha256},
                  priority=receipt["priority"], evaluation=receipt["evaluation"], freshness=freshness)
+        self._sanma_friend_discard_observation = (receipt, receipt['digest'], capture_started)
         return receipt
 
     def execute_sanma_friend_tsumo_candidate(self, page: Page, receipt: dict[str, Any]) -> dict[str, Any]:

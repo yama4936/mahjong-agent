@@ -25,7 +25,7 @@ class C177KitaTransitionTests(unittest.TestCase):
    self.assertTrue(json.loads(child.stdout.readline())['ready'])
    with tempfile.TemporaryDirectory(dir=Path(__file__).resolve().parent.parent) as d:
     op=object.__new__(PythonAutoOperator);op.frames=Path(d);op.recognition_request_id=0;op.recognition_server=child;op.log=Mock()
-    op.args=SimpleNamespace(rules='sanma',mode='force-auto',action_deadline_ms=300000,ranked_loop=False,experimental_sanma_friend=True,start_reviewed_friend_room='reviewed.png')
+    op.args=SimpleNamespace(rules='sanma',mode='force-auto',action_deadline_ms=300000,force_auto_click_budget_ms=8000,ranked_loop=False,experimental_sanma_friend=True,start_reviewed_friend_room='reviewed.png')
     op.verified_friend_300_active=True;op.verified_friend_300_started_at=time.monotonic();op.sanma_friend_riichi_attempted=False;op.layout=load_json(Path('config/layout-runtime.json'))
     page=Mock();page.screenshot.return_value=(ROOT/'manual-42-after.png').read_bytes();receipt=op.inspect_sanma_self_turn(page)
     self.assertEqual(receipt['candidates']['candidates'],[]);self.assertEqual(receipt['drawCandidate']['tile'],'7s')

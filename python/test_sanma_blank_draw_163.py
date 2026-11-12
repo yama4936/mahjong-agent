@@ -1,4 +1,4 @@
-import copy,json,unittest
+import copy,json,unittest,time
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock,patch
@@ -28,7 +28,11 @@ class BlankDraw163(unittest.TestCase):
  def test_bridge_only_targets_draw_and_requires_stop(self,execute):
   op=Mock();op.args=SimpleNamespace(experimental_sanma_friend=True,rules='sanma',mode='force-auto',action_deadline_ms=300000,ranked_loop=False)
   op.verified_friend_300_active=True;op.verified_friend_300_started_at=100.;op.layout={}
+  op.force_auto_click_budget_ms.return_value=8000
+  self.receipt['captureStartedMonotonic']=time.monotonic()
+  receipt=copy.deepcopy(self.receipt)
+  op._sanma_friend_discard_observation=(receipt,receipt['digest'],receipt['captureStartedMonotonic'])
   with patch('sanma_friend_discard_experiment.friend_opponent_riichi_candidates',return_value=[]):
-   result=execute_friend_draw_candidate(op,Mock(),copy.deepcopy(self.receipt))
+   result=execute_friend_draw_candidate(op,Mock(),receipt)
   self.assertTrue(result['blankDrawIdentityUnknown']);self.assertEqual(execute.call_args.kwargs['plan']['clickIndex'],13)
   self.assertEqual(execute.call_args.kwargs['plan']['clickPoint'],self.draw['point'])
