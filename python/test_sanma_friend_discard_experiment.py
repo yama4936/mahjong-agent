@@ -213,6 +213,12 @@ class FriendDrawBridgeTests(unittest.TestCase):
                             "handGeometry": {"status": "candidate", "value": {"clickPoints": [self.point] * 14}},
                             "buttonRow": {"status": "candidate", "value": {"slots": [{"status": "empty_candidate"}] * 3}}}}}
 
+        import time
+        self.receipt['captureStartedMonotonic'] = time.monotonic()
+        self.operator._sanma_friend_discard_observation = (
+            self.receipt, digest, self.receipt['captureStartedMonotonic'])
+        self.operator.force_auto_click_budget_ms.return_value = 8000
+
     @patch("sanma_friend_discard_experiment.execute_friend_discard")
     def test_uses_draw_candidate_and_friend_config(self, execute):
         execute_friend_draw_candidate(self.operator, Mock(), self.receipt)
