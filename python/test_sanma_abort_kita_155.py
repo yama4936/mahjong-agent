@@ -37,6 +37,8 @@ class AbortKita155(unittest.TestCase):
         op.args=SimpleNamespace(rules='sanma',mode='force-auto',action_deadline_ms=300000,ranked_loop=False,experimental_sanma_friend=True)
         op.verified_friend_300_active=True;op.verified_friend_300_started_at=time.monotonic();op.screen_references={};op.log=Mock()
         receipt=copy.deepcopy(self.receipt);receipt['freshness']['status']='stable_kita_glyph_candidate';receipt['freshness']['operationAuthorized']=False
+        op.args.force_auto_click_budget_ms=8000;receipt['captureStartedMonotonic']=time.monotonic()
+        op._sanma_friend_discard_observation=(receipt,receipt['digest'],receipt['captureStartedMonotonic'])
         with tempfile.TemporaryDirectory() as path:
             op.frames=Path(path);page=Mock();page.screenshot.return_value=self.fresh.read_bytes()
             with patch('auto_operator.classify_screen',return_value=('match',1)),patch('auto_operator.latch_friend_action_target'):

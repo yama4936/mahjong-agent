@@ -4601,6 +4601,8 @@ class PythonAutoOperator:
             raise RuntimeError(f"sanma tsumo pre-click check failed: {error}") from error
         if self.verified_friend_300_active is not True or not 0 <= time.monotonic() - started_at < 300:
             raise RuntimeError("experimental sanma friend session or timing expired")
+        from sanma_friend_discard_experiment import require_friend_observation_budget
+        require_friend_observation_budget(self, receipt)
         attempted = getattr(self, "_sanma_friend_attempted_frames", set())
         if receipt["digest"] in attempted:
             raise RuntimeError("sanma frame already attempted; fresh observation required")
@@ -4617,6 +4619,7 @@ class PythonAutoOperator:
         latch_friend_action_target(self, baseline, "tsumo")
         if self.verified_friend_300_active is not True or not 0 <= time.monotonic() - started_at < 300:
             raise RuntimeError("experimental sanma friend session or timing expired")
+        require_friend_observation_budget(self, receipt)
         page.mouse.click(point["x"], point["y"])
         try:
             page.wait_for_timeout(200)
@@ -4690,6 +4693,8 @@ class PythonAutoOperator:
             raise RuntimeError(f"sanma ron pre-click check failed: {error}") from error
         if self.verified_friend_300_active is not True or not 0 <= time.monotonic() - started_at < 300:
             raise RuntimeError("experimental sanma friend session or timing expired")
+        from sanma_friend_discard_experiment import require_friend_observation_budget
+        require_friend_observation_budget(self, receipt)
         attempted = getattr(self, "_sanma_friend_attempted_frames", set())
         if receipt["digest"] in attempted:
             raise RuntimeError("sanma frame already attempted; fresh observation required")
@@ -4706,6 +4711,7 @@ class PythonAutoOperator:
         latch_friend_action_target(self, baseline, "ron")
         if self.verified_friend_300_active is not True or not 0 <= time.monotonic() - started_at < 300:
             raise RuntimeError("experimental sanma friend session or timing expired")
+        require_friend_observation_budget(self, receipt)
         page.mouse.click(point["x"], point["y"])
         try:
             page.wait_for_timeout(200)
@@ -4834,6 +4840,8 @@ class PythonAutoOperator:
         # Saving evidence and logging can block past the action deadline.
         if self.verified_friend_300_active is not True or not 0 <= time.monotonic() - started_at < 300:
             raise RuntimeError("experimental sanma friend session or timing expired")
+        from sanma_friend_discard_experiment import require_friend_observation_budget
+        require_friend_observation_budget(self, receipt)
         latch_friend_action_target(self, baseline, "kita")
         if self.verified_friend_300_active is not True or not 0 <= time.monotonic() - started_at < 300:
             raise RuntimeError("experimental sanma friend session or timing expired")
@@ -4841,6 +4849,7 @@ class PythonAutoOperator:
         attempted.add(receipt["digest"])
         self._sanma_friend_attempted_frames = attempted
         try:
+            require_friend_observation_budget(self, receipt)
             page.mouse.click(point["x"], point["y"])
         except Exception as error:
             raise RuntimeError(f"sanma kita click attempted; outcome unknown: {error}") from error

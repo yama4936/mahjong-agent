@@ -45,6 +45,9 @@ class SanmaFriendRonTest(unittest.TestCase):
             'sourceObservation': {'digest': self.digest, 'operationAuthorized': False,
                 'report': {'digest': self.digest, 'buttonRow': {'status': 'candidate', 'value': {'slots': slots}}}},
             'freshness': {'status': 'identical_pixels_candidate', 'operationAuthorized': False, 'elapsedMs': 1000}}
+        self.operator.args.force_auto_click_budget_ms = 8000
+        self.receipt['captureStartedMonotonic'] = time.monotonic()
+        self.operator._sanma_friend_discard_observation = (self.receipt, self.digest, self.receipt['captureStartedMonotonic'])
 
     def test_real_prompt_clicks_once_and_stops_with_unknown_outcome(self):
         result = self.operator.execute_sanma_friend_ron_candidate(self.page, self.receipt)

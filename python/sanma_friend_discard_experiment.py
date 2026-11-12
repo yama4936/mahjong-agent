@@ -43,6 +43,14 @@ def require_friend_discard_timing_binding(operator, receipt, capture_started):
         raise ValueError('friend discard observation timing binding changed')
 
 
+def require_friend_observation_budget(operator, receipt):
+    """Keep a single observation's original clock across all friend inputs."""
+    capture_started = receipt.get('captureStartedMonotonic')
+    require_friend_discard_timing_binding(operator, receipt, capture_started)
+    friend_discard_budget_guard(capture_started, operator.force_auto_click_budget_ms(), operator.log,
+                                clock=time.monotonic)
+
+
 def friend_opponent_riichi_candidates(frame):
     """Positive-only stick candidates in physical left/right HUD regions.
 

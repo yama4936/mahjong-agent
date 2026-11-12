@@ -11,6 +11,9 @@ class Integration(unittest.TestCase):
   self.op=Mock();self.op.args=SimpleNamespace(rules='sanma',mode='force-auto',action_deadline_ms=300000,ranked_loop=False,experimental_sanma_friend=True,experimental_sanma_pon_monitor=True)
   temp=tempfile.TemporaryDirectory();self.addCleanup(temp.cleanup);self.op.frames=Path(temp.name)
   self.op.verified_friend_300_active=True;self.op.sanma_friend_action_observed_at=time.monotonic();self.op._sanma_friend_attempted_targets=set();self.op._sanma_friend_resume_guard=None
+  self.op.force_auto_click_budget_ms.return_value=8000
+  self.receipt['captureStartedMonotonic']=time.monotonic()
+  self.op._sanma_friend_discard_observation=(self.receipt,self.receipt['digest'],self.receipt['captureStartedMonotonic'])
   self.page=Mock();self.page.screenshot.return_value=Path(self.receipt['freshness']['screenshot']).read_bytes();self.monitor=Mock();self.monitor.matches.return_value=True
  def call(self):
   with patch('sanma_friend_pass_experiment.classify_screen',return_value=('match',1)):

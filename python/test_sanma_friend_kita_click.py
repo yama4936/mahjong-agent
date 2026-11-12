@@ -65,6 +65,9 @@ process.stdout.write(JSON.stringify(report));
             'sourceObservation': {'digest': self.digest, 'operationAuthorized': False,
                 'report': copy.deepcopy(self.report)},
             'freshness': {'status': 'identical_pixels_candidate', 'operationAuthorized': False, 'elapsedMs': 1000}}
+        self.operator.args.force_auto_click_budget_ms = 8000
+        self.receipt['captureStartedMonotonic'] = time.monotonic()
+        self.operator._sanma_friend_discard_observation = (self.receipt, self.digest, self.receipt['captureStartedMonotonic'])
 
     def test_logging_delay_or_session_revocation_prevents_kita_click(self):
         for failure in ('deadline', 'session'):
@@ -196,6 +199,8 @@ process.stdout.write(JSON.stringify(report));
         if not receipts or not before or not after:
             self.skipTest('a5fb00b friend evidence unavailable')
         receipt = json.loads(receipts[0].read_text())
+        receipt['captureStartedMonotonic'] = time.monotonic()
+        self.operator._sanma_friend_discard_observation = (receipt, receipt['digest'], receipt['captureStartedMonotonic'])
         baseline = Path(receipt['screenshot']).read_bytes()
         fresh = before[0].read_bytes()
         self.assertNotEqual(hashlib.sha256(baseline).hexdigest(), hashlib.sha256(fresh).hexdigest())

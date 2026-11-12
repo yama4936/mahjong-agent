@@ -16,6 +16,9 @@ class PassPreclick165(unittest.TestCase):
   self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
   self.op=Mock();self.op.args=SimpleNamespace(rules='sanma',mode='force-auto',action_deadline_ms=300000,ranked_loop=False,experimental_sanma_friend=True)
   self.op.verified_friend_300_active=True;self.op.verified_friend_300_started_at=time.monotonic();self.op._sanma_friend_resume_guard=None;self.op._sanma_friend_attempted_targets=set();self.op.frames=Path(self.temp.name)
+  self.op.force_auto_click_budget_ms.return_value=8000
+  self.receipt['captureStartedMonotonic']=time.monotonic()
+  self.op._sanma_friend_discard_observation=(self.receipt,self.receipt['digest'],self.receipt['captureStartedMonotonic'])
   self.page=Mock();self.page.screenshot.return_value=self.stop.read_bytes()
  def test_recorded_stop_frame_is_diagnostic_only_and_safe_to_reobserve(self):
   with self.assertRaises(PassPreclickChanged) as e:execute_friend_pon_pass(self.op,self.page,self.receipt)
