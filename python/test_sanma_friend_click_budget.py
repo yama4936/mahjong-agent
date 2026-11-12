@@ -75,6 +75,36 @@ class FriendDiscardBudgetTests(unittest.TestCase):
                 self.run_discard()
         self.assertNotIsInstance(error.exception, DiscardPreclickBudgetExpired)
 
+    def test_expiry_after_latch_is_terminal(self):
+        self.now = 101
+        def latch():
+            self.target.append('latched')
+            self.now = 108
+        with patch('sanma_friend_discard_experiment.require_sanma_observable_frame'), \
+             patch('auto_operator.raised_closed_hand_slots', return_value=[]):
+            with self.assertRaises(FriendDiscardBudgetExpired) as error:
+                execute_friend_discard(self.page, session=self.session, observation=self.observation,
+                    plan=self.plan, layout=self.layout, log=self.events.append, turn_started_monotonic=100,
+                    clock=self.clock, click_budget_guard=self.guard, before_click=latch)
+        self.assertNotIsInstance(error.exception, DiscardPreclickBudgetExpired)
+        self.page.mouse.click.assert_not_called()
+
+    def test_capture_disconnect_is_terminal(self):
+        self.now = 101
+        self.page.screenshot.side_effect = ConnectionError('disconnected')
+        with self.assertRaises(ConnectionError): self.run_discard()
+        self.page.mouse.click.assert_not_called()
+
+    def test_budget_log_failure_is_terminal(self):
+        self.now = 108
+        def failed_log(*args, **kwargs): raise OSError('disk full')
+        with patch('sanma_friend_discard_experiment.require_sanma_observable_frame'):
+            with self.assertRaises(OSError):
+                execute_friend_discard(self.page, session=self.session, observation=self.observation,
+                    plan=self.plan, layout=self.layout, log=lambda event: None, turn_started_monotonic=100,
+                    clock=self.clock, click_budget_guard=lambda: friend_discard_budget_guard(100, 8000, failed_log, self.clock))
+        self.page.mouse.click.assert_not_called()
+
     def test_missing_or_future_timestamp_rejected(self):
         for stamp in (None, float('nan'), True):
             with self.assertRaises(ValueError): friend_discard_budget_guard(stamp, 8000, Mock(), self.clock)

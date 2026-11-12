@@ -33,7 +33,9 @@ def friend_discard_budget_guard(capture_started, click_budget, log, clock=time.m
             or type(click_budget) is not int or click_budget <= 0):
         raise ValueError("friend discard click budget evidence missing")
     age = (clock() - capture_started) * 1000
-    if not 0 <= age < click_budget:
+    if age < 0:
+        raise RuntimeError("friend discard capture timestamp is in the future")
+    if not age < click_budget:
         log("sanma_friend_click_budget_expired", captureAgeMs=round(age),
             clickBudgetMs=click_budget, operationAuthorized=False)
         raise FriendDiscardBudgetExpired("friend discard click budget expired")
