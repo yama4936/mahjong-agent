@@ -12,6 +12,7 @@ from replay_evidence189_preclick import DEFAULT_ROOT, LOG_SHA, checked, replay
 
 
 class Evidence189PreclickReplayTest(unittest.TestCase):
+    @unittest.skipUnless((DEFAULT_ROOT / "operator.log").exists(), "local evidence189 archive unavailable")
     def test_recorded_rejections_replay(self):
         result = replay()
         self.assertFalse(result['operationAuthorized'])
@@ -29,6 +30,7 @@ class Evidence189PreclickReplayTest(unittest.TestCase):
                 replay(Path(directory))
 
 
+    @unittest.skipUnless((DEFAULT_ROOT / "operator.log").exists(), "local evidence189 archive unavailable")
     def test_tampered_image_and_receipt_are_rejected(self):
         rows = [json.loads(line) for line in (DEFAULT_ROOT / 'operator.log').read_bytes().splitlines()]
         rejects = [rows[i] for i in (189, 234, 242)]

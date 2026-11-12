@@ -1,7 +1,9 @@
 """Replay retained evidence189 pre-click rejections; no browser or input.
 
 Run with PYTHONPATH=python and the project's image/recognition dependencies.
-The source evidence defaults to this workstation's SSD archive.
+Requires the local evidence189 archive, which is not included in the repository.
+Defaults to this workstation's SSD path; use --source-root for a relocated copy.
+Hashes bind logs, screenshots and retained reports; recognition is not rerun.
 """
 import argparse
 import hashlib
