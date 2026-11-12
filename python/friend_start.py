@@ -25,6 +25,16 @@ _BOUND_REGIONS = (
     (1000, 955, 1280, 1040),
 )
 
+# Fixed text-free gaps in the calibrated sanma settings panel. These are
+# deliberately not inferred from pixel colors: a petal over a glyph must still
+# fail closed. Evidence187 adds gaps below the last required-score heading
+# glyph (which ends at y=427), and left of the bankruptcy rule. Keep the
+# surrounding antialiasing, all values, and all player/ready regions bound.
+_SANMA_SETTINGS_DECORATION = (
+    (1642, 367, 1674, 395), (1834, 335, 1866, 351),
+    (1798, 429, 1822, 440), (1656, 496, 1678, 518),
+)
+
 # Native 300+0 time label from the independently reviewed friend-room
 # preflight. The 5+20 label must not match this template.
 _LONG_FRIEND_CLOCK = "FypLFypLFipMFipLJTlZJDdYEydKFipMKjxbGSxMFihJJjhYIjNUFylKFypLEydJFilLFCdJKDpaHC5PGy5POkxrQ1RzEidJP1FwFipMFypLGCtMFSlMFSlMEyhLIjZYXG2LcoGeMUVmTl9+cYCbU2OALj9ecX+abXyXIzVVGCtMJTlZDiNFPlBvcYCbY3KOIzZWbn6ZTmB+N0pqZ3eTQlRzGCtMGCtMFClMFClMFClMFClNHjFVZ3eURVd3bH2ZGi5PbXyXZXSQO0tqUmJ/SFh2MUNiZnaSGi5PbHyXIzZWZXSQPE5sgY+qeomjYXKOWmqIWmuIMkNiFShJFSpQFCpPFSpPECZMMUVoeommQVR0a3uYEydKbHuWcH+ZMkRkSVl4WGeEXG2KiJewQVNybn6aGy9RYHCMO01tf46oeYmkO05uZ3eUU2SDJThZFypMFi5XFi5XFC1VJz5kK0FnT2OEXG+PZniXO09xa3yZUmSEVGaFZHWTOU1vHjRZSF1+CyRLYHOSQ1Z3a3yZP1R2ZHeWPFF0HDNZYXOSVGeIFStRGjBVGDRjGDRjFjJhJ0JuY3mcZHmcITxnMkx1bIGiOlJ4HzljY3iaWG6RHDZgGjRgGDRgFTFdJkFran6gSmGGEi1aQVl/RVyCY3eZVGuPGTRhGjVgGzZh"
@@ -101,12 +111,10 @@ def verified_friend_room(frame: bytes, reviewed_preflight: bytes, *, sanma: bool
             left = current.crop(box)
             right = reviewed.crop(box)
             if sanma and box == (1610, 175, 1870, 900):
-                # The 35000-point panel has two narrow, text-free background
-                # areas where animated petals were captured in reviewed
-                # friend frames. Leave all score/rule glyphs compared.
-                for x1,y1,x2,y2 in ((1642,367,1674,395),(1834,335,1866,351)):
-                    masked=(x1-box[0],y1-box[1],x2-box[0],y2-box[1])
-                    left.paste((0,0,0),masked);right.paste((0,0,0),masked)
+                for x1, y1, x2, y2 in _SANMA_SETTINGS_DECORATION:
+                    masked = (x1 - box[0], y1 - box[1], x2 - box[0], y2 - box[1])
+                    left.paste((0, 0, 0), masked)
+                    right.paste((0, 0, 0), masked)
             # Text changes occupy only a small portion of a panel. Compare
             # tightly tiled patches so a changed digit cannot be averaged out
             # across the surrounding dark background.

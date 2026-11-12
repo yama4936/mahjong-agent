@@ -1,0 +1,34 @@
+{
+  "184-reviewed.png": {
+    "source": "evidence184/artifacts/frames/2026-11-08T14-03-19.201703+00-00.friend-start-32.png",
+    "sha256": "b5e220e467bfc61cc9c512eece0c65e366d942114858b8e15293f0701af4cf97"
+  },
+  "184-current.png": {
+    "source": "evidence184/retry-artifacts/frames/2026-11-08T14-06-06.491942+00-00.friend-start-1.png",
+    "sha256": "21ecde513a97973be169247fa66f3793a9afe79bfecbb7e145df8e8418f51932"
+  },
+  "187-reviewed.png": {
+    "source": "evidence187/reviewed-room.png",
+    "sha256": "0a844b44f069f4f44c93191090a8f175c6c00a51d5b83f00490df39f11fc577b"
+  },
+  "187-current.png": {
+    "source": "evidence187/artifacts/frames/2026-11-12T04-08-49.660624+00-00.friend-start-3.png",
+    "sha256": "e5c7a3025a036031d0f22b29a88a12dcfec0143fcd5af5e828be7ed26501ca6b"
+  },
+  "187-reviewed-2.png": {
+    "source": "evidence187/reviewed-room-2.png",
+    "sha256": "3a233aa8688bd755537745e37786bfed53252f328ce9663d3601e5d19f78ca72"
+  },
+  "187-current-2.png": {
+    "source": "evidence187/attempt2/artifacts/frames/2026-11-12T04-10-12.574295+00-00.friend-start-8.png",
+    "sha256": "a2c5df28e307980ecac48c92df009b3a609752e5a3dfc3205bea5434deca668b"
+  },
+  "187-next.png": {
+    "source": "evidence187/artifacts/frames/2026-11-12T04-08-50.951887+00-00.friend-start-4.png",
+    "sha256": "595c1900666873d1d77e08a44d9f59fc5fe488752609b2ecfd2c93b52a5be3a6"
+  },
+  "187-next-2.png": {
+    "source": "evidence187/attempt2/artifacts/frames/2026-11-12T04-10-14.021344+00-00.friend-start-9.png",
+    "sha256": "6b9021b25f560e8368457a5807a6201c7d9ca3078fe169e32f307a092dcae67d"
+  }
+}
