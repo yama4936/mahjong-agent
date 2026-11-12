@@ -41,6 +41,8 @@ class LeftPonTrial(unittest.TestCase):
  def test_actual_friend_pass_bridge_uses_current_frame_guard(self):
   r=copy.deepcopy(self.r);r['freshness']['status']='stable_pon_pass_candidate';page=Mock();page.screenshot.return_value=self.after
   op=Mock();op.args=SimpleNamespace(rules='sanma',mode='force-auto',action_deadline_ms=300000,ranked_loop=False,experimental_sanma_friend=True,experimental_sanma_pon_monitor=False);op.verified_friend_300_active=True;op.frames=ROOT;op.screen_references={}
+  r['captureStartedMonotonic']=time.monotonic();op.force_auto_click_budget_ms.return_value=8000
+  op._sanma_friend_discard_observation=(r,r['digest'],r['captureStartedMonotonic'])
   with patch('sanma_friend_pass_experiment.friend_action_started_at',return_value=time.monotonic()),patch('sanma_friend_pass_experiment.classify_screen',return_value=('match',1.0)),patch('sanma_friend_pass_experiment.latch_friend_action_target'),patch('sanma_friend_freshness.check_friend_recovery_guard'):
    result=execute_friend_pon_pass(op,page,r)
   page.mouse.click.assert_called_once_with(1300,830);self.assertEqual(result['confirmation'],'unknown')
