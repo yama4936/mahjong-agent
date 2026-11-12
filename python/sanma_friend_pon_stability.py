@@ -37,7 +37,7 @@ def _pon_pass_stability_impl(before, after, report, *, on_wall_error=None, diagn
                     for x in range(0,824,8):
                         value=max(ImageStat.Stat(delta.crop((x,y,min(x+8,824),min(y+8,90)))).mean)
                         if value>(30 if left_candidate else 10):
-                            if diagnostic is not None: diagnostic.update(reason='row_block',frame=frame_index,blockX=x+600,blockY=y+785,value=value,threshold=10)
+                            if diagnostic is not None: diagnostic.update(reason='row_block',frame=frame_index,blockX=x+600,blockY=y+785,value=value,threshold=30 if left_candidate else 10)
                             return False
             from auto_operator import experimental_kita_wall_color_stable, experimental_kita_color_stable
             opposite_offered=False
