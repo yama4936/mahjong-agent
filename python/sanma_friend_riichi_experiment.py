@@ -76,8 +76,9 @@ def choose_riichi_selection(frame, layout, receipt):
             if len(rows_for_tile)!=1 or rows_for_tile[0]['shanten']!=0:return None
             row=rows_for_tile[0]
             if not any(p['index']==index and p['point']==layout['clickPoints'][index] for p in row['positions']):return None
-            options.append((row['shanten'],-row['maximumUnseenTotal'],index))
-        return min(options)[2] if options else None
+            options.append((row['shanten'],-row['maximumUnseenTotal'],
+                            row['tile'] in ('0p','0s'),index))
+        return min(options)[3] if options else None
     except (OSError,KeyError,TypeError,ValueError,IndexError):return None
 
 

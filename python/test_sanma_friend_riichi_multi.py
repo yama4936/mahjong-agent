@@ -35,6 +35,24 @@ class MultiRiichiTests(unittest.TestCase):
    page=Mock();page.screenshot.return_value=self.frame
    with patch('sanma_friend_riichi_experiment.execute_friend_pon_pass'),patch('sanma_friend_riichi_experiment.send_discard_click',return_value={}) as discard:
     execute_friend_riichi(op,page,self.receipt);self.assertEqual(discard.call_args.args[7],7)
+ def test_multi_option_equal_shape_preserves_red_with_synthetic_labels(self):
+  # Reuse saved geometry and image, but simulate recognizer labels and scores;
+  # this is a ranking test, not evidence that these tiles were in that image.
+  r=copy.deepcopy(self.receipt);hand=r['sourceObservation']['report']['hand']['value']
+  rows=r['structuralPositions']['candidates']
+  red=next(x for x in rows if x['tile']=='2s');plain=next(x for x in rows if x['tile']=='9s')
+  for index,label,row in ((7,'0p',red),(12,'5p',plain)):
+   hand['tiles'][index]=label;hand['matches'][index]['tile']=label;row['tile']=label
+  plain['maximumUnseenTotal']=red['maximumUnseenTotal'];plain['improvingDraws']=copy.deepcopy(red['improvingDraws'])
+  self.assertEqual(choose_riichi_selection(self.frame,self.layout,r),12)
+  with tempfile.TemporaryDirectory() as d:
+   op=Mock();op.layout=self.layout;op.frames=Path(d);op.verified_friend_300_active=True;op.sanma_friend_action_observed_at=time.monotonic()
+   page=Mock();page.screenshot.return_value=self.frame
+   with patch('sanma_friend_riichi_experiment.execute_friend_pon_pass'),patch('sanma_friend_riichi_experiment.send_discard_click',return_value={}) as discard:
+    execute_friend_riichi(op,page,r);self.assertEqual(discard.call_args.args[7],12)
+  # Better shape/acceptance remains more important than red retention.
+  plain['maximumUnseenTotal']-=1;plain['improvingDraws'][0]['maximumUnseen']-=1
+  self.assertEqual(choose_riichi_selection(self.frame,self.layout,r),7)
  def test_changed_glyph_color_rejected_even_if_dark_mask_matches(self):
   image=Image.open(io.BytesIO(self.frame)).convert('RGB');slot=self.layout['handSlots'][7];count=0
   for y in range(slot['y']+10,slot['y']+slot['height']-38):
