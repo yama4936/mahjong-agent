@@ -4,7 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 from PIL import Image, ImageDraw
-from sanma_friend_pon_stability import pon_pass_stability
+from sanma_friend_pon_stability import pon_pass_stability, _pon_pass_stability_impl
 from sanma_friend_pass_experiment import execute_friend_pon_pass, PassPreclickChanged
 
 ROOT=Path('/home/yama1/server/data/dev-work/jantama/evidence192/attempt/artifacts/frames')
@@ -32,6 +32,12 @@ class LeftPonTrial(unittest.TestCase):
   self.assertTrue(pon_pass_stability(self.before,self.after,self.report))
   for kind in ('indicator','arrow','real_other_tile','tile','small_red','hand','skip','board','ron','red_at_700_300','red_at_773_300','red_at_699_341','red_at_773_345','red_at_695_270','red_at_836_405'):
    with self.subTest(kind=kind):self.assertFalse(pon_pass_stability(self.before,self.mutate(kind),self.report))
+ def test_trial_reports_the_threshold_actually_used(self):
+  im=Image.open(io.BytesIO(self.after)).convert('RGB')
+  ImageDraw.Draw(im).rectangle((1112,801,1119,802),fill=(255,0,0))
+  out=io.BytesIO();im.save(out,format='PNG');detail={}
+  self.assertFalse(_pon_pass_stability_impl(self.before,out.getvalue(),self.report,diagnostic=detail,left_candidate=True))
+  self.assertEqual((detail.get('reason'),detail.get('threshold')),('row_block',30))
  def test_actual_friend_pass_bridge_uses_current_frame_guard(self):
   r=copy.deepcopy(self.r);r['freshness']['status']='stable_pon_pass_candidate';page=Mock();page.screenshot.return_value=self.after
   op=Mock();op.args=SimpleNamespace(rules='sanma',mode='force-auto',action_deadline_ms=300000,ranked_loop=False,experimental_sanma_friend=True,experimental_sanma_pon_monitor=False);op.verified_friend_300_active=True;op.frames=ROOT;op.screen_references={}
