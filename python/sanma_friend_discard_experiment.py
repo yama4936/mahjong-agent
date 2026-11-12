@@ -18,7 +18,7 @@ import uuid
 import tempfile
 from pathlib import Path
 
-from auto_operator import send_discard_click
+from auto_operator import SelectionStateUncertainAbort, send_discard_click
 from screen_state import require_sanma_observable_frame
 from sanma_friend_freshness import friend_action_started_at, friend_frame_stable, latch_friend_action_target
 
@@ -541,17 +541,21 @@ def _save_refresh_frame(directory, refresh_id, role, frame, *, captured_at=None,
 _DISCARD_FRAME_MAX_AGE_SECONDS = 5.0
 
 
-def _require_discard_capture_fresh(clock, *captured_times):
+def _require_discard_capture_fresh(clock, *capture_started_times):
+    # Bytes may describe the start of a blocking capture. Completion must
+    # never renew the evidence budget, including for selection receipts.
     now = clock()
-    if any(not 0 <= now - captured < _DISCARD_FRAME_MAX_AGE_SECONDS
-           for captured in captured_times):
+    if any(type(started) not in (int, float) or not math.isfinite(started)
+           or not 0 <= now - started < _DISCARD_FRAME_MAX_AGE_SECONDS
+           for started in capture_started_times):
         raise RuntimeError("discard image freshness expired")
 
 
 def _refresh_discard_baseline(page, *, reference, candidate, candidate_captured_at,
                               report, diagnostic, wall_errors, self_turn_wall_opt_in,
                               draw_index, clock, log, evidence_directory=None,
-                              candidate_captured_at_unix=None, reference_screenshot=None, input_guard=None):
+                              candidate_captured_at_unix=None, reference_screenshot=None, input_guard=None,
+                              candidate_capture_started_at=None):
     """Adopt a fresh preclick capture as the comparison baseline, or return None.
 
     The recognised reference is already seconds old when the preclick capture
@@ -597,6 +601,7 @@ def _refresh_discard_baseline(page, *, reference, candidate, candidate_captured_
               "referenceSha256": hashlib.sha256(reference).hexdigest(),
               "candidateSha256": hashlib.sha256(candidate).hexdigest(),
               "candidateCapturedAtMonotonic": candidate_captured_at,
+              "candidateCaptureStartedAtMonotonic": candidate_capture_started_at,
               "originalDiagnostic": dict(diagnostic), "refreshId": uuid.uuid4().hex,
               "evidence": {}}
     def save_role(role, frame, captured=None, unix=None, source=None):
@@ -613,6 +618,18 @@ def _refresh_discard_baseline(page, *, reference, candidate, candidate_captured_
             raise
         detail["evidence"][role] = {"status": "saved", **saved}
 
+    def require_current_evidence(*additional_capture_starts):
+        try:
+            if input_guard is not None:
+                input_guard()
+            _require_discard_capture_fresh(
+                clock, candidate_capture_started_at, *additional_capture_starts)
+        except Exception as error:
+            detail["reason"] = f"refresh input gate rejected: {type(error).__name__}: {error}"
+            log(detail)
+            raise
+
+    require_current_evidence()
     try:
         for role, frame, captured, unix, source in (
                 ("reference", reference, None, None, reference_screenshot),
@@ -668,10 +685,18 @@ def _refresh_discard_baseline(page, *, reference, candidate, candidate_captured_
         detail["reason"] = "centre structure differs from reference"
         log(detail)
         return None
+    require_current_evidence()
+    confirmation_capture_started_at = clock()
     try:
         confirmation = page.screenshot(animations="disabled")
         confirmation_captured_at = clock()
         confirmation_captured_at_unix = time.time()
+    except Exception as error:
+        detail["reason"] = f"confirmation capture unavailable: {type(error).__name__}"
+        log(detail)
+        return None
+    require_current_evidence(confirmation_capture_started_at)
+    try:
         require_sanma_observable_frame(confirmation)
         if not isinstance(confirmation, bytes):
             raise ValueError("confirmation capture unavailable")
@@ -687,6 +712,7 @@ def _refresh_discard_baseline(page, *, reference, candidate, candidate_captured_
         return None
     detail["confirmationSha256"] = hashlib.sha256(confirmation).hexdigest()
     detail["confirmationCapturedAtMonotonic"] = confirmation_captured_at
+    detail["confirmationCaptureStartedAtMonotonic"] = confirmation_capture_started_at
     confirmed = detail["confirmationSha256"] == detail["candidateSha256"]
     if not confirmed:
         confirmed = friend_frame_stable(candidate, confirmation)
@@ -714,17 +740,7 @@ def _refresh_discard_baseline(page, *, reference, candidate, candidate_captured_
         detail["reason"] = "candidate baseline not confirmed by immediate capture"
         log(detail)
         return None
-    def require_current_evidence():
-        try:
-            if input_guard is not None:
-                input_guard()
-            _require_discard_capture_fresh(clock, candidate_captured_at, confirmation_captured_at)
-        except Exception as error:
-            detail["reason"] = f"refresh input gate rejected: {type(error).__name__}: {error}"
-            log(detail)
-            raise
-
-    require_current_evidence()
+    require_current_evidence(confirmation_capture_started_at)
     adopted = {"kind": "sanma_discard_baseline_refreshed", "confirmed": False,
                "refreshId": detail["refreshId"], "evidence": detail["evidence"],
                "operationAuthorized": False,
@@ -732,6 +748,8 @@ def _refresh_discard_baseline(page, *, reference, candidate, candidate_captured_
                "baselineSha256": detail["candidateSha256"],
                "confirmationSha256": detail["confirmationSha256"],
                "baselineCapturedAtMonotonic": candidate_captured_at,
+               "baselineCaptureStartedAtMonotonic": candidate_capture_started_at,
+               "confirmationCaptureStartedAtMonotonic": confirmation_capture_started_at,
                "confirmationCapturedAtMonotonic": confirmation_captured_at,
                "originalDiagnostic": dict(diagnostic),
                "binaryChangeBlocks": blocks,
@@ -740,7 +758,7 @@ def _refresh_discard_baseline(page, *, reference, candidate, candidate_captured_
                          "re-verified against reference hand faces and confirmed by "
                          "an immediate capture under the same stability chain"}
     log(adopted)
-    require_current_evidence()
+    require_current_evidence(confirmation_capture_started_at)
     return adopted
 
 
@@ -787,9 +805,13 @@ def execute_friend_discard(page, *, session, observation, plan, layout, log,
             if not 0 <= clock() - turn_started_monotonic < 300:
                 raise RuntimeError("action deadline expired")
 
+        deadline()
+        before_capture_started_at = clock()
         before = page.screenshot(animations="disabled")
         before_captured_at = clock()
         before_captured_at_unix = time.time()
+        deadline()
+        _require_discard_capture_fresh(clock, before_capture_started_at)
         try:
             require_sanma_observable_frame(before)
         except Exception:
@@ -830,6 +852,7 @@ def execute_friend_discard(page, *, session, observation, plan, layout, log,
                         baseline_refresh = _refresh_discard_baseline(
                             page, reference=reference, candidate=before,
                             candidate_captured_at=before_captured_at,
+                            candidate_capture_started_at=before_capture_started_at,
                             report=observation["experimentalDrawReport"],
                             diagnostic=diagnostic, wall_errors=wall_errors,
                             self_turn_wall_opt_in=self_turn_wall_opt_in,
@@ -857,10 +880,11 @@ def execute_friend_discard(page, *, session, observation, plan, layout, log,
         if raised:
             event['raisedSlots'] = raised
             raise ValueError('selected or hovered tile before discard')
-        input_captured_at = before_captured_at
+        input_capture_started_at = before_capture_started_at
         def input_guard():
             deadline()
-            _require_discard_capture_fresh(clock, input_captured_at)
+            _require_discard_capture_fresh(
+                clock, before_capture_started_at, input_capture_started_at)
         input_guard()
         if before_click is not None:
             before_click()
@@ -872,18 +896,27 @@ def execute_friend_discard(page, *, session, observation, plan, layout, log,
                          referenceSha256=baseline_refresh["referenceSha256"])
         log(dict(event))
         def checked_selection(_):
-            nonlocal input_captured_at
-            frame = page.screenshot(animations="disabled")
-            input_captured_at = clock()
+            nonlocal input_capture_started_at
+            frame = None
             try:
+                input_guard()
+                input_capture_started_at = clock()
+                frame = page.screenshot(animations="disabled")
+                input_guard()
                 require_sanma_observable_frame(frame)
-            except Exception:
+            except Exception as error:
                 if isinstance(frame, bytes) and save_rejected_frame is not None:
                     try:
                         save_rejected_frame(frame)
                     except Exception:
                         pass  # The first input is still unresolved; never confirm.
-                raise
+                # The first click has already selected a tile. Preserve the
+                # sender's uncertain-selection stop semantics even when the
+                # capture gate rejects before its confirmation hook runs.
+                page.mouse.move(layout["viewport"]["width"] / 2,
+                                layout["viewport"]["height"] * 0.72)
+                raise SelectionStateUncertainAbort(
+                    f"discard confirmation withheld after tile selection: {error}") from error
             return frame
         # The attempted-event logger may block beyond the action deadline or
         # the friend session may be revoked while it writes.

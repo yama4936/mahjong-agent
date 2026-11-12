@@ -196,6 +196,7 @@ class FriendDrawBridgeTests(unittest.TestCase):
                                              action_deadline_ms=300000, ranked_loop=False)
         self.operator.verified_friend_300_active = True
         self.operator.verified_friend_300_started_at = 100
+        self.operator._sanma_friend_resume_guard = None
         self.point = {"x": 1000, "y": 1000}
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
@@ -751,7 +752,7 @@ class FriendDiscardBlockingWorkTests(unittest.TestCase):
                 return not (stage == 'revoked' and self.page.mouse.click.call_count)
             kwargs = {**self.kwargs, 'clock': lambda: now[0], 'session_check': session_check}
             with self.subTest(stage=stage):
-                if stage in ('normal', 'fresh_after_slow_poll'):
+                if stage == 'normal':
                     result = execute_friend_discard(self.page, **kwargs)
                     self.assertEqual(result['status'], 'selection_confirmed')
                     self.assertEqual(self.page.mouse.click.call_count, 2)
@@ -778,3 +779,117 @@ class FriendDiscardBlockingWorkTests(unittest.TestCase):
                     with self.assertRaisesRegex(RuntimeError, 'freshness expired|deadline expired'):
                         execute_friend_discard(self.page, **kwargs)
                     send.assert_not_called()
+
+
+class FriendDiscardCaptureLatencyTests(unittest.TestCase):
+    """Use recorded tile pixels and the real sender/selection verification.
+
+    Only transport, mouse and monotonic time are faked; returning pixels taken
+    at capture start must not make them fresh when transport finally returns.
+    """
+
+    def setUp(self):
+        import json
+        root = Path(__file__).resolve().parents[1]
+        self.layout = json.loads((root / 'config/layout-300-regression.json').read_text())
+        self.before = (root / 'test/fixtures/selection-7p-before-20261029.png').read_bytes()
+        self.after = (root / 'test/fixtures/selection-7p-receipt-20261029.png').read_bytes()
+
+    def run_capture_case(self, *, capture_delays=(0, 0), wait_delay=0,
+                         first_click_delay=0, log_delay=0, started=101,
+                         unproven_receipts=0):
+        now = [float(started)]
+        page = Mock()
+        logs, click_times = [], []
+        point = self.layout['clickPoints'][8]
+        captures = [0]
+
+        def capture(**kwargs):
+            index = captures[0]
+            captures[0] += 1
+            # Select the pixels BEFORE advancing transport time.
+            frame = self.before if index <= unproven_receipts else self.after
+            now[0] += capture_delays[min(index, len(capture_delays) - 1)]
+            return frame
+
+        def click(*args, **kwargs):
+            click_times.append(now[0])
+            if len(click_times) == 1:
+                now[0] += first_click_delay
+
+        def log(event):
+            logs.append(event)
+            if event.get('status') == 'attempted':
+                now[0] += log_delay
+
+        page.screenshot.side_effect = capture
+        page.mouse.click.side_effect = click
+        page.wait_for_timeout.side_effect = lambda _: now.__setitem__(0, now[0] + wait_delay)
+        kwargs = dict(
+            session={'mode': 'cpu_friend', 'rules': 'sanma', 'clock': '300+0',
+                     'actionDeadlineMs': 300000, 'ranked': False, 'cpuCount': 2, 'roomVerified': True},
+            observation={'status': 'candidate', 'phase': 'self_turn', 'promptStatus': 'none',
+                         'handStatus': 'candidate', 'layoutStatus': 'candidate',
+                         'slots': [{'tile': '7p', **p} for p in self.layout['clickPoints']],
+                         'frameSha256': hashlib.sha256(self.before).hexdigest(), 'referenceFrame': self.before},
+            plan={'scope': 'offline_untrusted_sanma_discard_plan', 'operationAuthorized': False,
+                  'tile': '7p', 'clickIndex': 8, 'clickPoint': point},
+            layout=self.layout, log=log, turn_started_monotonic=100, clock=lambda: now[0])
+        try:
+            result = execute_friend_discard(page, **kwargs)
+            error = None
+        except Exception as caught:
+            result, error = None, caught
+        return page, logs, click_times, result, error
+
+    def test_slow_capture_and_chain_stalls_withhold_actual_clicks(self):
+        from auto_operator import SelectionStateUncertainAbort
+        cases = [
+            ('initial_transport', dict(capture_delays=(99, 0)), 0),
+            ('receipt_transport', dict(capture_delays=(0, 99)), 1),
+            ('initial_boundary', dict(capture_delays=(5, 0)), 0),
+            ('receipt_boundary', dict(capture_delays=(0, 5)), 1),
+            ('sum_of_fast_captures', dict(capture_delays=(3, 2)), 1),
+            ('backward_initial_capture', dict(capture_delays=(-.1, 0)), 0),
+            ('backward_receipt_capture', dict(capture_delays=(3, -1)), 1),
+            ('nonfinite_initial_capture', dict(capture_delays=(float('nan'), 0)), 0),
+            ('nonfinite_receipt_capture', dict(capture_delays=(0, float('inf'))), 1),
+            ('poll_does_not_renew_baseline', dict(wait_delay=9), 1),
+            ('blocking_first_click', dict(first_click_delay=99), 1),
+            ('attempt_log', dict(log_delay=99), 0),
+            ('original_deadline_before_selection', dict(started=399, capture_delays=(1, 0)), 0),
+            ('original_deadline_before_confirmation', dict(started=399, wait_delay=1), 1),
+            ('repeated_receipts_do_not_renew_baseline', dict(wait_delay=2, unproven_receipts=2), 1),
+        ]
+        for name, options, clicks in cases:
+            with self.subTest(name=name):
+                page, logs, times, result, error = self.run_capture_case(**options)
+                self.assertIsNone(result)
+                self.assertIsInstance(error, RuntimeError)
+                self.assertRegex(str(error), 'freshness expired|deadline expired')
+                self.assertEqual(page.mouse.click.call_count, clicks)
+                self.assertEqual(len(times), clicks)
+                expected_status = 'failed' if clicks or name == 'attempt_log' else 'blocked'
+                self.assertEqual(logs[-1]['status'], expected_status)
+                self.assertFalse(any(e.get('status') == 'selection_confirmed' for e in logs))
+                if clicks:
+                    self.assertIsInstance(error, SelectionStateUncertainAbort)
+                    page.mouse.move.assert_called_with(960, 777.6)
+                    self.assertEqual(page.mouse.click.call_args.args,
+                                     (self.layout['clickPoints'][8]['x'], self.layout['clickPoints'][8]['y']))
+                    self.assertEqual(page.mouse.click.call_args.kwargs, {})
+
+    def test_fresh_chain_reaches_real_measured_confirmation_click(self):
+        for options in ({}, {'capture_delays': (2, 2), 'wait_delay': .999},
+                        {'wait_delay': .5, 'unproven_receipts': 2},
+                        {'started': 398, 'wait_delay': 1}):
+            with self.subTest(options=options):
+                page, logs, times, result, error = self.run_capture_case(**options)
+                self.assertIsNone(error)
+                self.assertEqual(result['status'], 'selection_confirmed')
+                self.assertEqual(page.mouse.click.call_count, 2)
+                self.assertEqual(page.mouse.click.call_args.args, (1027.5, 951.0))
+                self.assertEqual(page.mouse.click.call_args.kwargs, {'delay': 80})
+                self.assertEqual(result['selectionReceipt']['lift'], 48)
+                self.assertLess(times[-1] - options.get('started', 101), 5)
+                self.assertLess(times[-1], 400)
