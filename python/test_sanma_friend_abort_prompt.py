@@ -129,6 +129,14 @@ class NineTerminalsPromptTest(unittest.TestCase):
         self.page.mouse.click.assert_called_once_with(1300,830)
         self.watch.close.assert_called_once()
 
+    def test_deadline_crossed_after_latch_blocks_click(self):
+        now=[10.0];self.op.sanma_friend_action_observed_at=9.0
+        self.op.log.side_effect=lambda *a,**k: now.__setitem__(0,310.0)
+        with patch('sanma_friend_abort_prompt.time.monotonic',side_effect=lambda:now[0]):
+            with self.assertRaisesRegex(RuntimeError,'deadline lost before pass'):self.call()
+        self.page.mouse.click.assert_not_called()
+        self.assertTrue(self.op._sanma_friend_attempted_targets)
+
     def test_disconnect_after_sent_never_retries(self):
         self.page.screenshot.return_value=self.fresh
         self.watch.alive.side_effect=[True,True,True,False]
