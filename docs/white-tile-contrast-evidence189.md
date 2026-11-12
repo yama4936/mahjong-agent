@@ -1,0 +1,20 @@
+# 白牌候補の対照画像: 友人戦189
+
+友人戦189の `pon-watch/054.png` では、自摸後の手牌の2枠に白牌が見えるが、共通テンプレート認識は両枠に P・confidence 0 を返す。`templateMatcher.ts` は、ほぼ無地の面を白と空欄で区別できない場合、意図的に確信度を0とする。これは三麻専用の処理ではない。友人戦限定の `experimental_white_hand_candidate` は白らしい候補を使う場合があるが、未読込の牌面との区別を保証せず、共通認識の安全判定やログ上は確定済みに昇格させない。この候補は友人戦の判断・操作経路で使われ得るため、白の識別が安全だと証明されたことを意味しない。
+
+既存の保存画像から小規模な対照集合を作った。三麻白2枚・南・卓面は同じ054画像に由来するため、独立した対局のサンプルではない。四麻画像は別場面の白自摸、持ち上げた白への花びらの重なり、南の3例。さらに三麻の南牌の字を人工的に隠した2画像を含む。合成画像は実際のUIによる遮蔽や未読込が発生した証拠ではない。目視ラベルであり、他スキン・暗転・実際に非白牌の字形全体が隠れた例の網羅性はない。
+
+SSD上の `/home/yama1/server/data/dev-work/jantama/white-contrast-189/manifest.json` に元画像のSHA256、座標、出力画像のSHA256と場面関係、`results.jsonl` に各画像の分類結果を記録した。`rejectBlank: true` のとき三麻白2枚と四麻白自摸は P・0、南2例は S・0.99以上、花びらが重なった白は P・約0.565。判定拒否を外すと三麻白、四麻白自摸、卓面、実白の牌面を合成した南牌はいずれも P・1 となった。これは切り出した画像単体の分類実験であり、卓面が実際の手牌検出や他の操作許可条件も通ることを示すものではない。合成遮蔽はあくまで反例であり、現実の誤認率も示さない。
+
+これらの実例だけでは、白と遮蔽・未読込を識別できる安全な変更は立証できないため、共通認識や操作条件は変更しない。実際の非白牌遮蔽、異なるスキン・照明、複数対局の独立データと前後画像を追加して、物理的な牌の存在と字形が隠れていないことを別々に検証する必要がある。
+
+## 再現
+
+リポジトリルートで実行する。054の画像はローカル証拠でありリポジトリには含まない。出力先には空のSSDディレクトリを指定する。画像生成にはPillow、分類にはNode依存と `templates/bootstrap` が必要。画像のハッシュは確認するが、テンプレートや依存のバージョンは自動固定しないため、使用コミットと環境を記録すること。
+
+```sh
+/home/yama1/.local/bin/jantama-dev run -- /home/yama1/server/data/dev-work/jantama/evidence187-review-fix/test-venv/bin/python scripts/build-white-contrast.py /home/yama1/server/data/dev-work/jantama/evidence189/pon-watch/054.png /home/yama1/server/data/dev-work/jantama/white-contrast-replay
+/home/yama1/.local/bin/jantama-dev run -- node --import tsx scripts/evaluate-white-contrast.ts /home/yama1/server/data/dev-work/jantama/white-contrast-replay/manifest.json
+```
+
+分類器は `config/layout-runtime.json` の `tileMatcher: face` と同様に正規化し、全クラス探索は指定しない。各結果は静止画上の候補であり、対局状態や操作権限を示さない。
