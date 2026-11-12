@@ -66,6 +66,37 @@ class FreshnessDiagnosticsTest(unittest.TestCase):
   self.assertTrue(all(type(v) is int and v>=0 for v in f['timingMs'].values() if v is not None))
   self.assertTrue(all(type(v['elapsedMs']) is int and v['elapsedMs']>=0 for v in f['guards'].values()))
   self.page.mouse.click.assert_not_called()
+ def test_shared_decode_failure_is_recorded_for_each_guard_and_can_retry(self):
+  original=Image.open;count=[0]
+  def open_once(*args,**kwargs):
+   count[0]+=1
+   if count[0]==1:raise OSError('transient')
+   return original(*args,**kwargs)
+  changes={'hand':True,'actions':False,'fullFrame':True,'clock':False}
+  with patch('auto_operator.require_sanma_observable_frame'), \
+       patch('auto_operator.friend_frame_changes',return_value=changes), \
+       patch('auto_operator.Image.open',side_effect=open_once), \
+       patch('auto_operator.experimental_kita_glyph_stability') as kita, \
+       patch('auto_operator.experimental_draw_glyph_stability',return_value=True) as draw:
+   receipt=self.op.inspect_sanma_self_turn(self.page)
+  freshness=receipt['freshness'];self.assertEqual(freshness['status'],'stable_draw_glyph_candidate')
+  self.assertEqual(freshness['guards']['kita']['outcome'],'exception')
+  self.assertEqual(freshness['guards']['kita']['errorType'],'OSError')
+  kita.assert_not_called();draw.assert_called_once();self.page.mouse.click.assert_not_called()
+
+ def test_shared_decode_persistent_failure_keeps_both_guards_closed(self):
+  changes={'hand':True,'actions':False,'fullFrame':True,'clock':False}
+  with patch('auto_operator.require_sanma_observable_frame'), \
+       patch('auto_operator.friend_frame_changes',return_value=changes), \
+       patch('auto_operator.Image.open',side_effect=OSError('persistent')), \
+       patch('sanma_friend_pon_stability.pon_pass_stability',return_value=False):
+   receipt=self.op.inspect_sanma_self_turn(self.page)
+  freshness=receipt['freshness'];self.assertEqual(freshness['status'],'changed')
+  for name in ('kita','draw'):
+   self.assertEqual(freshness['guards'][name]['outcome'],'exception')
+   self.assertEqual(freshness['guards'][name]['errorType'],'OSError')
+  self.page.mouse.click.assert_not_called()
+
  def test_stream_wait_is_not_reported_as_screenshot_duration(self):
   self.op.args.experimental_sanma_png_stream=True
   stream=Mock();stream.capture_after.return_value=self.frame

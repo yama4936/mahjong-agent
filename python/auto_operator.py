@@ -2096,7 +2096,7 @@ def experimental_friend_kita_kan_row(frame, report):
 def experimental_kita_glyph_stability(before: bytes, after: bytes, report: dict[str, Any], *, on_wall_error=None, diagnostic=None) -> bool:
     """Decode each full frame once; preserve all existing candidate checks."""
     try:
-        with Image.open(io.BytesIO(before)) as a, Image.open(io.BytesIO(after)) as b:
+        with _open_screenshot(before) as a, _open_screenshot(after) as b:
             a.load(); b.load()
             return _experimental_kita_glyph_stability_decoded(a, b, report, on_wall_error=on_wall_error, diagnostic=diagnostic)
     except (KeyError, TypeError, ValueError, OSError, IndexError) as error:
@@ -2241,7 +2241,7 @@ def _sanma_draw_wall_edge_lighting(a, b, first_mask, second_mask, x, y, changed)
 def experimental_draw_glyph_stability(before: bytes, after: bytes, report: dict[str, Any], *, on_wall_error=None, diagnostic=None, friend_prompt_guard=None) -> bool:
     """Compare the same full images after decoding each once."""
     try:
-        with Image.open(io.BytesIO(before)) as a, Image.open(io.BytesIO(after)) as b:
+        with _open_screenshot(before) as a, _open_screenshot(after) as b:
             a.load(); b.load()
             return _experimental_draw_glyph_stability_decoded(a, b, report, on_wall_error=on_wall_error, diagnostic=diagnostic, friend_prompt_guard=friend_prompt_guard)
     except (KeyError, TypeError, ValueError, OSError, IndexError) as error:
@@ -4477,28 +4477,49 @@ class PythonAutoOperator:
                 wall_errors.append(data)  # Latch before attempting durable logging.
                 self.log('sanma_wall_guard_error', **data)
             guard_diagnostics = {'kita': {'outcome':'not_run'}, 'draw': {'outcome':'not_run'}}
-            def timed_guard(name, guard):
-                details = guard_diagnostics[name] = {'stage':'decode'}
-                started = time.monotonic()
-                try:
-                    accepted = guard(image, latest, result.get('report') or {}, on_wall_error=record_wall_error, diagnostic=details)
-                    if wall_errors: details.update(outcome='wall_error', errorType=wall_errors[-1].get('errorType'))
-                    elif details.get('outcome') != 'exception': details['outcome'] = 'accepted' if accepted else 'rejected'
-                    return accepted
-                except Exception as error:
-                    details.update(outcome='exception', errorType=type(error).__name__)
-                    raise
-                finally:
-                    details['elapsedMs'] = round((time.monotonic() - started) * 1000)
-            kita_glyph_candidate = (changes['fullFrame'] and experimental_sanma_friend_allowed(getattr(self, "args", None))
-                                    and timed_guard('kita', experimental_kita_glyph_stability))
-            draw_glyph_candidate = (changes['fullFrame'] and not kita_glyph_candidate and not wall_errors
-                                    and experimental_sanma_friend_allowed(getattr(self, "args", None))
-                                    and timed_guard('draw', experimental_draw_glyph_stability))
-            from sanma_friend_pon_stability import pon_pass_stability
-            pon_candidate = (changes['fullFrame'] and not kita_glyph_candidate and not draw_glyph_candidate
-                             and not wall_errors and experimental_sanma_friend_allowed(getattr(self, "args", None))
-                             and timed_guard('pon', pon_pass_stability))
+            guard_decode_ms = 0
+            decoded = None
+            with ExitStack() as guard_images:
+                def timed_guard(name, guard, *, use_shared=False):
+                    nonlocal decoded, guard_decode_ms
+                    details = guard_diagnostics[name] = {'stage':'decode'}
+                    started = time.monotonic()
+                    try:
+                        if use_shared and decoded is None:
+                            decode_started = time.monotonic()
+                            try:
+                                first = guard_images.enter_context(Image.open(io.BytesIO(image)))
+                                second = guard_images.enter_context(Image.open(io.BytesIO(latest)))
+                                first.load(); second.load()
+                                decoded = (first, second)
+                            except (KeyError, TypeError, ValueError, OSError, IndexError) as error:
+                                # Match the independent byte wrappers: a decode
+                                # failure belongs to this guard, and the next
+                                # guard may try its own decode independently.
+                                guard_images.close()
+                                details.update(outcome='exception', errorType=type(error).__name__)
+                                return False
+                            finally:
+                                guard_decode_ms += round((time.monotonic() - decode_started) * 1000)
+                        first, second = decoded if use_shared else (image, latest)
+                        accepted = guard(first, second, result.get('report') or {}, on_wall_error=record_wall_error, diagnostic=details)
+                        if wall_errors: details.update(outcome='wall_error', errorType=wall_errors[-1].get('errorType'))
+                        elif details.get('outcome') != 'exception': details['outcome'] = 'accepted' if accepted else 'rejected'
+                        return accepted
+                    except Exception as error:
+                        details.update(outcome='exception', errorType=type(error).__name__)
+                        raise
+                    finally:
+                        details['elapsedMs'] = round((time.monotonic() - started) * 1000)
+                kita_glyph_candidate = (changes['fullFrame'] and experimental_sanma_friend_allowed(getattr(self, "args", None))
+                                        and timed_guard('kita', experimental_kita_glyph_stability, use_shared=True))
+                draw_glyph_candidate = (changes['fullFrame'] and not kita_glyph_candidate and not wall_errors
+                                        and experimental_sanma_friend_allowed(getattr(self, "args", None))
+                                        and timed_guard('draw', experimental_draw_glyph_stability, use_shared=True))
+                from sanma_friend_pon_stability import pon_pass_stability
+                pon_candidate = (changes['fullFrame'] and not kita_glyph_candidate and not draw_glyph_candidate
+                                 and not wall_errors and experimental_sanma_friend_allowed(getattr(self, "args", None))
+                                 and timed_guard('pon', pon_pass_stability))
             latest_path = self.frames / f"{utc_stamp()}.{uuid.uuid4().hex}.sanma-freshness.png"
             latest_path.write_bytes(latest)
             freshness = {"status": "unknown" if wall_errors else "stable_kita_glyph_candidate" if kita_glyph_candidate else "stable_draw_glyph_candidate" if draw_glyph_candidate else "stable_pon_pass_candidate" if pon_candidate else "changed" if changes['fullFrame'] else
@@ -4510,7 +4531,7 @@ class PythonAutoOperator:
                          "timingMs": {"initialCapture": capture_ms, "recognition": recognition_ms,
                                       "freshCapture": latest_capture_ms if stream is None else None,
                                       "streamWait": stream_wait_ms,
-                                      "frameComparison": changes_ms,
+                                      "frameComparison": changes_ms, "guardDecode": guard_decode_ms,
                                       "betweenCaptureReturns": round((latest_finished - capture_finished) * 1000) if stream is None else None},
                          "guards": guard_diagnostics,
                          "screenshot": str(latest_path),
