@@ -1,6 +1,7 @@
 """Real prompt with synthetic countdown-only changes; no browser input."""
 import io
 import hashlib
+import json
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -10,6 +11,7 @@ from sanma_friend_freshness import friend_frame_changes,friend_frame_stable,latc
 from sanma_friend_discard_experiment import execute_friend_discard
 
 IMAGE=Path('/home/yama1/sanma-independent-20261031/20-turn.png')
+DISCARD_IMAGE=Path('/home/yama1/.codex/sanma-run-41b9fb3-20261031/manual-21-before.png')
 
 
 def modified(frame, box):
@@ -42,8 +44,11 @@ class SanmaFriendFreshnessTests(unittest.TestCase):
         for box in [(1500,900,1510,910),(900,800,910,810),(1000,500,1010,510),(1424,780,1424,780),(1500,870,1500,870)]:
             with self.subTest(box=box): self.assertFalse(friend_frame_stable(self.frame,modified(self.frame,box)))
 
+    @unittest.skipUnless(DISCARD_IMAGE.exists(),'neutral discard frame unavailable')
     @patch('sanma_friend_discard_experiment.send_discard_click',return_value={'lift':48})
     def test_discard_dispatch_accepts_only_clock_change_from_bound_frame(self,send):
+        # The original prompt has a raised tile; use a neutral discard frame.
+        self.frame=DISCARD_IMAGE.read_bytes()
         point={'x':300,'y':1000}; digest=hashlib.sha256(self.frame).hexdigest()
         session={'mode':'cpu_friend','rules':'sanma','clock':'300+0','actionDeadlineMs':300000,
                  'ranked':False,'cpuCount':2,'roomVerified':True}
@@ -52,7 +57,7 @@ class SanmaFriendFreshnessTests(unittest.TestCase):
                      'frameSha256':digest,'referenceFrame':self.frame}
         plan={'scope':'offline_untrusted_sanma_discard_plan','operationAuthorized':False,'tile':'1m','clickIndex':0,'clickPoint':point}
         page=Mock();page.screenshot.return_value=modified(self.frame,(1500,780,1550,830))
-        kw={'session':session,'observation':observation,'plan':plan,'layout':{'viewport':{'width':1920,'height':1080}},
+        kw={'session':session,'observation':observation,'plan':plan,'layout':json.loads(Path('config/layout-runtime.json').read_text()),
             'log':lambda event:None,'turn_started_monotonic':100,'clock':lambda:101}
         self.assertEqual(execute_friend_discard(page,**kw)['result'],'discard_not_verified')
         send.assert_called_once()
