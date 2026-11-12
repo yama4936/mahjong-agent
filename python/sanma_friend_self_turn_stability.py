@@ -42,10 +42,9 @@ def self_turn_stability(before, after, report):
                     if delta.crop((x,y,min(x+16,delta.width),min(y+16,delta.height))).histogram()[255] > block_limit:
                         return False
             b.paste(ca,box[:2])
-        encoded=[]
-        for image in (a,b):
-            output=io.BytesIO();image.save(output,format='PNG');encoded.append(output.getvalue())
-        from auto_operator import experimental_draw_glyph_stability
-        return experimental_draw_glyph_stability(*encoded,report)
+        # Both frames are already decoded RGB. Encoding and decoding them
+        # again adds latency without changing their pixels or the checks.
+        from auto_operator import _experimental_draw_glyph_stability_decoded
+        return _experimental_draw_glyph_stability_decoded(a,b,report)
     except (OSError, ValueError, TypeError, KeyError):
         return False

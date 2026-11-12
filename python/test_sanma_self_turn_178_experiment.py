@@ -27,6 +27,37 @@ class TestSelfTurn178(unittest.TestCase):
   import inspect
   from sanma_friend_discard_experiment import execute_friend_discard
   self.assertFalse(inspect.signature(execute_friend_discard).parameters['self_turn_wall_opt_in'].default)
+ def test_real_click_dispatch_uses_actual_optimized_fallback(self):
+  import hashlib
+  from unittest.mock import Mock,patch
+  from sanma_friend_discard_experiment import execute_friend_discard, friend_discard_budget_guard
+  from auto_operator import SelectionStateUncertainAbort
+  geo=self.report['handGeometry']['value'];tiles=self.report['hand']['value']['tiles'];points=geo['clickPoints']
+  layout={'viewport':{'width':1920,'height':1080},'handSlots':geo['handSlots'],'drawSlot':geo['drawSlot']}
+  slots=[{'tile':t,**q} for t,q in zip(tiles,points)]
+  plan={'scope':'offline_untrusted_sanma_discard_plan','operationAuthorized':False,'tile':tiles[-1],'clickIndex':13,'clickPoint':points[-1]}
+  obs={'status':'candidate','phase':'self_turn','promptStatus':'none','handStatus':'candidate','layoutStatus':'candidate','slots':slots,'frameSha256':hashlib.sha256(self.a).hexdigest(),'referenceFrame':self.a,'experimentalDrawReport':self.report}
+  session={'mode':'cpu_friend','rules':'sanma','clock':'300+0','actionDeadlineMs':300000,'ranked':False,'cpuCount':2,'roomVerified':True}
+  page=Mock();page.screenshot.return_value=self.b
+  now=[101.]
+  def clock():return now[0]
+  def guard():friend_discard_budget_guard(100,8000,lambda *a,**k:None,clock=clock)
+  with patch('auto_operator.raised_tile_confirmation_point',return_value={'x':points[-1]['x'],'y':points[-1]['y']-48}):
+   result=execute_friend_discard(page,session=session,observation=obs,plan=plan,layout=layout,log=lambda _:None,turn_started_monotonic=100,clock=clock,self_turn_wall_opt_in=True,click_budget_guard=guard)
+  self.assertEqual(result['status'],'selection_confirmed')
+  self.assertEqual(page.mouse.click.call_count,2)
+  page.reset_mock();page.screenshot.return_value=self.b;now[0]=108
+  with self.assertRaisesRegex(RuntimeError,'budget expired'):
+   execute_friend_discard(page,session=session,observation=obs,plan=plan,layout=layout,log=lambda _:None,turn_started_monotonic=100,clock=clock,self_turn_wall_opt_in=True,click_budget_guard=guard)
+  page.mouse.click.assert_not_called()
+  page.reset_mock();now[0]=101
+  def screenshot(**kwargs):
+   if page.screenshot.call_count==2:now[0]=108
+   return self.b
+  page.screenshot.side_effect=screenshot
+  with self.assertRaises(SelectionStateUncertainAbort):
+   execute_friend_discard(page,session=session,observation=obs,plan=plan,layout=layout,log=lambda _:None,turn_started_monotonic=100,clock=clock,self_turn_wall_opt_in=True,click_budget_guard=guard)
+  self.assertEqual(page.mouse.click.call_count,1)
  def test_actual_preclick_fallback_is_opt_in_and_draw_only(self):
   import hashlib
   from unittest.mock import Mock,patch
@@ -66,7 +97,7 @@ class SyntheticWallSafetyTests(unittest.TestCase):
   report={'handGeometry':{'value':{'drawSlot':{'x':1485,'y':921,'width':93,'height':151}}}}
   def encode(im):
    output=io.BytesIO();im.save(output,format='PNG');return output.getvalue()
-  with patch('auto_operator.experimental_draw_glyph_stability',return_value=True):
+  with patch('auto_operator._experimental_draw_glyph_stability_decoded',return_value=True):
    self.assertTrue(self_turn_stability(base,base,report))
    for box,color in (((904,496,1015,515),(0,0,0)),((170,190,375,620),(0,0,0)),((1495,880,1565,915),(255,255,255))):
     with self.subTest(box=box):
