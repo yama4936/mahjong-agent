@@ -4453,7 +4453,9 @@ class PythonAutoOperator:
             if not isinstance(latest, bytes) or not latest:
                 raise ValueError("fresh screenshot unavailable")
             changes_started = time.monotonic()
-            changes = friend_frame_changes(image, latest)
+            hand_region_diagnostics = {}
+            changes = friend_frame_changes(image, latest, report=result.get("report"),
+                                           diagnostic=hand_region_diagnostics)
             changes_ms = round((time.monotonic() - changes_started) * 1000)
             clock_changed = changes.pop('clock')
             wall_errors = []
@@ -4488,6 +4490,7 @@ class PythonAutoOperator:
             freshness = {"status": "unknown" if wall_errors else "stable_kita_glyph_candidate" if kita_glyph_candidate else "stable_draw_glyph_candidate" if draw_glyph_candidate else "stable_pon_pass_candidate" if pon_candidate else "changed" if changes['fullFrame'] else
                          "stable_except_clock_candidate" if clock_changed else "identical_pixels_candidate",
                          "operationAuthorized": False, "elapsedMs": round((time.monotonic() - capture_started) * 1000),
+                         "handRegionDiagnostics": hand_region_diagnostics,
                          "regionsChanged": changes, "clockChanged": clock_changed, "digest": hashlib.sha256(latest).hexdigest(),
                          "captureMode": "png_stream" if stream is not None else "screenshot",
                          "timingMs": {"initialCapture": capture_ms, "recognition": recognition_ms,

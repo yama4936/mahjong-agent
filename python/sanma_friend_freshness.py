@@ -12,16 +12,69 @@ from PIL import Image, ImageChops
 CLOCK_RECT = (1425, 755, 1650, 870)
 
 
-def friend_frame_changes(before: bytes, after: bytes) -> dict[str, bool]:
+# Reviewed neutral closed-hand geometry from evidence187. Unknown/melded/raised
+# layouts retain the broad legacy diagnostic. These rectangles never authorize input.
+HAND_ENVELOPE = (180, 865, 1650, 1080)
+REVIEWED_HAND_SLOTS = tuple(
+    (x, 921, width, 151) for x, width in
+    ((223,92),(317,93),(412,93),(507,93),(602,92),(697,92),(792,92),
+     (887,92),(981,93),(1076,93),(1171,93),(1266,93),(1361,92),(1486,92))
+)
+
+
+def _reviewed_hand_boxes(before, report):
+    """Bind diagnostic geometry to the exact original image; fail conservatively."""
+    try:
+        if report['digest'] != hashlib.sha256(before).hexdigest():
+            return None
+        geometry = report['handGeometry']
+        value = geometry['value']
+        if (geometry['status'] != 'candidate'
+                or value['viewport'] != {'width':1920, 'height':1080}
+                or len(value['handSlots']) != 13):
+            return None
+        slots = value['handSlots'] + [value['drawSlot']]
+        coordinates = tuple(tuple(slot[k] for k in ('x','y','width','height')) for slot in slots)
+        if (any(type(v) is not int for slot in coordinates for v in slot)
+                or coordinates != REVIEWED_HAND_SLOTS):
+            return None
+        return [(x,y,x+w,y+h) for x,y,w,h in coordinates]
+    except (KeyError, TypeError):
+        return None
+
+
+def friend_frame_changes(before: bytes, after: bytes, *, report=None, diagnostic=None) -> dict[str, bool]:
+    """Exact RGB changes; only reviewed, image-bound geometry refines hand attribution.
+
+    fullFrame remains the original strict guard. A false hand flag cannot establish
+    unchanged tiles in an unknown layout, nor permit background changes or input.
+    """
     with Image.open(io.BytesIO(before)) as a, Image.open(io.BytesIO(after)) as b:
         if a.size != (1920, 1080) or b.size != a.size:
             raise ValueError('unreviewed screenshot dimensions')
         delta = ImageChops.difference(a.convert('RGB'), b.convert('RGB'))
         clock_changed = delta.crop(CLOCK_RECT).getbbox() is not None
         delta.paste((0, 0, 0), CLOCK_RECT)
-        regions = {'hand':(180,865,1650,1080),'actions':(600,785,1425,875),
+        regions = {'hand':HAND_ENVELOPE,'actions':(600,785,1425,875),
                    'fullFrame':(0,0,1920,1080)}
         changes = {name: delta.crop(box).getbbox() is not None for name,box in regions.items()}
+        boxes = _reviewed_hand_boxes(before, report)
+        envelope_changed = changes['hand']
+        if boxes is not None:
+            changes['hand'] = any(delta.crop(box).getbbox() is not None for box in boxes)
+        if diagnostic is not None:
+            outside = delta.crop(HAND_ENVELOPE)
+            if boxes is not None:
+                for x,y,right,bottom in boxes:
+                    outside.paste((0,0,0), (x-180,y-865,right-180,bottom-865))
+            diagnostic.update(
+                geometryStatus='reviewed_image_bound' if boxes is not None else 'unreviewed_fallback',
+                handEnvelopeChanged=envelope_changed,
+                handTilesChanged=changes['hand'] if boxes is not None else None,
+                handOutsideTilesChanged=outside.getbbox() is not None if boxes is not None else None,
+                handRectangles=[list(box) for box in boxes] if boxes is not None else [],
+                comparison='exact_rgb', operationAuthorized=False,
+            )
         return {**changes, 'clock':clock_changed}
 
 

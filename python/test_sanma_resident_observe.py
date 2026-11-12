@@ -13,9 +13,13 @@ class ResidentObservationTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
+        from PIL import Image
+        output = io.BytesIO()
+        Image.new('RGB', (1920,1080), (30,40,50)).save(output, format='PNG')
+        self.frame = output.getvalue()
         self.file = Path(self.temp.name) / 'frame.png'
-        self.file.write_bytes(b'fake frame')
-        self.digest = hashlib.sha256(b'fake frame').hexdigest()
+        self.file.write_bytes(self.frame)
+        self.digest = hashlib.sha256(self.frame).hexdigest()
 
     def result(self):
         return {'scope': 'offline_untrusted_sanma_auto_observation', 'operationAuthorized': False,
@@ -25,6 +29,8 @@ class ResidentObservationTests(unittest.TestCase):
 
     def operator(self, response):
         op = object.__new__(PythonAutoOperator)
+        op.args = SimpleNamespace(rules='sanma', mode='inspect', experimental_sanma_friend=False,
+                                  experimental_sanma_fast_png=False, experimental_sanma_png_stream=False)
         op.recognition_request_id = 0
         op.frames = Path(self.temp.name)
         op.log = Mock()
@@ -87,12 +93,12 @@ class ResidentObservationTests(unittest.TestCase):
     def test_page_capture_routes_priority_to_blocked_receipt_without_click(self):
         op = self.operator({'id': 1, 'result': self.result()})
         page = Mock()
-        page.screenshot.return_value = b'fake frame'
+        page.screenshot.return_value = self.frame
         receipt = op.inspect_sanma_self_turn(page)
         self.assertEqual(receipt['status'], 'blocked')
         self.assertEqual(receipt['priority']['status'], 'blocked')
         self.assertFalse(receipt['operationAuthorized'])
-        self.assertEqual(Path(receipt['screenshot']).read_bytes(), b'fake frame')
+        self.assertEqual(Path(receipt['screenshot']).read_bytes(), self.frame)
         page.mouse.click.assert_not_called()
         op.log.assert_called_once()
 
@@ -102,7 +108,7 @@ class ResidentObservationTests(unittest.TestCase):
                                  'river': {'status':'unknown','complete':False},
                                  'buttonRow': {'status':'unresolved'}})
         result['candidates']={'status':'unresolved','candidates':[]}
-        op=self.operator({'id':1,'result':result});page=Mock();page.screenshot.return_value=b'fake frame'
+        op=self.operator({'id':1,'result':result});page=Mock();page.screenshot.return_value=self.frame
         receipt=op.inspect_sanma_self_turn(page)
         event=op.log.call_args
         saved=Path(event.kwargs['receiptPath']);data=saved.read_bytes()
@@ -143,7 +149,7 @@ class ResidentObservationTests(unittest.TestCase):
         page.mouse.click.assert_not_called()
 
     def test_evidence_save_failure_blocks_before_action(self):
-        op=self.operator({'id':1,'result':self.result()});page=Mock();page.screenshot.return_value=b'fake frame'
+        op=self.operator({'id':1,'result':self.result()});page=Mock();page.screenshot.return_value=self.frame
         with patch('auto_operator.os.open',side_effect=OSError('disk unavailable')):
             with self.assertRaisesRegex(RuntimeError,'evidence could not be recorded'):
                 op.inspect_sanma_self_turn(page)
@@ -158,7 +164,7 @@ class ResidentObservationTests(unittest.TestCase):
             result['structuralPositions'] = candidate
             op = self.operator({'id': 1, 'result': result})
             page = Mock()
-            page.screenshot.return_value = b'fake frame'
+            page.screenshot.return_value = self.frame
             with self.subTest(candidate=candidate), self.assertRaisesRegex(RuntimeError, 'structural positions'):
                 op.inspect_sanma_self_turn(page)
             page.mouse.click.assert_not_called()
@@ -189,6 +195,37 @@ class ResidentObservationTests(unittest.TestCase):
         page.screenshot.assert_not_called()
         page.mouse.click.assert_not_called()
 
+    def test_reviewed_hand_diagnostics_are_preserved_in_saved_receipt(self):
+        from PIL import Image
+        from sanma_friend_freshness import REVIEWED_HAND_SLOTS
+        image = Image.new('RGB', (1920,1080), (30,40,50))
+        def png(frame):
+            output=io.BytesIO();frame.save(output,format='PNG');return output.getvalue()
+        original=png(image)
+        image.putpixel((300,900),(31,40,50))  # Outside the reviewed tile rectangles.
+        changed=png(image)
+        digest=hashlib.sha256(original).hexdigest()
+        result=self.result()
+        result['digest']=result['report']['digest']=result['structuralPositions']['digest']=digest
+        slots=[dict(zip(('x','y','width','height'),slot)) for slot in REVIEWED_HAND_SLOTS]
+        result['report']['handGeometry']={'status':'candidate','value':{
+            'viewport':{'width':1920,'height':1080},'handSlots':slots[:-1],'drawSlot':slots[-1]}}
+        op=self.operator({'id':1,'result':result})
+        page=Mock();page.screenshot.side_effect=[original,changed]
+        receipt=op.inspect_sanma_self_turn(page)
+        saved=json.loads(Path(op.log.call_args.kwargs['receiptPath']).read_text())
+        self.assertEqual(saved['freshness'],receipt['freshness'])
+        freshness=saved['freshness']
+        self.assertEqual(freshness['status'],'changed')
+        self.assertEqual(freshness['regionsChanged'],{'hand':False,'actions':False,'fullFrame':True})
+        diagnostic=freshness['handRegionDiagnostics']
+        self.assertEqual(diagnostic['geometryStatus'],'reviewed_image_bound')
+        self.assertFalse(diagnostic['handTilesChanged'])
+        self.assertTrue(diagnostic['handEnvelopeChanged'])
+        self.assertTrue(diagnostic['handOutsideTilesChanged'])
+        self.assertFalse(diagnostic['operationAuthorized'])
+        page.mouse.click.assert_not_called()
+
     def test_clock_only_change_is_reported_without_confirming_action(self):
         from PIL import Image
         before = Image.new('RGB', (1920, 1080), 'black')
@@ -211,7 +248,7 @@ class ResidentObservationTests(unittest.TestCase):
     def test_tampered_self_turn_receipt_is_rejected_before_capture(self):
         op = self.operator({'id': 1, 'result': self.result()})
         page = Mock()
-        page.screenshot.return_value = b'fake frame'
+        page.screenshot.return_value = self.frame
         receipt = op.inspect_sanma_self_turn(page)
         Path(receipt['screenshot']).write_bytes(b'tampered')
         page.screenshot.reset_mock()
@@ -223,7 +260,7 @@ class ResidentObservationTests(unittest.TestCase):
     def test_receipt_without_matching_source_cannot_enter_confirmation(self):
         op = self.operator({'id': 1, 'result': self.result()})
         page = Mock()
-        page.screenshot.return_value = b'fake frame'
+        page.screenshot.return_value = self.frame
         receipt = op.inspect_sanma_self_turn(page)
         receipt['sourceObservation']['digest'] = '0' * 64
         page.screenshot.reset_mock()
@@ -260,7 +297,7 @@ class ResidentObservationTests(unittest.TestCase):
         bad['assembly']['priority'] = {'status': 'offline_priority'}
         op = self.operator({'id': 1, 'result': bad})
         page = Mock()
-        page.screenshot.return_value = b'fake frame'
+        page.screenshot.return_value = self.frame
         with self.assertRaisesRegex(RuntimeError, 'fail closed'):
             op.inspect_sanma_self_turn(page)
         page.mouse.click.assert_not_called()
@@ -286,6 +323,8 @@ class ResidentSanmaEndToEndTests(unittest.TestCase):
         self.assertTrue(json.loads(child.stdout.readline())['ready'])
         with tempfile.TemporaryDirectory() as directory:
             op = object.__new__(PythonAutoOperator)
+            op.args = SimpleNamespace(rules='sanma', mode='inspect', experimental_sanma_friend=False,
+                                      experimental_sanma_fast_png=False, experimental_sanma_png_stream=False)
             op.recognition_request_id = 0
             op.recognition_server = child
             op.frames = Path(directory)

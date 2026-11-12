@@ -196,6 +196,7 @@ class FriendDrawBridgeTests(unittest.TestCase):
                                              action_deadline_ms=300000, ranked_loop=False)
         self.operator.verified_friend_300_active = True
         self.operator.verified_friend_300_started_at = 100
+        self.operator._sanma_friend_resume_guard = None
         self.point = {"x": 1000, "y": 1000}
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
@@ -311,15 +312,18 @@ class FriendDiscardBaselineRefreshTests(unittest.TestCase):
                             "handStatus": "candidate", "layoutStatus": "candidate",
                             "slots": [{"tile": "1m", **self.point}],
                             "frameSha256": hashlib.sha256(self.reference).hexdigest(),
-                            "referenceFrame": self.reference,
+                            "referenceFrame": self.reference, "referenceScreenshot": "original-observation.png",
                             "experimentalDrawReport": report}
         self.plan = {"scope": "offline_untrusted_sanma_discard_plan", "operationAuthorized": False,
                      "tile": "1m", "clickIndex": 0, "clickPoint": self.point}
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
         self.logs = []
         self.kwargs = dict(session=self.session, observation=self.observation, plan=self.plan,
                            layout={"viewport": {"width": 1920, "height": 1080},
                                    "handSlots": hand_slots, "drawSlot": draw_slot},
-                           log=self.logs.append, turn_started_monotonic=100, clock=lambda: 101)
+                           log=self.logs.append, turn_started_monotonic=100, clock=lambda: 101,
+                           evidence_directory=self.directory.name)
 
     @staticmethod
     def _fail_at_binary_frame(diagnostic):
@@ -349,6 +353,21 @@ class FriendDiscardBaselineRefreshTests(unittest.TestCase):
         self.assertEqual(refreshed["baselineSha256"], hashlib.sha256(self.candidate).hexdigest())
         self.assertEqual(refreshed["confirmationSha256"], hashlib.sha256(self.confirmation).hexdigest())
         self.assertEqual(refreshed["baselineCapturedAtMonotonic"], 101)
+        self.assertEqual(result["refreshId"], refreshed["refreshId"])
+        for role, original in (("reference", self.reference), ("candidate", self.candidate),
+                               ("confirmation", self.confirmation)):
+            evidence = refreshed["evidence"][role]
+            self.assertEqual(Path(evidence["screenshot"]).read_bytes(), original)
+            self.assertEqual(evidence["sha256"], hashlib.sha256(original).hexdigest())
+            self.assertEqual(evidence["byteLength"], len(original))
+            self.assertGreater(evidence["savedAtUnix"], 0)
+            if role == "reference":
+                self.assertEqual(evidence["sourceScreenshot"], "original-observation.png")
+                self.assertIsNone(evidence["capturedAtMonotonic"])
+                self.assertIsNone(evidence["capturedAtUnix"])
+            else:
+                self.assertEqual(evidence["capturedAtMonotonic"], 101)
+                self.assertLessEqual(evidence["capturedAtUnix"], evidence["savedAtUnix"])
 
     @patch('sanma_friend_self_turn_stability.self_turn_stability', return_value=True)
     @patch('auto_operator.raised_closed_hand_slots', return_value=[])
@@ -384,6 +403,8 @@ class FriendDiscardBaselineRefreshTests(unittest.TestCase):
         saved.assert_called_once_with(self.candidate)
         failed = next(item for item in self.logs if item.get("kind") == "sanma_discard_baseline_refresh_failed")
         self.assertEqual(failed["reason"], "candidate baseline not confirmed by immediate capture")
+        self.assertEqual(Path(failed["evidence"]["confirmation"]["screenshot"]).read_bytes(), unstable)
+        self.assertEqual(failed["evidence"]["confirmation"]["sha256"], hashlib.sha256(unstable).hexdigest())
 
     @patch('sanma_friend_self_turn_stability.self_turn_stability', return_value=False)
     @patch('auto_operator.raised_closed_hand_slots', return_value=[])
@@ -514,3 +535,361 @@ class FriendDiscardBaselineRefreshTests(unittest.TestCase):
         self.assertEqual(result["baselineSha256"], hashlib.sha256(candidate).hexdigest())
         refreshed = next(item for item in self.logs if item.get("kind") == "sanma_discard_baseline_refreshed")
         self.assertEqual(refreshed["centreStructureDelta"], 0)
+
+
+class FriendRefreshPersistenceFailureTests(unittest.TestCase):
+    setUp = FriendDiscardBaselineRefreshTests.setUp
+    _fail_at_binary_frame = staticmethod(FriendDiscardBaselineRefreshTests._fail_at_binary_frame)
+    @patch('sanma_friend_self_turn_stability.self_turn_stability', return_value=False)
+    @patch('auto_operator.closed_hand_face_mismatches', return_value=[])
+    @patch('auto_operator.experimental_draw_glyph_stability')
+    @patch('sanma_friend_discard_experiment.send_discard_click')
+    def test_save_failures_at_each_capture_prevent_click(self, send, glyph, faces, wall_gate):
+        import sanma_friend_discard_experiment as module
+        save = module._save_refresh_frame
+        glyph.side_effect = lambda *a, diagnostic=None, **kw: self._fail_at_binary_frame(diagnostic)
+        for failed_role in ('reference', 'candidate', 'confirmation'):
+            self.logs.clear()
+            self.page.screenshot.side_effect = [self.candidate, self.confirmation]
+            def save_or_fail(directory, refresh_id, role, frame, **kwargs):
+                if role == failed_role:
+                    raise OSError('simulated full evidence disk')
+                return save(directory, refresh_id, role, frame, **kwargs)
+            with self.subTest(role=failed_role), patch.object(module, '_save_refresh_frame', side_effect=save_or_fail):
+                with self.assertRaises(DiscardPreclickChanged):
+                    execute_friend_discard(self.page, **self.kwargs)
+            send.assert_not_called()
+            failed = next(e for e in self.logs if e.get('kind') == 'sanma_discard_baseline_refresh_failed')
+            self.assertIn('evidence unavailable', failed['reason'])
+            self.assertEqual(failed['evidence'][failed_role]['status'], 'failed')
+            self.assertIsNone(failed['evidence'][failed_role]['screenshot'])
+            self.assertIn('simulated full evidence disk', failed['evidence'][failed_role]['error'])
+            self.assertEqual(len(failed['evidence'][failed_role]['sha256']), 64)
+            self.assertFalse(any(e.get('kind') == 'sanma_discard_baseline_refreshed' for e in self.logs))
+
+    def test_saved_hash_mismatch_fails_closed(self):
+        from sanma_friend_discard_experiment import _save_refresh_frame
+        with patch.object(Path, 'read_bytes', return_value=b'corrupted'):
+            with self.assertRaisesRegex(OSError, 'read-back hash mismatch'):
+                _save_refresh_frame(self.directory.name, 'hash-mismatch', 'candidate', self.candidate)
+
+    def test_missing_directory_does_not_create_evidence(self):
+        from sanma_friend_discard_experiment import _save_refresh_frame
+        with self.assertRaisesRegex(ValueError, 'evidence directory required'):
+            _save_refresh_frame(None, 'missing', 'candidate', self.candidate)
+
+
+    @patch('sanma_friend_self_turn_stability.self_turn_stability', return_value=False)
+    @patch('auto_operator.raised_closed_hand_slots', return_value=[])
+    @patch('auto_operator.closed_hand_face_mismatches', return_value=[])
+    @patch('auto_operator.experimental_draw_glyph_stability')
+    @patch('sanma_friend_discard_experiment.send_discard_click')
+    def test_slow_evidence_save_expires_deadline_before_input(self, send, glyph, faces, raised, wall_gate):
+        import sanma_friend_discard_experiment as module
+        save = module._save_refresh_frame
+        now = [101.0]
+        def slow_save(*args, **kwargs):
+            result = save(*args, **kwargs)
+            now[0] = 401.0
+            return result
+        glyph.side_effect = lambda *a, diagnostic=None, **kw: self._fail_at_binary_frame(diagnostic)
+        self.page.screenshot.side_effect = [self.candidate, self.candidate]
+        with patch.object(module, '_save_refresh_frame', side_effect=slow_save):
+            with self.assertRaisesRegex(RuntimeError, 'action deadline expired'):
+                execute_friend_discard(self.page, **{**self.kwargs, 'clock': lambda: now[0]})
+        send.assert_not_called()
+
+
+class FriendRefreshAtomicPersistenceTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+
+    def save(self, frame=b'complete image'):
+        from sanma_friend_discard_experiment import _save_refresh_frame
+        return _save_refresh_frame(self.directory.name, 'atomic', 'candidate', frame)
+
+    def test_private_permissions_at_creation_and_publication(self):
+        import os
+        import stat
+        real_fsync = os.fsync
+        observed = []
+        def fsync(fd):
+            info = os.fstat(fd)
+            if stat.S_ISREG(info.st_mode):
+                observed.append(stat.S_IMODE(info.st_mode))
+            return real_fsync(fd)
+        for mask in (0, 0o22):
+            old = os.umask(mask)
+            try:
+                with patch('sanma_friend_discard_experiment.os.fsync', side_effect=fsync):
+                    saved = self.save()
+                path = Path(saved['screenshot'])
+                self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
+                path.unlink()
+            finally:
+                os.umask(old)
+        self.assertEqual(observed, [0o600, 0o600])
+
+    def test_file_and_directory_fsync_failures_leave_no_final_or_temporary(self):
+        import os
+        real_fsync = os.fsync
+        for failed_call in (1, 2):
+            calls = [0]
+            def fsync(fd):
+                calls[0] += 1
+                if calls[0] == failed_call:
+                    raise OSError('injected fsync failure')
+                return real_fsync(fd)
+            with self.subTest(failed_call=failed_call), patch('sanma_friend_discard_experiment.os.fsync', side_effect=fsync):
+                with self.assertRaisesRegex(OSError, 'injected fsync'):
+                    self.save()
+            self.assertEqual(list(Path(self.directory.name).iterdir()), [])
+
+    def test_partial_write_failure_leaves_no_final_or_temporary(self):
+        import os
+        real_fdopen = os.fdopen
+        class FailedWriter:
+            def __init__(self, fd, mode): self.stream = real_fdopen(fd, mode)
+            def __enter__(self): return self
+            def __exit__(self, *args): self.stream.close()
+            def write(self, data):
+                self.stream.write(data[:3])
+                raise OSError('injected partial write')
+        with patch('sanma_friend_discard_experiment.os.fdopen', side_effect=FailedWriter):
+            with self.assertRaisesRegex(OSError, 'partial write'):
+                self.save()
+        self.assertEqual(list(Path(self.directory.name).iterdir()), [])
+
+    def test_hash_failure_leaves_no_final_or_temporary(self):
+        with patch.object(Path, 'read_bytes', return_value=b'corrupt'):
+            with self.assertRaisesRegex(OSError, 'read-back hash mismatch'):
+                self.save()
+        self.assertEqual(list(Path(self.directory.name).iterdir()), [])
+
+    def test_competing_writers_publish_exactly_one_complete_winner(self):
+        import os
+        import threading
+        from concurrent.futures import ThreadPoolExecutor
+        barrier = threading.Barrier(2)
+        real_link = os.link
+        def link(source, destination):
+            self.assertEqual(Path(source).stat().st_mode & 0o777, 0o600)
+            barrier.wait(timeout=5)
+            return real_link(source, destination)
+        def attempt(data):
+            try:
+                return self.save(data)
+            except FileExistsError:
+                return None
+        with patch('sanma_friend_discard_experiment.os.link', side_effect=link):
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                results = list(pool.map(attempt, (b'a' * 10000, b'b' * 20000)))
+        winners = [item for item in results if item is not None]
+        self.assertEqual(len(winners), 1)
+        saved = winners[0]
+        content = Path(saved['screenshot']).read_bytes()
+        self.assertIn(content, (b'a' * 10000, b'b' * 20000))
+        self.assertEqual(hashlib.sha256(content).hexdigest(), saved['sha256'])
+        self.assertEqual(len(list(Path(self.directory.name).iterdir())), 1)
+
+
+class FriendDiscardBlockingWorkTests(unittest.TestCase):
+    setUp = FriendDiscardBaselineRefreshTests.setUp
+    _fail_at_binary_frame = staticmethod(FriendDiscardBaselineRefreshTests._fail_at_binary_frame)
+
+    @patch('sanma_friend_self_turn_stability.self_turn_stability', return_value=False)
+    @patch('auto_operator.raised_closed_hand_slots', return_value=[])
+    @patch('auto_operator.closed_hand_face_mismatches', return_value=[])
+    @patch('auto_operator.experimental_draw_glyph_stability')
+    @patch('sanma_friend_discard_experiment.send_discard_click')
+    def test_99_second_stalls_at_every_preinput_stage_reject(self, send, glyph, faces, raised, wall_gate):
+        import sanma_friend_discard_experiment as module
+        save = module._save_refresh_frame
+        glyph.side_effect = lambda *a, diagnostic=None, **kw: self._fail_at_binary_frame(diagnostic)
+        for stage in ('reference', 'candidate', 'confirmation', 'adopted_log', 'attempted_log', 'before_click', 'session_check'):
+            now = [101.0]
+            self.logs.clear()
+            self.page.screenshot.side_effect = [self.candidate, self.candidate]
+            def delayed_save(directory, refresh_id, role, frame, **kwargs):
+                result = save(directory, refresh_id, role, frame, **kwargs)
+                if stage == role: now[0] += 99
+                return result
+            def log(event):
+                self.logs.append(event)
+                if ((stage == 'adopted_log' and event.get('kind') == 'sanma_discard_baseline_refreshed')
+                        or (stage == 'attempted_log' and event.get('status') == 'attempted')):
+                    now[0] += 99
+            def before_click():
+                if stage == 'before_click': now[0] += 99
+            def session_check():
+                if stage == 'session_check': now[0] += 99
+                return True
+            with self.subTest(stage=stage), patch.object(module, '_save_refresh_frame', side_effect=delayed_save):
+                with self.assertRaisesRegex(RuntimeError, 'freshness expired'):
+                    execute_friend_discard(self.page, **{**self.kwargs, 'clock': lambda: now[0],
+                        'log': log, 'before_click': before_click, 'session_check': session_check})
+            send.assert_not_called()
+            self.page.mouse.click.assert_not_called()
+
+    @patch('auto_operator.raised_closed_hand_slots', return_value=[])
+    @patch('auto_operator.raised_tile_confirmation_point')
+    def test_real_sender_checks_receipt_age_and_original_deadline(self, confirmation, raised):
+        from auto_operator import SelectionStateUncertainAbort
+        for stage in ('normal', 'fresh_after_slow_poll', 'stale_receipt', 'expired_turn', 'revoked'):
+            now = [101.0]
+            self.page.reset_mock()
+            self.page.screenshot.side_effect = None
+            self.page.screenshot.return_value = self.reference
+            self.page.wait_for_timeout.side_effect = (
+                (lambda _: now.__setitem__(0, 110.0)) if stage == 'fresh_after_slow_poll' else None)
+            def verify(*args, **kwargs):
+                if stage == 'stale_receipt': now[0] += 99
+                if stage == 'expired_turn': now[0] = 400.0
+                return {'x': 200, 'y': 950}
+            confirmation.side_effect = verify
+            def session_check():
+                return not (stage == 'revoked' and self.page.mouse.click.call_count)
+            kwargs = {**self.kwargs, 'clock': lambda: now[0], 'session_check': session_check}
+            with self.subTest(stage=stage):
+                if stage == 'normal':
+                    result = execute_friend_discard(self.page, **kwargs)
+                    self.assertEqual(result['status'], 'selection_confirmed')
+                    self.assertEqual(self.page.mouse.click.call_count, 2)
+                else:
+                    with self.assertRaises(SelectionStateUncertainAbort):
+                        execute_friend_discard(self.page, **kwargs)
+                    self.assertEqual(self.page.mouse.click.call_count, 1)
+
+    @patch('auto_operator.raised_closed_hand_slots', return_value=[])
+    @patch('sanma_friend_discard_experiment.send_discard_click')
+    def test_image_age_boundary_and_invalid_clocks_at_input(self, send, raised):
+        for elapsed in (4.999, 5.0, -0.001, float('nan'), float('inf')):
+            now = [101.0]
+            send.reset_mock()
+            self.page.screenshot.side_effect = None
+            self.page.screenshot.return_value = self.reference
+            def before_click(): now[0] += elapsed
+            kwargs = {**self.kwargs, 'clock': lambda: now[0], 'before_click': before_click}
+            with self.subTest(elapsed=elapsed):
+                if elapsed == 4.999:
+                    self.assertEqual(execute_friend_discard(self.page, **kwargs)['status'], 'selection_confirmed')
+                    send.assert_called_once()
+                else:
+                    with self.assertRaisesRegex(RuntimeError, 'freshness expired|deadline expired'):
+                        execute_friend_discard(self.page, **kwargs)
+                    send.assert_not_called()
+
+
+class FriendDiscardCaptureLatencyTests(unittest.TestCase):
+    """Use recorded tile pixels and the real sender/selection verification.
+
+    Only transport, mouse and monotonic time are faked; returning pixels taken
+    at capture start must not make them fresh when transport finally returns.
+    """
+
+    def setUp(self):
+        import json
+        root = Path(__file__).resolve().parents[1]
+        self.layout = json.loads((root / 'config/layout-300-regression.json').read_text())
+        self.before = (root / 'test/fixtures/selection-7p-before-20261029.png').read_bytes()
+        self.after = (root / 'test/fixtures/selection-7p-receipt-20261029.png').read_bytes()
+
+    def run_capture_case(self, *, capture_delays=(0, 0), wait_delay=0,
+                         first_click_delay=0, log_delay=0, started=101,
+                         unproven_receipts=0):
+        now = [float(started)]
+        page = Mock()
+        logs, click_times = [], []
+        point = self.layout['clickPoints'][8]
+        captures = [0]
+
+        def capture(**kwargs):
+            index = captures[0]
+            captures[0] += 1
+            # Select the pixels BEFORE advancing transport time.
+            frame = self.before if index <= unproven_receipts else self.after
+            now[0] += capture_delays[min(index, len(capture_delays) - 1)]
+            return frame
+
+        def click(*args, **kwargs):
+            click_times.append(now[0])
+            if len(click_times) == 1:
+                now[0] += first_click_delay
+
+        def log(event):
+            logs.append(event)
+            if event.get('status') == 'attempted':
+                now[0] += log_delay
+
+        page.screenshot.side_effect = capture
+        page.mouse.click.side_effect = click
+        page.wait_for_timeout.side_effect = lambda _: now.__setitem__(0, now[0] + wait_delay)
+        kwargs = dict(
+            session={'mode': 'cpu_friend', 'rules': 'sanma', 'clock': '300+0',
+                     'actionDeadlineMs': 300000, 'ranked': False, 'cpuCount': 2, 'roomVerified': True},
+            observation={'status': 'candidate', 'phase': 'self_turn', 'promptStatus': 'none',
+                         'handStatus': 'candidate', 'layoutStatus': 'candidate',
+                         'slots': [{'tile': '7p', **p} for p in self.layout['clickPoints']],
+                         'frameSha256': hashlib.sha256(self.before).hexdigest(), 'referenceFrame': self.before},
+            plan={'scope': 'offline_untrusted_sanma_discard_plan', 'operationAuthorized': False,
+                  'tile': '7p', 'clickIndex': 8, 'clickPoint': point},
+            layout=self.layout, log=log, turn_started_monotonic=100, clock=lambda: now[0])
+        try:
+            result = execute_friend_discard(page, **kwargs)
+            error = None
+        except Exception as caught:
+            result, error = None, caught
+        return page, logs, click_times, result, error
+
+    def test_slow_capture_and_chain_stalls_withhold_actual_clicks(self):
+        from auto_operator import SelectionStateUncertainAbort
+        cases = [
+            ('initial_transport', dict(capture_delays=(99, 0)), 0),
+            ('receipt_transport', dict(capture_delays=(0, 99)), 1),
+            ('initial_boundary', dict(capture_delays=(5, 0)), 0),
+            ('receipt_boundary', dict(capture_delays=(0, 5)), 1),
+            ('sum_of_fast_captures', dict(capture_delays=(3, 2)), 1),
+            ('backward_initial_capture', dict(capture_delays=(-.1, 0)), 0),
+            ('backward_receipt_capture', dict(capture_delays=(3, -1)), 1),
+            ('nonfinite_initial_capture', dict(capture_delays=(float('nan'), 0)), 0),
+            ('nonfinite_receipt_capture', dict(capture_delays=(0, float('inf'))), 1),
+            ('poll_does_not_renew_baseline', dict(wait_delay=9), 1),
+            ('blocking_first_click', dict(first_click_delay=99), 1),
+            ('attempt_log', dict(log_delay=99), 0),
+            ('original_deadline_before_selection', dict(started=399, capture_delays=(1, 0)), 0),
+            ('original_deadline_before_confirmation', dict(started=399, wait_delay=1), 1),
+            ('repeated_receipts_do_not_renew_baseline', dict(wait_delay=2, unproven_receipts=2), 1),
+        ]
+        for name, options, clicks in cases:
+            with self.subTest(name=name):
+                page, logs, times, result, error = self.run_capture_case(**options)
+                self.assertIsNone(result)
+                self.assertIsInstance(error, RuntimeError)
+                self.assertRegex(str(error), 'freshness expired|deadline expired')
+                self.assertEqual(page.mouse.click.call_count, clicks)
+                self.assertEqual(len(times), clicks)
+                expected_status = 'failed' if clicks or name == 'attempt_log' else 'blocked'
+                self.assertEqual(logs[-1]['status'], expected_status)
+                self.assertFalse(any(e.get('status') == 'selection_confirmed' for e in logs))
+                if clicks:
+                    self.assertIsInstance(error, SelectionStateUncertainAbort)
+                    page.mouse.move.assert_called_with(960, 777.6)
+                    self.assertEqual(page.mouse.click.call_args.args,
+                                     (self.layout['clickPoints'][8]['x'], self.layout['clickPoints'][8]['y']))
+                    self.assertEqual(page.mouse.click.call_args.kwargs, {})
+
+    def test_fresh_chain_reaches_real_measured_confirmation_click(self):
+        for options in ({}, {'capture_delays': (2, 2), 'wait_delay': .999},
+                        {'wait_delay': .5, 'unproven_receipts': 2},
+                        {'started': 398, 'wait_delay': 1}):
+            with self.subTest(options=options):
+                page, logs, times, result, error = self.run_capture_case(**options)
+                self.assertIsNone(error)
+                self.assertEqual(result['status'], 'selection_confirmed')
+                self.assertEqual(page.mouse.click.call_count, 2)
+                self.assertEqual(page.mouse.click.call_args.args, (1027.5, 951.0))
+                self.assertEqual(page.mouse.click.call_args.kwargs, {'delay': 80})
+                self.assertEqual(result['selectionReceipt']['lift'], 48)
+                self.assertLess(times[-1] - options.get('started', 101), 5)
+                self.assertLess(times[-1], 400)

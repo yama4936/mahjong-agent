@@ -1,0 +1,281 @@
+{
+  "offlineOnly": true,
+  "sourceSettings": {
+    "mode": "sanma friend east",
+    "time": "300+0",
+    "actionDeadlineMs": 300000
+  },
+  "cases": [
+    {
+      "guards": {
+        "kita": {
+          "accepted": false,
+          "diagnostic": {
+            "stage": "recognition_and_prompt"
+          },
+          "wallErrors": []
+        },
+        "draw": {
+          "accepted": false,
+          "diagnostic": {
+            "stage": "binary_frame",
+            "blockX": 320,
+            "blockY": 128,
+            "changedPixels": 33,
+            "threshold": 14
+          },
+          "wallErrors": []
+        },
+        "pon": {
+          "accepted": false,
+          "diagnostic": {
+            "stage": "pon_row"
+          },
+          "wallErrors": []
+        },
+        "refreshInitialEligibility": true
+      },
+      "name": "background-only-hand-envelope",
+      "kind": "unaltered-real-frames",
+      "changes": {
+        "hand": false,
+        "actions": true,
+        "fullFrame": true,
+        "clock": true
+      },
+      "diagnostic": {
+        "geometryStatus": "reviewed_image_bound",
+        "handEnvelopeChanged": true,
+        "handTilesChanged": false,
+        "handOutsideTilesChanged": true,
+        "comparison": "exact_rgb",
+        "operationAuthorized": false
+      },
+      "fullFrameRejected": true,
+      "actualHandEnvelopeChangedPixels": 0,
+      "legacyHandEnvelopeClockMaskedChangedPixels": 539
+    },
+    {
+      "guards": {
+        "kita": {
+          "accepted": false,
+          "diagnostic": {
+            "stage": "recognition_and_prompt"
+          },
+          "wallErrors": []
+        },
+        "draw": {
+          "accepted": false,
+          "diagnostic": {
+            "stage": "hand_faces"
+          },
+          "wallErrors": []
+        },
+        "pon": {
+          "accepted": false,
+          "diagnostic": {
+            "stage": "pon_row"
+          },
+          "wallErrors": []
+        },
+        "refreshInitialEligibility": false
+      },
+      "name": "real-hand-rearrangement-and-draw",
+      "kind": "unaltered-real-frames",
+      "changes": {
+        "hand": true,
+        "actions": true,
+        "fullFrame": true,
+        "clock": true
+      },
+      "diagnostic": {
+        "geometryStatus": "reviewed_image_bound",
+        "handEnvelopeChanged": true,
+        "handTilesChanged": true,
+        "handOutsideTilesChanged": true,
+        "comparison": "exact_rgb",
+        "operationAuthorized": false
+      },
+      "fullFrameRejected": true
+    },
+    {
+      "guards": {
+        "kita": {
+          "accepted": false,
+          "diagnostic": {
+            "stage": "hand_faces"
+          },
+          "wallErrors": []
+        },
+        "draw": {
+          "accepted": false,
+          "diagnostic": {
+            "stage": "partial_prompt"
+          },
+          "wallErrors": []
+        },
+        "pon": {
+          "accepted": false,
+          "diagnostic": {
+            "stage": "pon_row"
+          },
+          "wallErrors": []
+        },
+        "refreshInitialEligibility": false
+      },
+      "name": "real-kita-button-disappearance-and-tile-replacement",
+      "kind": "unaltered-real-frames",
+      "changes": {
+        "hand": true,
+        "actions": true,
+        "fullFrame": true,
+        "clock": true
+      },
+      "diagnostic": {
+        "geometryStatus": "reviewed_image_bound",
+        "handEnvelopeChanged": true,
+        "handTilesChanged": true,
+        "handOutsideTilesChanged": true,
+        "comparison": "exact_rgb",
+        "operationAuthorized": false
+      },
+      "fullFrameRejected": true
+    },
+    {
+      "guards": {
+        "kita": {
+          "accepted": false,
+          "diagnostic": {
+            "stage": "recognition_and_prompt"
+          },
+          "wallErrors": []
+        },
+        "draw": {
+          "accepted": false,
+          "diagnostic": {
+            "stage": "button_glyphs"
+          },
+          "wallErrors": []
+        },
+        "pon": {
+          "accepted": false,
+          "diagnostic": {
+            "stage": "pon_row"
+          },
+          "wallErrors": []
+        },
+        "refreshInitialEligibility": false
+      },
+      "name": "isolated-real-button-crop-transplant",
+      "kind": "synthetic-negative-from-saved-image",
+      "changes": {
+        "hand": false,
+        "actions": true,
+        "fullFrame": true,
+        "clock": false
+      },
+      "diagnostic": {
+        "geometryStatus": "reviewed_image_bound",
+        "handEnvelopeChanged": true,
+        "handTilesChanged": false,
+        "handOutsideTilesChanged": true,
+        "comparison": "exact_rgb",
+        "operationAuthorized": false
+      },
+      "fullFrameRejected": true
+    },
+    {
+      "guards": {
+        "kita": {
+          "accepted": false,
+          "diagnostic": {
+            "stage": "recognition_and_prompt"
+          },
+          "wallErrors": []
+        },
+        "draw": {
+          "accepted": false,
+          "diagnostic": {
+            "stage": "hand_faces"
+          },
+          "wallErrors": []
+        },
+        "pon": {
+          "accepted": false,
+          "diagnostic": {
+            "stage": "pon_row"
+          },
+          "wallErrors": []
+        },
+        "refreshInitialEligibility": false
+      },
+      "name": "isolated-real-north-tile-crop-transplant",
+      "kind": "synthetic-negative-from-saved-image",
+      "changes": {
+        "hand": true,
+        "actions": false,
+        "fullFrame": true,
+        "clock": false
+      },
+      "diagnostic": {
+        "geometryStatus": "reviewed_image_bound",
+        "handEnvelopeChanged": true,
+        "handTilesChanged": true,
+        "handOutsideTilesChanged": true,
+        "comparison": "exact_rgb",
+        "operationAuthorized": false
+      },
+      "fullFrameRejected": true
+    },
+    {
+      "guards": {
+        "kita": {
+          "accepted": false,
+          "diagnostic": {
+            "stage": "recognition_and_prompt"
+          },
+          "wallErrors": []
+        },
+        "draw": {
+          "accepted": true,
+          "diagnostic": {
+            "stage": "center"
+          },
+          "wallErrors": []
+        },
+        "pon": {
+          "accepted": false,
+          "diagnostic": {
+            "stage": "pon_row"
+          },
+          "wallErrors": []
+        },
+        "refreshInitialEligibility": false
+      },
+      "name": "one-rgb-bit-on-tile",
+      "kind": "synthetic-negative-from-saved-image",
+      "changes": {
+        "hand": true,
+        "actions": false,
+        "fullFrame": true,
+        "clock": false
+      },
+      "diagnostic": {
+        "geometryStatus": "reviewed_image_bound",
+        "handEnvelopeChanged": true,
+        "handTilesChanged": true,
+        "handOutsideTilesChanged": false,
+        "comparison": "exact_rgb",
+        "operationAuthorized": false
+      },
+      "fullFrameRejected": true
+    }
+  ],
+  "limitations": [
+    "No live match or ranked evaluation performed.",
+    "Real button disappearance coincides with tile replacement; isolated button case is synthetic.",
+    "Full-frame rejection remains even when hand background attribution is corrected.",
+    "Finite saved fixtures do not prove all future tile/button changes are detected.",
+    "Historical refresh baseline and confirmation bytes cannot be reconstructed from their hashes."
+  ]
+}
