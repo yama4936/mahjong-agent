@@ -6,6 +6,12 @@
 
 自動操作者による打牌選択と画面上の捨て牌の増加を観察したが、操作の確定は認識ログ上未確認のまま。14:42:16、東1局の打牌復帰中に `discard_recovery_session_or_deadline` で停止。停止ログでは元の期限から301247ms、期限300000ms、監視invalid=false。画面に新たな自摸と残り時間が見えても、元の不確実な操作に結び付いた期限は延長されない。終了コード0は完走を意味しない。自動回帰は不合格であり、ポン待ちの自動復帰も検証されていない。
 
+停止直前の復帰候補について、保存画像のハッシュを検証し、実装の候補判定と期限ガードを入力なしで再実行する `python/replay_evidence189_deadline.py` を追加した。保存記録から算出した候補受理時の経過は約91135ms、停止時は301247msで、候補判定は前者を受理し後者を拒否した。復帰後は次の入力まで旧期限を保持し、その間、画面差分による再観測や打牌直前の検査拒否があった。リプレイでは接続継続を仮定しており、画像間の操作や対局継続を証明しない。
+
+```sh
+/home/yama1/.local/bin/jantama-dev run -- env PYTHONPATH=python /home/yama1/server/data/dev-work/jantama/evidence187-review-fix/test-venv/bin/python -B python/replay_evidence189_deadline.py /home/yama1/server/data/dev-work/jantama/evidence189
+```
+
 ## 無入力でのポン待ち
 
 操作者の停止後、補助入力で進めた東2局で、左家の東に対するポン／スキップ待ちを観測。14:46:35に残り296秒、山47。操作せず概ね5秒間隔で撮影し、単調時刻と画像のSHA256を `pon-watch/observations.jsonl` に記録した。
