@@ -9893,8 +9893,15 @@ class PythonAutoOperator:
                         if transition.get("status") not in {"visual_change_unconfirmed", "terminal", "round_end_candidate"}:
                             if (action == "discard" and discard_recovery is not None
                                     and transition.get("reason") == "transition_not_observed"):
-                                from sanma_transition_diagnostics import capture_unresolved_discard
-                                capture_unresolved_discard(self, page, discard_recovery)
+                                # A missing visual transition is not proof of an input
+                                # outcome. Let the existing recovery path collect two
+                                # independent later-turn observations under the original
+                                # deadline and continuous match watch. It authorizes no
+                                # retry until its full evidence chain is satisfied.
+                                self.log("sanma_friend_wait", reason="discard_transition_recovery",
+                                         transition=transition, confirmed=False,
+                                         operationAuthorized=False)
+                                continue
                             self.log("sanma_friend_stopped", reason="transition_requires_review", transition=transition)
                             return
                         if transition.get("status") == "round_end_candidate":
