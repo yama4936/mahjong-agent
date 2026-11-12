@@ -237,13 +237,75 @@ class Evidence195FourthNorthTests(unittest.TestCase):
         self.assertTrue(rearm_friend_kita_candidate(self.op,self.before,self.after,continuity=self.watch))
         self.assertFalse(rearm_friend_kita_candidate(self.op,self.before,self.after,continuity=self.watch))
     def test_no_connection_different_round_or_hand_fail(self):
-        for case in ('disconnect','round','count','different_tile','same','reversed'):
+        for case in ('disconnect','round','count','score','different_tile','same','reversed','north_limit'):
             with self.subTest(case=case):
                 self.setUp();before=copy.deepcopy(self.before);after=copy.deepcopy(self.after)
                 if case=='disconnect':self.watch.alive.return_value=False
                 if case=='round':after['sourceObservation']['board']['candidate']['round']='east_2'
                 if case=='count':after['sourceObservation']['board']['candidate']['remainingTiles']-=1
                 if case=='different_tile':after['sourceObservation']['report']['hand']['value']['tiles'][-1]='S'
+                if case=='score':after['sourceObservation']['board']['candidate']['scores']['south']-=1000
+                if case=='north_limit':self.op._sanma_friend_kita_rearmed_thrice=True
                 if case=='same':after=before
                 if case=='reversed':before,after=after,before
                 self.assertFalse(rearm_friend_kita_candidate(self.op,before,after,continuity=self.watch))
+
+    def test_live_loop_rearms_only_after_watched_third_input(self):
+        from test_experimental_sanma_friend_loop import ExperimentalSanmaFriendLoopTest
+        case=ExperimentalSanmaFriendLoopTest('runTest');case.setUp();self.addCleanup(case.doCleanups)
+        case.op.args.max_iterations=3
+        case.op._sanma_friend_kita_rearmed=True;case.op._sanma_friend_kita_rearmed_twice=True;case.op._sanma_friend_kita_rearmed_thrice=False
+        case.op._sanma_friend_attempted_targets=set();case.op._sanma_friend_attempted_frames=set()
+        case.op.inspect_sanma_self_turn.side_effect=[self.before,self.after]
+        case.op.observe_sanma_friend_transition.return_value={'status':'visual_change_unconfirmed','confirmed':False}
+        calls=[]
+        def execute(page,receipt):
+            calls.append(receipt['digest'])
+            case.op._sanma_friend_attempted_targets.add(friend_action_target_key(Path(receipt['screenshot']).read_bytes(),'kita'))
+            return {'clicked':True,'confirmation':'unknown'}
+        case.op.execute_sanma_friend_kita_candidate.side_effect=execute
+        with patch('sanma_friend_discard_recovery.MatchContinuity',return_value=self.watch):
+            case.run_room()
+        self.assertEqual(calls,[self.before['digest'],self.after['digest']],repr(case.op.log.call_args_list[-5:]))
+        self.assertTrue(case.op._sanma_friend_kita_rearmed_thrice)
+        self.assertGreaterEqual(self.watch.alive.call_count,2)
+
+    def test_disconnect_between_latch_and_click_stops_actual_executor(self):
+        import time
+        from auto_operator import PythonAutoOperator
+        op=object.__new__(PythonAutoOperator)
+        op.args=SimpleNamespace(experimental_sanma_friend=True,rules='sanma',mode='force-auto',action_deadline_ms=300000,ranked_loop=False,force_auto_click_budget_ms=8000)
+        op.verified_friend_300_active=True;op.verified_friend_300_started_at=time.monotonic()
+        op.log=Mock();op.screen_references={}
+        with tempfile.TemporaryDirectory() as tmp:
+            op.frames=Path(tmp)
+            receipt=copy.deepcopy(self.after);receipt['captureStartedMonotonic']=time.monotonic()
+            op._sanma_friend_discard_observation=(receipt,receipt['digest'],receipt['captureStartedMonotonic'])
+            self.watch.alive.side_effect=[True,False]
+            op._sanma_friend_resume_guard=(self.watch,op.verified_friend_300_started_at,300000)
+            page=Mock();page.screenshot.return_value=Path(receipt['screenshot']).read_bytes()
+            with patch('auto_operator.classify_screen',return_value=('match',1.0)):
+                with self.assertRaisesRegex(RuntimeError,'continuity'):
+                    op.execute_sanma_friend_kita_candidate(page,receipt)
+            page.mouse.click.assert_not_called()
+
+    def test_ron_or_tsumo_takes_priority_over_fourth_north(self):
+        from test_experimental_sanma_friend_loop import ExperimentalSanmaFriendLoopTest
+        for action in ('ron','tsumo'):
+            with self.subTest(action=action):
+                case=ExperimentalSanmaFriendLoopTest('runTest');case.setUp();self.addCleanup(case.doCleanups)
+                case.op.args.max_iterations=3
+                case.op._sanma_friend_kita_rearmed=True;case.op._sanma_friend_kita_rearmed_twice=True;case.op._sanma_friend_kita_rearmed_thrice=False
+                case.op._sanma_friend_attempted_targets=set();case.op._sanma_friend_attempted_frames=set()
+                after=copy.deepcopy(self.after);after['candidates']['candidates'].insert(0,{'action':action})
+                case.op.inspect_sanma_self_turn.side_effect=[self.before,after]
+                case.op.observe_sanma_friend_transition.return_value={'status':'visual_change_unconfirmed','confirmed':False}
+                case.op.execute_sanma_friend_ron_candidate=Mock(return_value={'clicked':True})
+                case.op.execute_sanma_friend_tsumo_candidate=Mock(return_value={'clicked':True})
+                def execute(page,receipt):
+                    case.op._sanma_friend_attempted_targets.add(friend_action_target_key(Path(receipt['screenshot']).read_bytes(),'kita'))
+                    return {'clicked':True}
+                case.op.execute_sanma_friend_kita_candidate.side_effect=execute
+                with patch('sanma_friend_discard_recovery.MatchContinuity',return_value=self.watch):case.run_room()
+                case.op.execute_sanma_friend_kita_candidate.assert_called_once()
+                getattr(case.op,'execute_sanma_friend_'+action+'_candidate').assert_called_once()

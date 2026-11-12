@@ -4863,6 +4863,7 @@ class PythonAutoOperator:
         self._sanma_friend_attempted_frames = attempted
         try:
             require_friend_observation_budget(self, receipt)
+            check_friend_recovery_guard(self)
             page.mouse.click(point["x"], point["y"])
         except Exception as error:
             raise RuntimeError(f"sanma kita click attempted; outcome unknown: {error}") from error
@@ -9723,6 +9724,13 @@ class PythonAutoOperator:
                             self._sanma_friend_resume_guard = None
                             self.log("sanma_friend_stopped", reason="discard_recovery_action_requires_review", operationAuthorized=False)
                             return
+                        # The third-north watch is only needed until the next
+                        # north input. Close it on any intervening win or discard.
+                        if (kita_continuity is not None and
+                                (any(isinstance(item, dict) and item.get("action") in {"ron", "tsumo"} for item in actions)
+                                 or not any(isinstance(item, dict) and item.get("action") == "kita" for item in actions))):
+                            kita_continuity.close()
+                            kita_continuity = None
                         if any(isinstance(item, dict) and item.get("action") == "ron" for item in actions):
                             action = "ron"
                             result = self.execute_sanma_friend_ron_candidate(page, receipt)
