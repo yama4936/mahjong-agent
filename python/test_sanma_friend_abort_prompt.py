@@ -111,6 +111,24 @@ class NineTerminalsPromptTest(unittest.TestCase):
                 self.page.mouse.click.assert_called_once_with(1300,830)
                 self.watch.close.assert_called_once()
 
+    def test_changed_board_pixels_between_independent_post_frames_never_resumes(self):
+        image=Image.open(io.BytesIO(self.after)).convert('RGB')
+        ImageDraw.Draw(image).rectangle((760,550,775,565),fill=(255,255,255))
+        buffer=io.BytesIO();image.save(buffer,format='PNG');alternate=buffer.getvalue()
+        path=Path(self.post['screenshot']).with_name('synthetic-other.png');path.write_bytes(alternate)
+        other=copy.deepcopy(self.post);digest=hashlib.sha256(alternate).hexdigest()
+        other.update(screenshot=str(path),digest=digest)
+        other['sourceObservation']['digest']=digest;other['sourceObservation']['report']['digest']=digest
+        other['freshness'].update(screenshot=str(path),digest=digest);other['drawCandidate']['digest']=digest
+        def inspect(page, *, classified_frame, classified_started):
+            current=self.post if classified_frame==self.after else other
+            return dict(current,captureStartedMonotonic=classified_started)
+        self.op.inspect_sanma_self_turn.side_effect=inspect
+        self.page.screenshot.side_effect=[self.fresh]+[x for _ in range(4) for x in (self.after,alternate)]
+        with self.assertRaisesRegex(RuntimeError,'pass outcome not independently observed'):self.call()
+        self.page.mouse.click.assert_called_once_with(1300,830)
+        self.watch.close.assert_called_once()
+
     def test_disconnect_after_sent_never_retries(self):
         self.page.screenshot.return_value=self.fresh
         self.watch.alive.side_effect=[True,True,True,False]

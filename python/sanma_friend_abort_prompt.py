@@ -143,7 +143,8 @@ def execute(operator, page, receipt):
             except (KeyError,TypeError,ValueError,OSError):
                 good=False
             if good:
-                if previous is not None and captured > previous[1]:
+                if (previous is not None and captured > previous[1]
+                        and friend_frame_stable(Path(previous[0]).read_bytes(),data)):
                     if (not with_watch.alive() or operator.verified_friend_300_active is not True
                             or not 0<=time.monotonic()-started<300):
                         raise RuntimeError('friend continuity or deadline lost on pass recovery')
