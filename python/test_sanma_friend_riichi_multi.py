@@ -9,6 +9,12 @@ from unittest.mock import Mock,patch
 from PIL import Image,ImageEnhance,ImageDraw
 from auto_operator import load_json
 from sanma_friend_riichi_experiment import riichi_bright_slots,choose_riichi_selection,execute_friend_riichi
+def bind_budget(op, receipt):
+ receipt.setdefault('digest','synthetic')
+ receipt['captureStartedMonotonic']=time.monotonic()
+ op.force_auto_click_budget_ms.return_value=8000
+ op._sanma_friend_discard_observation=(receipt,receipt['digest'],receipt['captureStartedMonotonic'])
+
 ROOT=Path('/home/yama1/.codex/sanma-run-dd7175d-20261031')
 @unittest.skipUnless((ROOT/'manual-12-before.png').exists(),'friend frame unavailable')
 class MultiRiichiTests(unittest.TestCase):
@@ -34,6 +40,7 @@ class MultiRiichiTests(unittest.TestCase):
    op=Mock();op.layout=self.layout;op.frames=Path(d);op.verified_friend_300_active=True;op.sanma_friend_action_observed_at=time.monotonic()
    page=Mock();page.screenshot.return_value=self.frame
    with patch('sanma_friend_riichi_experiment.execute_friend_pon_pass'),patch('sanma_friend_riichi_experiment.send_discard_click',return_value={}) as discard:
+    bind_budget(op,self.receipt)
     execute_friend_riichi(op,page,self.receipt);self.assertEqual(discard.call_args.args[7],7)
  def test_multi_option_equal_shape_preserves_red_with_synthetic_labels(self):
   # Reuse saved geometry and image, but simulate recognizer labels and scores;
@@ -49,6 +56,7 @@ class MultiRiichiTests(unittest.TestCase):
    op=Mock();op.layout=self.layout;op.frames=Path(d);op.verified_friend_300_active=True;op.sanma_friend_action_observed_at=time.monotonic()
    page=Mock();page.screenshot.return_value=self.frame
    with patch('sanma_friend_riichi_experiment.execute_friend_pon_pass'),patch('sanma_friend_riichi_experiment.send_discard_click',return_value={}) as discard:
+    bind_budget(op,r)
     execute_friend_riichi(op,page,r);self.assertEqual(discard.call_args.args[7],12)
   # Better shape/acceptance remains more important than red retention.
   plain['maximumUnseenTotal']-=1;plain['improvingDraws'][0]['maximumUnseen']-=1

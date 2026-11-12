@@ -113,6 +113,8 @@ def execute_friend_pon_pass(operator, page, receipt, *, declare_riichi=False, po
         raise RuntimeError('game screen not recognized')
     if operator.verified_friend_300_active is not True or not 0 <= time.monotonic() - started < 300:
         raise RuntimeError('friend session or timing expired')
+    from sanma_friend_discard_experiment import require_friend_observation_budget
+    require_friend_observation_budget(operator, receipt)
     latch_friend_action_target(operator,baseline,'pass')
     action = 'riichi_declaration' if declare_riichi else 'pass_optional'
     point = {'x':1010,'y':830} if declare_riichi else {'x':1300,'y':830}
@@ -127,5 +129,6 @@ def execute_friend_pon_pass(operator, page, receipt, *, declare_riichi=False, po
     check_friend_recovery_guard(operator)
     if monitored and not pon_monitor.matches(report, baseline, fresh):
         raise RuntimeError('pon monitor changed before click')
+    require_friend_observation_budget(operator, receipt)
     page.mouse.click(point['x'],point['y'])
     return {'clicked':True,'action':action,'confirmation':'unknown','stopped':True}

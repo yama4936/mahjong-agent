@@ -60,6 +60,7 @@ class KitaLightingTests(unittest.TestCase):
    op=object.__new__(PythonAutoOperator);op.frames=Path(d);op.log=Mock();op.screen_references={}
    op.args=SimpleNamespace(rules='sanma',mode='force-auto',experimental_sanma_friend=True,
       action_deadline_ms=300000,ranked_loop=False,start_reviewed_friend_room='reviewed')
+   op.args.force_auto_click_budget_ms=8000
    op.verified_friend_300_active=True;op.sanma_friend_action_observed_at=time.monotonic()
    data=json.loads(DATA.read_text());op.observe_sanma_resident=Mock(return_value=data['sourceObservation'])
    page=Mock();page.screenshot.side_effect=[self.a,self.b,self.b,self.b]

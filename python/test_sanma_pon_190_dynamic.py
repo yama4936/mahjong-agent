@@ -30,6 +30,7 @@ class DynamicOppositeOffer190(unittest.TestCase):
             op=object.__new__(PythonAutoOperator);op.frames=Path(directory);op.log=Mock();op.screen_references={}
             op.args=SimpleNamespace(rules='sanma',mode='force-auto',experimental_sanma_friend=True,
                 action_deadline_ms=300000,ranked_loop=False,start_reviewed_friend_room='reviewed')
+            op.args.force_auto_click_budget_ms=8000
             op.verified_friend_300_active=True;op.sanma_friend_action_observed_at=time.monotonic()
             op._sanma_friend_attempted_targets=set();op._sanma_friend_resume_guard=None
             op.observe_sanma_resident=Mock(return_value=self.receipt['sourceObservation'])
@@ -51,6 +52,7 @@ class DynamicOppositeOffer190(unittest.TestCase):
                 op=object.__new__(PythonAutoOperator);op.frames=Path(directory);op.log=Mock();op.screen_references={}
                 op.args=SimpleNamespace(rules='sanma',mode='force-auto',experimental_sanma_friend=True,
                     action_deadline_ms=300000,ranked_loop=False,start_reviewed_friend_room='reviewed')
+                op.args.force_auto_click_budget_ms=8000
                 op.verified_friend_300_active=True;op.sanma_friend_action_observed_at=time.monotonic()
                 op._sanma_friend_attempted_targets=set();op._sanma_friend_resume_guard=None
                 op.observe_sanma_resident=Mock(return_value=self.receipt['sourceObservation'])

@@ -114,13 +114,22 @@ def execute_friend_riichi(operator, page, receipt):
         raise RuntimeError('riichi selection changed before discard')
     started=friend_action_started_at(operator)
     def deadline():
+        from sanma_friend_discard_experiment import require_friend_observation_budget
+        require_friend_observation_budget(operator, receipt)
         if operator.verified_friend_300_active is not True or type(started) not in (float,int) or not 0<=time.monotonic()-started<300:
             raise RuntimeError('friend session revoked or action deadline expired')
     deadline();point=operator.layout['clickPoints'][index]
     def checked_selection(_):
-        frame=page.screenshot(animations='disabled')
-        require_sanma_observable_frame(frame)
-        return frame
+        from auto_operator import SelectionStateUncertainAbort
+        try:
+            deadline()
+            frame=page.screenshot(animations='disabled')
+            deadline()
+            require_sanma_observable_frame(frame)
+            return frame
+        except Exception as error:
+            page.mouse.move(operator.layout['viewport']['width']/2, operator.layout['viewport']['height']*.72)
+            raise SelectionStateUncertainAbort(f'riichi selection unresolved: {error}') from error
     result=send_discard_click(page.mouse,point,operator.layout['viewport'],page.wait_for_timeout,fresh,
                               checked_selection,operator.layout,index,5,deadline)
     operator.log('sanma_friend_riichi_discard_attempted',index=index,point=point,selection=result,confirmed=False)

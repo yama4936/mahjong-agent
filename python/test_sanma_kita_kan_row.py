@@ -60,6 +60,8 @@ class ThreeButtonTest(unittest.TestCase):
                 'sourceObservation':{'digest':digest,'operationAuthorized':False,'report':self.report},
                 'freshness':{'status':'identical_pixels_candidate','operationAuthorized':False,'elapsedMs':1000},
                 'candidates':{'candidates':[{'action':'kita','slot':0},{'action':'kan','slot':1}]}}
+            op.args.force_auto_click_budget_ms=8000;receipt['captureStartedMonotonic']=time.monotonic()
+            op._sanma_friend_discard_observation=(receipt,receipt['digest'],receipt['captureStartedMonotonic'])
             page=Mock();page.screenshot.return_value=self.frame
             with patch('auto_operator.classify_screen',return_value=('match',1.0)):
                 op.execute_sanma_friend_kita_candidate(page,receipt)
@@ -108,6 +110,8 @@ class ThreeButtonTest(unittest.TestCase):
                 experimental_sanma_friend=True, max_iterations=1, start_reviewed_friend_room="verified.png")
             op.verified_friend_300_active=True;op.verified_friend_300_started_at=time.monotonic()
             op.frames=Path(directory);op.screen_references={};op.log=Mock()
+            op.args.force_auto_click_budget_ms=8000;receipt['captureStartedMonotonic']=time.monotonic()
+            op._sanma_friend_discard_observation=(receipt,receipt['digest'],receipt['captureStartedMonotonic'])
             op.inspect_sanma_self_turn=Mock(return_value=receipt)
             op.observe_sanma_friend_transition=Mock(return_value={'status':'unresolved','confirmed':False})
             page=Mock();page.screenshot.return_value=after

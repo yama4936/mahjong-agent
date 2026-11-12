@@ -9,6 +9,12 @@ from unittest.mock import Mock,patch
 from PIL import Image,ImageDraw
 from auto_operator import load_json
 from sanma_friend_riichi_experiment import unique_riichi_selection,execute_friend_riichi
+def bind_budget(op, receipt):
+ receipt.setdefault('digest','synthetic')
+ receipt['captureStartedMonotonic']=time.monotonic()
+ op.force_auto_click_budget_ms.return_value=8000
+ op._sanma_friend_discard_observation=(receipt,receipt['digest'],receipt['captureStartedMonotonic'])
+
 ROOT=Path('/home/yama1/.codex/sanma-run-dd7175d-20261031')
 @unittest.skipUnless((ROOT/'manual-62-before.png').exists(),'friend riichi images unavailable')
 class RiichiExperimentTests(unittest.TestCase):
@@ -37,7 +43,8 @@ class RiichiExperimentTests(unittest.TestCase):
    op=Mock();op.layout=self.layout;op.frames=Path(d);op.verified_friend_300_active=True;op.sanma_friend_action_observed_at=time.monotonic()
    page=Mock();page.screenshot.return_value=self.selection
    with patch('sanma_friend_riichi_experiment.execute_friend_pon_pass') as declare,patch('sanma_friend_riichi_experiment.send_discard_click',return_value={}) as discard:
-    result=execute_friend_riichi(op,page,{})
+    receipt={};bind_budget(op,receipt)
+    result=execute_friend_riichi(op,page,receipt)
     self.assertEqual(result['confirmation'],'unknown');self.assertTrue(declare.call_args.kwargs['declare_riichi'])
     self.assertEqual(discard.call_args.args[7],7)
  def test_changed_selection_never_discards(self):
@@ -62,6 +69,7 @@ class RiichiExperimentTests(unittest.TestCase):
    with self.assertRaisesRegex(RuntimeError,'incomplete or stale'):
     execute_friend_riichi(op,page,receipt)
    page.mouse.click.assert_not_called()
+   bind_budget(op,receipt)
    # Exercise the downstream path with the new field simulated; this does not
    # assert the historical frame was compared with the ron reference.
    receipt['sourceObservation']['report']['buttonRow']['value']['ronReferenceCompared']=True

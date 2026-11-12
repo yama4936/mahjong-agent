@@ -28,6 +28,9 @@ class FriendPassTests(unittest.TestCase):
         self.op.verified_friend_300_started_at=time.monotonic();self.op._sanma_friend_attempted_targets=set()
         self.op._sanma_friend_resume_guard=None
         self.page=Mock();self.page.screenshot.return_value=self.frame
+        self.op.force_auto_click_budget_ms.return_value=8000
+        self.receipt['captureStartedMonotonic']=time.monotonic()
+        self.op._sanma_friend_discard_observation=(self.receipt,digest,self.receipt['captureStartedMonotonic'])
         self.classifier=patch('sanma_friend_pass_experiment.classify_screen',return_value=('match',1.0));self.classifier.start();self.addCleanup(self.classifier.stop)
     def test_real_prompt_clicks_once_and_duplicate_is_blocked(self):
         result=execute_friend_pon_pass(self.op,self.page,self.receipt)
@@ -44,6 +47,8 @@ class FriendPassTests(unittest.TestCase):
     def test_deadline_expires_during_click_log_does_not_click(self):
         self.op.sanma_friend_action_observed_at = 100.0
         current = [399.0]
+        self.receipt['captureStartedMonotonic']=399.0
+        self.op._sanma_friend_discard_observation=(self.receipt,self.receipt['digest'],399.0)
         self.op.log.side_effect = lambda *a, **kw: current.__setitem__(0, 400.0)
         with patch('sanma_friend_pass_experiment.time.monotonic', side_effect=lambda: current[0]):
             with self.assertRaisesRegex(RuntimeError, 'expired'):
@@ -65,6 +70,8 @@ class FriendPassTests(unittest.TestCase):
     def test_observed_action_clock_survives_old_session_and_expires(self):
         self.op.verified_friend_300_started_at = 100.0
         self.op.sanma_friend_action_observed_at = 450.0
+        self.receipt['captureStartedMonotonic']=499.0
+        self.op._sanma_friend_discard_observation=(self.receipt,self.receipt['digest'],499.0)
         with patch('sanma_friend_pass_experiment.time.monotonic', return_value=500.0):
             result = execute_friend_pon_pass(self.op, self.page, self.receipt)
         self.assertFalse(result['confirmation'] == 'confirmed')
@@ -92,6 +99,7 @@ class FriendPassTests(unittest.TestCase):
             self.page.screenshot.return_value = frame
             self.receipt['screenshot'] = str(path)
             self.receipt['digest'] = digest
+            self.op._sanma_friend_discard_observation=(self.receipt,digest,self.receipt['captureStartedMonotonic'])
             self.receipt['sourceObservation']['digest'] = digest
             self.receipt['sourceObservation']['report']['digest'] = digest
             self.receipt['candidates'] = {'candidates':[{'action':action} for action in options]}
