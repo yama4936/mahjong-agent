@@ -309,3 +309,68 @@ class Evidence195FourthNorthTests(unittest.TestCase):
                 with patch('sanma_friend_discard_recovery.MatchContinuity',return_value=self.watch):case.run_room()
                 case.op.execute_sanma_friend_kita_candidate.assert_called_once()
                 getattr(case.op,'execute_sanma_friend_'+action+'_candidate').assert_called_once()
+
+    def test_forged_third_extracted_north_is_rejected(self):
+        after=copy.deepcopy(self.after)
+        with tempfile.TemporaryDirectory() as tmp:
+            with Image.open(after['screenshot']) as source:
+                image=source.convert('RGB');image.paste((255,255,255),(1258,765,1293,790))
+                path=Path(tmp)/'altered.png';image.save(path)
+            digest=hashlib.sha256(path.read_bytes()).hexdigest()
+            after['screenshot']=str(path);after['digest']=digest
+            after['sourceObservation']['digest']=digest;after['sourceObservation']['report']['digest']=digest
+            after['drawCandidate']['digest']=digest
+            after['freshness'].pop('handRegionDiagnostics',None)
+            after['freshness'].update(screenshot=str(path),digest=digest,status='identical_pixels_candidate',
+                clockChanged=False,regionsChanged={'hand':False,'actions':False,'fullFrame':False})
+            self.assertFalse(rearm_friend_kita_candidate(self.op,self.before,after,continuity=self.watch))
+
+    def test_fourth_preclick_rejection_restores_guard_and_reobserves(self):
+        from auto_operator import SanmaKitaPreclickChanged
+        from test_experimental_sanma_friend_loop import ExperimentalSanmaFriendLoopTest
+        case=ExperimentalSanmaFriendLoopTest('runTest');case.setUp();self.addCleanup(case.doCleanups)
+        case.op.args.max_iterations=4
+        case.op._sanma_friend_kita_rearmed=True;case.op._sanma_friend_kita_rearmed_twice=True;case.op._sanma_friend_kita_rearmed_thrice=False
+        case.op._sanma_friend_attempted_targets=set();case.op._sanma_friend_attempted_frames=set()
+        case.op.inspect_sanma_self_turn.side_effect=[self.before,self.after,self.after]
+        case.op.observe_sanma_friend_transition.return_value={'status':'visual_change_unconfirmed','confirmed':False}
+        calls=[]
+        def execute(page,receipt):
+            calls.append(receipt['digest'])
+            if len(calls)==2:raise SanmaKitaPreclickChanged('no input sent')
+            case.op._sanma_friend_attempted_targets.add(friend_action_target_key(Path(receipt['screenshot']).read_bytes(),'kita'))
+            return {'clicked':True,'confirmation':'unknown'}
+        case.op.execute_sanma_friend_kita_candidate.side_effect=execute
+        with patch('sanma_friend_discard_recovery.MatchContinuity',return_value=self.watch), \
+             patch('auto_operator.may_reobserve_unsent_kita',return_value=True):
+            case.run_room()
+        self.assertEqual(calls,[self.before['digest'],self.after['digest'],self.after['digest']],repr(case.op.log.call_args_list[-6:]))
+        self.assertTrue(case.op._sanma_friend_kita_rearmed_thrice)
+
+    def test_third_preclick_rejection_closes_watch_and_rearms_again(self):
+        from auto_operator import SanmaKitaPreclickChanged
+        from test_experimental_sanma_friend_loop import ExperimentalSanmaFriendLoopTest
+        case=ExperimentalSanmaFriendLoopTest('runTest');case.setUp();self.addCleanup(case.doCleanups)
+        case.op.args.max_iterations=4
+        case.op._sanma_friend_kita_rearmed=True;case.op._sanma_friend_kita_rearmed_twice=False;case.op._sanma_friend_kita_rearmed_thrice=False
+        old=friend_action_target_key(Path(self.before['screenshot']).read_bytes(),'kita')
+        case.op._sanma_friend_attempted_targets=set();case.op._sanma_friend_attempted_frames=set()
+        case.op.inspect_sanma_self_turn.side_effect=[self.before,self.after,self.after]
+        case.op.observe_sanma_friend_transition.return_value={'status':'visual_change_unconfirmed','confirmed':False}
+        calls=[];watches=[Mock(),Mock()]
+        for w in watches:w.alive.return_value=True
+        def execute(page,receipt):
+            calls.append(receipt['digest'])
+            if len(calls)==2:raise SanmaKitaPreclickChanged('no input sent')
+            case.op._sanma_friend_attempted_targets.add(friend_action_target_key(Path(receipt['screenshot']).read_bytes(),'kita'))
+            return {'clicked':True,'confirmation':'unknown'}
+        def rearm(op,before,after):
+            op._sanma_friend_attempted_targets.remove(old);op._sanma_friend_kita_rearmed_twice=True;return True
+        case.op.execute_sanma_friend_kita_candidate.side_effect=execute
+        with patch('sanma_friend_kita_rearm.rearm_friend_kita_candidate',side_effect=rearm), \
+             patch('sanma_friend_discard_recovery.MatchContinuity',side_effect=watches), \
+             patch('auto_operator.may_reobserve_unsent_kita',return_value=True):
+            case.run_room()
+        self.assertEqual(calls,[self.before['digest'],self.after['digest'],self.after['digest']],repr(case.op.log.call_args_list[-6:]))
+        watches[0].close.assert_called_once()
+        self.assertTrue(case.op._sanma_friend_kita_rearmed_twice)
