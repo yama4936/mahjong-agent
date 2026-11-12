@@ -281,7 +281,7 @@ class ExperimentalSanmaFriendLoopTest(unittest.TestCase):
                 'clickIndex':0,'clickPoint':{'x':1,'y':1},'frameSha256':'0'}
         def discard(op, page, receipt):
             if receipt is receipts[2]:
-                self.assertEqual(op._sanma_friend_resume_guard[1:], (100.0,300000))
+                self.assertEqual(op._sanma_friend_resume_guard[1:], (200.0,300000))
             check_friend_recovery_guard(op)
             return result
         watch=Mock(); watch.alive.return_value=True

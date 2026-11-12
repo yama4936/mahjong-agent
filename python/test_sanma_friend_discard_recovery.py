@@ -403,12 +403,20 @@ class RecoveryTest(unittest.TestCase):
             # The retained frames predate this test run; use their original
             # click journal so capture-time ordering is validated as recorded.
             return candidate(before, posts, self.journal, **kwargs)
+        guards=[]
+        def execute(*args, **kwargs):
+            guards.append(getattr(case.op,'_sanma_friend_resume_guard',None))
+            return output
         with patch('sanma_friend_discard_recovery.MatchContinuity',return_value=self.watch), \
              patch('sanma_friend_discard_recovery.candidate',side_effect=replay), \
-             patch('sanma_friend_discard_experiment.execute_friend_draw_candidate',return_value=output) as discard:
+             patch('sanma_friend_discard_experiment.execute_friend_draw_candidate',side_effect=execute) as discard:
             case.run_room()
         self.assertEqual(discard.call_count,2)
-        self.assertTrue(any(c.args[0]=='sanma_friend_discard_recovery_candidate' for c in case.op.log.call_args_list))
+        resume=next(c.kwargs for c in case.op.log.call_args_list if c.args[0]=='sanma_friend_discard_recovery_candidate')
+        self.assertEqual(resume['resumedDeadlineStart'],resume['attemptedMonotonic'])
+        self.assertIs(guards[1][0],self.watch)
+        self.assertEqual(guards[1][1],resume['attemptedMonotonic'])
+        self.assertEqual(guards[1][2],300000)
 
     def test_unresolved_transition_enters_existing_guarded_recovery(self):
         from test_experimental_sanma_friend_loop import ExperimentalSanmaFriendLoopTest
@@ -604,7 +612,7 @@ class RecoveryTest(unittest.TestCase):
     def test_real_executor_and_current_journal_with_simulated_page(self):
         self._real_executor_and_current_journal_with_simulated_page()
 
-    def test_original_deadline_blocks_second_click_after_resume(self):
+    def test_resumed_deadline_blocks_second_click_after_resume(self):
         self._real_executor_and_current_journal_with_simulated_page(expire=True)
 
 class Evidence194LoopTest(unittest.TestCase):
@@ -637,3 +645,25 @@ class Evidence194LoopTest(unittest.TestCase):
             case.run_room()
         self.assertEqual(discard.call_count,2)
         self.assertTrue(any(c.args[0]=='sanma_friend_discard_recovery_candidate' for c in case.op.log.call_args_list))
+
+
+class Evidence196DeadlineTest(unittest.TestCase):
+    @unittest.skipUnless(Path('/home/yama1/server/data/dev-work/jantama/evidence196/operator.log').exists(), 'evidence196 unavailable')
+    def test_real_later_turn_evidence_and_conservative_attempt_bound(self):
+        path=Path('/home/yama1/server/data/dev-work/jantama/evidence196/operator.log')
+        rows=[json.loads(line) for line in path.read_text().splitlines() if line.startswith('{')]
+        resume=next(row for row in rows if row.get('event')=='sanma_friend_discard_recovery_candidate')
+        stop=next(row for row in rows if row.get('reason')=='discard_recovery_session_or_deadline')
+        screenshots=resume['screenshots']
+        receipts=[json.loads(Path(p).with_suffix('.receipt.json').read_text()) for p in screenshots]
+        watch=Mock(); watch.alive.return_value=True
+        # Replay real pixels/recognition while supplying a current test clock.
+        self.assertTrue(candidate(receipts[0],receipts[1:],resume['journal'],continuity=watch,
+                                  active=lambda:True,started=time.monotonic(),deadline_ms=300000))
+        self.assertGreaterEqual(stop['deadlineElapsedMs'],300000)
+        self.assertLess(stop['originalStart'],resume['attemptedMonotonic'])
+        self.assertLess(resume['attemptedMonotonic'],resume['selectedMonotonic'])
+        self.assertLess(resume['selectedMonotonic'],resume['postMonotonic'][0])
+        # At the observed stop, this stricter-than-new-turn bound was live.
+        stopped_at=stop['originalStart']+stop['deadlineElapsedMs']/1000
+        self.assertLess((stopped_at-resume['attemptedMonotonic'])*1000,300000)

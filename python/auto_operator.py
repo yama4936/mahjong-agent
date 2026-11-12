@@ -9625,11 +9625,14 @@ class PythonAutoOperator:
                                 self.log("sanma_friend_stopped", reason="discard_recovery_evidence_rejected", operationAuthorized=False)
                                 return
                             resumed_watch = watch
-                            self._sanma_friend_resume_guard = (watch, discard_recovery['started'], self.args.action_deadline_ms)
+                            # For an accepted later-turn evidence candidate, the
+                            # prior discard attempt is a conservative upper bound
+                            # on elapsed time. Use that attempt as the bound,
+                            # never the later capture time. Keep the same live
+                            # continuity watch and never retry the prior input.
+                            self._sanma_friend_resume_guard = (watch, discard_recovery['attempted_monotonic'], self.args.action_deadline_ms)
                             # The independent later-turn evidence supersedes the
-                            # startup black-screen bound. Keep the old turn's
-                            # deadline in the resume guard through the next input;
-                            # only subsequent turns can use their own bound.
+                            # startup black-screen bound.
                             recovery_deadline_at = None
                             recovery_deadline_basis = None
                             action_observed_at = discard_recovery['new_started']
@@ -9640,6 +9643,7 @@ class PythonAutoOperator:
                             self.log("sanma_friend_discard_recovery_candidate", screenshot=receipt.get('screenshot'),
                                      confirmed=False, operationAuthorized=False, freshRecognitionRequired=False,
                                      originalStart=discard_recovery['started'], attemptedMonotonic=discard_recovery['attempted_monotonic'],
+                                     resumedDeadlineStart=discard_recovery['attempted_monotonic'],
                                      selectedMonotonic=discard_recovery['selected_monotonic'],
                                      postMonotonic=[discard_recovery['post_monotonic'], observation_started],
                                      journal=discard_recovery['journal'],
@@ -9669,9 +9673,9 @@ class PythonAutoOperator:
                             self.log("sanma_friend_stopped", reason="kita_reobserve_candidate_changed",
                                      screenshot=receipt.get("screenshot"), operationAuthorized=False)
                             return
-                        # Recovery retains the old turn's bounds until the next
-                        # input. Check before freshness can reobserve indefinitely;
-                        # the new visible countdown does not replace that bound.
+                        # Check the conservative recovery bound before freshness
+                        # can reobserve indefinitely; the visible countdown does
+                        # not replace that bound.
                         if resumed_watch is not None:
                             guard = self._sanma_friend_resume_guard
                             continuity_alive = resumed_watch.alive()
