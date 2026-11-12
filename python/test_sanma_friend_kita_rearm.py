@@ -374,3 +374,21 @@ class Evidence195FourthNorthTests(unittest.TestCase):
         self.assertEqual(calls,[self.before['digest'],self.after['digest'],self.after['digest']],repr(case.op.log.call_args_list[-6:]))
         watches[0].close.assert_called_once()
         self.assertTrue(case.op._sanma_friend_kita_rearmed_twice)
+
+    def test_expired_old_turn_blocks_fourth_north_executor(self):
+        import time
+        from auto_operator import PythonAutoOperator
+        op=object.__new__(PythonAutoOperator)
+        op.args=SimpleNamespace(experimental_sanma_friend=True,rules='sanma',mode='force-auto',action_deadline_ms=300000,ranked_loop=False,force_auto_click_budget_ms=8000)
+        op.verified_friend_300_active=True;op.verified_friend_300_started_at=time.monotonic()
+        op.log=Mock();op.screen_references={}
+        with tempfile.TemporaryDirectory() as tmp:
+            op.frames=Path(tmp)
+            receipt=copy.deepcopy(self.after);receipt['captureStartedMonotonic']=time.monotonic()
+            op._sanma_friend_discard_observation=(receipt,receipt['digest'],receipt['captureStartedMonotonic'])
+            op._sanma_friend_resume_guard=(self.watch,time.monotonic()-301,300000)
+            page=Mock();page.screenshot.return_value=Path(receipt['screenshot']).read_bytes()
+            with patch('auto_operator.classify_screen',return_value=('match',1.0)):
+                with self.assertRaisesRegex(RuntimeError,'deadline'):
+                    op.execute_sanma_friend_kita_candidate(page,receipt)
+            page.mouse.click.assert_not_called()
