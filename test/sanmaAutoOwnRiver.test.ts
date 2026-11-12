@@ -121,3 +121,61 @@ test('failed frame drains pending board and river work before rejection',async()
   templates:'templates/bootstrap',boardObserver});
  assert.equal(valid.digest,digest); assert.ok(calls>0); assert.equal(active,0); assert.equal(maxActive,1);
 });
+
+test('score uncertainty retains both physical opponent rivers and serializes inference after the report',async()=>{
+ const right=await readFile('test/fixtures/sanma-right-river-portable/four.png');
+ const image=await sharp(frame).composite([{input:right,left:1115,top:285}]).png().toBuffer();
+ const hash=createHash('sha256').update(image).digest('hex');
+ let active=0, maxActive=0;
+ const worker={async classifyTileImages(images:Buffer[]){
+  maxActive=Math.max(maxActive,++active);
+  await new Promise(resolve=>setTimeout(resolve,10));active--;
+  return classifier.classifyTileImages(images);
+ }};
+ const board={async observe(){return {frame_sha256:hash,board:{verified:false,
+  reason:'expected_total_points_unknown',candidate:{seat:'west'},
+  layoutCandidate:{verified:false,opponents:['left','right']}},
+  north:{status:'unknown',verified:false,complete:false}};}};
+ const input={frame:image,layout,buttonTemplates,publicClassifier:worker,templates:'templates/bootstrap',boardObserver:board};
+ const result=await observeSanmaFrameAutomatically(input);
+ assert.equal(result.board.reason,'expected_total_points_unknown');
+ assert.equal(result.report.publicTiles.status,'candidate');
+ assert.equal(result.rightRiver?.candidates.length,4);
+ assert.deepEqual(result.leftRiver?.candidates,[]);
+ assert.equal(maxActive,1);assert.equal(active,0);
+ assert.ok('ownRiver' in result);
+ for(const river of [result.ownRiver,result.leftRiver,result.rightRiver]) {
+  assert.ok(river);assert.equal(river.frameSha256,hash);
+  assert.equal(river.verified,false);assert.equal(river.complete,false);assert.equal(river.operationAuthorized,false);
+ }
+ assert.equal(result.north.bySeat,undefined);assert.equal(result.operationAuthorized,false);
+ const broken={async classifyTileImages():Promise<never>{throw new Error('worker failed');}};
+ const failed=await observeSanmaFrameAutomatically({...input,publicClassifier:broken});
+ assert.equal(failed.rightRiver,undefined); // Failed inference is not an empty river.
+ assert.equal(failed.operationAuthorized,false);
+});
+
+test('score uncertainty alone never establishes the physical opponent layout',async()=>{
+ for(const layoutCandidate of [undefined,{verified:true,opponents:['left','right']},
+  {verified:false,opponents:['opposite','left']},{verified:false,opponents:['left','right','opposite']}]) {
+  const board={async observe(){return {frame_sha256:digest,board:{verified:false,
+   reason:'expected_total_points_unknown',layoutCandidate},north:{status:'unknown',verified:false,complete:false}};}};
+  const result=await observeSanmaFrameAutomatically({frame,layout,buttonTemplates,publicClassifier:classifier,
+   templates:'templates/bootstrap',boardObserver:board});
+  assert.equal(result.leftRiver,undefined);assert.equal(result.rightRiver,undefined);
+  assert.equal(result.operationAuthorized,false);
+ }
+});
+
+test('successful score validation also preserves the unverified physical layout',async()=>{
+ const board={async observe(){return {frame_sha256:digest,board:{verified:false,consistent:true,
+  reason:'right_opponent_layout_candidate',layoutCandidate:{verified:false,opponents:['left','right']}},
+  north:{status:'unknown',verified:false,complete:false}};}};
+ const result=await observeSanmaFrameAutomatically({frame,layout,buttonTemplates,publicClassifier:classifier,
+  templates:'templates/bootstrap',boardObserver:board});
+ for(const river of [result.leftRiver,result.rightRiver]) {
+  assert.ok(river);assert.equal(river.frameSha256,digest);
+  assert.equal(river.verified,false);assert.equal(river.operationAuthorized,false);
+ }
+ assert.equal(result.north.bySeat,undefined);assert.equal(result.operationAuthorized,false);
+});

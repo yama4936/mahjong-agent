@@ -92,23 +92,26 @@ export async function observeSanmaFrameAutomatically(input: {
     ...(input.buttonRowReferences ? { buttonRowReferences: input.buttonRowReferences } : {}) });
   const riversPromise = boardPromise.then(async ({ board }) => {
     if (board.reason !== "expected_total_points_unknown") await reportPromise;
-    const ownClassifier: PublicVitClassifier = board.reason === "expected_total_points_unknown" ? {
+    const physicalRiverClassifier: PublicVitClassifier = board.reason === "expected_total_points_unknown" ? {
       ...(riverClassifier.backend ? {backend: riverClassifier.backend} : {}),
       async classifyTileImages(images) {
         await reportPromise;
         return riverClassifier.classifyTileImages(images);
       },
     } : riverClassifier;
-    const opponentsPromise = board.reason === 'unsupported_right_opponent_layout' && board.layoutCandidate?.verified === false
+    // Score validation can replace board.reason while preserving the observed
+    // physical layout. River crops require that layout, not a particular OCR
+    // failure reason; they still establish neither winds nor safe actions.
+    const opponentsPromise = board.layoutCandidate?.verified === false
         && JSON.stringify(board.layoutCandidate.opponents) === JSON.stringify(['left','right'])
       ? inspectIndependentRivers(
-        () => inspectSanmaRightRiverCandidate(frame, input.layout, riverClassifier),
-        () => inspectSanmaLeftRiverCandidate(frame, input.layout, riverClassifier),
+        () => inspectSanmaRightRiverCandidate(frame, input.layout, physicalRiverClassifier),
+        () => inspectSanmaLeftRiverCandidate(frame, input.layout, physicalRiverClassifier),
       ) : Promise.resolve([undefined, undefined] as const);
     const ownPromise = (async () => {
       if (board.reason === "unsupported_opposite_right_layout" || board.reason === "unsupported_right_opponent_layout"
           || board.reason === "expected_total_points_unknown") {
-        try { return {ownRiver: await inspectSanmaOwnRiverCandidate(frame, input.layout, ownClassifier)}; }
+        try { return {ownRiver: await inspectSanmaOwnRiverCandidate(frame, input.layout, physicalRiverClassifier)}; }
         catch (error) { return {ownRiverError: error instanceof Error ? error.message : String(error)}; }
       }
       return {};
