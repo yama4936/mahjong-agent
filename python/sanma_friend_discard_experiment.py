@@ -23,6 +23,26 @@ from screen_state import require_sanma_observable_frame
 from sanma_friend_freshness import friend_action_started_at, friend_frame_stable, latch_friend_action_target
 
 
+def friend_discard_budget_guard(capture_started, click_budget, log, clock=time.monotonic):
+    """Bound the original observation, without resetting it on recapture."""
+    if (type(capture_started) not in (int, float) or not math.isfinite(capture_started)
+            or type(click_budget) is not int or click_budget <= 0):
+        raise ValueError("friend discard click budget evidence missing")
+    age = (clock() - capture_started) * 1000
+    if not 0 <= age < click_budget:
+        log("sanma_friend_click_budget_expired", captureAgeMs=round(age),
+            clickBudgetMs=click_budget, operationAuthorized=False)
+        raise RuntimeError("friend discard click budget expired")
+
+
+def require_friend_discard_timing_binding(operator, receipt, capture_started):
+    bound = getattr(operator, '_sanma_friend_discard_observation', None)
+    if (not isinstance(bound, tuple) or len(bound) != 3 or bound[0] is not receipt
+            or bound[1] != receipt.get('digest') or bound[2] != receipt.get('captureStartedMonotonic')
+            or bound[2] != capture_started):
+        raise ValueError('friend discard observation timing binding changed')
+
+
 def friend_opponent_riichi_candidates(frame):
     """Positive-only stick candidates in physical left/right HUD regions.
 
@@ -387,6 +407,12 @@ def execute_friend_draw_candidate(operator, page, receipt):
                    "experimentalDrawReport": report if freshness.get("status") == "stable_draw_glyph_candidate" else None}
     session = {"mode": "cpu_friend", "rules": "sanma", "clock": "300+0", "actionDeadlineMs": 300000,
                "ranked": False, "cpuCount": 2, "roomVerified": True}
+    capture_started = receipt.get("captureStartedMonotonic")
+    click_budget = operator.force_auto_click_budget_ms()
+    def click_budget_guard():
+        require_friend_discard_timing_binding(operator, receipt, capture_started)
+        friend_discard_budget_guard(capture_started, click_budget, operator.log)
+    click_budget_guard()
     def record(event):
         operator.log("sanma_friend_discard_experiment", **event)
     def save_rejected_frame(frame):
@@ -406,6 +432,7 @@ def execute_friend_draw_candidate(operator, page, receipt):
                                   session_check=session_check,
                                   self_turn_wall_opt_in=getattr(operator.args, 'experimental_sanma_self_turn_wall', False) is True,
                                   save_rejected_frame=save_rejected_frame, evidence_directory=operator.frames,
+                                  click_budget_guard=click_budget_guard,
                                   before_click=lambda: latch_friend_action_target(operator, baseline, "discard"))
     if blank_only:
         result['blankDrawIdentityUnknown'] = True
@@ -765,7 +792,7 @@ def _refresh_discard_baseline(page, *, reference, candidate, candidate_captured_
 def execute_friend_discard(page, *, session, observation, plan, layout, log,
                            turn_started_monotonic, clock=time.monotonic, session_check=None,
                            save_rejected_frame=None, before_click=None, self_turn_wall_opt_in=False,
-                           evidence_directory=None):
+                           evidence_directory=None, click_budget_guard=None):
     """Map a supplied TS plan to the existing select/confirm routine.
 
     This experimental entry point depends on a caller that establishes the
@@ -800,6 +827,8 @@ def execute_friend_discard(page, *, session, observation, plan, layout, log,
                 or not 0 <= started - turn_started_monotonic < 300):
             raise ValueError("invalid or expired turn clock")
         def deadline():
+            if click_budget_guard is not None:
+                click_budget_guard()
             if session_check is not None and session_check() is not True:
                 raise RuntimeError("friend session revoked")
             if not 0 <= clock() - turn_started_monotonic < 300:

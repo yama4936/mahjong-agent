@@ -1,3 +1,4 @@
+import time
 import copy
 import hashlib
 import tempfile
@@ -53,6 +54,9 @@ class WhiteCandidateTests(unittest.TestCase):
                        'freshness':{'status':'stable_except_clock_candidate'},
                        'drawCandidate':{'status':'candidate','digest':digest,'index':13,
                                         'tile':self.hand['tiles'][-1], 'point':point}}
+            receipt["captureStartedMonotonic"] = time.monotonic()
+            op.force_auto_click_budget_ms.return_value = 8000
+            op._sanma_friend_discard_observation = (receipt, receipt['digest'], receipt['captureStartedMonotonic'])
             execute_friend_draw_candidate(op,Mock(),receipt)
             execute.assert_called_once()
             self.assertFalse(self.hand['safe'])

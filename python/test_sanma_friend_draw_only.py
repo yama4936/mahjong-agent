@@ -1,3 +1,4 @@
+import time
 import copy
 import json
 import unittest
@@ -57,6 +58,9 @@ class DrawOnlyTests(unittest.TestCase):
         receipt={'scope':'sanma_self_turn_observation','digest':digest,'screenshot':str(path),'freshness':{'status':'identical_pixels_candidate'},
                  'sourceObservation':{'digest':digest,'report':report},
                  'drawCandidate':{'status':'candidate','digest':digest,'index':13,'tile':'E','point':point}}
+        receipt['captureStartedMonotonic'] = time.monotonic()
+        op.force_auto_click_budget_ms.return_value = 8000
+        op._sanma_friend_discard_observation = (receipt, receipt['digest'], receipt['captureStartedMonotonic'])
         with patch('sanma_friend_discard_experiment.execute_friend_discard') as execute:
             execute_friend_draw_candidate(op,Mock(),receipt)
             execute.assert_called_once()

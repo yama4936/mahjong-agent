@@ -1,3 +1,4 @@
+import time
 import hashlib
 import io
 import json
@@ -48,6 +49,9 @@ class PortableFullVisibleEmptyRowTest(unittest.TestCase):
         args=SimpleNamespace(experimental_sanma_friend=True,rules='sanma',mode='force-auto',action_deadline_ms=300000,ranked_loop=False)
         layout=json.loads(Path('config/layout-runtime.json').read_text())
         op=SimpleNamespace(args=args,verified_friend_300_active=True,layout=layout,sanma_friend_riichi_attempted=False,frames=fixture,log=Mock())
+        receipt['captureStartedMonotonic'] = time.monotonic()
+        op.force_auto_click_budget_ms = lambda: 8000
+        op._sanma_friend_discard_observation = (receipt, receipt['digest'], receipt['captureStartedMonotonic'])
         with patch('sanma_friend_discard_experiment.friend_opponent_riichi_candidates',return_value=[]), \
              patch('sanma_friend_discard_experiment.execute_friend_discard',return_value={'confirmation':'unknown'}) as execute:
             execute_friend_draw_candidate(op,Mock(),receipt)
@@ -114,6 +118,9 @@ class FullVisibleEmptyRowTest(unittest.TestCase):
                  'freshness':{'status':'identical_pixels_candidate'}}
         args=SimpleNamespace(experimental_sanma_friend=True,rules='sanma',mode='force-auto',action_deadline_ms=300000,ranked_loop=False)
         layout=json.loads(Path('config/layout-runtime.json').read_text());op=SimpleNamespace(args=args,verified_friend_300_active=True,layout=layout,sanma_friend_riichi_attempted=False,frames=ROOT,log=Mock())
+        receipt['captureStartedMonotonic'] = time.monotonic()
+        op.force_auto_click_budget_ms = lambda: 8000
+        op._sanma_friend_discard_observation = (receipt, receipt['digest'], receipt['captureStartedMonotonic'])
         with patch('sanma_friend_discard_experiment.friend_opponent_riichi_candidates',return_value=[]), \
              patch('sanma_friend_discard_experiment.execute_friend_discard',return_value={'confirmation':'unknown'}) as execute:
             execute_friend_draw_candidate(op,Mock(),receipt)
