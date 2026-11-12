@@ -2115,6 +2115,9 @@ def _experimental_kita_glyph_stability_decoded(before: bytes, after: bytes, repo
             return False
         if diagnostic is not None: diagnostic.update(stage='recognition_and_prompt')
         hand = report['hand']; geometry = report['handGeometry']; row = report['buttonRow']
+        if any(not isinstance(item, dict) or item.get('status') != 'candidate' for item in (hand, geometry, row)):
+            if diagnostic is not None: diagnostic.update(reason='recognition_unresolved')
+            return False
         hv = hand['value']; gv = geometry['value']; buttons = row['value']['slots']
         if (hand['status'] != 'candidate' or geometry['status'] != 'candidate' or row['status'] != 'candidate'
                 or len(hv['tiles']) != 14 or 'N' not in hv['tiles'] or len(buttons) != 3
@@ -2248,6 +2251,9 @@ def _experimental_draw_glyph_stability_decoded(before: bytes, after: bytes, repo
     try:
         if diagnostic is not None: diagnostic.update(stage='recognition_and_prompt')
         hand, geometry, row = (report[k] for k in ('hand', 'handGeometry', 'buttonRow'))
+        if any(not isinstance(item, dict) or item.get('status') != 'candidate' for item in (hand, geometry, row)):
+            if diagnostic is not None: diagnostic.update(reason='recognition_unresolved')
+            return False
         value, shape = hand['value'], geometry['value']
         slots = row['value']['slots']
         if (any(x['status'] != 'candidate' for x in (hand, geometry, row))

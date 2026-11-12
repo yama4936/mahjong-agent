@@ -8,7 +8,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 from PIL import Image
-from auto_operator import PythonAutoOperator, experimental_draw_glyph_stability
+from auto_operator import PythonAutoOperator, experimental_draw_glyph_stability, experimental_kita_glyph_stability
 
 class FreshnessDiagnosticsTest(unittest.TestCase):
  def setUp(self):
@@ -24,6 +24,22 @@ class FreshnessDiagnosticsTest(unittest.TestCase):
   detail={};self.assertFalse(experimental_draw_glyph_stability(b'bad',b'bad',{},diagnostic=detail));self.assertEqual(detail['outcome'],'exception');self.assertIn('errorType',detail)
   detail={};report={'hand':{'status':'unresolved','value':{}},'handGeometry':{'status':'candidate','value':{}},'buttonRow':{'status':'candidate','value':{'slots':[]}}}
   self.assertFalse(experimental_draw_glyph_stability(self.frame,self.frame,report,diagnostic=detail));self.assertEqual(detail['stage'],'recognition_and_prompt');self.assertNotEqual(detail.get('outcome'),'exception')
+ def test_unresolved_recognition_is_a_rejection_not_an_exception(self):
+  report={'hand':{'status':'unresolved'},'handGeometry':{'status':'unresolved'},'buttonRow':{'status':'candidate','value':{'slots':[]}}}
+  for guard in (experimental_draw_glyph_stability,experimental_kita_glyph_stability):
+   with self.subTest(guard=guard.__name__):
+    detail={};self.assertFalse(guard(self.frame,self.frame,report,diagnostic=detail))
+    self.assertEqual(detail.get('reason'),'recognition_unresolved');self.assertNotEqual(detail.get('outcome'),'exception')
+  for malformed in ({}, {'hand':None,'handGeometry':{},'buttonRow':{}}):
+   detail={};self.assertFalse(experimental_draw_glyph_stability(self.frame,self.frame,malformed,diagnostic=detail))
+ def test_retained_192_unresolved_report_rejects_without_keyerror(self):
+  root=Path('/home/yama1/server/data/dev-work/jantama/evidence192/attempt/artifacts/frames')
+  if not root.exists():self.skipTest('optional friend-match evidence unavailable')
+  path=next(root.glob('*11-36-48*.sanma-self-turn.receipt.json'))
+  receipt=json.loads(path.read_text());frame=Path(receipt['screenshot']).read_bytes();report=receipt['sourceObservation']['report']
+  for guard in (experimental_draw_glyph_stability,experimental_kita_glyph_stability):
+   detail={};self.assertFalse(guard(frame,frame,report,diagnostic=detail))
+   self.assertEqual(detail.get('reason'),'recognition_unresolved');self.assertNotEqual(detail.get('outcome'),'exception')
  def test_observation_records_durations_rejection_and_frame_hashes(self):
   def kita(*args,diagnostic=None,**kwargs):diagnostic['stage']='wall_color';return False
   def draw(*args,diagnostic=None,**kwargs):diagnostic.update(stage='recognition_and_prompt',outcome='exception',errorType='KeyError');return False
