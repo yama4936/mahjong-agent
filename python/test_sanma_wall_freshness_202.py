@@ -1,5 +1,7 @@
 """202 retained images; friend-only wall fallback never authorizes input."""
 import copy
+import io
+from PIL import Image
 import json
 import tempfile
 import time
@@ -31,6 +33,18 @@ class WallFreshness202Tests(unittest.TestCase):
   r=self.inspect();self.assertEqual(r['freshness']['status'],'stable_self_turn_wall_draw_candidate')
   self.assertFalse(r['freshness']['operationAuthorized'])
   self.page.mouse.click.assert_not_called()
+ def test_shared_images_match_bytes_and_remain_unchanged(self):
+  with Image.open(io.BytesIO(self.before)) as first, Image.open(io.BytesIO(self.after)) as second:
+   first.load(); second.load()
+   before_pixels, after_pixels = first.tobytes(), second.tobytes()
+   expected = self_turn_stability(self.before, self.after, self.source['report'])
+   self.assertTrue(expected)
+   self.assertEqual(self_turn_stability(first, second, self.source['report']), expected)
+   self.assertEqual(first.tobytes(), before_pixels)
+   self.assertEqual(second.tobytes(), after_pixels)
+   self.assertEqual(self_turn_stability(first, second, {}), False)
+   self.assertEqual(first.tobytes(), before_pixels)
+   self.assertEqual(second.tobytes(), after_pixels)
  def test_opt_out_or_unverified_session_does_not_use_wall_fallback(self):
   for key in ('disabled','unverified'):
    with self.subTest(key=key):

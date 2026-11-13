@@ -4,11 +4,13 @@ This helper does not grant permission to click. The caller must verify the
 room, action deadline, exact hand, draw-only plan, and operation priority.
 """
 import io
+from contextlib import nullcontext
 from PIL import Image, ImageChops, ImageStat
 
 def self_turn_stability(before, after, report):
     try:
-        with Image.open(io.BytesIO(before)) as aa, Image.open(io.BytesIO(after)) as bb:
+        with (nullcontext(before) if isinstance(before, Image.Image) else Image.open(io.BytesIO(before))) as aa, \
+             (nullcontext(after) if isinstance(after, Image.Image) else Image.open(io.BytesIO(after))) as bb:
             a,b=aa.convert('RGB'),bb.convert('RGB')
         if a.size != (1920,1080) or b.size != a.size: return False
         def self_lamp(image):

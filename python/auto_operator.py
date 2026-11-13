@@ -4541,7 +4541,7 @@ class PythonAutoOperator:
                                     and self_turn_stability(first, second, report))
                         except (KeyError, TypeError, ValueError):
                             return False
-                    wall_draw_candidate = timed_guard('wallSelfTurn', wall_guard)
+                    wall_draw_candidate = timed_guard('wallSelfTurn', wall_guard, use_shared=True)
                     draw_glyph_candidate = wall_draw_candidate
             latest_path = self.frames / f"{utc_stamp()}.{uuid.uuid4().hex}.sanma-freshness.png"
             latest_path.write_bytes(latest)
