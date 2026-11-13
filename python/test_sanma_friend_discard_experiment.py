@@ -40,6 +40,40 @@ class FriendDiscardExperimentTests(unittest.TestCase):
         self.assertEqual(result["result"], "discard_not_verified")
 
     @patch("sanma_friend_discard_experiment.send_discard_click")
+    def test_timing_attached_to_terminal_event_without_new_log_or_input(self, send):
+        send.return_value = {"lift": 48}
+        ticks = iter(range(0, 100_000_000, 1_000_000))
+        with patch("sanma_friend_discard_experiment.time.monotonic_ns", side_effect=lambda: next(ticks)):
+            result = execute_friend_discard(self.page, **self.kwargs)
+        self.assertEqual([item["status"] for item in self.logs], ["attempted", "selection_confirmed"])
+        self.assertEqual(result["timingMs"]["preclickCapture"], 1)
+        self.assertEqual(result["timingMs"]["frameMatching"], 1)
+        self.assertEqual(result["timingMs"]["preclickAcceptance"], 1)
+        self.assertGreater(result["timingMs"]["total"], 0)
+        send.assert_called_once()
+
+    @patch("sanma_friend_discard_experiment.send_discard_click")
+    def test_selection_capture_timing_records_existing_callback(self, send):
+        send.side_effect = lambda *args: {"bytes": len(args[5](None))}
+        result = execute_friend_discard(self.page, **self.kwargs)
+        self.assertEqual(self.page.screenshot.call_count, 2)
+        self.assertIn("selectionInput", result["timingMs"])
+        self.assertIn("selectionCapture", result["timingMs"])
+        send.assert_called_once()
+
+    @patch("sanma_friend_discard_experiment.send_discard_click")
+    def test_timing_on_reserve_rejection_does_not_latch_or_click(self, send):
+        from sanma_friend_discard_experiment import FriendDiscardBudgetExpired, DiscardPreclickBudgetExpired
+        latch = Mock()
+        def reject(): raise FriendDiscardBudgetExpired("reserve")
+        with self.assertRaises(DiscardPreclickBudgetExpired):
+            execute_friend_discard(self.page, **{**self.kwargs, "before_click": latch,
+                                                   "preclick_budget_reserve_guard": reject})
+        self.assertEqual(self.logs[-1]["status"], "blocked")
+        self.assertIn("unfinishedStage", self.logs[-1]["timingMs"])
+        latch.assert_not_called(); send.assert_not_called()
+
+    @patch("sanma_friend_discard_experiment.send_discard_click")
     def test_revoked_friend_session_stops_before_click(self, send):
         with self.assertRaisesRegex(RuntimeError, 'friend session revoked'):
             execute_friend_discard(self.page, **{**self.kwargs, 'session_check': lambda: False})

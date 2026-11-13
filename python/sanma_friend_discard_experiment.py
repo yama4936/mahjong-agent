@@ -858,6 +858,18 @@ def execute_friend_discard(page, *, session, observation, plan, layout, log,
     events. It does not establish any of those claims itself.
     """
     started = clock()
+    # Diagnostic clock is separate from the injected safety clock: recording a
+    # checkpoint must never advance, reset, or replace a deadline measurement.
+    timing_started_ns = time.monotonic_ns()
+    timing_previous_ns = timing_started_ns
+    timing_ms = {}
+    def checkpoint(name):
+        nonlocal timing_previous_ns
+        now = time.monotonic_ns()
+        timing_ms[name] = round((now - timing_previous_ns) / 1_000_000, 3)
+        timing_previous_ns = now
+    def attach_timing():
+        event['timingMs'] = {**timing_ms, 'total': round((time.monotonic_ns() - timing_started_ns) / 1_000_000, 3)}
     event = {"kind": "sanma_friend_discard", "status": "blocked"}
     precheck_rejected = False
     input_may_have_started = False
@@ -894,10 +906,12 @@ def execute_friend_discard(page, *, session, observation, plan, layout, log,
                 raise RuntimeError("action deadline expired")
 
         deadline()
+        checkpoint("validation")
         before_capture_started_at = clock()
         before = page.screenshot(animations="disabled")
         before_captured_at = clock()
         before_captured_at_unix = time.time()
+        checkpoint("preclickCapture")
         deadline()
         _require_discard_capture_fresh(clock, before_capture_started_at)
         try:
@@ -909,6 +923,7 @@ def execute_friend_discard(page, *, session, observation, plan, layout, log,
                 except Exception:
                     pass  # Failed evidence never permits input.
             raise
+        checkpoint("captureValidation")
         reference = observation.get("referenceFrame")
         baseline_refresh = None
         matched = isinstance(before, bytes) and hashlib.sha256(before).hexdigest() == observation.get("frameSha256")
@@ -949,6 +964,7 @@ def execute_friend_discard(page, *, session, observation, plan, layout, log,
                             candidate_captured_at_unix=before_captured_at_unix,
                             reference_screenshot=observation.get("referenceScreenshot"), input_guard=deadline)
                         matched = baseline_refresh is not None
+        checkpoint("frameMatching")
         if not matched:
             event['preclickDiagnostic'] = diagnostic
             if isinstance(before, bytes) and save_rejected_frame is not None:
@@ -965,6 +981,7 @@ def execute_friend_discard(page, *, session, observation, plan, layout, log,
         # byte-identical frames and the opt-in lighting fallback.
         from auto_operator import raised_closed_hand_slots
         raised = raised_closed_hand_slots(before, layout, strict=True)
+        checkpoint("raisedTileCheck")
         if raised:
             event['raisedSlots'] = raised
             raise ValueError('selected or hovered tile before discard')
@@ -979,6 +996,7 @@ def execute_friend_discard(page, *, session, observation, plan, layout, log,
         # or any input, so rejection can safely return to fresh observation.
         if preclick_budget_reserve_guard is not None:
             preclick_budget_reserve_guard()
+        checkpoint("preclickAcceptance")
         # Latching modifies the duplicate-input guard. Once begun, any error
         # is conservatively terminal even if the mouse was not yet invoked.
         input_may_have_started = True
@@ -997,7 +1015,9 @@ def execute_friend_discard(page, *, session, observation, plan, layout, log,
             try:
                 input_guard()
                 input_capture_started_at = clock()
+                checkpoint("selectionInput")
                 frame = page.screenshot(animations="disabled")
+                checkpoint("selectionCapture")
                 input_guard()
                 require_sanma_observable_frame(frame)
             except Exception as error:
@@ -1020,11 +1040,15 @@ def execute_friend_discard(page, *, session, observation, plan, layout, log,
         receipt = send_discard_click(page.mouse, point, layout["viewport"], page.wait_for_timeout,
                                      before,
                                      checked_selection, layout, index, 5, input_guard)
+        checkpoint("selectionAndConfirmation")
         event.update(status="selection_confirmed", selectionReceipt=receipt,
                      result="discard_not_verified")
+        attach_timing()
         log(dict(event))
         return event
     except Exception as error:
+        checkpoint("unfinishedStage")
+        attach_timing()
         event.update(status="failed" if event["status"] == "attempted" else "blocked",
                      error=str(error), result="discard_not_verified")
         try:
